@@ -110,6 +110,15 @@ public final class DeviceNotificationHandler {
         // Feature 8: Validate key index list from protobuf
         var validatedKeyIndexInfo = validateKeyIndexList(keyIndexListNode);
 
+        // Feature 11: Validate that protobuf timestamp matches notification timestamp
+        // Per WhatsApp Web: reject notification if timestamps don't match
+        if (validatedKeyIndexInfo != null && validatedKeyIndexInfo.timestamp() != timestamp) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Device add notification timestamp mismatch for {0}: protobuf={1}, notification={2}, ignoring",
+                    userJid, validatedKeyIndexInfo.timestamp(), timestamp);
+            return;
+        }
+
         // Parse devices from device-list node with key index validation
         var devices = deviceListNode.streamChildren("device")
                 .flatMap(deviceNode -> {
@@ -244,14 +253,31 @@ public final class DeviceNotificationHandler {
         // Build key index map from notification
         var validKeyIndexes = buildKeyIndexMap(keyIndexListNode);
 
-        // Filter devices to keep only those with valid key indexes
+        // Feature 10: Filter devices to keep only those with valid key indexes AND matching keyIndex
+        // Per WhatsApp Web: device is kept if ID is in notification map AND keyIndex matches
+        // Primary device (ID=0) is always kept
         var remainingDevices = oldList.devices().stream()
-                .filter(device -> validKeyIndexes.containsKey(device.id()))
+                .filter(device -> {
+                    if (device.isPrimary()) {
+                        return true; // Always keep primary device
+                    }
+                    var notificationKeyIndex = validKeyIndexes.get(device.id());
+                    // Keep if in notification AND keyIndex matches
+                    return notificationKeyIndex != null && notificationKeyIndex == device.keyIndex();
+                })
                 .toList();
 
         // Feature 7: Cleanup Signal sessions for removed devices
+        // A device is removed if: not primary AND (not in notification OR keyIndex doesn't match)
         var removedDevices = oldList.devices().stream()
-                .filter(device -> !validKeyIndexes.containsKey(device.id()))
+                .filter(device -> {
+                    if (device.isPrimary()) {
+                        return false; // Primary is never removed
+                    }
+                    var notificationKeyIndex = validKeyIndexes.get(device.id());
+                    // Removed if NOT in notification OR keyIndex doesn't match
+                    return notificationKeyIndex == null || notificationKeyIndex != device.keyIndex();
+                })
                 .toList();
         for (var removedDevice : removedDevices) {
             var deviceJid = removedDevice.toDeviceJid(userJid.user(), userJid.server());

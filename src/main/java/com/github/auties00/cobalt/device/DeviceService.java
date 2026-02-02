@@ -133,6 +133,51 @@ public final class DeviceService {
     }
 
     /**
+     * Gets device lists for the specified users with phash pre-check optimization.
+     * <p>
+     * Feature 13: Per WhatsApp Web, if the locally computed phash from cached device lists
+     * matches the provided expectedPhash, the server sync is skipped entirely.
+     *
+     * @param userJids      the user JIDs to get device lists for
+     * @param expectedPhash optional phash to compare against local device list
+     * @return the device lists
+     */
+    public List<DeviceList> getDeviceLists(Collection<Jid> userJids, String expectedPhash) {
+        // Feature 13: If phash is provided, check if local phash matches
+        if (expectedPhash != null && !expectedPhash.isEmpty()) {
+            // Get cached device lists for all requested JIDs
+            var cachedLists = new ArrayList<DeviceList>();
+            for (var jid : userJids) {
+                var cached = store.findDeviceList(jid);
+                cached.ifPresent(cachedLists::add);
+            }
+
+            // If we have all cached lists, compute local phash and compare
+            if (cachedLists.size() == userJids.size()) {
+                try {
+                    // Extract device JIDs from cached lists
+                    var allDeviceJids = new HashSet<Jid>();
+                    for (var deviceList : cachedLists) {
+                        allDeviceJids.addAll(deviceList.deviceJids());
+                    }
+
+                    // Compute local phash
+                    var localPhash = DevicePhashCalculator.calculate(allDeviceJids, DevicePhashVersion.V2, false);
+                    if (localPhash.equals(expectedPhash)) {
+                        LOGGER.log(System.Logger.Level.DEBUG, "Phash pre-check passed, skipping device sync");
+                        return mergeAlternateDeviceLists(cachedLists);
+                    }
+                } catch (NoSuchAlgorithmException e) {
+                    // Fall through to normal sync
+                }
+            }
+        }
+
+        // Fall through to normal sync
+        return getDeviceLists(userJids);
+    }
+
+    /**
      * Merges device lists for users who have both PN and LID identities.
      * Deduplicates by device ID, with PN version taking precedence.
      */
@@ -233,8 +278,14 @@ public final class DeviceService {
                 throw new RuntimeException("Interrupted while fetching device lists", e);
             }
 
+            // Feature 6: Backfill missing device sync entries (LID→PN mapping)
+            // If a PN entry was requested but server returned LID entry only, copy LID result to PN
+            fetchedResults = backfillMissingDeviceSyncEntries(toFetch, fetchedResults);
+
             // Process results (full device lists or omitted results)
             var lastADVCheckTime = store.lastAdvCheckTime();
+            // Feature 15: Track users with validated key index info for optional identity key prefetch
+            var usersWithValidatedKeyIndex = new ArrayList<Jid>();
             for (var deviceResult : fetchedResults) {
                 var deviceList = switch (deviceResult) {
                     case DeviceListResult.Full full -> {
@@ -337,6 +388,12 @@ public final class DeviceService {
                             }
                         }
 
+                        // Feature 15: Track users with validated key index info
+                        // These are users that had signedKeyIndexBytes and passed signature verification
+                        if (!trackedList.validIndexes().isEmpty() || trackedList.currentIndex() > 0) {
+                            usersWithValidatedKeyIndex.add(trackedList.userJid());
+                        }
+
                         yield trackedList;
                     }
 
@@ -434,6 +491,15 @@ public final class DeviceService {
                 }
             }
 
+            // Feature 15: Log users that had validated key index info (can be used for identity key prefetching)
+            // Per WhatsApp Web: after device sync, call getAndStoreIdentityKeys for these users
+            // The actual identity key fetching happens on-demand during message sending via MessagePreKeyBundleService
+            if (!usersWithValidatedKeyIndex.isEmpty()) {
+                LOGGER.log(System.Logger.Level.DEBUG,
+                        "Device sync completed for {0} users with validated key index info",
+                        usersWithValidatedKeyIndex.size());
+            }
+
             return result;
         } catch (Exception e) {
             // Save as pending sync for retry on reconnect
@@ -526,6 +592,93 @@ public final class DeviceService {
             var deviceJid = device.toDeviceJid(userJid.user(), userJid.server());
             store.cleanupSignalSessionsForDevice(deviceJid);
         }
+    }
+
+    /**
+     * Backfills missing device sync entries when server returns LID-based results but PN was requested.
+     * <p>
+     * Per WhatsApp Web: if a PN entry was requested but server only returned the LID entry,
+     * duplicate the LID result as if it were the PN entry.
+     *
+     * @param requestedJids the JIDs that were originally requested
+     * @param results       the results returned from the server
+     * @return the results with backfilled entries
+     */
+    private List<DeviceListResult> backfillMissingDeviceSyncEntries(
+            Set<Jid> requestedJids,
+            List<DeviceListResult> results
+    ) {
+        // Build a map of returned results by JID
+        var resultMap = new HashMap<Jid, DeviceListResult>();
+        for (var result : results) {
+            var jid = switch (result) {
+                case DeviceListResult.Full full -> full.deviceList().userJid();
+                case DeviceListResult.Omitted omitted -> omitted.userJid();
+            };
+            resultMap.put(jid, result);
+        }
+
+        // Check for missing PN entries that have LID counterparts
+        var backfilledResults = new ArrayList<>(results);
+        for (var requestedJid : requestedJids) {
+            // Skip if we already have a result for this JID
+            if (resultMap.containsKey(requestedJid)) {
+                continue;
+            }
+
+            // Only backfill for PN JIDs (user JIDs)
+            if (!requestedJid.hasUserServer()) {
+                continue;
+            }
+
+            // Try to find LID mapping for this PN
+            var lidJid = store.findLidByPhone(requestedJid);
+            if (lidJid.isEmpty()) {
+                continue;
+            }
+
+            // Check if we have a result for the LID
+            var lidResult = resultMap.get(lidJid.get());
+            if (lidResult == null) {
+                continue;
+            }
+
+            // Duplicate the LID result as a PN result
+            LOGGER.log(System.Logger.Level.DEBUG, "Backfilling device list for {0} from LID {1}",
+                    requestedJid, lidJid.get());
+
+            var backfilledResult = switch (lidResult) {
+                case DeviceListResult.Full full -> {
+                    // Create a new DeviceList with the PN JID
+                    var originalList = full.deviceList();
+                    var backfilledList = new DeviceList(
+                            requestedJid,
+                            originalList.devices(),
+                            originalList.timestamp(),
+                            originalList.expiresAt(),
+                            originalList.rawId(),
+                            originalList.deleted(),
+                            originalList.deletedChangedToHost(),
+                            originalList.advAccountType(),
+                            originalList.expectedTs(),
+                            originalList.expectedTsLastDeviceJobTs(),
+                            originalList.expectedTsUpdateTs(),
+                            originalList.currentIndex(),
+                            originalList.validIndexes()
+                    );
+                    yield new DeviceListResult.Full(backfilledList);
+                }
+                case DeviceListResult.Omitted omitted -> new DeviceListResult.Omitted(
+                        requestedJid,
+                        omitted.timestamp(),
+                        omitted.expectedTs()
+                );
+            };
+
+            backfilledResults.add(backfilledResult);
+        }
+
+        return backfilledResults;
     }
 
     /**

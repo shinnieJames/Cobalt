@@ -186,10 +186,15 @@ public final class MessageSendingService {
         var messageToSend = prepareMessage(message, options);
 
         // Serialize and encrypt message for each device
-        var plaintext = MessageContainerSpec.encode(messageToSend);
+        // Feature 8: Wrap in deviceSentMessage for own devices
         var deviceEncryptions = new ArrayList<MessageDeviceEncryption>();
+        var myUserJid = myDeviceJid.toUserJid();
         for (var deviceJid : allFanoutDevices) {
-            var encrypted = encryptionService.encryptForDevice(plaintext, deviceJid);
+            var isOwnDevice = deviceJid.toUserJid().equals(myUserJid);
+            var plaintextToSend = isOwnDevice
+                    ? wrapInDeviceSentMessage(messageToSend, effectiveRecipient, phash)
+                    : MessageContainerSpec.encode(messageToSend);
+            var encrypted = encryptionService.encryptForDevice(plaintextToSend, deviceJid);
             deviceEncryptions.add(new MessageDeviceEncryption(deviceJid, encrypted));
         }
 
@@ -701,5 +706,27 @@ public final class MessageSendingService {
         return store.signedDeviceIdentity()
                 .map(SignedDeviceIdentity::details)
                 .orElse(null);
+    }
+
+    /**
+     * Wraps a message in a DeviceSentMessage for delivery to own devices.
+     * <p>
+     * Per WhatsApp Web: when encrypting for the sender's own devices, the message
+     * is wrapped in a DeviceSentMessage protobuf that includes the destination JID.
+     *
+     * @param message       the message to wrap
+     * @param destinationJid the intended recipient JID
+     * @param phash         the phash for multi-device delivery (may be null)
+     * @return the encoded DeviceSentMessage protobuf bytes
+     */
+    private byte[] wrapInDeviceSentMessage(MessageContainer message, Jid destinationJid, String phash) {
+        var deviceSentMessage = new com.github.auties00.cobalt.model.message.server.DeviceSentMessageBuilder()
+                .destinationJid(destinationJid)
+                .message(message)
+                .phash(phash)
+                .build();
+        // Wrap in a MessageContainer and encode
+        var wrappedContainer = MessageContainer.of(deviceSentMessage);
+        return MessageContainerSpec.encode(wrappedContainer);
     }
 }

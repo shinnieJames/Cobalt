@@ -52,6 +52,12 @@ public record ABProp(int code, String value, Long exposureKey) {
      */
     public static final int NUM_DAYS_BEFORE_DEVICE_EXPIRY_CHECK_AB_PROP_CODE = 0; // TODO: Find actual code
 
+    /**
+     * Controls whether to trigger logout when the user's own device list expires.
+     * Per WhatsApp Web: when true, ADV expiration of own device list triggers logout.
+     */
+    public static final int WEB_ADV_LOGOUT_ON_SELF_DEVICE_LIST_EXPIRED_AB_PROP_CODE = 0; // TODO: Find actual code
+
     public ABProp {
         Objects.requireNonNull(value, "value cannot be null");
     }
