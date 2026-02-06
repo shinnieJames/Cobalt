@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.message.send.stanza;
 
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.button.InteractiveMessage;
 import com.github.auties00.cobalt.model.message.common.MessageContainer;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -134,53 +135,8 @@ public final class BizNode {
     }
 
     private boolean isNativeFlowInteractiveMessage(MessageContainer message) {
-        var unwrapped = message.unbox();
-        if (unwrapped.interactiveMessage().isPresent()) {
-            var interactive = unwrapped.interactiveMessage().get();
-            return interactive.nativeFlowMessage().isPresent();
-        }
-        return false;
-    }
-
-    /**
-     * Extracts the native flow name from a message.
-     *
-     * @param message the message container
-     * @return the native flow name, or null
-     *
-     * @apiNote WAWebE2EProtoUtils.getBizNativeFlowName
-     */
-    public String extractNativeFlowName(MessageContainer message) {
-        var unwrapped = message.unbox();
-
-        var interactive = unwrapped.interactiveMessage().orElse(null);
-        if (interactive != null) {
-            var nativeFlow = interactive.nativeFlowMessage().orElse(null);
-            if (nativeFlow != null) {
-                var buttons = nativeFlow.buttons();
-                if (buttons != null && !buttons.isEmpty()) {
-                    var firstButton = buttons.getFirst();
-                    var name = firstButton.name();
-                    if (name != null && !name.isEmpty()) {
-                        return name.toUpperCase();
-                    }
-                }
-            }
-        }
-
-        var buttonsMsg = unwrapped.buttonsMessage().orElse(null);
-        if (buttonsMsg != null) {
-            var buttons = buttonsMsg.buttons();
-            if (buttons != null && buttons.size() == 1) {
-                var button = buttons.getFirst();
-                var nativeFlowInfo = button.nativeFlowInfo();
-                if (nativeFlowInfo != null) {
-                    return nativeFlowInfo.name() != null ? nativeFlowInfo.name().toUpperCase() : null;
-                }
-            }
-        }
-
-        return null;
+        return message.content() instanceof InteractiveMessage interactiveMessage
+               && interactiveMessage.contentNativeFlow().isPresent();
     }
 
     private record PrivacyMode(int hostStorage, int actualActors, long privacyModeTs) {}

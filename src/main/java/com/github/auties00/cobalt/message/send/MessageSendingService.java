@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.BizNode;
 import com.github.auties00.cobalt.message.send.stanza.CtwaNode;
 import com.github.auties00.cobalt.message.send.stanza.MetaNode;
+import com.github.auties00.cobalt.message.send.stanza.StanzaBuilder;
 import com.github.auties00.cobalt.message.send.token.ContentBindingToken;
 import com.github.auties00.cobalt.message.send.token.ReportingToken;
 import com.github.auties00.cobalt.message.send.token.TrustContactToken;
@@ -2488,7 +2489,7 @@ public final class MessageSendingService {
         byte[] deviceIdentity = needsIdentity ? getEncodedDeviceIdentity() : null;
 
         // Build stanza with device_fanout="false" for resend
-        var stanza = MessageSendStanzaBuilder.createUserMessageStanza(
+        var stanza = StanzaBuilder.createUserMessageStanza(
                 messageId,
                 chatJid,
                 getMessageType(message),

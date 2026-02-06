@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.message.send.stanza;
 
 import com.github.auties00.cobalt.message.encryption.MessageEncryption;
 import com.github.auties00.cobalt.message.encryption.MessageSignalEncryptionType;
+import com.github.auties00.cobalt.message.send.stanza.StanzaContext.EncryptedDeviceNode;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -68,7 +69,7 @@ public final class StanzaBuilder {
             String messageType,
             Collection<EncryptedDeviceNode> encryptedNodes,
             byte[] deviceIdentity,
-            UserMessageStanzaContext context
+            StanzaContext.UserStanzaContext context
     ) {
         Objects.requireNonNull(messageId, "messageId cannot be null");
         Objects.requireNonNull(chatJid, "chatJid cannot be null");
@@ -203,10 +204,10 @@ public final class StanzaBuilder {
             Jid groupJid,
             String messageType,
             String phash,
-            EncryptedGroupMessage senderKeyMessage,
+            StanzaContext.EncryptedGroupMessage senderKeyMessage,
             Collection<EncryptedDeviceNode> distributionNodes,
             byte[] deviceIdentity,
-            GroupMessageStanzaContext context
+            StanzaContext.GroupStanzaContext context
     ) {
         Objects.requireNonNull(messageId, "messageId cannot be null");
         Objects.requireNonNull(groupJid, "groupJid cannot be null");

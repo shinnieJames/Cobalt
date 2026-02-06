@@ -62,7 +62,7 @@ public final class SagaDebugInfo {
         debugInfo.put("platform", "cobalt");
         debugInfo.put("sagaKey", "saga_v1_enabled");
 
-        store.clientVersion().ifPresent(v -> debugInfo.put("clientVersion", v.toString()));
+        debugInfo.put("clientVersion", store.clientVersion().toString());
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("version", 1);

@@ -170,14 +170,14 @@ public final class ReportingToken {
                 }
             }
             case ContactMessage contact -> {
-                var vcard = contact.vcard().orElse(null);
+                var vcard = contact.vcard().toVcard();
                 if (vcard != null) {
                     baos.write(vcard.getBytes(StandardCharsets.UTF_8));
                 }
             }
             case ContactsMessage contacts -> {
                 for (var entry : contacts.contacts()) {
-                    var vcard = entry.vcard().orElse(null);
+                    var vcard = entry.vcard().toVcard();
                     if (vcard != null) {
                         baos.write(vcard.getBytes(StandardCharsets.UTF_8));
                     }
