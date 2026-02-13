@@ -25,9 +25,12 @@ public final class SocketStream {
     private final Map<String, SequencedCollection<Handler>> handlers;
 
     public SocketStream(WhatsAppClient whatsapp, DeviceService deviceService, MessageReceiverService messageReceiverService, LidMigrationService lidMigrationService, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
-        var pairingCode = switch (webVerificationHandler) {
-            case WhatsAppClientVerificationHandler.Web.PairingCode _ -> new SocketPhonePairing();
-            case WhatsAppClientVerificationHandler.Web.QrCode _ -> null;
+        var pairingCode = switch (whatsapp.store().clientType()) {
+            case MOBILE -> null;
+            case WEB -> switch (webVerificationHandler) {
+                case WhatsAppClientVerificationHandler.Web.PairingCode _ -> new SocketPhonePairing();
+                case WhatsAppClientVerificationHandler.Web.QrCode _ -> null;
+            };
         };
 
         var result = new HashMap<String, SequencedCollection<Handler>>();

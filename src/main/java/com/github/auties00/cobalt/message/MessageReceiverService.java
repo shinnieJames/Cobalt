@@ -309,9 +309,23 @@ public final class MessageReceiverService {
         try {
             return signalMessageDecoder.decode(messageKey, type, encodedMessage.get());
         }catch (Throwable throwable) {
+            if (isIgnorableDecryptionFailure(throwable)) {
+                return MessageContainer.empty();
+            }
             whatsapp.handleFailure(MESSAGE, throwable);
             return MessageContainer.empty();
         }
+    }
+
+    private boolean isIgnorableDecryptionFailure(Throwable throwable) {
+        var className = throwable.getClass().getName();
+        if ("com.github.auties00.libsignal.exception.SignalMissingSenderKeyException".equals(className)) {
+            return true;
+        }
+
+        return throwable instanceof IllegalStateException illegalStateException
+                && illegalStateException.getMessage() != null
+                && illegalStateException.getMessage().startsWith("No signed prekey found with id ");
     }
 
     private void handleSenderKeyDistributionMessage(SenderKeyDistributionMessage keyDistributionMessage, SignalProtocolAddress address) {

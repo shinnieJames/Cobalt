@@ -2506,7 +2506,21 @@ public final class WhatsAppStore implements SignalProtocolStore {
      */
     @Override
     public Optional<SignalSignedKeyPair> findSignedPreKeyById(Integer id) {
-        return id == signedKeyPair.id() ? Optional.of(signedKeyPair) : Optional.empty();
+        if (id == null) {
+            return Optional.empty();
+        }
+
+        if (id == signedKeyPair.id()) {
+            return Optional.of(signedKeyPair);
+        }
+
+        // Some mobile sessions restored from six-parts receive pre-key messages targeting skey id 0.
+        // In that case, keep using the active signed key pair instead of hard-failing decryption.
+        if (id == 0) {
+            return Optional.of(signedKeyPair);
+        }
+
+        return Optional.empty();
     }
 
     /**

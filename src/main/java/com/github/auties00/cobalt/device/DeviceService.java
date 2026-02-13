@@ -161,7 +161,7 @@ public final class DeviceService {
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
         var companionIdentity = client.store()
                 .companionIdentity()
-                .orElseThrow(() -> new IllegalStateException("Companion identity is not available"));
+                .orElse(null);
 
         var remoteJid = userNode.getRequiredAttributeAsJid("jid");
         var registrationId = userNode.getChild("registration")
@@ -181,7 +181,9 @@ public final class DeviceService {
             return;
         }
 
-        DeviceADVValidator.extractAndValidateRemoteSignedDeviceIdentity(localJid, remoteJid, companionIdentity, userNode, identityKeyBytes);
+        if (companionIdentity != null && remoteJid.hasDevice()) {
+            DeviceADVValidator.extractAndValidateRemoteSignedDeviceIdentity(localJid, remoteJid, companionIdentity, userNode, identityKeyBytes);
+        }
 
         var signedPreKeyId = signedPreKey.getChild("id")
                 .flatMap(Node::toContentBytes)
