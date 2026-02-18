@@ -45,8 +45,7 @@ public final class TcTokenStanza {
      * checks AB prop, retrieves tcToken from chat, verifies not expired.
      */
     public Node build(Jid chatJid) {
-        var tcTokenEnabled = abPropsService.getBool(
-                ABProp.PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES_AB_PROP_CODE).orElse(false);
+        var tcTokenEnabled = abPropsService.getBool(ABProp.PRIVACY_TOKEN_SENDING_ON_ALL_1_ON_1_MESSAGES);
         if (!tcTokenEnabled) {
             return null;
         }

@@ -8,15 +8,16 @@ import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.stanza.*;
-import com.github.auties00.cobalt.model.business.BusinessProfile;
+import com.github.auties00.cobalt.model.business.profile.BusinessAutomatedType;
+import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.DeviceContextInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.ChatMessageKey;
-import com.github.auties00.cobalt.model.message.common.Message;
-import com.github.auties00.cobalt.model.message.common.MessageThreadId;
+import com.github.auties00.cobalt.model.message.ChatMessageKey;
+import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.message.MessageThreadId;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.standard.TextMessage;
 import com.github.auties00.cobalt.node.Node;
@@ -249,8 +250,7 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
             return null;
         }
 
-        var usernameEnabled = abPropsService.getBool(
-                ABProp.USERNAME_CONTACT_DISPLAY_AB_PROP_CODE).orElse(false);
+        var usernameEnabled = abPropsService.getBool(ABProp.USERNAME_CONTACT_DISPLAY);
         if (!usernameEnabled) {
             return null;
         }
@@ -302,6 +302,7 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
         // "1p_partial" (BIZ_1P) or "3p_full" (BIZ_3P)
         var bizBotType = client.queryBusinessProfile(chatJid)
                 .flatMap(BusinessProfile::automatedType)
+                .map(BusinessAutomatedType::value)
                 .orElse(null);
 
         return BotStanza.buildMetadata(botMsgBodyType, bizBotType, clientThreadId);

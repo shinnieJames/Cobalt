@@ -1,7 +1,7 @@
 
 package com.github.auties00.cobalt.client;
 
-import com.github.auties00.cobalt.model.message.common.Message;
+import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.standard.TextMessage;
 import it.auties.linkpreview.LinkPreview;
 

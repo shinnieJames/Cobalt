@@ -1,12 +1,11 @@
 package com.github.auties00.cobalt.model.newsletter;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.util.Clock;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -71,11 +70,11 @@ public final class NewsletterMetadata {
     }
 
     public OptionalLong creationTimestampSeconds() {
-        return Clock.parseTimestamp(creationTimestampSeconds);
+        return creationTimestampSeconds == 0 ? OptionalLong.empty() : OptionalLong.of(creationTimestampSeconds);
     }
 
-    public Optional<ZonedDateTime> creationTimestamp() {
-        return Clock.parseSeconds(creationTimestampSeconds);
+    public Optional<Instant> creationTimestamp() {
+        return creationTimestampSeconds == 0 ? OptionalLong.empty() : OptionalLong.of(creationTimestampSeconds);
     }
 
     public Optional<NewsletterName> name() {

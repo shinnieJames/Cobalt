@@ -1,0 +1,174 @@
+package com.github.auties00.cobalt.model.message.event;
+
+import com.github.auties00.cobalt.model.message.ContextInfo;
+import com.github.auties00.cobalt.model.message.ContextualMessage;
+import com.github.auties00.cobalt.model.message.location.LocationMessage;
+
+import java.time.Instant;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
+import java.util.OptionalLong;
+
+@ProtobufMessage(name = "Message.EventMessage")
+public final class EventMessage implements ContextualMessage {
+    @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
+    ContextInfo contextInfo;
+
+    @ProtobufProperty(index = 2, type = ProtobufType.BOOL)
+    Boolean isCanceled;
+
+    @ProtobufProperty(index = 3, type = ProtobufType.STRING)
+    String name;
+
+    @ProtobufProperty(index = 4, type = ProtobufType.STRING)
+    String description;
+
+    @ProtobufProperty(index = 5, type = ProtobufType.MESSAGE)
+    LocationMessage location;
+
+    @ProtobufProperty(index = 6, type = ProtobufType.STRING)
+    String joinLink;
+
+    @ProtobufProperty(index = 7, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant startTime;
+
+    @ProtobufProperty(index = 8, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant endTime;
+
+    @ProtobufProperty(index = 9, type = ProtobufType.BOOL)
+    Boolean extraGuestsAllowed;
+
+    @ProtobufProperty(index = 10, type = ProtobufType.BOOL)
+    Boolean isScheduleCall;
+
+    @ProtobufProperty(index = 11, type = ProtobufType.BOOL)
+    Boolean hasReminder;
+
+    @ProtobufProperty(index = 12, type = ProtobufType.INT64)
+    Long reminderOffsetSec;
+
+
+    EventMessage(ContextInfo contextInfo, Boolean isCanceled, String name, String description, LocationMessage location, String joinLink, Instant startTime, Instant endTime, Boolean extraGuestsAllowed, Boolean isScheduleCall, Boolean hasReminder, Long reminderOffsetSec) {
+        this.contextInfo = contextInfo;
+        this.isCanceled = isCanceled;
+        this.name = name;
+        this.description = description;
+        this.location = location;
+        this.joinLink = joinLink;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.extraGuestsAllowed = extraGuestsAllowed;
+        this.isScheduleCall = isScheduleCall;
+        this.hasReminder = hasReminder;
+        this.reminderOffsetSec = reminderOffsetSec;
+    }
+
+    public Optional<ContextInfo> contextInfo() {
+        return Optional.ofNullable(contextInfo);
+    }
+
+    public boolean isCanceled() {
+        return isCanceled != null && isCanceled;
+    }
+
+    public Optional<String> name() {
+        return Optional.ofNullable(name);
+    }
+
+    public Optional<String> description() {
+        return Optional.ofNullable(description);
+    }
+
+    public Optional<LocationMessage> location() {
+        return Optional.ofNullable(location);
+    }
+
+    public Optional<String> joinLink() {
+        return Optional.ofNullable(joinLink);
+    }
+
+    public Optional<Instant> startTime() {
+        return Optional.ofNullable(startTime);
+    }
+
+    public Optional<Instant> endTime() {
+        return Optional.ofNullable(endTime);
+    }
+
+    public boolean extraGuestsAllowed() {
+        return extraGuestsAllowed != null && extraGuestsAllowed;
+    }
+
+    public boolean isScheduleCall() {
+        return isScheduleCall != null && isScheduleCall;
+    }
+
+    public boolean hasReminder() {
+        return hasReminder != null && hasReminder;
+    }
+
+    public OptionalLong reminderOffsetSec() {
+        return reminderOffsetSec == null ? OptionalLong.empty() : OptionalLong.of(reminderOffsetSec);
+    }
+
+    public EventMessage setContextInfo(ContextInfo contextInfo) {
+        this.contextInfo = contextInfo;
+        return this;
+    }
+
+    public EventMessage setCanceled(Boolean isCanceled) {
+        this.isCanceled = isCanceled;
+        return this;
+    }
+
+    public EventMessage setName(String name) {
+        this.name = name;
+        return this;
+    }
+
+    public EventMessage setDescription(String description) {
+        this.description = description;
+        return this;
+    }
+
+    public EventMessage setLocation(LocationMessage location) {
+        this.location = location;
+        return this;
+    }
+
+    public EventMessage setJoinLink(String joinLink) {
+        this.joinLink = joinLink;
+        return this;
+    }
+
+    public EventMessage setStartTime(Instant startTime) {
+        this.startTime = startTime;
+        return this;
+    }
+
+    public EventMessage setEndTime(Instant endTime) {
+        this.endTime = endTime;
+        return this;
+    }
+
+    public EventMessage setExtraGuestsAllowed(Boolean extraGuestsAllowed) {
+        this.extraGuestsAllowed = extraGuestsAllowed;
+        return this;
+    }
+
+    public EventMessage setScheduleCall(Boolean isScheduleCall) {
+        this.isScheduleCall = isScheduleCall;
+        return this;
+    }
+
+    public EventMessage setHasReminder(Boolean hasReminder) {
+        this.hasReminder = hasReminder;
+        return this;
+    }
+
+    public EventMessage setReminderOffsetSec(Long reminderOffsetSec) {
+        this.reminderOffsetSec = reminderOffsetSec;
+        return this;
+    }
+}

@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.message.send.stanza;
 
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 

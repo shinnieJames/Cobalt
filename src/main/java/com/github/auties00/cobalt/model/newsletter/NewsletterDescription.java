@@ -1,12 +1,11 @@
 package com.github.auties00.cobalt.model.newsletter;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.github.auties00.cobalt.util.Clock;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -55,8 +54,8 @@ public final class NewsletterDescription {
         return updateTimeSeconds;
     }
 
-    public Optional<ZonedDateTime> updateTime() {
-        return Clock.parseSeconds(updateTimeSeconds);
+    public Optional<Instant> updateTime() {
+        return updateTimeSeconds == 0 ? Optional.empty() : Optional.of(Instant.ofEpochSecond(updateTimeSeconds));
     }
 
     @Override

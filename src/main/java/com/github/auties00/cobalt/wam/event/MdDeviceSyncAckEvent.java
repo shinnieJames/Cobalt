@@ -1,0 +1,35 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.AddressingMode;
+import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
+import com.github.auties00.cobalt.wam.type.MessageChatType;
+import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
+
+import java.util.Optional;
+
+@WamEvent(id = 2180)
+public interface MdDeviceSyncAckEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.ENUM)
+    Optional<MessageChatType> chatType();
+
+    @WamProperty(index = 7, type = WamType.ENUM)
+    Optional<InvisibleMessageCategoryType> invisibleMessageCategory();
+
+    @WamProperty(index = 3, type = WamType.BOOLEAN)
+    Optional<Boolean> isLid();
+
+    @WamProperty(index = 5, type = WamType.ENUM)
+    Optional<AddressingMode> localAddressingMode();
+
+    @WamProperty(index = 2, type = WamType.BOOLEAN)
+    Optional<Boolean> revoke();
+
+    @WamProperty(index = 6, type = WamType.ENUM)
+    Optional<AddressingMode> serverAddressingMode();
+
+    @WamProperty(index = 4, type = WamType.ENUM)
+    Optional<TypeOfGroupEnum> typeOfGroup();
+}

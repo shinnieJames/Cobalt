@@ -17,10 +17,10 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketPhonePairing;
 import com.github.auties00.cobalt.stream.SocketStream;
-import com.github.auties00.cobalt.util.Clock;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
@@ -127,8 +127,7 @@ public final class IqStreamNodeHandler extends SocketStream.Handler {
         if(result == null) {
             whatsapp.disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
         }else {
-            var store = whatsapp.store();
-            store.serialize();
+            whatsapp.store().save();
         }
         pingExecutor.execute(this::schedulePing);
     }
@@ -256,7 +255,7 @@ public final class IqStreamNodeHandler extends SocketStream.Handler {
                 .jid(jid)
                 .chosenName(whatsapp.store().name())
                 .lastKnownPresence(ContactStatus.AVAILABLE)
-                .lastSeenSeconds(Clock.nowSeconds())
+                .lastSeenSeconds(Instant.now().getEpochSecond())
                 .blocked(false)
                 .build();
         whatsapp.store()

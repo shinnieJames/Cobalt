@@ -1,0 +1,72 @@
+package com.github.auties00.cobalt.model.message.system;
+
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.Message;
+
+import java.time.Instant;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
+
+@ProtobufMessage(name = "Message.PinInChatMessage")
+public final class PinInChatMessage implements Message {
+    @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
+    MessageKey key;
+
+    @ProtobufProperty(index = 2, type = ProtobufType.ENUM)
+    Type type;
+
+    @ProtobufProperty(index = 3, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant senderTimestampMs;
+
+
+    PinInChatMessage(MessageKey key, Type type, Instant senderTimestampMs) {
+        this.key = key;
+        this.type = type;
+        this.senderTimestampMs = senderTimestampMs;
+    }
+
+    public Optional<MessageKey> key() {
+        return Optional.ofNullable(key);
+    }
+
+    public Optional<Type> type() {
+        return Optional.ofNullable(type);
+    }
+
+    public Optional<Instant> senderTimestampMs() {
+        return Optional.ofNullable(senderTimestampMs);
+    }
+
+    public PinInChatMessage setKey(MessageKey key) {
+        this.key = key;
+        return this;
+    }
+
+    public PinInChatMessage setType(Type type) {
+        this.type = type;
+        return this;
+    }
+
+    public PinInChatMessage setSenderTimestampMs(Instant senderTimestampMs) {
+        this.senderTimestampMs = senderTimestampMs;
+        return this;
+    }
+
+    @ProtobufEnum(name = "Message.PinInChatMessage.Type")
+    public static enum Type {
+        UNKNOWN_TYPE(0),
+        PIN_FOR_ALL(1),
+        UNPIN_FOR_ALL(2);
+
+        Type(@ProtobufEnumIndex int index) {
+            this.index = index;
+        }
+
+        final int index;
+
+        public int index() {
+            return this.index;
+        }
+    }
+}

@@ -176,7 +176,7 @@ public abstract sealed class WhatsAppMobileClientRegistration implements AutoClo
             var jid = Jid.of(phoneNumber);
             store.setJid(jid);
         }
-        store.serialize();
+        store.save();
     }
 
     private String normalizeCodeResult(String code) {

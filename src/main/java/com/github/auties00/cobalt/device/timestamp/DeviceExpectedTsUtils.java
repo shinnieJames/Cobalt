@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.device.timestamp;
 
-import com.github.auties00.cobalt.model.device.DeviceList;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 
 import java.time.Duration;
 import java.time.Instant;

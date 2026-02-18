@@ -6,7 +6,7 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketStream;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 
 public final class WebUpdateSelfPresenceStreamNodeHandler extends SocketStream.Handler {
     public WebUpdateSelfPresenceStreamNodeHandler(WhatsAppClient whatsapp) {
@@ -27,7 +27,7 @@ public final class WebUpdateSelfPresenceStreamNodeHandler extends SocketStream.H
                 .flatMap(whatsapp.store()::findContactByJid)
                 .ifPresent(entry -> {
                     entry.setLastKnownPresence(ContactStatus.AVAILABLE);
-                    entry.setLastSeen(ZonedDateTime.now());
+                    entry.setLastSeen(Instant.now());
                 });
     }
 }

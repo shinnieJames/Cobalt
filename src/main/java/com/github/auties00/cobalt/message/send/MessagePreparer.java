@@ -1,17 +1,18 @@
 package com.github.auties00.cobalt.message.send;
 
+import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.info.*;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.model.message.common.*;
-import com.github.auties00.cobalt.model.message.standard.*;
+import com.github.auties00.cobalt.model.message.*;
 import com.github.auties00.cobalt.model.message.standard.EncryptedCommentMessageSimpleBuilder;
 import com.github.auties00.cobalt.model.message.standard.EncryptedReactionMessageSimpleBuilder;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.sync.DeviceListMetadataBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.util.Clock;
 import com.github.auties00.cobalt.util.SecureBytes;
 
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -91,7 +92,7 @@ final class MessagePreparer {
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
         var messageId = ChatMessageKey.randomId(store.clientType());
-        var timestamp = Clock.nowSeconds();
+        var timestamp = Instant.now().getEpochSecond();
 
         // WAWebOutgoingMessage: generate 32-byte message secret
         var messageSecret = SecureBytes.random(MESSAGE_SECRET_SIZE);
@@ -155,7 +156,7 @@ final class MessagePreparer {
         var info = new NewsletterMessageInfoBuilder()
                 .id(ChatMessageKey.randomId(store.clientType()))
                 .serverId(oldServerId + 1)
-                .timestampSeconds(Clock.nowSeconds())
+                .timestampSeconds(Instant.now().getEpochSecond())
                 .message(container)
                 .status(MessageStatus.PENDING)
                 .build();
@@ -283,8 +284,9 @@ final class MessagePreparer {
             return false;
         }
 
-        var metadata = store.findGroupOrCommunityMetadata(chatJid).orElse(null);
-        return metadata != null && metadata.isDefaultSubgroup();
+        var metadata = store.findChatMetadata(chatJid).orElse(null);
+        return metadata instanceof GroupMetadata group
+                && group.isDefaultSubgroup();
     }
 
     /**

@@ -1,0 +1,25 @@
+package com.github.auties00.cobalt.model.sync.data;
+
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
+
+@ProtobufMessage(name = "SyncdValue")
+public final class SyncdValue {
+    @ProtobufProperty(index = 1, type = ProtobufType.BYTES)
+    byte[] blob;
+
+
+    SyncdValue(byte[] blob) {
+        this.blob = blob;
+    }
+
+    public Optional<byte[]> blob() {
+        return Optional.ofNullable(blob);
+    }
+
+    public SyncdValue setBlob(byte[] blob) {
+        this.blob = blob;
+        return this;
+    }
+}

@@ -1,150 +1,238 @@
 package com.github.auties00.cobalt.model.chat;
 
-import com.github.auties00.cobalt.util.Clock;
 import it.auties.protobuf.annotation.ProtobufDeserializer;
 import it.auties.protobuf.annotation.ProtobufSerializer;
 
 import java.time.Instant;
-import java.time.ZonedDateTime;
-import java.util.Optional;
+import java.time.temporal.ChronoUnit;
 
 /**
- * An immutable model class that represents a mute
+ * A mute state for a chat, representing whether notifications for the chat
+ * are suppressed and, if so, for how long.
  *
- * @param endTimeStamp the end date of the mute associated with this object stored as second since
- *                     {@link Instant#EPOCH}
+ * <p>Instances are obtained through the static factory methods
+ * {@link #notMuted()}, {@link #muted()}, {@link #mutedForEightHours()},
+ * {@link #mutedForOneWeek()}, and {@link #mutedUntil(Long)}.
+ *
+ * <p>The mute state is serialized as an epoch-second value via
+ * {@link #toEpochSecond()}: {@code 0} means not muted, {@code -1} means
+ * muted indefinitely, and any other positive value represents the
+ * expiration timestamp.
  */
-public record ChatMute(long endTimeStamp) {
+public sealed interface ChatMute {
     /**
-     * Not muted flag
-     */
-    private static final long NOT_MUTED_FLAG = 0;
-
-    /**
-     * Muted flag
-     */
-    private static final long MUTED_INDEFINITELY_FLAG = -1;
-
-    /**
-     * Not muted constant
-     */
-    private static final ChatMute NOT_MUTED = new ChatMute(NOT_MUTED_FLAG);
-
-    /**
-     * Muted constant
-     */
-    private static final ChatMute MUTED_INDEFINITELY = new ChatMute(MUTED_INDEFINITELY_FLAG);
-
-    /**
-     * Constructs a new not muted ChatMute
+     * Returns the epoch-second representation of this mute state.
      *
-     * @return a non-null mute
+     * <p>The returned value is {@code 0} for {@link Disabled}, {@code -1}
+     * for {@link Enabled.Indefinitely}, or a positive epoch-second timestamp
+     * for {@link Enabled.Timeframe}.
+     *
+     * @return the epoch-second value representing this mute state
      */
-    public static ChatMute notMuted() {
-        return NOT_MUTED;
+    @ProtobufSerializer
+    long toEpochSecond();
+
+    /**
+     * Returns whether the chat is currently muted.
+     *
+     * @return {@code true} if notifications are suppressed, {@code false}
+     *         otherwise
+     */
+    boolean isMuted();
+
+    /**
+     * Returns a {@code ChatMute} representing the not-muted state.
+     *
+     * <p>The returned instance has an epoch-second value of {@code 0} and
+     * its {@link #isMuted()} method returns {@code false}.
+     *
+     * @return a {@code ChatMute} indicating that notifications are enabled,
+     *         not null
+     */
+    static ChatMute notMuted() {
+        return Disabled.INSTANCE;
     }
 
     /**
-     * Constructs a new muted ChatMute
+     * Returns a {@code ChatMute} representing an indefinite mute with no
+     * expiration.
      *
-     * @return a non-null mute
+     * <p>The returned instance has an epoch-second value of {@code -1} and
+     * its {@link #isMuted()} method returns {@code true}.
+     *
+     * @return a {@code ChatMute} indicating that notifications are
+     *         suppressed indefinitely, not null
      */
-    public static ChatMute muted() {
-        return MUTED_INDEFINITELY;
+    static ChatMute muted() {
+        return Enabled.Indefinitely.INSTANCE;
     }
 
     /**
-     * Constructs a new mute that lasts eight hours
+     * Returns a {@code ChatMute} that expires eight hours from the current
+     * time.
      *
-     * @return a non-null mute
+     * <p>The expiration instant is computed as
+     * {@code Instant.now().plus(8, ChronoUnit.HOURS)}.
+     *
+     * @return a {@code ChatMute} muted for eight hours, not null
      */
-    public static ChatMute mutedForEightHours() {
-        return muted(ZonedDateTime.now().plusHours(8).toEpochSecond());
+    static ChatMute mutedForEightHours() {
+        return mutedUntil(Instant.now().plus(8, ChronoUnit.HOURS).getEpochSecond());
     }
 
     /**
-     * Constructs a new mute for a duration in endTimeStamp
+     * Returns a {@code ChatMute} that expires one week from the current
+     * time.
      *
-     * @param seconds can be null and is considered as not muted
-     * @return a non-null mute
+     * <p>The expiration instant is computed as
+     * {@code Instant.now().plus(1, ChronoUnit.WEEKS)}.
+     *
+     * @return a {@code ChatMute} muted for one week, not null
+     */
+    static ChatMute mutedForOneWeek() {
+        return mutedUntil(Instant.now().plus(1, ChronoUnit.WEEKS).getEpochSecond());
+    }
+
+    /**
+     * Returns a {@code ChatMute} for the given epoch-second expiration
+     * timestamp.
+     *
+     * @param seconds the epoch-second expiration timestamp, or {@code null}
+     *        to indicate not muted
+     * @return a {@code ChatMute} corresponding to the given timestamp, not
+     *         null
      */
     @ProtobufDeserializer
-    public static ChatMute muted(Long seconds) {
-        if (seconds == null || seconds == NOT_MUTED_FLAG) {
-            return NOT_MUTED;
+    static ChatMute mutedUntil(Long seconds) {
+        if (seconds == null || seconds == Disabled.EPOCH_SECOND) {
+            return Disabled.INSTANCE;
+        } else if (seconds == Enabled.Indefinitely.EPOCH_SECOND) {
+            return Enabled.Indefinitely.INSTANCE;
+        } else {
+            return new ChatMute.Enabled.Timeframe(Instant.ofEpochSecond(seconds));
         }
-        if (seconds == MUTED_INDEFINITELY_FLAG) {
-            return MUTED_INDEFINITELY;
-        }
-        return new ChatMute(seconds);
     }
 
     /**
-     * Constructs a new mute that lasts one week
+     * A {@link ChatMute} representing the not-muted state, where notifications
+     * are delivered normally.
      *
-     * @return a non-null mute
+     * <p>This class uses a singleton pattern; the sole instance is obtained
+     * through {@link ChatMute#notMuted()}.
      */
-    public static ChatMute mutedForOneWeek() {
-        return muted(ZonedDateTime.now().plusWeeks(1).toEpochSecond());
-    }
-
-    /**
-     * Returns whether the chat associated with this object is muted or not.
-     *
-     * @return true if the chat associated with this object is muted
-     */
-    public boolean isMuted() {
-        return type() != Type.NOT_MUTED;
-    }
-
-    /**
-     * Returns a non-null enum that describes the type of mute for this object
-     *
-     * @return a non-null enum that describes the type of mute for this object
-     */
-    public Type type() {
-        if (endTimeStamp == MUTED_INDEFINITELY_FLAG) {
-            return Type.MUTED_INDEFINITELY;
-        }
-        if (endTimeStamp == NOT_MUTED_FLAG) {
-            return Type.NOT_MUTED;
-        }
-        return Type.MUTED_FOR_TIMEFRAME;
-    }
-
-    /**
-     * Returns the date when this mute expires if the chat is muted and not indefinitely
-     *
-     * @return a non-empty optional date if {@link ChatMute#endTimeStamp} > 0
-     */
-    public Optional<ZonedDateTime> end() {
-        return Clock.parseSeconds(endTimeStamp);
-    }
-
-    @ProtobufSerializer
-    public long endTimeStamp() {
-        return endTimeStamp;
-    }
-
-    /**
-     * The constants of this enumerated type describe the various types of mute a {@link ChatMute} can
-     * describe
-     */
-    public enum Type {
+    final class Disabled implements ChatMute {
         /**
-         * This constant describes a {@link ChatMute} that holds a seconds greater than 0 Simply put,
-         * {@link ChatMute#endTimeStamp()} > 0
+         * The singleton not-muted instance.
          */
-        MUTED_FOR_TIMEFRAME,
+        private static final Disabled INSTANCE = new Disabled();
+
         /**
-         * This constant describes a {@link ChatMute} that holds a seconds equal to -1 Simply put,
-         * {@link ChatMute#endTimeStamp()} == -1
+         * The epoch-second sentinel value ({@code 0}) indicating that the
+         * chat is not muted.
          */
-        MUTED_INDEFINITELY,
+        private static final int EPOCH_SECOND = 0;
+
         /**
-         * This constant describes a {@link ChatMute} that holds a seconds equal to 0 Simply put,
-         * {@link ChatMute#endTimeStamp()} == 0
+         * {@inheritDoc}
+         *
+         * @implSpec This implementation always returns {@code 0}.
          */
-        NOT_MUTED
+        @Override
+        public long toEpochSecond() {
+            return EPOCH_SECOND;
+        }
+
+        /**
+         * {@inheritDoc}
+         *
+         * @implSpec This implementation always returns {@code false}.
+         */
+        @Override
+        public boolean isMuted() {
+            return false;
+        }
+    }
+
+    /**
+     * A {@link ChatMute} sub-interface representing an active mute, either
+     * time-bound or indefinite.
+     *
+     * <p>All implementations of this interface return {@code true} from
+     * {@link #isMuted()}.
+     */
+    sealed interface Enabled extends ChatMute {
+        /**
+         * {@inheritDoc}
+         *
+         * @implSpec The default implementation always returns {@code true}.
+         */
+        @Override
+        default boolean isMuted() {
+            return true;
+        }
+
+        /**
+         * An {@link Enabled} mute that expires at a specific {@link Instant}.
+         *
+         * <p>Instances are created through {@link ChatMute#mutedUntil(Long)},
+         * {@link ChatMute#mutedForEightHours()}, or
+         * {@code ChatMute#mutedForOneWeek()}.
+         */
+        final class Timeframe implements Enabled {
+            /**
+             * The instant at which this mute expires.
+             */
+            final Instant end;
+
+            /**
+             * Constructs a new {@code Timeframe} mute that expires at the
+             * given instant.
+             *
+             * @param end the instant at which the mute expires, not null
+             */
+            Timeframe(Instant end) {
+                this.end = end;
+            }
+
+            /**
+             * {@inheritDoc}
+             *
+             * @implSpec This implementation returns the epoch second of the
+             *           expiration instant.
+             */
+            @Override
+            public long toEpochSecond() {
+                return end.getEpochSecond();
+            }
+        }
+
+        /**
+         * An {@link Enabled} mute with no expiration.
+         *
+         * <p>This class uses a singleton pattern; the sole instance is obtained
+         * through {@link ChatMute#muted()}.
+         */
+        final class Indefinitely implements Enabled {
+            /**
+             * The singleton indefinitely-muted instance.
+             */
+            private static final Indefinitely INSTANCE = new Indefinitely();
+
+            /**
+             * The epoch-second sentinel value ({@code -1}) indicating that
+             * the mute has no expiration.
+             */
+            private static final long EPOCH_SECOND = -1;
+
+            /**
+             * {@inheritDoc}
+             *
+             * @implSpec This implementation always returns {@code -1}.
+             */
+            @Override
+            public long toEpochSecond() {
+                return EPOCH_SECOND;
+            }
+        }
     }
 }

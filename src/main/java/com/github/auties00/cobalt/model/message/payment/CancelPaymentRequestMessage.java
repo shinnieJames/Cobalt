@@ -1,50 +1,28 @@
 package com.github.auties00.cobalt.model.message.payment;
 
-import com.github.auties00.cobalt.model.message.common.ChatMessageKey;
-import com.github.auties00.cobalt.model.message.common.PaymentMessage;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.Message;
 
-import java.util.Objects;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
 
-/**
- * A model class that represents a message that cancels a {@link RequestPaymentMessage}.
- */
 @ProtobufMessage(name = "Message.CancelPaymentRequestMessage")
-public final class CancelPaymentRequestMessage implements PaymentMessage {
-
+public final class CancelPaymentRequestMessage implements Message {
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
-    final ChatMessageKey key;
+    MessageKey key;
 
-    CancelPaymentRequestMessage(ChatMessageKey key) {
-        this.key = Objects.requireNonNull(key, "key cannot be null");
+
+    CancelPaymentRequestMessage(MessageKey key) {
+        this.key = key;
     }
 
-    public ChatMessageKey key() {
-        return key;
+    public Optional<MessageKey> key() {
+        return Optional.ofNullable(key);
     }
 
-    @Override
-    public Type type() {
-        return Type.CANCEL_PAYMENT_REQUEST;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof CancelPaymentRequestMessage that
-                && Objects.equals(key, that.key);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(key);
-    }
-
-    @Override
-    public String toString() {
-        return "CancelPaymentRequestMessage[" +
-                "key=" + key +
-                ']';
+    public CancelPaymentRequestMessage setKey(MessageKey key) {
+        this.key = key;
+        return this;
     }
 }

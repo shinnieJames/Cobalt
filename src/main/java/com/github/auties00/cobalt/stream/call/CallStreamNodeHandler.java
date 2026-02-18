@@ -1,11 +1,12 @@
 package com.github.auties00.cobalt.stream.call;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.model.call.CallBuilder;
-import com.github.auties00.cobalt.model.call.CallStatus;
 import com.github.auties00.cobalt.stream.SocketStream;
-import com.github.auties00.cobalt.util.Clock;
+
+import java.time.Instant;
 
 public final class CallStreamNodeHandler extends SocketStream.Handler {
     public CallStreamNodeHandler(WhatsAppClient whatsapp) {
@@ -31,18 +32,19 @@ public final class CallStreamNodeHandler extends SocketStream.Handler {
         var callId = callNode.getRequiredAttributeAsString("call-id");
         var caller = callNode.getAttributeAsJid("call-creator", from);
         var status = getCallStatus(callNode);
-        var timestampSeconds = callNode.getAttributeAsLong("t")
-                .orElseGet(Clock::nowSeconds);
+        var timestamp = callNode.getAttributeAsLong("t")
+                .map(Instant::ofEpochSecond)
+                .orElseGet(Instant::now);
         var isOffline = callNode.hasAttribute("offline");
         var hasVideo = callNode.hasChild("video");
         var call = new CallBuilder()
                 .chatJid(from)
                 .callerJid(caller)
-                .id(callId)
-                .timestampSeconds(timestampSeconds)
+                .callId(callId)
+                .timestamp(timestamp)
                 .video(hasVideo)
                 .status(status)
-                .offline(isOffline)
+                .offlineOffer(isOffline)
                 .build();
         whatsapp.store().addCall(call);
         for(var listener : whatsapp.store().listeners()) {
@@ -50,12 +52,12 @@ public final class CallStreamNodeHandler extends SocketStream.Handler {
         }
     }
 
-    private CallStatus getCallStatus(Node node) {
+    private CallOffer.Status getCallStatus(Node node) {
         return switch (node.description()) {
-            case "terminate" -> node.hasAttribute("reason", "timeout") ? CallStatus.TIMED_OUT : CallStatus.REJECTED;
-            case "reject" -> CallStatus.REJECTED;
-            case "accept" -> CallStatus.ACCEPTED;
-            default -> CallStatus.RINGING;
+            case "terminate" -> node.hasAttribute("reason", "timeout") ? CallOffer.Status.TIMED_OUT : CallOffer.Status.CANCELLED;
+            case "reject" -> CallOffer.Status.REJECTED;
+            case "accept" -> CallOffer.Status.ACCEPTED;
+            default -> CallOffer.Status.RINGING;
         };
     }
 }

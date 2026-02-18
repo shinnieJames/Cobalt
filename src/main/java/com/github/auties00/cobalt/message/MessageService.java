@@ -10,7 +10,8 @@ import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -89,7 +90,7 @@ public final class MessageService {
      *
      * <p>Use this overload when the caller has already constructed a
      * fully-populated {@link ChatMessageInfo} or
-     * {@link com.github.auties00.cobalt.model.info.NewsletterMessageInfo}
+     * {@link NewsletterMessageInfo}
      * with all required fields.
      *
      * @param messageInfo the fully-prepared outgoing message
@@ -124,7 +125,7 @@ public final class MessageService {
      * appropriate {@link MessageInfo} subtype.
      *
      * <p>Newsletter messages produce
-     * {@link com.github.auties00.cobalt.model.info.NewsletterMessageInfo};
+     * {@link NewsletterMessageInfo};
      * all other messages go through E2E decryption and produce
      * {@link ChatMessageInfo}.  Returns {@code null} for unavailable
      * (fanout placeholder) messages.

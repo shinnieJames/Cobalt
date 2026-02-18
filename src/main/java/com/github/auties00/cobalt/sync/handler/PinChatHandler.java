@@ -4,7 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import com.github.auties00.cobalt.util.Clock;
+
+import java.time.Instant;
 
 /**
  * Handles pin chat actions.
@@ -43,7 +44,7 @@ public final class PinChatHandler implements WebAppStateActionHandler {
         switch (mutation.operation()) {
             case SET -> {
                 if (action.pinned()) {
-                    chat.get().setPinnedTimestampSeconds((int) Clock.nowSeconds());
+                    chat.get().setPinnedTimestampSeconds((int) Instant.now().getEpochSecond());
                 } else {
                     chat.get().setPinnedTimestampSeconds(0);
                 }

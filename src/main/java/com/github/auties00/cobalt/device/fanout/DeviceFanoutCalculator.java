@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.device.fanout;
 
-import com.github.auties00.cobalt.model.device.DeviceList;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
@@ -100,8 +100,7 @@ public final class DeviceFanoutCalculator {
      * ADV_ACCEPT_HOSTED_DEVICES AB prop is enabled.
      */
     public boolean isBizHostedDevicesEnabled() {
-        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES_AB_PROP_CODE)
-                .orElse(false);
+        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES);
     }
 
     /**

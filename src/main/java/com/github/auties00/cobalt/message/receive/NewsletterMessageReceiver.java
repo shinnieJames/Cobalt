@@ -1,10 +1,9 @@
 package com.github.auties00.cobalt.message.receive;
 
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.info.NewsletterMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.MessageContainerSpec;
-import com.github.auties00.cobalt.model.message.common.MessageStatus;
+import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 

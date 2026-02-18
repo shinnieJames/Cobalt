@@ -1,0 +1,97 @@
+package com.github.auties00.cobalt.model.sync.action.media;
+
+import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.SyncAction;
+
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
+import java.util.OptionalLong;
+
+@ProtobufMessage(name = "SyncActionValue.NoteEditAction")
+public final class NoteEditAction implements SyncAction {
+    @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
+    NoteType type;
+
+    @ProtobufProperty(index = 2, type = ProtobufType.STRING)
+    Jid chatJid;
+
+    @ProtobufProperty(index = 3, type = ProtobufType.INT64)
+    Long createdAt;
+
+    @ProtobufProperty(index = 4, type = ProtobufType.BOOL)
+    Boolean deleted;
+
+    @ProtobufProperty(index = 5, type = ProtobufType.STRING)
+    String unstructuredContent;
+
+
+    NoteEditAction(NoteType type, Jid chatJid, Long createdAt, Boolean deleted, String unstructuredContent) {
+        this.type = type;
+        this.chatJid = chatJid;
+        this.createdAt = createdAt;
+        this.deleted = deleted;
+        this.unstructuredContent = unstructuredContent;
+    }
+
+    public Optional<NoteType> type() {
+        return Optional.ofNullable(type);
+    }
+
+    public Optional<Jid> chatJid() {
+        return Optional.ofNullable(chatJid);
+    }
+
+    public OptionalLong createdAt() {
+        return createdAt == null ? OptionalLong.empty() : OptionalLong.of(createdAt);
+    }
+
+    public boolean deleted() {
+        return deleted != null && deleted;
+    }
+
+    public Optional<String> unstructuredContent() {
+        return Optional.ofNullable(unstructuredContent);
+    }
+
+    public NoteEditAction setType(NoteType type) {
+        this.type = type;
+        return this;
+    }
+
+    public NoteEditAction setChatJid(Jid chatJid) {
+        this.chatJid = chatJid;
+        return this;
+    }
+
+    public NoteEditAction setCreatedAt(Long createdAt) {
+        this.createdAt = createdAt;
+        return this;
+    }
+
+    public NoteEditAction setDeleted(Boolean deleted) {
+        this.deleted = deleted;
+        return this;
+    }
+
+    public NoteEditAction setUnstructuredContent(String unstructuredContent) {
+        this.unstructuredContent = unstructuredContent;
+        return this;
+    }
+
+    @ProtobufEnum(name = "SyncActionValue.NoteEditAction.NoteType")
+    public static enum NoteType {
+        UNSTRUCTURED(1),
+        STRUCTURED(2);
+
+        NoteType(@ProtobufEnumIndex int index) {
+            this.index = index;
+        }
+
+        final int index;
+
+        public int index() {
+            return this.index;
+        }
+    }
+}

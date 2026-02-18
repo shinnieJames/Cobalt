@@ -28,7 +28,6 @@ import java.util.Objects;
  * which chats qualify (first message only, or all messages).
  */
 public final class CtwaAttributionStanza {
-    private static final boolean CTWA_LOGGING_ENABLED_DEFAULT = false;
 
     private final WhatsAppStore store;
     private final ABPropsService abPropsService;
@@ -51,8 +50,7 @@ public final class CtwaAttributionStanza {
      */
     public Node build(Jid chatJid) {
         // WAWebExternalCtxConfig.isCtxLoggingEnabled
-        var isCtxLoggingEnabled = abPropsService.getBool(ABProp.CTWA_CONTEXT_LOGGING_ENABLED_AB_PROP_CODE)
-                .orElse(CTWA_LOGGING_ENABLED_DEFAULT);
+        var isCtxLoggingEnabled = abPropsService.getBool(ABProp.CTWA_CONTEXT_LOGGING_ENABLED);
         if (!isCtxLoggingEnabled) {
             return null;
         }

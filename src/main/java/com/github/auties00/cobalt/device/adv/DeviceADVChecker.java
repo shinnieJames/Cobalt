@@ -6,9 +6,9 @@ import com.github.auties00.cobalt.device.timestamp.DeviceExpectedTsUtils;
 import com.github.auties00.cobalt.exception.WhatsAppAdvCheckException;
 import com.github.auties00.cobalt.exception.WhatsAppOwnDeviceListExpiredException;
 import com.github.auties00.cobalt.model.auth.ADVEncryptionType;
-import com.github.auties00.cobalt.model.device.DeviceList;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.DeviceListBuilder;
-import com.github.auties00.cobalt.model.device.PendingDeviceSync;
+import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
@@ -40,19 +40,6 @@ public final class DeviceADVChecker implements AutoCloseable {
      */
     private static final Duration CHECK_INTERVAL = Duration.ofHours(24);
 
-    /**
-     * Default number of days before key index list expires.
-     *
-     * @apiNote AB prop NUM_DAYS_KEY_INDEX_LIST_EXPIRATION: defaults to 35 days.
-     */
-    private static final int DEFAULT_EXPIRY_DAYS = 35;
-
-    /**
-     * Default number of days before expiry to start warning.
-     *
-     * @apiNote AB prop NUM_DAYS_BEFORE_DEVICE_EXPIRY_CHECK: defaults to 7 days.
-     */
-    private static final int DEFAULT_WARNING_DAYS = 7;
 
     private final WhatsAppClient client;
     private final DeviceService deviceService;
@@ -141,10 +128,8 @@ public final class DeviceADVChecker implements AutoCloseable {
 
         try {
             // WAWebAdvDeviceInfoCheckJob: get expiry thresholds from AB props
-            var expiryDays = abPropsService.getInt(ABProp.NUM_DAYS_KEY_INDEX_LIST_EXPIRATION_AB_PROP_CODE)
-                    .orElse(DEFAULT_EXPIRY_DAYS);
-            var warningDays = abPropsService.getInt(ABProp.NUM_DAYS_BEFORE_DEVICE_EXPIRY_CHECK_AB_PROP_CODE)
-                    .orElse(DEFAULT_WARNING_DAYS);
+            var expiryDays = abPropsService.getInt(ABProp.NUM_DAYS_KEY_INDEX_LIST_EXPIRATION);
+            var warningDays = abPropsService.getInt(ABProp.NUM_DAYS_BEFORE_DEVICE_EXPIRY_CHECK);
             var expiryThreshold = Duration.ofDays(expiryDays);
             var warningThreshold = Duration.ofDays(expiryDays - warningDays);
 
@@ -231,8 +216,7 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     private boolean shouldLogoutOnSelfExpired() {
-        return abPropsService.getBool(ABProp.WEB_ADV_LOGOUT_ON_SELF_DEVICE_LIST_EXPIRED_AB_PROP_CODE)
-                .orElse(false);
+        return abPropsService.getBool(ABProp.WEB_ADV_LOGOUT_ON_SELF_DEVICE_LIST_EXPIRED);
     }
 
     /**
@@ -277,8 +261,7 @@ public final class DeviceADVChecker implements AutoCloseable {
      * @apiNote WAWebBizCoexGatingUtils.bizHostedDevicesEnabled: checks the adv_accept_hosted_devices AB prop.
      */
     private boolean isBizHostedDevicesEnabled() {
-        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES_AB_PROP_CODE)
-                .orElse(false);
+        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES);
     }
 
     /**

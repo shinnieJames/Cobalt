@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.model.media.MediaProvider;
-import com.github.auties00.cobalt.util.Clock;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,7 +54,7 @@ public final class MediaConnection {
             try (uploadStream; var outputStream = Files.newOutputStream(tempFile)) {
                 uploadStream.transferTo(outputStream);
             }
-            var timestamp = Clock.nowSeconds();
+            var timestamp = Instant.now().getEpochSecond();
             var fileSha256 = uploadStream.fileSha256();
             var fileEncSha256 = uploadStream.fileEncSha256()
                     .orElse(null);

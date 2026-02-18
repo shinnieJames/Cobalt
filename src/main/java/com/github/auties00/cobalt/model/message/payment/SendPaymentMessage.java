@@ -1,71 +1,69 @@
 package com.github.auties00.cobalt.model.message.payment;
 
-import com.github.auties00.cobalt.model.message.common.ChatMessageKey;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
-import com.github.auties00.cobalt.model.message.common.PaymentMessage;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.payment.PaymentBackground;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
 
-import java.util.Objects;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
 import java.util.Optional;
 
-/**
- * A model class that represents a message to confirm a {@link RequestPaymentMessage}.
- */
 @ProtobufMessage(name = "Message.SendPaymentMessage")
-public final class SendPaymentMessage implements PaymentMessage {
+public final class SendPaymentMessage implements Message {
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    final MessageContainer noteMessage;
+    MessageContainer noteMessageContainer;
 
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
-    final ChatMessageKey requestMessageKey;
+    MessageKey requestMessageKey;
 
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
-    final PaymentBackground background;
+    PaymentBackground background;
 
-    SendPaymentMessage(MessageContainer noteMessage, ChatMessageKey requestMessageKey, PaymentBackground background) {
-        this.noteMessage = noteMessage;
-        this.requestMessageKey = Objects.requireNonNull(requestMessageKey, "requestMessageKey cannot be null");
+    @ProtobufProperty(index = 5, type = ProtobufType.STRING)
+    String transactionData;
+
+
+    SendPaymentMessage(MessageContainer noteMessageContainer, MessageKey requestMessageKey, PaymentBackground background, String transactionData) {
+        this.noteMessageContainer = noteMessageContainer;
+        this.requestMessageKey = requestMessageKey;
         this.background = background;
+        this.transactionData = transactionData;
     }
 
     public Optional<MessageContainer> noteMessage() {
-        return Optional.ofNullable(noteMessage);
+        return Optional.ofNullable(noteMessageContainer);
     }
 
-    public ChatMessageKey requestMessageKey() {
-        return requestMessageKey;
+    public Optional<MessageKey> requestMessageKey() {
+        return Optional.ofNullable(requestMessageKey);
     }
 
     public Optional<PaymentBackground> background() {
         return Optional.ofNullable(background);
     }
 
-    @Override
-    public Type type() {
-        return Type.SEND_PAYMENT;
+    public Optional<String> transactionData() {
+        return Optional.ofNullable(transactionData);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof SendPaymentMessage that
-                && Objects.equals(noteMessage, that.noteMessage)
-                && Objects.equals(requestMessageKey, that.requestMessageKey)
-                && Objects.equals(background, that.background);
+    public SendPaymentMessage setNoteMessage(MessageContainer noteMessageContainer) {
+        this.noteMessageContainer = noteMessageContainer;
+        return this;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(noteMessage, requestMessageKey, background);
+    public SendPaymentMessage setRequestMessageKey(MessageKey requestMessageKey) {
+        this.requestMessageKey = requestMessageKey;
+        return this;
     }
 
-    @Override
-    public String toString() {
-        return "SendPaymentMessage[" +
-                "noteMessage=" + noteMessage + ", " +
-                "requestMessageKey=" + requestMessageKey + ", " +
-                "background=" + background + ']';
+    public SendPaymentMessage setBackground(PaymentBackground background) {
+        this.background = background;
+        return this;
+    }
+
+    public SendPaymentMessage setTransactionData(String transactionData) {
+        this.transactionData = transactionData;
+        return this;
     }
 }

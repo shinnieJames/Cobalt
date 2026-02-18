@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.exception.WhatsAppHistorySyncException;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
+import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.message.receive.receipt.MessageReceiptHandler;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanzaParser;
@@ -18,18 +19,16 @@ import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageIndexInfoBuilder;
 import com.github.auties00.cobalt.model.info.MessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.Message;
+import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessage;
 import com.github.auties00.cobalt.model.setting.EphemeralSettingsBuilder;
-import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
-import com.github.auties00.cobalt.util.Clock;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.time.ZonedDateTime;
+import java.time.Instant;
 import java.util.BitSet;
 import java.util.HashSet;
 import java.util.NoSuchElementException;
@@ -47,7 +46,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
     private static final Set<HistorySync.Type> REQUIRED_HISTORY_SYNC_TYPES = Set.of(HistorySync.Type.INITIAL_BOOTSTRAP, HistorySync.Type.PUSH_NAME, HistorySync.Type.NON_BLOCKING_DATA);
 
     private final LidMigrationService lidMigrationService;
-    private final com.github.auties00.cobalt.message.MessageService messageService;
+    private final MessageService messageService;
     private final MessageReceiptHandler messageReceiptHandler;
     private final Set<Jid> historyCache;
     private final HistorySyncProgressTracker recentHistorySyncTracker;
@@ -58,7 +57,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
     public MessageStreamNodeHandler(
             WhatsAppClient whatsapp,
             LidMigrationService lidMigrationService,
-            com.github.auties00.cobalt.message.MessageService messageService,
+            MessageService messageService,
             MessageReceiptHandler messageReceiptHandler
     ) {
         super(whatsapp, "message");
@@ -206,7 +205,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
                                     .findContactByJid(sender);
                             if (contact.isPresent()) {
                                 contact.get().setLastKnownPresence(ContactStatus.AVAILABLE);
-                                contact.get().setLastSeen(ZonedDateTime.now());
+                                contact.get().setLastSeen(Instant.now());
                             }
 
                             var provider = contact.orElse(sender);
@@ -477,7 +476,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
                 }
             }else {
                 var mediaConnection = whatsapp.store()
-                        .waitForMediaConnection();
+                        .awaitMediaConnection();
                 try(var mediaStream = ProtobufInputStream.fromStream(mediaConnection.download(notification))) {
                     return HistorySyncSpec.decode(mediaStream);
                 }
@@ -517,7 +516,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
 
     private void onMessageDeleted(ChatMessageInfo info, ChatMessageInfo message) {
         info.chat().ifPresent(chat -> chat.removeMessage(message.id()));
-        message.setRevokeTimestampSeconds(Clock.nowSeconds());
+        message.setRevokeTimestampSeconds(Instant.now().getEpochSecond());
         for (var listener : whatsapp.store().listeners()) {
             Thread.startVirtualThread(() -> listener.onMessageDeleted(whatsapp, message, true));
         }

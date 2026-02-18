@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit;
  */
 public final class MissingSyncKeyTimeoutScheduler {
     private static final System.Logger LOGGER = System.getLogger("MissingSyncKeyTimeoutScheduler");
-    private static final int DEFAULT_TIMEOUT_DAYS = 7;
 
     private final WhatsAppClient client;
     private final WhatsAppStore store;
@@ -93,8 +92,7 @@ public final class MissingSyncKeyTimeoutScheduler {
      * Gets the timeout duration from AB props.
      */
     private Duration getTimeout() {
-        var days = abPropsService.getInt(ABProp.SYNCD_WAIT_FOR_KEY_TIMEOUT_DAYS_AB_PROP_CODE)
-                .orElse(DEFAULT_TIMEOUT_DAYS);
+        var days = abPropsService.getInt(ABProp.SYNCD_WAIT_FOR_KEY_TIMEOUT_DAYS);
         return Duration.ofDays(days);
     }
 

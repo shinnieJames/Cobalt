@@ -1,58 +1,38 @@
 package com.github.auties00.cobalt.model.setting;
 
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
-
-import java.util.Objects;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
 
 @ProtobufMessage(name = "AvatarUserSettings")
-public final class AvatarUserSettings implements Setting {
+public final class AvatarUserSettings {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    final String facebookId;
+    String fbid;
 
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
-    final String password;
+    String password;
 
-    AvatarUserSettings(String facebookId, String password) {
-        this.facebookId = Objects.requireNonNull(facebookId, "facebookId cannot be null");
-        this.password = Objects.requireNonNull(password, "password cannot be null");
+
+    AvatarUserSettings(String fbid, String password) {
+        this.fbid = fbid;
+        this.password = password;
     }
 
-    public String facebookId() {
-        return facebookId;
+    public Optional<String> fbid() {
+        return Optional.ofNullable(fbid);
     }
 
-    public String password() {
-        return password;
+    public Optional<String> password() {
+        return Optional.ofNullable(password);
     }
 
-    @Override
-    public int settingVersion() {
-        return -1;
+    public AvatarUserSettings setFbid(String fbid) {
+        this.fbid = fbid;
+        return this;
     }
 
-    @Override
-    public String indexName() {
-        throw new UnsupportedOperationException("Cannot send setting: no index name");
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof AvatarUserSettings that
-                && Objects.equals(facebookId, that.facebookId)
-                && Objects.equals(password, that.password);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(facebookId, password);
-    }
-
-    @Override
-    public String toString() {
-        return "AvatarUserSettings[" +
-                "facebookId=" + facebookId + ", " +
-                "password=" + password + ']';
+    public AvatarUserSettings setPassword(String password) {
+        this.password = password;
+        return this;
     }
 }

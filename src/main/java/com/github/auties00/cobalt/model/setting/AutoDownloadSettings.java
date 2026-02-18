@@ -4,23 +4,22 @@ import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
-import java.util.Objects;
-
 @ProtobufMessage(name = "AutoDownloadSettings")
-public final class AutoDownloadSettings implements Setting {
+public final class AutoDownloadSettings {
     @ProtobufProperty(index = 1, type = ProtobufType.BOOL)
-    final boolean downloadImages;
+    Boolean downloadImages;
 
     @ProtobufProperty(index = 2, type = ProtobufType.BOOL)
-    final boolean downloadAudio;
+    Boolean downloadAudio;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BOOL)
-    final boolean downloadVideo;
+    Boolean downloadVideo;
 
     @ProtobufProperty(index = 4, type = ProtobufType.BOOL)
-    final boolean downloadDocuments;
+    Boolean downloadDocuments;
 
-    AutoDownloadSettings(boolean downloadImages, boolean downloadAudio, boolean downloadVideo, boolean downloadDocuments) {
+
+    AutoDownloadSettings(Boolean downloadImages, Boolean downloadAudio, Boolean downloadVideo, Boolean downloadDocuments) {
         this.downloadImages = downloadImages;
         this.downloadAudio = downloadAudio;
         this.downloadVideo = downloadVideo;
@@ -28,51 +27,38 @@ public final class AutoDownloadSettings implements Setting {
     }
 
     public boolean downloadImages() {
-        return downloadImages;
+        return downloadImages != null && downloadImages;
     }
 
     public boolean downloadAudio() {
-        return downloadAudio;
+        return downloadAudio != null && downloadAudio;
     }
 
     public boolean downloadVideo() {
-        return downloadVideo;
+        return downloadVideo != null && downloadVideo;
     }
 
     public boolean downloadDocuments() {
-        return downloadDocuments;
+        return downloadDocuments != null && downloadDocuments;
     }
 
-    @Override
-    public int settingVersion() {
-        return -1;
+    public AutoDownloadSettings setDownloadImages(Boolean downloadImages) {
+        this.downloadImages = downloadImages;
+        return this;
     }
 
-    @Override
-    public String indexName() {
-        throw new UnsupportedOperationException("Cannot send setting: no index name");
+    public AutoDownloadSettings setDownloadAudio(Boolean downloadAudio) {
+        this.downloadAudio = downloadAudio;
+        return this;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof AutoDownloadSettings that
-                && downloadImages == that.downloadImages
-                && downloadAudio == that.downloadAudio
-                && downloadVideo == that.downloadVideo
-                && downloadDocuments == that.downloadDocuments;
+    public AutoDownloadSettings setDownloadVideo(Boolean downloadVideo) {
+        this.downloadVideo = downloadVideo;
+        return this;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(downloadImages, downloadAudio, downloadVideo, downloadDocuments);
-    }
-
-    @Override
-    public String toString() {
-        return "AutoDownloadSettings[" +
-                "downloadImages=" + downloadImages + ", " +
-                "downloadAudio=" + downloadAudio + ", " +
-                "downloadVideo=" + downloadVideo + ", " +
-                "downloadDocuments=" + downloadDocuments + ']';
+    public AutoDownloadSettings setDownloadDocuments(Boolean downloadDocuments) {
+        this.downloadDocuments = downloadDocuments;
+        return this;
     }
 }

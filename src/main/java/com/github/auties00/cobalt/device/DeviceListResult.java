@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.device;
 
-import com.github.auties00.cobalt.model.device.DeviceInfo;
-import com.github.auties00.cobalt.model.device.DeviceList;
+import com.github.auties00.cobalt.model.device.info.DeviceInfo;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.DeviceListBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 

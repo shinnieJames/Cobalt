@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.node;
 
 import com.github.auties00.cobalt.exception.WhatsAppMalformedJidException;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.node.binary.NodeDecoder;
+import com.github.auties00.cobalt.node.binary.NodeEncoder;
 import it.auties.protobuf.model.ProtobufString;
 
 import java.io.ByteArrayInputStream;

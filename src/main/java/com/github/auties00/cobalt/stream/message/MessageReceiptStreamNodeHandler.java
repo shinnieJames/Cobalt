@@ -3,14 +3,14 @@ package com.github.auties00.cobalt.stream.message;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageInfo;
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.info.QuotedMessageInfo;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.model.message.common.MessageStatus;
+import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
-import com.github.auties00.cobalt.util.Clock;
 
+import java.time.Instant;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -67,12 +67,12 @@ public final class MessageReceiptStreamNodeHandler extends SocketStream.Handler 
                 message.receipt().addDeliveredJid(target);
             }
             if(chat.jid().hasServer(JidServer.groupOrCommunity())) {
-                var metadata = whatsapp.queryGroupOrCommunityMetadata(chat.jid());
+                var metadata = whatsapp.queryChatMetadata(chat.jid());
                 var jids = status == MessageStatus.READ ? message.receipt().readJids() : message.receipt().deliveredJids();
                 if (participant == null || metadata.participants().size() == jids.size()) {
                     switch (status) {
-                        case READ -> message.receipt().setReadTimestampSeconds(Clock.nowSeconds());
-                        case PLAYED -> message.receipt().setPlayedTimestampSeconds(Clock.nowSeconds());
+                        case READ -> message.receipt().setReadTimestampSeconds(Instant.now().getEpochSecond());
+                        case PLAYED -> message.receipt().setPlayedTimestampSeconds(Instant.now().getEpochSecond());
                     }
                 }
             }

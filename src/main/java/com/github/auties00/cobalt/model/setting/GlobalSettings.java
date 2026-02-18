@@ -1,59 +1,77 @@
 package com.github.auties00.cobalt.model.setting;
 
-import com.github.auties00.cobalt.model.chat.ChatWallpaper;
 import com.github.auties00.cobalt.model.media.MediaVisibility;
-import com.github.auties00.cobalt.util.Clock;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
 
-import java.time.ZonedDateTime;
-import java.util.Objects;
+import java.time.Instant;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 @ProtobufMessage(name = "GlobalSettings")
 public final class GlobalSettings {
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
-    final ChatWallpaper lightThemeWallpaper;
+    WallpaperSettings lightThemeWallpaper;
 
     @ProtobufProperty(index = 2, type = ProtobufType.ENUM)
-    final MediaVisibility mediaVisibility;
+    MediaVisibility mediaVisibility;
 
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
-    final ChatWallpaper darkThemeWallpaper;
+    WallpaperSettings darkThemeWallpaper;
 
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
-    final AutoDownloadSettings autoDownloadWiFi;
+    AutoDownloadSettings autoDownloadWiFi;
 
     @ProtobufProperty(index = 5, type = ProtobufType.MESSAGE)
-    final AutoDownloadSettings autoDownloadCellular;
+    AutoDownloadSettings autoDownloadCellular;
 
     @ProtobufProperty(index = 6, type = ProtobufType.MESSAGE)
-    final AutoDownloadSettings autoDownloadRoaming;
+    AutoDownloadSettings autoDownloadRoaming;
 
     @ProtobufProperty(index = 7, type = ProtobufType.BOOL)
-    final boolean showIndividualNotificationsPreview;
+    Boolean showIndividualNotificationsPreview;
 
     @ProtobufProperty(index = 8, type = ProtobufType.BOOL)
-    final boolean showGroupNotificationsPreview;
+    Boolean showGroupNotificationsPreview;
 
     @ProtobufProperty(index = 9, type = ProtobufType.INT32)
-    final int disappearingModeDuration;
+    Integer disappearingModeDuration;
 
-    @ProtobufProperty(index = 10, type = ProtobufType.INT64)
-    final long disappearingModeTimestampSeconds;
+    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant disappearingModeTimestamp;
 
     @ProtobufProperty(index = 11, type = ProtobufType.MESSAGE)
-    final AvatarUserSettings avatarUserSettings;
+    AvatarUserSettings avatarUserSettings;
 
-    @ProtobufProperty(index = 20, type = ProtobufType.INT64)
-    final long chatDbLidMigrationTimestamp;
+    @ProtobufProperty(index = 12, type = ProtobufType.INT32)
+    Integer fontSize;
 
-    GlobalSettings(ChatWallpaper lightThemeWallpaper, MediaVisibility mediaVisibility, ChatWallpaper darkThemeWallpaper,
-                   AutoDownloadSettings autoDownloadWiFi, AutoDownloadSettings autoDownloadCellular, AutoDownloadSettings autoDownloadRoaming,
-                   boolean showIndividualNotificationsPreview, boolean showGroupNotificationsPreview,
-                   int disappearingModeDuration, long disappearingModeTimestampSeconds, AvatarUserSettings avatarUserSettings,
-                   long chatDbLidMigrationTimestamp) {
+    @ProtobufProperty(index = 13, type = ProtobufType.BOOL)
+    Boolean securityNotifications;
+
+    @ProtobufProperty(index = 14, type = ProtobufType.BOOL)
+    Boolean autoUnarchiveChats;
+
+    @ProtobufProperty(index = 15, type = ProtobufType.INT32)
+    Integer videoQualityMode;
+
+    @ProtobufProperty(index = 16, type = ProtobufType.INT32)
+    Integer photoQualityMode;
+
+    @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
+    NotificationSettings individualNotificationSettings;
+
+    @ProtobufProperty(index = 18, type = ProtobufType.MESSAGE)
+    NotificationSettings groupNotificationSettings;
+
+    @ProtobufProperty(index = 19, type = ProtobufType.MESSAGE)
+    ChatLockSettings chatLockSettings;
+
+    @ProtobufProperty(index = 20, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant chatDbLidMigrationTimestamp;
+
+
+    GlobalSettings(WallpaperSettings lightThemeWallpaper, MediaVisibility mediaVisibility, WallpaperSettings darkThemeWallpaper, AutoDownloadSettings autoDownloadWiFi, AutoDownloadSettings autoDownloadCellular, AutoDownloadSettings autoDownloadRoaming, Boolean showIndividualNotificationsPreview, Boolean showGroupNotificationsPreview, Integer disappearingModeDuration, Instant disappearingModeTimestamp, AvatarUserSettings avatarUserSettings, Integer fontSize, Boolean securityNotifications, Boolean autoUnarchiveChats, Integer videoQualityMode, Integer photoQualityMode, NotificationSettings individualNotificationSettings, NotificationSettings groupNotificationSettings, ChatLockSettings chatLockSettings, Instant chatDbLidMigrationTimestamp) {
         this.lightThemeWallpaper = lightThemeWallpaper;
         this.mediaVisibility = mediaVisibility;
         this.darkThemeWallpaper = darkThemeWallpaper;
@@ -63,20 +81,28 @@ public final class GlobalSettings {
         this.showIndividualNotificationsPreview = showIndividualNotificationsPreview;
         this.showGroupNotificationsPreview = showGroupNotificationsPreview;
         this.disappearingModeDuration = disappearingModeDuration;
-        this.disappearingModeTimestampSeconds = disappearingModeTimestampSeconds;
+        this.disappearingModeTimestamp = disappearingModeTimestamp;
         this.avatarUserSettings = avatarUserSettings;
+        this.fontSize = fontSize;
+        this.securityNotifications = securityNotifications;
+        this.autoUnarchiveChats = autoUnarchiveChats;
+        this.videoQualityMode = videoQualityMode;
+        this.photoQualityMode = photoQualityMode;
+        this.individualNotificationSettings = individualNotificationSettings;
+        this.groupNotificationSettings = groupNotificationSettings;
+        this.chatLockSettings = chatLockSettings;
         this.chatDbLidMigrationTimestamp = chatDbLidMigrationTimestamp;
     }
 
-    public Optional<ChatWallpaper> lightThemeWallpaper() {
+    public Optional<WallpaperSettings> lightThemeWallpaper() {
         return Optional.ofNullable(lightThemeWallpaper);
     }
 
-    public MediaVisibility mediaVisibility() {
-        return mediaVisibility;
+    public Optional<MediaVisibility> mediaVisibility() {
+        return Optional.ofNullable(mediaVisibility);
     }
 
-    public Optional<ChatWallpaper> darkThemeWallpaper() {
+    public Optional<WallpaperSettings> darkThemeWallpaper() {
         return Optional.ofNullable(darkThemeWallpaper);
     }
 
@@ -93,83 +119,158 @@ public final class GlobalSettings {
     }
 
     public boolean showIndividualNotificationsPreview() {
-        return showIndividualNotificationsPreview;
+        return showIndividualNotificationsPreview != null && showIndividualNotificationsPreview;
     }
 
     public boolean showGroupNotificationsPreview() {
-        return showGroupNotificationsPreview;
+        return showGroupNotificationsPreview != null && showGroupNotificationsPreview;
     }
 
-    public int disappearingModeDuration() {
-        return disappearingModeDuration;
+    public OptionalInt disappearingModeDuration() {
+        return disappearingModeDuration == null ? OptionalInt.empty() : OptionalInt.of(disappearingModeDuration);
     }
 
-    public long disappearingModeTimestampSeconds() {
-        return disappearingModeTimestampSeconds;
+    public Optional<Instant> disappearingModeTimestamp() {
+        return Optional.ofNullable(disappearingModeTimestamp);
     }
 
-    public AvatarUserSettings avatarUserSettings() {
-        return avatarUserSettings;
+    public Optional<AvatarUserSettings> avatarUserSettings() {
+        return Optional.ofNullable(avatarUserSettings);
     }
 
-    /**
-     * Returns the timestamp when the chat database LID migration should occur.
-     *
-     * @return the migration timestamp in seconds since epoch, or 0 if not set
-     */
-    public long chatDbLidMigrationTimestamp() {
-        return chatDbLidMigrationTimestamp;
+    public OptionalInt fontSize() {
+        return fontSize == null ? OptionalInt.empty() : OptionalInt.of(fontSize);
     }
 
-    /**
-     * Returns when the disappearing mode was toggled
-     *
-     * @return an optional
-     */
-    public Optional<ZonedDateTime> disappearingModeTimestamp() {
-        return Clock.parseSeconds(disappearingModeTimestampSeconds);
+    public boolean securityNotifications() {
+        return securityNotifications != null && securityNotifications;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof GlobalSettings that
-                && Objects.equals(lightThemeWallpaper, that.lightThemeWallpaper)
-                && Objects.equals(mediaVisibility, that.mediaVisibility)
-                && Objects.equals(darkThemeWallpaper, that.darkThemeWallpaper)
-                && Objects.equals(autoDownloadWiFi, that.autoDownloadWiFi)
-                && Objects.equals(autoDownloadCellular, that.autoDownloadCellular)
-                && Objects.equals(autoDownloadRoaming, that.autoDownloadRoaming)
-                && showIndividualNotificationsPreview == that.showIndividualNotificationsPreview
-                && showGroupNotificationsPreview == that.showGroupNotificationsPreview
-                && disappearingModeDuration == that.disappearingModeDuration
-                && disappearingModeTimestampSeconds == that.disappearingModeTimestampSeconds
-                && Objects.equals(avatarUserSettings, that.avatarUserSettings)
-                && chatDbLidMigrationTimestamp == that.chatDbLidMigrationTimestamp;
+    public boolean autoUnarchiveChats() {
+        return autoUnarchiveChats != null && autoUnarchiveChats;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(lightThemeWallpaper, mediaVisibility, darkThemeWallpaper,
-                autoDownloadWiFi, autoDownloadCellular, autoDownloadRoaming,
-                showIndividualNotificationsPreview, showGroupNotificationsPreview,
-                disappearingModeDuration, disappearingModeTimestampSeconds, avatarUserSettings,
-                chatDbLidMigrationTimestamp);
+    public OptionalInt videoQualityMode() {
+        return videoQualityMode == null ? OptionalInt.empty() : OptionalInt.of(videoQualityMode);
     }
 
-    @Override
-    public String toString() {
-        return "GlobalSettings[" +
-                "lightThemeWallpaper=" + lightThemeWallpaper + ", " +
-                "mediaVisibility=" + mediaVisibility + ", " +
-                "darkThemeWallpaper=" + darkThemeWallpaper + ", " +
-                "autoDownloadWiFi=" + autoDownloadWiFi + ", " +
-                "autoDownloadCellular=" + autoDownloadCellular + ", " +
-                "autoDownloadRoaming=" + autoDownloadRoaming + ", " +
-                "showIndividualNotificationsPreview=" + showIndividualNotificationsPreview + ", " +
-                "showGroupNotificationsPreview=" + showGroupNotificationsPreview + ", " +
-                "disappearingModeDuration=" + disappearingModeDuration + ", " +
-                "disappearingModeTimestampSeconds=" + disappearingModeTimestampSeconds + ", " +
-                "avatarUserSettings=" + avatarUserSettings + ", " +
-                "chatDbLidMigrationTimestamp=" + chatDbLidMigrationTimestamp + ']';
+    public OptionalInt photoQualityMode() {
+        return photoQualityMode == null ? OptionalInt.empty() : OptionalInt.of(photoQualityMode);
+    }
+
+    public Optional<NotificationSettings> individualNotificationSettings() {
+        return Optional.ofNullable(individualNotificationSettings);
+    }
+
+    public Optional<NotificationSettings> groupNotificationSettings() {
+        return Optional.ofNullable(groupNotificationSettings);
+    }
+
+    public Optional<ChatLockSettings> chatLockSettings() {
+        return Optional.ofNullable(chatLockSettings);
+    }
+
+    public Optional<Instant> chatDbLidMigrationTimestamp() {
+        return Optional.ofNullable(chatDbLidMigrationTimestamp);
+    }
+
+    public GlobalSettings setLightThemeWallpaper(WallpaperSettings lightThemeWallpaper) {
+        this.lightThemeWallpaper = lightThemeWallpaper;
+        return this;
+    }
+
+    public GlobalSettings setMediaVisibility(MediaVisibility mediaVisibility) {
+        this.mediaVisibility = mediaVisibility;
+        return this;
+    }
+
+    public GlobalSettings setDarkThemeWallpaper(WallpaperSettings darkThemeWallpaper) {
+        this.darkThemeWallpaper = darkThemeWallpaper;
+        return this;
+    }
+
+    public GlobalSettings setAutoDownloadWiFi(AutoDownloadSettings autoDownloadWiFi) {
+        this.autoDownloadWiFi = autoDownloadWiFi;
+        return this;
+    }
+
+    public GlobalSettings setAutoDownloadCellular(AutoDownloadSettings autoDownloadCellular) {
+        this.autoDownloadCellular = autoDownloadCellular;
+        return this;
+    }
+
+    public GlobalSettings setAutoDownloadRoaming(AutoDownloadSettings autoDownloadRoaming) {
+        this.autoDownloadRoaming = autoDownloadRoaming;
+        return this;
+    }
+
+    public GlobalSettings setShowIndividualNotificationsPreview(Boolean showIndividualNotificationsPreview) {
+        this.showIndividualNotificationsPreview = showIndividualNotificationsPreview;
+        return this;
+    }
+
+    public GlobalSettings setShowGroupNotificationsPreview(Boolean showGroupNotificationsPreview) {
+        this.showGroupNotificationsPreview = showGroupNotificationsPreview;
+        return this;
+    }
+
+    public GlobalSettings setDisappearingModeDuration(Integer disappearingModeDuration) {
+        this.disappearingModeDuration = disappearingModeDuration;
+        return this;
+    }
+
+    public GlobalSettings setDisappearingModeTimestamp(Instant disappearingModeTimestamp) {
+        this.disappearingModeTimestamp = disappearingModeTimestamp;
+        return this;
+    }
+
+    public GlobalSettings setAvatarUserSettings(AvatarUserSettings avatarUserSettings) {
+        this.avatarUserSettings = avatarUserSettings;
+        return this;
+    }
+
+    public GlobalSettings setFontSize(Integer fontSize) {
+        this.fontSize = fontSize;
+        return this;
+    }
+
+    public GlobalSettings setSecurityNotifications(Boolean securityNotifications) {
+        this.securityNotifications = securityNotifications;
+        return this;
+    }
+
+    public GlobalSettings setAutoUnarchiveChats(Boolean autoUnarchiveChats) {
+        this.autoUnarchiveChats = autoUnarchiveChats;
+        return this;
+    }
+
+    public GlobalSettings setVideoQualityMode(Integer videoQualityMode) {
+        this.videoQualityMode = videoQualityMode;
+        return this;
+    }
+
+    public GlobalSettings setPhotoQualityMode(Integer photoQualityMode) {
+        this.photoQualityMode = photoQualityMode;
+        return this;
+    }
+
+    public GlobalSettings setIndividualNotificationSettings(NotificationSettings individualNotificationSettings) {
+        this.individualNotificationSettings = individualNotificationSettings;
+        return this;
+    }
+
+    public GlobalSettings setGroupNotificationSettings(NotificationSettings groupNotificationSettings) {
+        this.groupNotificationSettings = groupNotificationSettings;
+        return this;
+    }
+
+    public GlobalSettings setChatLockSettings(ChatLockSettings chatLockSettings) {
+        this.chatLockSettings = chatLockSettings;
+        return this;
+    }
+
+    public GlobalSettings setChatDbLidMigrationTimestamp(Instant chatDbLidMigrationTimestamp) {
+        this.chatDbLidMigrationTimestamp = chatDbLidMigrationTimestamp;
+        return this;
     }
 }

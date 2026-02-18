@@ -3,7 +3,6 @@ package com.github.auties00.cobalt.model.newsletter;
 import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.model.info.MessageInfo;
 import com.github.auties00.cobalt.model.info.MessageInfoParent;
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.collections.ConcurrentLinkedHashMap;
 import it.auties.protobuf.annotation.ProtobufMessage;

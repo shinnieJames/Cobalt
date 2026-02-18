@@ -13,9 +13,7 @@ public final class WebNotifyStoreStreamNodeHandler extends SocketStream.Handler 
     @Override
     public void handle(Node node) {
         try {
-            whatsapp.store()
-                    .serializer()
-                    .finishDeserialize(whatsapp.store());
+            whatsapp.store().await();
         } catch (Exception exception) {
             whatsapp.handleFailure(new WhatsAppCorruptedStoreException(exception));
             return;

@@ -1,14 +1,12 @@
 package com.github.auties00.cobalt.props;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.exception.WhatsAppABPropTypeMismatchException;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -17,15 +15,18 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Service for managing A/B testing properties (AB props) received from WhatsApp servers.
- * <p>
- * AB props are feature flags and configuration values that control client behavior.
- * The service stores props by their numeric {@code code} and provides type-safe
- * accessors that return {@link Optional} values for graceful handling of missing props.
- * <p>
- * When querying props before the first sync completes, the query will automatically
- * wait (up to a configurable timeout) for sync to complete before returning.
- * <p>
- * This class is thread-safe.
+ *
+ * <p>AB props are feature flags and configuration values that control client behavior.
+ * The service stores synced prop values by their numeric {@code code} and provides
+ * type-safe accessors that return non-optional values, falling back to the
+ * {@linkplain ABProp#defaultValue() default value} defined by each {@link ABProp} when
+ * the server has not provided a value.
+ *
+ * <p>When querying props before the first sync completes, the query will automatically
+ * wait (up to a configurable timeout) for sync to complete before returning. If the
+ * timeout expires, the default value is used.
+ *
+ * <p>This class is thread-safe.
  *
  * @see ABProp
  */
@@ -40,11 +41,11 @@ public final class ABPropsService {
     private final WhatsAppClient client;
 
     /**
-     * Thread-safe map storing AB props by their config code.
+     * Thread-safe map storing raw synced AB prop values by their config code.
      * Key: config code (unique identifier)
-     * Value: ABProp containing the configuration value
+     * Value: the raw string value received from the server
      */
-    private final Map<Integer, ABProp> props;
+    private final Map<Integer, String> props;
 
     /**
      * Current hash of the AB props state, used for delta updates.
@@ -65,7 +66,7 @@ public final class ABPropsService {
 
     /**
      * Creates a new AB props service that will sync props from the server.
-     * Uses the default sync timeout {@link #DEFAULT_SYNC_TIMEOUT}
+     * Uses the default sync timeout {@link #DEFAULT_SYNC_TIMEOUT}.
      *
      * @param client the WhatsApp client instance to use for communication
      */
@@ -76,8 +77,8 @@ public final class ABPropsService {
     /**
      * Creates a new AB props service with a custom sync timeout.
      *
-     * @param client        the WhatsApp client instance to use for communication
-     * @param syncTimeout timeout in milliseconds to wait for sync when querying
+     * @param client      the WhatsApp client instance to use for communication
+     * @param syncTimeout timeout to wait for sync when querying
      */
     public ABPropsService(WhatsAppClient client, Duration syncTimeout) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
@@ -88,15 +89,15 @@ public final class ABPropsService {
 
     /**
      * Synchronizes AB props from the server.
-     * <p>
-     * This method sends a sync request to WhatsApp servers and processes the response.
+     *
+     * <p>This method sends a sync request to WhatsApp servers and processes the response.
      * On first sync, all props are requested. On subsequent syncs, only the hash is sent
      * to enable delta updates (the server will only send changed props).
-     * <p>
-     * After sync completes, the sync future is completed, allowing any waiting
+     *
+     * <p>After sync completes, the sync future is completed, allowing any waiting
      * query operations to proceed.
      *
-     * @return true if sync succeeded, false otherwise
+     * @return {@code true} if sync succeeded, {@code false} otherwise
      */
     public boolean sync() {
         try {
@@ -114,8 +115,8 @@ public final class ABPropsService {
 
     /**
      * Completes the sync future with the given result.
-     * <p>
-     * This releases all threads waiting in query methods.
+     *
+     * <p>This releases all threads waiting in query methods.
      *
      * @param success whether the sync succeeded
      */
@@ -125,8 +126,8 @@ public final class ABPropsService {
 
     /**
      * Completes the sync future exceptionally.
-     * <p>
-     * This ensures waiting threads don't hang when sync fails.
+     *
+     * <p>This ensures waiting threads don't hang when sync fails.
      *
      * @param throwable the exception that caused sync to fail
      */
@@ -136,12 +137,13 @@ public final class ABPropsService {
 
     /**
      * Waits for the initial sync to complete, with a timeout.
-     * <p>
-     * This is called internally by query methods to ensure props are available
+     *
+     * <p>This is called internally by query methods to ensure props are available
      * before returning results. If the sync hasn't completed yet, this will block
      * until either the sync completes or the timeout expires.
      *
-     * @return true if sync completed successfully before timeout, false if timeout occurred or sync failed
+     * @return {@code true} if sync completed successfully before timeout,
+     *         {@code false} if timeout occurred or sync failed
      */
     private boolean awaitSync() {
         try {
@@ -182,6 +184,10 @@ public final class ABPropsService {
 
     /**
      * Processes an AB props response received from the server.
+     *
+     * @param response the server response node
+     * @return {@code true} if the response was processed successfully, {@code false} otherwise
+     * @throws NullPointerException if {@code response} is {@code null}
      */
     public boolean process(Node response) {
         Objects.requireNonNull(response, "response cannot be null");
@@ -221,16 +227,7 @@ public final class ABPropsService {
                 continue;
             }
 
-            var exposureKey = propNode.getAttributeAsLong("config_expo_key");
-            var exposureKeyId = exposureKey.isPresent() ? exposureKey.getAsLong() : null;
-
-            var prop = new ABProp(
-                    configCode.getAsInt(),
-                    configValue.get(),
-                    exposureKeyId
-            );
-
-            props.put(prop.code(), prop);
+            props.put(configCode.getAsInt(), configValue.get());
             count++;
         }
 
@@ -239,250 +236,171 @@ public final class ABPropsService {
     }
 
     /**
-     * Queries a boolean AB prop by its config code.
-     * <p>
-     * If the initial sync hasn't completed, this method will wait (up to the configured timeout)
-     * for the sync to complete before querying.
+     * Returns the raw string value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @return an Optional containing the boolean value if the prop exists, or empty if not found or timeout occurred
+     * <p>If the server has not provided a value for this prop, the
+     * {@linkplain ABProp#defaultValue() default value} is returned. If the initial sync
+     * hasn't completed, this method will wait (up to the configured timeout) for the sync
+     * to complete before querying.
+     *
+     * @param prop the AB prop definition
+     * @return the string value from the server, or the default value if not available
      */
-    public Optional<Boolean> getBool(int configCode) {
-        return getBool(configCode, true);
+    public String getString(ABProp prop) {
+        return getString(prop, true);
     }
 
     /**
-     * Queries a boolean AB prop by its config code.
+     * Returns the raw string value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @param waitForSync whether the method should wait for the A/B props data to arrive from the server
-     * @return an Optional containing the boolean value if the prop exists, or empty if not found or timeout occurred
+     * @param prop        the AB prop definition
+     * @param waitForSync whether to wait for the A/B props data to arrive from the server
+     * @return the string value from the server, or the default value if not available
      */
-    public Optional<Boolean> getBool(int configCode, boolean waitForSync) {
-        if (waitForSync && !awaitSync()) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Timeout waiting for AB props sync before querying config {0}", configCode);
-            return Optional.empty();
+    public String getString(ABProp prop, boolean waitForSync) {
+        if (waitForSync) {
+            awaitSync();
         }
-
-        return Optional.ofNullable(props.get(configCode))
-                .map(ABProp::asBoolean);
+        return props.getOrDefault(prop.code(), prop.defaultValue());
     }
 
     /**
-     * Queries an integer AB prop by its config code.
-     * <p>
-     * If the initial sync hasn't completed, this method will wait (up to the configured timeout)
-     * for the sync to complete before querying.
+     * Returns the boolean value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @return an Optional containing the integer value if the prop exists and is parseable, or empty otherwise
+     * <p>If the server has not provided a value for this prop, the
+     * {@linkplain ABProp#defaultValue() default value} is parsed as a boolean.
+     * If the initial sync hasn't completed, this method will wait (up to the configured
+     * timeout) for the sync to complete before querying.
+     *
+     * @param prop the AB prop definition
+     * @return the boolean value from the server, or the default value if not available
+     * @see ABProp#toBoolean(String)
      */
-    public Optional<Integer> getInt(int configCode) {
-        return getInt(configCode, true);
+    public boolean getBool(ABProp prop) {
+        return getBool(prop, true);
     }
 
     /**
-     * Queries an integer AB prop by its config code.
+     * Returns the boolean value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @param waitForSync whether the method should wait for the A/B props data to arrive from the server
-     * @return an Optional containing the integer value if the prop exists and is parseable, or empty otherwise
+     * @param prop        the AB prop definition
+     * @param waitForSync whether to wait for the A/B props data to arrive from the server
+     * @return the boolean value from the server, or the default value if not available
+     * @see ABProp#toBoolean(String)
      */
-    public Optional<Integer> getInt(int configCode, boolean waitForSync) {
-        if (waitForSync && !awaitSync()) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Timeout waiting for AB props sync before querying config {0}", configCode);
-            return Optional.empty();
-        }
-
-        var prop = props.get(configCode);
-        if (prop == null) {
-            return Optional.empty();
-        }
-
-        var value = prop.asInt();
-        return value.isPresent() ? Optional.of(value.getAsInt()) : Optional.empty();
+    public boolean getBool(ABProp prop, boolean waitForSync) {
+        return ABProp.toBoolean(getString(prop, waitForSync));
     }
 
     /**
-     * Queries a long AB prop by its config code.
-     * <p>
-     * If the initial sync hasn't completed, this method will wait (up to the configured timeout)
-     * for the sync to complete before querying.
+     * Returns the integer value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @return an Optional containing the long value if the prop exists and is parseable, or empty otherwise
+     * <p>If the server has not provided a value for this prop, the
+     * {@linkplain ABProp#defaultValue() default value} is parsed as an integer.
+     * If neither the synced value nor the default value can be parsed as an integer,
+     * {@code 0} is returned. If the initial sync hasn't completed, this method will
+     * wait (up to the configured timeout) for the sync to complete before querying.
+     *
+     * @param prop the AB prop definition
+     * @return the integer value from the server, or the default value if not available
+     * @see ABProp#toInt(String)
      */
-    public Optional<Long> getLong(int configCode) {
-        return getLong(configCode, true);
+    public int getInt(ABProp prop) {
+        return getInt(prop, true);
     }
 
     /**
-     * Queries a long AB prop by its config code.
+     * Returns the integer value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @param waitForSync whether the method should wait for the A/B props data to arrive from the server
-     * @return an Optional containing the long value if the prop exists and is parseable, or empty otherwise
+     * @param prop        the AB prop definition
+     * @param waitForSync whether to wait for the A/B props data to arrive from the server
+     * @return the integer value from the server, or the default value if not available
+     * @see ABProp#toInt(String)
      */
-    public Optional<Long> getLong(int configCode, boolean waitForSync) {
-        if (waitForSync && !awaitSync()) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Timeout waiting for AB props sync before querying config {0}", configCode);
-            return Optional.empty();
+    public int getInt(ABProp prop, boolean waitForSync) {
+        var value = getString(prop, waitForSync);
+        var result = ABProp.toInt(value);
+        if (result.isPresent()) {
+            return result.getAsInt();
         }
-
-        var prop = props.get(configCode);
-        if (prop == null) {
-            return Optional.empty();
-        }
-
-        var value = prop.asLong();
-        return value.isPresent() ? Optional.of(value.getAsLong()) : Optional.empty();
+        var fallback = ABProp.toInt(prop.defaultValue());
+        return fallback.orElse(0);
     }
 
     /**
-     * Queries a double (floating-point) AB prop by its config code.
-     * <p>
-     * If the initial sync hasn't completed, this method will wait (up to the configured timeout)
-     * for the sync to complete before querying.
+     * Returns the long value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @return an Optional containing the double value if the prop exists and is parseable, or empty otherwise
+     * <p>If the server has not provided a value for this prop, the
+     * {@linkplain ABProp#defaultValue() default value} is parsed as a long.
+     * If neither the synced value nor the default value can be parsed as a long,
+     * {@code 0L} is returned. If the initial sync hasn't completed, this method will
+     * wait (up to the configured timeout) for the sync to complete before querying.
+     *
+     * @param prop the AB prop definition
+     * @return the long value from the server, or the default value if not available
+     * @see ABProp#toLong(String)
      */
-    public Optional<Double> getDouble(int configCode) {
-        return getDouble(configCode, true);
+    public long getLong(ABProp prop) {
+        return getLong(prop, true);
     }
 
     /**
-     * Queries a double (floating-point) AB prop by its config code.
+     * Returns the long value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @param waitForSync whether the method should wait for the A/B props data to arrive from the server
-     * @return an Optional containing the double value if the prop exists and is parseable, or empty otherwise
+     * @param prop        the AB prop definition
+     * @param waitForSync whether to wait for the A/B props data to arrive from the server
+     * @return the long value from the server, or the default value if not available
+     * @see ABProp#toLong(String)
      */
-    public Optional<Double> getDouble(int configCode, boolean waitForSync) {
-        if (waitForSync && !awaitSync()) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Timeout waiting for AB props sync before querying config {0}", configCode);
-            return Optional.empty();
+    public long getLong(ABProp prop, boolean waitForSync) {
+        var value = getString(prop, waitForSync);
+        var result = ABProp.toLong(value);
+        if (result.isPresent()) {
+            return result.getAsLong();
         }
-
-        var prop = props.get(configCode);
-        if (prop == null) {
-            return Optional.empty();
-        }
-
-        var value = prop.asDouble();
-        return value.isPresent() ? Optional.of(value.getAsDouble()) : Optional.empty();
+        var fallback = ABProp.toLong(prop.defaultValue());
+        return fallback.orElse(0L);
     }
 
     /**
-     * Queries a string AB prop by its config code.
-     * <p>
-     * If the initial sync hasn't completed, this method will wait (up to the configured timeout)
-     * for the sync to complete before querying.
+     * Returns the double (floating-point) value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @return an Optional containing the string value if the prop exists, or empty if not found or timeout occurred
+     * <p>If the server has not provided a value for this prop, the
+     * {@linkplain ABProp#defaultValue() default value} is parsed as a double.
+     * If neither the synced value nor the default value can be parsed as a double,
+     * {@code 0.0} is returned. If the initial sync hasn't completed, this method will
+     * wait (up to the configured timeout) for the sync to complete before querying.
+     *
+     * @param prop the AB prop definition
+     * @return the double value from the server, or the default value if not available
+     * @see ABProp#toDouble(String)
      */
-    public Optional<String> getString(int configCode) {
-        return getString(configCode, true);
+    public double getDouble(ABProp prop) {
+        return getDouble(prop, true);
     }
 
     /**
-     * Queries a string AB prop by its config code.
+     * Returns the double (floating-point) value for the given AB prop.
      *
-     * @param configCode the numeric identifier of the prop
-     * @param waitForSync whether the method should wait for the A/B props data to arrive from the server
-     * @return an Optional containing the string value if the prop exists, or empty if not found or timeout occurred
+     * @param prop        the AB prop definition
+     * @param waitForSync whether to wait for the A/B props data to arrive from the server
+     * @return the double value from the server, or the default value if not available
+     * @see ABProp#toDouble(String)
      */
-    public Optional<String> getString(int configCode, boolean waitForSync) {
-        if (waitForSync && !awaitSync()) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Timeout waiting for AB props sync before querying config {0}", configCode);
-            return Optional.empty();
+    public double getDouble(ABProp prop, boolean waitForSync) {
+        var value = getString(prop, waitForSync);
+        var result = ABProp.toDouble(value);
+        if (result.isPresent()) {
+            return result.getAsDouble();
         }
-
-        return Optional.ofNullable(props.get(configCode))
-                .map(ABProp::asString);
-    }
-
-    /**
-     * Queries an AB prop with type validation.
-     * <p>
-     * This method retrieves a prop and validates that it can be converted to the requested type.
-     * If the prop exists but cannot be converted to the expected type, an exception is thrown
-     * to alert developers of configuration mismatches.
-     * <p>
-     * If the initial sync hasn't completed, this method will wait (up to the configured timeout)
-     * for the sync to complete before querying.
-     *
-     * @param configCode   the numeric identifier of the prop
-     * @param expectedType the expected type (Boolean, Integer, Long, Double, or String)
-     * @param <T>          the type parameter
-     * @return an Optional containing the typed value if the prop exists, or empty if not found or timeout occurred
-     * @throws WhatsAppABPropTypeMismatchException if the prop exists but cannot be converted to the expected type
-     */
-    public <T> Optional<T> get(int configCode, Class<T> expectedType) {
-        return get(configCode, expectedType, true);
-    }
-
-    /**
-     * Queries an AB prop with type validation.
-     * <p>
-     * This method retrieves a prop and validates that it can be converted to the requested type.
-     * If the prop exists but cannot be converted to the expected type, an exception is thrown
-     * to alert developers of configuration mismatches.
-     *
-     * @param configCode   the numeric identifier of the prop
-     * @param expectedType the expected type (Boolean, Integer, Long, Double, or String)
-     * @param waitForSync whether the method should wait for the A/B props data to arrive from the server
-     * @param <T>          the type parameter
-     * @return an Optional containing the typed value if the prop exists, or empty if not found or timeout occurred
-     * @throws WhatsAppABPropTypeMismatchException if the prop exists but cannot be converted to the expected type
-     */
-    @SuppressWarnings("unchecked")
-    public <T> Optional<T> get(int configCode, Class<T> expectedType, boolean waitForSync) {
-        Objects.requireNonNull(expectedType, "expectedType cannot be null");
-
-        if (!awaitSync()) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Timeout waiting for AB props sync before querying config {0}", configCode);
-            return Optional.empty();
-        }
-
-        var prop = props.get(configCode);
-        if (prop == null) {
-            return Optional.empty();
-        }
-
-        // Type-safe conversion with validation
-        if (expectedType == Boolean.class || expectedType == boolean.class) {
-            return (Optional<T>) Optional.of(prop.asBoolean());
-        } else if (expectedType == Integer.class || expectedType == int.class) {
-            var value = prop.asInt();
-            if (value.isEmpty()) {
-                throw new WhatsAppABPropTypeMismatchException(configCode, expectedType, prop.value());
-            }
-            return (Optional<T>) Optional.of(value.getAsInt());
-        } else if (expectedType == Long.class || expectedType == long.class) {
-            var value = prop.asLong();
-            if (value.isEmpty()) {
-                throw new WhatsAppABPropTypeMismatchException(configCode, expectedType, prop.value());
-            }
-            return (Optional<T>) Optional.of(value.getAsLong());
-        } else if (expectedType == Double.class || expectedType == double.class) {
-            var value = prop.asDouble();
-            if (value.isEmpty()) {
-                throw new WhatsAppABPropTypeMismatchException(configCode, expectedType, prop.value());
-            }
-            return (Optional<T>) Optional.of(value.getAsDouble());
-        } else if (expectedType == String.class) {
-            return (Optional<T>) Optional.of(prop.asString());
-        } else {
-            throw new IllegalArgumentException("Unsupported type: " + expectedType.getName());
-        }
+        var fallback = ABProp.toDouble(prop.defaultValue());
+        return fallback.orElse(0.0);
     }
 
     /**
      * Returns the number of AB props currently stored.
      *
-     * @return the count of props
+     * @return the count of synced props
      */
     public int size() {
         return props.size();
@@ -491,7 +409,7 @@ public final class ABPropsService {
     /**
      * Checks if any AB props have been synced.
      *
-     * @return true if props are available, false if no sync has occurred
+     * @return {@code true} if props are available, {@code false} if no sync has occurred
      */
     public boolean isEmpty() {
         return props.isEmpty();
@@ -499,12 +417,12 @@ public final class ABPropsService {
 
     /**
      * Clears all stored AB props and resets the sync future.
-     * <p>
-     * This is typically called when disconnecting or resetting the session.
+     *
+     * <p>This is typically called when disconnecting or resetting the session.
      * After calling this method, a new sync must be performed and queries will
      * wait for the new sync to complete.
-     * <p>
-     * This method is fully resettable - the sync future is replaced with a new instance,
+     *
+     * <p>This method is fully resettable — the sync future is replaced with a new instance,
      * allowing subsequent syncs to work correctly.
      */
     public void clear() {

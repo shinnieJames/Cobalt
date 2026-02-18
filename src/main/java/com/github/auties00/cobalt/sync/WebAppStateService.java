@@ -223,7 +223,7 @@ public final class WebAppStateService {
     private InputStream downloadExternalMutation(ExternalBlobReference externalRef) {
         try {
             return whatsapp.store()
-                    .waitForMediaConnection()
+                    .awaitMediaConnection()
                     .download(externalRef);
         }catch (Throwable throwable) {
             throw new WhatsAppWebAppStateSyncException.ExternalDownloadFailed(throwable);

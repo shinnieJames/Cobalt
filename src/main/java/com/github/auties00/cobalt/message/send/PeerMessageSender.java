@@ -7,7 +7,7 @@ import com.github.auties00.cobalt.message.send.ack.AckParser;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
 import java.util.List;

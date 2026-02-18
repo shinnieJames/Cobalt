@@ -12,12 +12,12 @@ import com.github.auties00.cobalt.message.send.ack.NackReason;
 import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.*;
 import com.github.auties00.cobalt.message.send.token.ContentBindingToken;
-import com.github.auties00.cobalt.model.chat.ChatParticipant;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
-import com.github.auties00.cobalt.model.message.common.MessageContainerSpec;
-import com.github.auties00.cobalt.model.message.standard.*;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABProp;
@@ -54,12 +54,6 @@ import java.util.stream.Stream;
 final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     private static final System.Logger LOGGER = System.getLogger("GroupMessageSender");
 
-    /**
-     * Default maximum group size for RCAT content binding generation.
-     *
-     * @apiNote WAWebABPropsConfigs: maximum_group_size_for_rcat:[2915,"int",100,100]
-     */
-    private static final int DEFAULT_MAX_GROUP_SIZE_FOR_RCAT = 100;
 
     private final MessageEncryption encryption;
     private final DeviceService deviceService;
@@ -132,10 +126,11 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 var container = messageInfo.message();
 
                 // WAWebSendGroupSkmsgJob: resolve group metadata for addressing mode
-                var groupMetadata = store.findGroupOrCommunityMetadata(groupJid).orElse(null);
-                var isCag = groupMetadata != null && groupMetadata.isDefaultSubgroup();
+                var chatMetadata = store.findChatMetadata(groupJid).orElse(null);
+                var isCag = chatMetadata instanceof GroupMetadata gm
+                        && gm.isDefaultSubgroup();
                 var isCagAddon = isCag && isCagAddonMessage(container);
-                var isLidAddressingMode = (groupMetadata != null && groupMetadata.isLidAddressingMode())
+                var isLidAddressingMode = (chatMetadata != null && chatMetadata.isLidAddressingMode())
                         || isCagAddon;
                 var addressingMode = isLidAddressingMode ? "lid" : "pn";
 
@@ -217,8 +212,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 // WAWebSendGroupSkmsgJob: build open group bot node when applicable
                 // WAWebBotGroupGatingUtils.isOpenGroupBotSendEnabled: AB prop gate
                 var isOpenBotGroup = groupMetadata != null && groupMetadata.isOpenBotGroup()
-                        && abPropsService.getBool(ABProp.OPEN_GROUP_BOT_SEND_ENABLED_AB_PROP_CODE)
-                                .orElse(false);
+                        && abPropsService.getBool(ABProp.OPEN_GROUP_BOT_SEND_ENABLED);
                 Node openBotNode = null;
                 if (isOpenBotGroup) {
                     // WAWebSendGroupSkmsgJob function L: ensure sessions with
@@ -350,9 +344,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
         }
 
         // WAWebMsgRcatUtils: check group size limit
-        var maxGroupSize = abPropsService.getInt(
-                ABProp.MAXIMUM_GROUP_SIZE_FOR_RCAT_AB_PROP_CODE)
-                .orElse(DEFAULT_MAX_GROUP_SIZE_FOR_RCAT);
+        var maxGroupSize = abPropsService.getInt(ABProp.MAXIMUM_GROUP_SIZE_FOR_RCAT);
         if (participantJids.size() > maxGroupSize) {
             return null;
         }
@@ -505,7 +497,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
      * resets all sender keys to not-distributed, and persists the changes.
      */
     private void migrateAddressingMode(Jid groupJid, boolean toLid) {
-        var metadata = store.findGroupOrCommunityMetadata(groupJid).orElse(null);
+        var metadata = store.findChatMetadata(groupJid).orElse(null);
         if (metadata == null) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Cannot migrate addressing mode for {0}: no metadata", groupJid);
@@ -514,16 +506,19 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
         // WAWebDBGroupParticipant.migrateParticipantInfoAddressingMode:
         // convert each participant JID to the target addressing mode
-        var migratedParticipants = new ArrayList<ChatParticipant>();
+        var migratedParticipants = new ArrayList<GroupParticipant>();
         for (var participant : metadata.participants()) {
-            var convertedJid = convertJid(participant.jid(), toLid);
+            var convertedJid = convertJid(participant.userJid(), toLid);
             if (convertedJid != null) {
-                migratedParticipants.add(ChatParticipant.ofGroup(convertedJid, participant.role()));
+                migratedParticipants.add(new com.github.auties00.cobalt.model.group.GroupParticipantBuilder()
+                        .userJid(convertedJid)
+                        .rank(participant.rank().orElse(null))
+                        .build());
             } else {
                 // WAWebDBGroupParticipant: if conversion fails, keep original
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "No {0} mapping for {1}, keeping original",
-                        toLid ? "LID" : "PN", participant.jid());
+                        toLid ? "LID" : "PN", participant.userJid());
                 migratedParticipants.add(participant);
             }
         }

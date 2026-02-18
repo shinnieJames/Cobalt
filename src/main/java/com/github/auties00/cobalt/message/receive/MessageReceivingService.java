@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.dedup.MessageDedup;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryption;
 import com.github.auties00.cobalt.model.info.MessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
@@ -78,7 +79,7 @@ public final class MessageReceivingService {
      * appropriate {@link MessageInfo} subtype.
      *
      * <p>Newsletter messages produce
-     * {@link com.github.auties00.cobalt.model.info.NewsletterMessageInfo};
+     * {@link NewsletterMessageInfo};
      * all other messages go through E2E decryption and produce
      * {@link com.github.auties00.cobalt.model.info.ChatMessageInfo}.
      * Returns {@code null} for unavailable (fanout placeholder) messages.

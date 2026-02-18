@@ -93,8 +93,7 @@ public final class DeviceADVValidator {
      */
     public boolean isBizHostedDevicesEnabled() {
         // Don't wait for sync
-        return abProps.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES_AB_PROP_CODE, false)
-                .orElse(false);
+        return abProps.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES, false);
     }
 
     /**

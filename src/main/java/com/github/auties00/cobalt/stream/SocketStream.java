@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.message.receive.receipt.MessageReceiptHandler;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.stream.call.CallAckStreamNodeHandler;
 import com.github.auties00.cobalt.stream.call.CallStreamNodeHandler;
 import com.github.auties00.cobalt.stream.error.ErrorStreamNodeHandler;
@@ -26,7 +27,7 @@ import java.util.*;
 public final class SocketStream {
     private final Map<String, SequencedCollection<Handler>> handlers;
 
-    public SocketStream(WhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService) {
+    public SocketStream(WhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService) {
         var pairingCode = switch (webVerificationHandler) {
             case WhatsAppClientVerificationHandler.Web.PairingCode _ -> new SocketPhonePairing();
             case WhatsAppClientVerificationHandler.Web.QrCode _ -> null;
@@ -64,7 +65,7 @@ public final class SocketStream {
                 addHandler(result, new WebQueryPrivacySettingsStreamNodeHandler(whatsapp));
                 addHandler(result, new WebQueryDisappearingModeStreamNodeHandler(whatsapp));
                 addHandler(result, new WebQueryBlockListStreamNodeHandler(whatsapp));
-                addHandler(result, new WebOnInitialInfoStreamNodeHandler(whatsapp, lidMigrationService, abPropsService, deviceService));
+                addHandler(result, new WebOnInitialInfoStreamNodeHandler(whatsapp, lidMigrationService, abPropsService, deviceService, wamService));
                 addHandler(result, new WebQueryNewslettersStreamNodeHandler(whatsapp));
                 addHandler(result, new WebPropsStreamNodeHandler(whatsapp, abPropsService));
             }

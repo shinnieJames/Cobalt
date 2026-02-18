@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.message.send.stanza;
 import com.github.auties00.cobalt.model.business.VerifiedBusinessName;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.button.InteractiveMessage;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;

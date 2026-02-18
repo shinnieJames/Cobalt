@@ -1,0 +1,84 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.CrashApplicationState;
+import com.github.auties00.cobalt.wam.type.CrashType;
+import com.github.auties00.cobalt.wam.type.IphoneProcessNonGlobal;
+import com.github.auties00.cobalt.wam.type.ProductArea;
+import com.github.auties00.cobalt.wam.type.SubfunnelType;
+import com.github.auties00.cobalt.wam.type.TsSurface;
+import com.github.auties00.cobalt.wam.type.UfadReportType;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WamEvent(id = 494)
+public interface CrashLogEvent extends WamEventSpec {
+    @WamProperty(index = 20, type = WamType.STRING)
+    Optional<String> activeSubfunnelId();
+
+    @WamProperty(index = 21, type = WamType.ENUM)
+    Optional<SubfunnelType> activeSubfunnelType();
+
+    @WamProperty(index = 32, type = WamType.STRING)
+    Optional<String> appContext();
+
+    @WamProperty(index = 33, type = WamType.INTEGER)
+    OptionalInt appContextBitfield();
+
+    @WamProperty(index = 34, type = WamType.STRING)
+    Optional<String> callTestBucketIdList();
+
+    @WamProperty(index = 22, type = WamType.STRING)
+    Optional<String> chatSessionId();
+
+    @WamProperty(index = 23, type = WamType.ENUM)
+    Optional<CrashApplicationState> crashApplicationState();
+
+    @WamProperty(index = 3, type = WamType.STRING)
+    Optional<String> crashContext();
+
+    @WamProperty(index = 5, type = WamType.INTEGER)
+    OptionalInt crashCount();
+
+    @WamProperty(index = 28, type = WamType.ENUM)
+    Optional<ProductArea> crashLogProductArea();
+
+    @WamProperty(index = 27, type = WamType.STRING)
+    Optional<String> crashLogTimeSpentViewName();
+
+    @WamProperty(index = 2, type = WamType.STRING)
+    Optional<String> crashReason();
+
+    @WamProperty(index = 24, type = WamType.INTEGER)
+    OptionalInt crashTimeout();
+
+    @WamProperty(index = 6, type = WamType.ENUM)
+    Optional<CrashType> crashType();
+
+    @WamProperty(index = 30, type = WamType.ENUM)
+    Optional<IphoneProcessNonGlobal> iphoneProcessNonGlobal();
+
+    @WamProperty(index = 26, type = WamType.ENUM)
+    Optional<TsSurface> iphoneTimeSpentSurfaceId();
+
+    @WamProperty(index = 31, type = WamType.BOOLEAN)
+    Optional<Boolean> lowPowerModeEnabled();
+
+    @WamProperty(index = 19, type = WamType.STRING)
+    Optional<String> peripheralConnected();
+
+    @WamProperty(index = 18, type = WamType.INTEGER)
+    OptionalInt processIdentifier();
+
+    @WamProperty(index = 16, type = WamType.STRING)
+    Optional<String> runningTasks();
+
+    @WamProperty(index = 29, type = WamType.ENUM)
+    Optional<UfadReportType> ufadReportType();
+
+    @WamProperty(index = 25, type = WamType.STRING)
+    Optional<String> unifiedSessionId();
+}

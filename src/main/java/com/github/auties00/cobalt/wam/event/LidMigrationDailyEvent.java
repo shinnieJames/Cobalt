@@ -1,0 +1,51 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.LidMigrationSourceType;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WamEvent(id = 5842)
+public interface LidMigrationDailyEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.STRING)
+    Optional<String> completedMigrations();
+
+    @WamProperty(index = 7, type = WamType.ENUM)
+    Optional<LidMigrationSourceType> lidMigrationSource();
+
+    @WamProperty(index = 8, type = WamType.INTEGER)
+    OptionalInt numberOfChatsWithClientAssignedLid();
+
+    @WamProperty(index = 9, type = WamType.INTEGER)
+    OptionalInt numberOfDeprecatedChats();
+
+    @WamProperty(index = 10, type = WamType.INTEGER)
+    OptionalInt numberOfLidBroadcastLists();
+
+    @WamProperty(index = 11, type = WamType.INTEGER)
+    OptionalInt numberOfLidGroups();
+
+    @WamProperty(index = 12, type = WamType.INTEGER)
+    OptionalInt numberOfPnBroadcastLists();
+
+    @WamProperty(index = 5, type = WamType.INTEGER)
+    OptionalInt numberOfPnChatsWithoutMapping();
+
+    @WamProperty(index = 13, type = WamType.INTEGER)
+    OptionalInt numberOfPnGroups();
+
+    @WamProperty(index = 2, type = WamType.INTEGER)
+    OptionalInt numberOfPnhCtwaThreadsKnownMapping();
+
+    @WamProperty(index = 3, type = WamType.INTEGER)
+    OptionalInt numberOfPnhCtwaThreadsMissingMapping();
+
+    @WamProperty(index = 4, type = WamType.INTEGER)
+    OptionalInt numberOfSplitThreads();
+
+    @WamProperty(index = 6, type = WamType.INTEGER)
+    OptionalInt numberOfUserChatsWithoutAccountLid();
+}

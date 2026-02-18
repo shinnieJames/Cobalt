@@ -6,11 +6,10 @@ import com.github.auties00.cobalt.message.send.ack.AckParser;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.NewsletterStanza;
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.*;
+import com.github.auties00.cobalt.model.message.*;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessage;
-import com.github.auties00.cobalt.model.message.standard.*;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 

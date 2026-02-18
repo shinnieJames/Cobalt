@@ -2,9 +2,8 @@ package com.github.auties00.cobalt.client;
 
 import com.github.auties00.cobalt.model.action.Action;
 import com.github.auties00.cobalt.model.auth.ADVEncryptionType;
-import com.github.auties00.cobalt.model.call.Call;
+import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.chat.Chat;
-import com.github.auties00.cobalt.model.chat.ChatPastParticipant;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageIndexInfo;
@@ -167,9 +166,9 @@ public interface WhatsAppClientListener {
      *
      * @param whatsapp             an instance of the calling API
      * @param chatJid              the non-null group chat JID
-     * @param chatPastParticipants the non-null collection of past participants
+     * @param groupPastParticipants the non-null collection of past participants
      */
-    default void onWebHistorySyncPastParticipants(WhatsAppClient whatsapp, Jid chatJid, Collection<ChatPastParticipant> chatPastParticipants) {
+    default void onWebHistorySyncPastParticipants(WhatsAppClient whatsapp, Jid chatJid, Collection<GroupPastParticipant> groupPastParticipants) {
     }
 
     /**
@@ -323,7 +322,7 @@ public interface WhatsAppClientListener {
      * @param whatsapp an instance of the calling API
      * @param call     the non-null phone call information
      */
-    default void onCall(WhatsAppClient whatsapp, Call call) {
+    default void onCall(WhatsAppClient whatsapp, CallOffer call) {
     }
 
     /**

@@ -1,0 +1,65 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamChannel;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.DisclosureEventType;
+import com.github.auties00.cobalt.wam.type.DisclosureInteraction;
+import com.github.auties00.cobalt.wam.type.DisclosureSource;
+import com.github.auties00.cobalt.wam.type.DisclosureSuppressionReason;
+import com.github.auties00.cobalt.wam.type.DisclosureSurface;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WamEvent(id = 6552, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
+public interface MmDisclosureStateEventEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.STRING)
+    Optional<String> businessLidOrJid();
+
+    @WamProperty(index = 15, type = WamType.INTEGER)
+    OptionalInt deltaTimeReceived();
+
+    @WamProperty(index = 3, type = WamType.ENUM)
+    Optional<DisclosureEventType> disclosureEventType();
+
+    @WamProperty(index = 4, type = WamType.ENUM)
+    Optional<DisclosureInteraction> disclosureInteraction();
+
+    @WamProperty(index = 5, type = WamType.ENUM)
+    Optional<DisclosureSource> disclosureSource();
+
+    @WamProperty(index = 6, type = WamType.ENUM)
+    Optional<DisclosureSuppressionReason> disclosureSuppressionReason();
+
+    @WamProperty(index = 7, type = WamType.ENUM)
+    Optional<DisclosureSurface> disclosureSurface();
+
+    @WamProperty(index = 16, type = WamType.STRING)
+    Optional<String> entSourceSubplatform();
+
+    @WamProperty(index = 14, type = WamType.BOOLEAN)
+    Optional<Boolean> isCompanionDevice();
+
+    @WamProperty(index = 18, type = WamType.BOOLEAN)
+    Optional<Boolean> isNetworkAvailable();
+
+    @WamProperty(index = 8, type = WamType.BOOLEAN)
+    Optional<Boolean> isUserDisclosed();
+
+    @WamProperty(index = 19, type = WamType.INTEGER)
+    OptionalInt mmDisclosureFlags();
+
+    @WamProperty(index = 9, type = WamType.BOOLEAN)
+    Optional<Boolean> mmHasDisclosedUrl();
+
+    @WamProperty(index = 10, type = WamType.BOOLEAN)
+    Optional<Boolean> mmHasShowDisclosureFlag();
+
+    @WamProperty(index = 11, type = WamType.STRING)
+    Optional<String> templateId();
+
+    @WamProperty(index = 13, type = WamType.BOOLEAN)
+    Optional<Boolean> userBecameDisclosed();
+}

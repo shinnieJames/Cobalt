@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.message.receive;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.model.info.MessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
-import com.github.auties00.cobalt.model.message.common.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 

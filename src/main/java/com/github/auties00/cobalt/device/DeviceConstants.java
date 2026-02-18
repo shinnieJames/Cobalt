@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.device;
 
-import com.github.auties00.cobalt.model.device.DeviceInfo;
+import com.github.auties00.cobalt.model.device.info.DeviceInfo;
 
 /**
  * Device identification constants for WhatsApp's multi-device architecture.

@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.stream.SocketStream;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 
 public final class PresenceStreamNodeHandler extends SocketStream.Handler {
     public PresenceStreamNodeHandler(WhatsAppClient whatsapp) {
@@ -22,7 +22,7 @@ public final class PresenceStreamNodeHandler extends SocketStream.Handler {
                     .findContactByJid(chatJid)
                     .ifPresent(contact -> {
                         contact.setLastKnownPresence(status);
-                        contact.setLastSeen(ZonedDateTime.now());
+                        contact.setLastSeen(Instant.now());
                     });
             for(var listener : whatsapp.store().listeners()) {
                 Thread.startVirtualThread(() -> listener.onContactPresence(whatsapp, chatJid, chatJid));
@@ -32,7 +32,7 @@ public final class PresenceStreamNodeHandler extends SocketStream.Handler {
                     .findContactByJid(chatJid)
                     .ifPresent(contact -> {
                         contact.setLastKnownPresence(ContactStatus.AVAILABLE);
-                        contact.setLastSeen(ZonedDateTime.now());
+                        contact.setLastSeen(Instant.now());
                     });
             whatsapp.store()
                     .findChatByJid(chatJid)

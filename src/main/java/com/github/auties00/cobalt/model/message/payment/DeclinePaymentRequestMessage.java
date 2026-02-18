@@ -1,48 +1,28 @@
 package com.github.auties00.cobalt.model.message.payment;
 
-import com.github.auties00.cobalt.model.message.common.ChatMessageKey;
-import com.github.auties00.cobalt.model.message.common.PaymentMessage;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.Message;
 
-import java.util.Objects;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
 
-/**
- * A model class that represents a message to decline a {@link RequestPaymentMessage}.
- */
 @ProtobufMessage(name = "Message.DeclinePaymentRequestMessage")
-public final class DeclinePaymentRequestMessage implements PaymentMessage {
+public final class DeclinePaymentRequestMessage implements Message {
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
-    final ChatMessageKey key;
+    MessageKey key;
 
-    DeclinePaymentRequestMessage(ChatMessageKey key) {
-        this.key = Objects.requireNonNull(key, "key cannot be null");
+
+    DeclinePaymentRequestMessage(MessageKey key) {
+        this.key = key;
     }
 
-    public ChatMessageKey key() {
-        return key;
+    public Optional<MessageKey> key() {
+        return Optional.ofNullable(key);
     }
 
-    @Override
-    public Type type() {
-        return Type.DECLINE_PAYMENT_REQUEST;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof DeclinePaymentRequestMessage that
-                && Objects.equals(key, that.key);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(key);
-    }
-
-    @Override
-    public String toString() {
-        return "DeclinePaymentRequestMessage[" +
-                "key=" + key + ']';
+    public DeclinePaymentRequestMessage setKey(MessageKey key) {
+        this.key = key;
+        return this;
     }
 }

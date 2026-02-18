@@ -11,12 +11,11 @@ import com.github.auties00.cobalt.model.info.MessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.button.InteractiveMessage;
 import com.github.auties00.cobalt.model.message.button.InteractiveResponseMessage;
-import com.github.auties00.cobalt.model.message.common.KeepInChat;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
-import com.github.auties00.cobalt.model.message.common.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.KeepInChat;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.server.DeviceSentMessageBuilder;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessage;
-import com.github.auties00.cobalt.model.message.standard.*;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -80,7 +79,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * before the stanza is sent on the wire.
      */
     void flushStore() {
-        store.serializer().serialize(store);
+        store.save();
     }
 
     /**

@@ -1,14 +1,11 @@
 package com.github.auties00.cobalt.model.chat;
 
-import com.github.auties00.cobalt.model.contact.ContactStatus;
-import com.github.auties00.cobalt.model.info.ChatMessageInfo;
-import com.github.auties00.cobalt.model.info.MessageInfoParent;
+import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.jid.JidProvider;
-import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.media.MediaVisibility;
-import com.github.auties00.cobalt.model.sync.HistorySyncMessage;
-import com.github.auties00.cobalt.util.Clock;
+import com.github.auties00.cobalt.model.message.PrivacySystemMessage;
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
+import com.github.auties00.cobalt.model.setting.WallpaperSettings;
 import com.github.auties00.collections.ConcurrentLinkedHashMap;
 import it.auties.protobuf.annotation.ProtobufEnum;
 import it.auties.protobuf.annotation.ProtobufEnumIndex;
@@ -17,24 +14,15 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import java.time.ZonedDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Stream;
 
-/**
- * A model class that represents a Chat. A chat can be of two types: a conversation with a contact
- * or a group. This class is only a model, this means that changing its values will have no real
- * effect on WhatsappWeb's servers
- */
 @ProtobufMessage(name = "Conversation")
-@SuppressWarnings({"unused", "UnusedReturnValue"})
-public final class Chat implements MessageInfoParent {
+public final class Chat {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    final Jid jid;
+    Jid jid;
 
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    final Messages messages;
+    Messages messages;
 
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
     Jid newJid;
@@ -42,134 +30,307 @@ public final class Chat implements MessageInfoParent {
     @ProtobufProperty(index = 4, type = ProtobufType.STRING)
     Jid oldJid;
 
+    @ProtobufProperty(index = 5, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
+    Instant lastMsgTimestamp;
+
     @ProtobufProperty(index = 6, type = ProtobufType.UINT32)
-    int unreadMessagesCount;
+    Integer unreadCount;
+
+    @ProtobufProperty(index = 7, type = ProtobufType.BOOL)
+    Boolean readOnly;
 
     @ProtobufProperty(index = 8, type = ProtobufType.BOOL)
-    boolean endOfHistoryTransfer;
+    Boolean endOfHistoryTransfer;
 
     @ProtobufProperty(index = 9, type = ProtobufType.UINT32)
-    ChatEphemeralTimer ephemeralMessageDuration;
+    ChatEphemeralTimer ephemeralExpiration;
 
-    @ProtobufProperty(index = 10, type = ProtobufType.INT64)
-    long ephemeralMessagesToggleTimeSeconds;
+    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
+    Instant ephemeralSettingTimestamp;
 
     @ProtobufProperty(index = 11, type = ProtobufType.ENUM)
     EndOfHistoryTransferType endOfHistoryTransferType;
 
-    @ProtobufProperty(index = 12, type = ProtobufType.UINT64)
-    long timestampSeconds;
+    @ProtobufProperty(index = 12, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
+    Instant conversationTimestamp;
 
     @ProtobufProperty(index = 13, type = ProtobufType.STRING)
     String name;
 
+    @ProtobufProperty(index = 14, type = ProtobufType.STRING)
+    String pHash;
+
     @ProtobufProperty(index = 15, type = ProtobufType.BOOL)
-    boolean notSpam;
+    Boolean notSpam;
 
     @ProtobufProperty(index = 16, type = ProtobufType.BOOL)
-    boolean archived;
+    Boolean archived;
 
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
-    ChatDisappear disappearInitiator;
+    ChatDisappearingMode disappearingMode;
+
+    @ProtobufProperty(index = 18, type = ProtobufType.UINT32)
+    Integer unreadMentionCount;
 
     @ProtobufProperty(index = 19, type = ProtobufType.BOOL)
-    boolean markedAsUnread;
+    Boolean markedAsUnread;
+
+    @ProtobufProperty(index = 20, type = ProtobufType.MESSAGE)
+    List<GroupParticipant> participant;
 
     @ProtobufProperty(index = 21, type = ProtobufType.BYTES)
     byte[] tcToken;
 
-    @ProtobufProperty(index = 22, type = ProtobufType.UINT64)
-    Long tcTokenTimestamp;
+    @ProtobufProperty(index = 22, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
+    Instant tcTokenTimestamp;
+
+    @ProtobufProperty(index = 23, type = ProtobufType.BYTES)
+    byte[] contactPrimaryIdentityKey;
 
     @ProtobufProperty(index = 24, type = ProtobufType.UINT32)
-    int pinnedTimestampSeconds;
+    Integer pinned;
 
     @ProtobufProperty(index = 25, type = ProtobufType.UINT64)
     ChatMute mute;
 
     @ProtobufProperty(index = 26, type = ProtobufType.MESSAGE)
-    ChatWallpaper wallpaper;
+    WallpaperSettings wallpaper;
 
     @ProtobufProperty(index = 27, type = ProtobufType.ENUM)
     MediaVisibility mediaVisibility;
 
+    @ProtobufProperty(index = 28, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
+    Instant tcTokenSenderTimestamp;
+
     @ProtobufProperty(index = 29, type = ProtobufType.BOOL)
-    boolean suspended;
+    Boolean suspended;
 
     @ProtobufProperty(index = 30, type = ProtobufType.BOOL)
-    boolean terminated;
+    Boolean terminated;
+
+    @ProtobufProperty(index = 31, type = ProtobufType.UINT64)
+    Long createdAt;
+
+    @ProtobufProperty(index = 32, type = ProtobufType.STRING)
+    String createdBy;
+
+    @ProtobufProperty(index = 33, type = ProtobufType.STRING)
+    String description;
 
     @ProtobufProperty(index = 34, type = ProtobufType.BOOL)
-    boolean support;
+    Boolean support;
+
+    @ProtobufProperty(index = 35, type = ProtobufType.BOOL)
+    Boolean isParentGroup;
+
+    @ProtobufProperty(index = 37, type = ProtobufType.STRING)
+    String parentGroupId;
+
+    @ProtobufProperty(index = 36, type = ProtobufType.BOOL)
+    Boolean isDefaultSubgroup;
 
     @ProtobufProperty(index = 38, type = ProtobufType.STRING)
     String displayName;
 
     @ProtobufProperty(index = 39, type = ProtobufType.STRING)
-    Jid phoneJid;
+    Jid phoneNumberJid;
 
     @ProtobufProperty(index = 40, type = ProtobufType.BOOL)
-    boolean shareOwnPhoneNumber;
+    Boolean shareOwnPhoneNumber;
 
     @ProtobufProperty(index = 41, type = ProtobufType.BOOL)
-    boolean phoneDuplicateLidThread;
+    Boolean phoneNumberhDuplicateLidThread;
 
     @ProtobufProperty(index = 42, type = ProtobufType.STRING)
     Jid lid;
 
+    @ProtobufProperty(index = 43, type = ProtobufType.STRING)
+    String username;
+
     @ProtobufProperty(index = 44, type = ProtobufType.STRING)
     String lidOriginType;
 
+    @ProtobufProperty(index = 45, type = ProtobufType.UINT32)
+    Integer commentsCount;
+
+    @ProtobufProperty(index = 46, type = ProtobufType.BOOL)
+    Boolean locked;
+
+    @ProtobufProperty(index = 47, type = ProtobufType.ENUM)
+    PrivacySystemMessage systemMessageToInsert;
+
+    @ProtobufProperty(index = 48, type = ProtobufType.BOOL)
+    Boolean capiCreatedGroup;
+
     @ProtobufProperty(index = 49, type = ProtobufType.STRING)
-    Jid accountLid;
+    String accountLid;
 
-    @ProtobufProperty(index = 999, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.ENUM)
-    final ConcurrentHashMap<Jid, ContactStatus> presences;
+    @ProtobufProperty(index = 50, type = ProtobufType.BOOL)
+    Boolean limitSharing;
 
-    CtwaEntryPoint ctwaEntryPoint;
+    @ProtobufProperty(index = 51, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
+    Instant limitSharingSettingTimestamp;
 
-    Chat(Jid jid, Messages messages, Jid newJid, Jid oldJid, int unreadMessagesCount, boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralMessageDuration, long ephemeralMessagesToggleTimeSeconds, EndOfHistoryTransferType endOfHistoryTransferType, long timestampSeconds, String name, boolean notSpam, boolean archived, ChatDisappear disappearInitiator, boolean markedAsUnread, byte[] tcToken, Long tcTokenTimestamp, int pinnedTimestampSeconds, ChatMute mute, ChatWallpaper wallpaper, MediaVisibility mediaVisibility, boolean suspended, boolean terminated, boolean support, String displayName, Jid phoneJid, boolean shareOwnPhoneNumber, boolean phoneDuplicateLidThread, Jid lid, String lidOriginType, Jid accountLid, ConcurrentHashMap<Jid, ContactStatus> presences) {
-        this.jid = jid;
+    @ProtobufProperty(index = 52, type = ProtobufType.ENUM)
+    ChatLimitSharing.TriggerType limitSharingTrigger;
+
+    @ProtobufProperty(index = 53, type = ProtobufType.BOOL)
+    Boolean limitSharingInitiatedByMe;
+
+    @ProtobufProperty(index = 54, type = ProtobufType.BOOL)
+    Boolean maibaAiThreadEnabled;
+
+
+    Chat(Jid jid, Messages messages, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Integer pinned, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, String accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled) {
+        this.jid = Objects.requireNonNull(jid);
         this.messages = messages;
         this.newJid = newJid;
         this.oldJid = oldJid;
-        this.unreadMessagesCount = unreadMessagesCount;
+        this.lastMsgTimestamp = lastMsgTimestamp;
+        this.unreadCount = unreadCount;
+        this.readOnly = readOnly;
         this.endOfHistoryTransfer = endOfHistoryTransfer;
-        this.ephemeralMessageDuration = Objects.requireNonNullElse(ephemeralMessageDuration, ChatEphemeralTimer.OFF);
-        this.ephemeralMessagesToggleTimeSeconds = ephemeralMessagesToggleTimeSeconds;
+        this.ephemeralExpiration = ephemeralExpiration;
+        this.ephemeralSettingTimestamp = ephemeralSettingTimestamp;
         this.endOfHistoryTransferType = endOfHistoryTransferType;
-        this.timestampSeconds = timestampSeconds;
+        this.conversationTimestamp = conversationTimestamp;
         this.name = name;
+        this.pHash = pHash;
         this.notSpam = notSpam;
         this.archived = archived;
-        this.disappearInitiator = disappearInitiator;
+        this.disappearingMode = disappearingMode;
+        this.unreadMentionCount = unreadMentionCount;
         this.markedAsUnread = markedAsUnread;
+        this.participant = participant;
         this.tcToken = tcToken;
         this.tcTokenTimestamp = tcTokenTimestamp;
-        this.pinnedTimestampSeconds = pinnedTimestampSeconds;
-        this.mute = Objects.requireNonNullElse(mute, ChatMute.notMuted());
+        this.contactPrimaryIdentityKey = contactPrimaryIdentityKey;
+        this.pinned = pinned;
+        this.mute = mute;
         this.wallpaper = wallpaper;
         this.mediaVisibility = mediaVisibility;
+        this.tcTokenSenderTimestamp = tcTokenSenderTimestamp;
         this.suspended = suspended;
         this.terminated = terminated;
+        this.createdAt = createdAt;
+        this.createdBy = createdBy;
+        this.description = description;
         this.support = support;
+        this.isParentGroup = isParentGroup;
+        this.parentGroupId = parentGroupId;
+        this.isDefaultSubgroup = isDefaultSubgroup;
         this.displayName = displayName;
-        this.phoneJid = phoneJid;
+        this.phoneNumberJid = phoneNumberJid;
         this.shareOwnPhoneNumber = shareOwnPhoneNumber;
-        this.phoneDuplicateLidThread = phoneDuplicateLidThread;
+        this.phoneNumberhDuplicateLidThread = phoneNumberhDuplicateLidThread;
         this.lid = lid;
+        this.username = username;
         this.lidOriginType = lidOriginType;
+        this.commentsCount = commentsCount;
+        this.locked = locked;
+        this.systemMessageToInsert = systemMessageToInsert;
+        this.capiCreatedGroup = capiCreatedGroup;
         this.accountLid = accountLid;
-        this.presences = presences;
+        this.limitSharing = limitSharing;
+        this.limitSharingSettingTimestamp = limitSharingSettingTimestamp;
+        this.limitSharingTrigger = limitSharingTrigger;
+        this.limitSharingInitiatedByMe = limitSharingInitiatedByMe;
+        this.maibaAiThreadEnabled = maibaAiThreadEnabled;
+    }
+
+    public Jid jid() {
+        return jid;
     }
 
     /**
-     * Returns the JID associated with this chat.
+     * Returns the messages in this chat as an unmodifiable sequenced collection
+     * of {@link ChatMessageInfo}.
      *
-     * @return a non-null Jid
+     * <p>The returned collection is a live, zero-copy view over the underlying
+     * {@code HistorySyncMsg} storage used for protobuf serialization. Changes
+     * to the chat's messages are reflected in previously returned views.
+     *
+     * @return a non-null, unmodifiable sequenced collection of chat messages
      */
-    public Jid jid() {
-        return jid;
+    public SequencedCollection<ChatMessageInfo> messages() {
+        if (messages == null) {
+            return List.of();
+        }
+        return messages.messageInfoView();
+    }
+
+    /**
+     * Adds a message to this chat, wrapping it in the history sync format
+     * used for protobuf serialization.
+     *
+     * @param info the message to add
+     * @throws NullPointerException if {@code info} is {@code null}
+     */
+    public void addMessage(ChatMessageInfo info) {
+        Objects.requireNonNull(info);
+        if (messages == null) {
+            messages = new Messages();
+        }
+        messages.addMessageInfo(info);
+    }
+
+    /**
+     * Removes the message with the specified key ID from this chat.
+     *
+     * @param id the message key ID to remove
+     * @return {@code true} if a message was removed
+     */
+    public boolean removeMessage(String id) {
+        return messages != null && messages.removeMessageInfoById(id);
+    }
+
+    /**
+     * Removes all messages from this chat.
+     */
+    public void removeMessages() {
+        if (messages != null) {
+            messages.clear();
+        }
+    }
+
+    /**
+     * Returns the message with the specified key ID, if present.
+     *
+     * @param id the message key ID to look up
+     * @return an {@code Optional} containing the matching message, or empty
+     *         if no message with the given ID exists in this chat
+     */
+    public Optional<ChatMessageInfo> getMessageById(String id) {
+        if (messages == null) {
+            return Optional.empty();
+        }
+        return messages.getMessageInfoById(id);
+    }
+
+    /**
+     * Returns the newest (most recently added) message in this chat.
+     *
+     * @return an {@code Optional} containing the newest message, or empty
+     *         if this chat has no messages
+     */
+    public Optional<ChatMessageInfo> newestMessage() {
+        if (messages == null) {
+            return Optional.empty();
+        }
+        return messages.getNewestMessageInfo();
+    }
+
+    /**
+     * Returns the oldest (earliest added) message in this chat.
+     *
+     * @return an {@code Optional} containing the oldest message, or empty
+     *         if this chat has no messages
+     */
+    public Optional<ChatMessageInfo> oldestMessage() {
+        if (messages == null) {
+            return Optional.empty();
+        }
+        return messages.getOldestMessageInfo();
     }
 
     public Optional<Jid> newJid() {
@@ -180,609 +341,570 @@ public final class Chat implements MessageInfoParent {
         return Optional.ofNullable(oldJid);
     }
 
-    public int unreadMessagesCount() {
-        return unreadMessagesCount;
+    public Optional<Instant> lastMsgTimestamp() {
+        return Optional.ofNullable(lastMsgTimestamp);
+    }
+
+    public OptionalInt unreadCount() {
+        return unreadCount == null ? OptionalInt.empty() : OptionalInt.of(unreadCount);
+    }
+
+    public boolean readOnly() {
+        return readOnly != null && readOnly;
     }
 
     public boolean endOfHistoryTransfer() {
-        return endOfHistoryTransfer;
+        return endOfHistoryTransfer != null && endOfHistoryTransfer;
     }
 
-    public ChatEphemeralTimer ephemeralMessageDuration() {
-        return ephemeralMessageDuration;
+    public Optional<ChatEphemeralTimer> ephemeralExpiration() {
+        return Optional.ofNullable(ephemeralExpiration);
     }
 
-    public long ephemeralMessagesToggleTimeSeconds() {
-        return ephemeralMessagesToggleTimeSeconds;
+    public Optional<Instant> ephemeralSettingTimestamp() {
+        return Optional.ofNullable(ephemeralSettingTimestamp);
     }
 
     public Optional<EndOfHistoryTransferType> endOfHistoryTransferType() {
         return Optional.ofNullable(endOfHistoryTransferType);
     }
 
-    public long timestampSeconds() {
-        return timestampSeconds;
+    public Optional<Instant> conversationTimestamp() {
+        return Optional.ofNullable(conversationTimestamp);
+    }
+
+    public Optional<String> name() {
+        return Optional.ofNullable(name);
+    }
+
+    public Optional<String> pHash() {
+        return Optional.ofNullable(pHash);
     }
 
     public boolean notSpam() {
-        return notSpam;
+        return notSpam != null && notSpam;
     }
 
     public boolean archived() {
-        return archived;
+        return archived != null && archived;
     }
 
-    public Optional<ChatDisappear> disappearInitiator() {
-        return Optional.ofNullable(disappearInitiator);
+    public Optional<ChatDisappearingMode> disappearingMode() {
+        return Optional.ofNullable(disappearingMode);
+    }
+
+    public OptionalInt unreadMentionCount() {
+        return unreadMentionCount == null ? OptionalInt.empty() : OptionalInt.of(unreadMentionCount);
     }
 
     public boolean markedAsUnread() {
-        return markedAsUnread;
+        return markedAsUnread != null && markedAsUnread;
     }
 
-    /**
-     * Returns the trust contact (TC) token for this chat.
-     *
-     * @return the TC token bytes, or empty if not set
-     */
+    public List<GroupParticipant> participant() {
+        return participant == null ? List.of() : Collections.unmodifiableList(participant);
+    }
+
     public Optional<byte[]> tcToken() {
         return Optional.ofNullable(tcToken);
     }
 
-    /**
-     * Sets the trust contact (TC) token for this chat.
-     *
-     * @param tcToken the TC token bytes
-     */
-    public void setTcToken(byte[] tcToken) {
-        this.tcToken = tcToken;
-    }
-
-    /**
-     * Returns the timestamp when the TC token was last updated.
-     *
-     * @return the timestamp, or empty if not set
-     */
     public Optional<Instant> tcTokenTimestamp() {
-        return Optional.ofNullable(tcTokenTimestamp)
-                .map(Instant::ofEpochSecond);
+        return Optional.ofNullable(tcTokenTimestamp);
     }
 
-    /**
-     * Sets the timestamp when the TC token was last updated.
-     *
-     * @param tcTokenTimestamp the timestamp in epoch seconds, or {@code null}
-     */
-    public void setTcTokenTimestamp(Long tcTokenTimestamp) {
-        this.tcTokenTimestamp = tcTokenTimestamp;
+    public Optional<byte[]> contactPrimaryIdentityKey() {
+        return Optional.ofNullable(contactPrimaryIdentityKey);
     }
 
-    public int pinnedTimestampSeconds() {
-        return pinnedTimestampSeconds;
+    public OptionalInt pinned() {
+        return pinned == null ? OptionalInt.empty() : OptionalInt.of(pinned);
     }
 
-    public ChatMute mute() {
-        return mute;
+    public Optional<ChatMute> muteEndTime() {
+        return Optional.ofNullable(mute);
     }
 
-    public Optional<ChatWallpaper> wallpaper() {
+    public Optional<WallpaperSettings> wallpaper() {
         return Optional.ofNullable(wallpaper);
     }
 
-    public MediaVisibility mediaVisibility() {
-        return mediaVisibility;
+    public Optional<MediaVisibility> mediaVisibility() {
+        return Optional.ofNullable(mediaVisibility);
+    }
+
+    public Optional<Instant> tcTokenSenderTimestamp() {
+        return Optional.ofNullable(tcTokenSenderTimestamp);
     }
 
     public boolean suspended() {
-        return suspended;
+        return suspended != null && suspended;
     }
 
     public boolean terminated() {
-        return terminated;
+        return terminated != null && terminated;
+    }
+
+    public OptionalLong createdAt() {
+        return createdAt == null ? OptionalLong.empty() : OptionalLong.of(createdAt);
+    }
+
+    public Optional<String> createdBy() {
+        return Optional.ofNullable(createdBy);
+    }
+
+    public Optional<String> description() {
+        return Optional.ofNullable(description);
     }
 
     public boolean support() {
-        return support;
+        return support != null && support;
     }
 
-    public Optional<Jid> phoneJid() {
-        return Optional.ofNullable(phoneJid);
+    public boolean isParentGroup() {
+        return isParentGroup != null && isParentGroup;
     }
 
-    public boolean phoneDuplicateLidThread() {
-        return phoneDuplicateLidThread;
+    public Optional<String> parentGroupId() {
+        return Optional.ofNullable(parentGroupId);
     }
 
-    public Optional<Jid> lidJid() {
+    public boolean isDefaultSubgroup() {
+        return isDefaultSubgroup != null && isDefaultSubgroup;
+    }
+
+    public Optional<String> displayName() {
+        return Optional.ofNullable(displayName);
+    }
+
+    public Optional<Jid> phoneNumberJid() {
+        return Optional.ofNullable(phoneNumberJid);
+    }
+
+    public boolean shareOwnPhoneNumber() {
+        return shareOwnPhoneNumber != null && shareOwnPhoneNumber;
+    }
+
+    public boolean phoneNumberhDuplicateLidThread() {
+        return phoneNumberhDuplicateLidThread != null && phoneNumberhDuplicateLidThread;
+    }
+
+    public Optional<Jid> lid() {
         return Optional.ofNullable(lid);
     }
 
-    /**
-     * Returns the LID origin type for this chat.
-     *
-     * @return the origin type ({@code "ctwa"} or {@code "general"}),
-     *         or empty if not set
-     */
+    public Optional<String> username() {
+        return Optional.ofNullable(username);
+    }
+
     public Optional<String> lidOriginType() {
         return Optional.ofNullable(lidOriginType);
     }
 
-    public Optional<CtwaEntryPoint> ctwaEntryPoint() {
-        return Optional.ofNullable(ctwaEntryPoint);
+    public OptionalInt commentsCount() {
+        return commentsCount == null ? OptionalInt.empty() : OptionalInt.of(commentsCount);
     }
 
-    public void setCtwaEntryPoint(CtwaEntryPoint ctwaEntryPoint) {
-        this.ctwaEntryPoint = ctwaEntryPoint;
+    public boolean locked() {
+        return locked != null && locked;
     }
 
-    public Optional<Jid> accountLid() {
+    public Optional<PrivacySystemMessage> systemMessageToInsert() {
+        return Optional.ofNullable(systemMessageToInsert);
+    }
+
+    public boolean capiCreatedGroup() {
+        return capiCreatedGroup != null && capiCreatedGroup;
+    }
+
+    public Optional<String> accountLid() {
         return Optional.ofNullable(accountLid);
     }
 
-    public Optional<ContactStatus> getPresence(JidProvider jid) {
-        return Optional.ofNullable(presences.get(jid.toJid()));
+    public boolean limitSharing() {
+        return limitSharing != null && limitSharing;
     }
 
-    public void addPresence(JidProvider jid, ContactStatus status) {
-        presences.put(jid.toJid(), status);
+    public Optional<Instant> limitSharingSettingTimestamp() {
+        return Optional.ofNullable(limitSharingSettingTimestamp);
     }
 
-    public boolean removePresence(JidProvider jid) {
-        return presences.remove(jid.toJid()) != null;
+    public Optional<ChatLimitSharing.TriggerType> limitSharingTrigger() {
+        return Optional.ofNullable(limitSharingTrigger);
     }
 
-    public boolean hasName() {
-        return name != null;
+    public boolean limitSharingInitiatedByMe() {
+        return limitSharingInitiatedByMe != null && limitSharingInitiatedByMe;
     }
 
-    public boolean shareOwnPhoneNumber() {
-        return shareOwnPhoneNumber;
+    public boolean maibaAiThreadEnabled() {
+        return maibaAiThreadEnabled != null && maibaAiThreadEnabled;
     }
 
-    public void setUnreadMessagesCount(int unreadMessagesCount) {
-        this.unreadMessagesCount = unreadMessagesCount;
+    public Chat setJid(Jid jid) {
+        this.jid = jid;
+        return this;
     }
 
-    public void setEndOfHistoryTransfer(boolean endOfHistoryTransfer) {
+    /**
+     * Transfers all messages from the specified chat into this chat.
+     *
+     * <p>After this operation the source chat's message collection is empty
+     * and this chat owns every message that was previously in the source.
+     * The transfer is performed by swapping the underlying backing map,
+     * avoiding per-element copying.
+     *
+     * @param source the chat whose messages are transferred into this chat
+     * @throws NullPointerException if {@code source} is {@code null}
+     */
+    public void transferMessages(Chat source) {
+        Objects.requireNonNull(source);
+        if (source.messages == null || source.messages.isEmpty()) {
+            return;
+        }
+        if (this.messages == null) {
+            this.messages = new Messages();
+        }
+        this.messages.addAll(source.messages);
+        source.messages.clear();
+    }
+
+    public Chat setNewJid(Jid newJid) {
+        this.newJid = newJid;
+        return this;
+    }
+
+    public Chat setOldJid(Jid oldJid) {
+        this.oldJid = oldJid;
+        return this;
+    }
+
+    public Chat setLastMsgTimestamp(Instant lastMsgTimestamp) {
+        this.lastMsgTimestamp = lastMsgTimestamp;
+        return this;
+    }
+
+    public Chat setUnreadCount(Integer unreadCount) {
+        this.unreadCount = unreadCount;
+        return this;
+    }
+
+    public Chat setReadOnly(Boolean readOnly) {
+        this.readOnly = readOnly;
+        return this;
+    }
+
+    public Chat setEndOfHistoryTransfer(Boolean endOfHistoryTransfer) {
         this.endOfHistoryTransfer = endOfHistoryTransfer;
+        return this;
     }
 
-    public void setEphemeralMessageDuration(ChatEphemeralTimer ephemeralMessageDuration) {
-        this.ephemeralMessageDuration = ephemeralMessageDuration;
+    public Chat setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration) {
+        this.ephemeralExpiration = ephemeralExpiration;
+        return this;
     }
 
-    public void setEphemeralMessagesToggleTimeSeconds(long ephemeralMessagesToggleTimeSeconds) {
-        this.ephemeralMessagesToggleTimeSeconds = ephemeralMessagesToggleTimeSeconds;
+    public Chat setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
+        this.ephemeralSettingTimestamp = ephemeralSettingTimestamp;
+        return this;
     }
 
-    public void setEndOfHistoryTransferType(EndOfHistoryTransferType endOfHistoryTransferType) {
+    public Chat setEndOfHistoryTransferType(EndOfHistoryTransferType endOfHistoryTransferType) {
         this.endOfHistoryTransferType = endOfHistoryTransferType;
+        return this;
     }
 
-    public void setTimestampSeconds(long timestampSeconds) {
-        this.timestampSeconds = timestampSeconds;
+    public Chat setConversationTimestamp(Instant conversationTimestamp) {
+        this.conversationTimestamp = conversationTimestamp;
+        return this;
     }
 
-    public void setName(String name) {
+    public Chat setName(String name) {
         this.name = name;
+        return this;
     }
 
-    public void setNotSpam(boolean notSpam) {
+    public Chat setPHash(String pHash) {
+        this.pHash = pHash;
+        return this;
+    }
+
+    public Chat setNotSpam(Boolean notSpam) {
         this.notSpam = notSpam;
+        return this;
     }
 
-    public void setArchived(boolean archived) {
+    public Chat setArchived(Boolean archived) {
         this.archived = archived;
+        return this;
     }
 
-    public void setDisappearInitiator(ChatDisappear disappearInitiator) {
-        this.disappearInitiator = disappearInitiator;
+    public Chat setDisappearingMode(ChatDisappearingMode disappearingMode) {
+        this.disappearingMode = disappearingMode;
+        return this;
     }
 
-    public void setMarkedAsUnread(boolean markedAsUnread) {
+    public Chat setUnreadMentionCount(Integer unreadMentionCount) {
+        this.unreadMentionCount = unreadMentionCount;
+        return this;
+    }
+
+    public Chat setMarkedAsUnread(Boolean markedAsUnread) {
         this.markedAsUnread = markedAsUnread;
+        return this;
     }
 
-    public void setPinnedTimestampSeconds(int pinnedTimestampSeconds) {
-        this.pinnedTimestampSeconds = pinnedTimestampSeconds;
+    public Chat setParticipant(List<GroupParticipant> participant) {
+        this.participant = participant;
+        return this;
     }
 
-    public void setMute(ChatMute mute) {
+    public Chat setTcToken(byte[] tcToken) {
+        this.tcToken = tcToken;
+        return this;
+    }
+
+    public Chat setTcTokenTimestamp(Instant tcTokenTimestamp) {
+        this.tcTokenTimestamp = tcTokenTimestamp;
+        return this;
+    }
+
+    public Chat setContactPrimaryIdentityKey(byte[] contactPrimaryIdentityKey) {
+        this.contactPrimaryIdentityKey = contactPrimaryIdentityKey;
+        return this;
+    }
+
+    public Chat setPinned(Integer pinned) {
+        this.pinned = pinned;
+        return this;
+    }
+
+    public Chat setMute(ChatMute mute) {
         this.mute = mute;
+        return this;
     }
 
-    public void setWallpaper(ChatWallpaper wallpaper) {
+    public Chat setWallpaper(WallpaperSettings wallpaper) {
         this.wallpaper = wallpaper;
+        return this;
     }
 
-    public void setMediaVisibility(MediaVisibility mediaVisibility) {
+    public Chat setMediaVisibility(MediaVisibility mediaVisibility) {
         this.mediaVisibility = mediaVisibility;
+        return this;
     }
 
-    public void setSuspended(boolean suspended) {
+    public Chat setTcTokenSenderTimestamp(Instant tcTokenSenderTimestamp) {
+        this.tcTokenSenderTimestamp = tcTokenSenderTimestamp;
+        return this;
+    }
+
+    public Chat setSuspended(Boolean suspended) {
         this.suspended = suspended;
+        return this;
     }
 
-    public void setTerminated(boolean terminated) {
+    public Chat setTerminated(Boolean terminated) {
         this.terminated = terminated;
+        return this;
     }
 
-    public void setSupport(boolean support) {
+    public Chat setCreatedAt(Long createdAt) {
+        this.createdAt = createdAt;
+        return this;
+    }
+
+    public Chat setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+        return this;
+    }
+
+    public Chat setDescription(String description) {
+        this.description = description;
+        return this;
+    }
+
+    public Chat setSupport(Boolean support) {
         this.support = support;
+        return this;
     }
 
-    public void setPhoneJid(Jid phoneJid) {
-        this.phoneJid = phoneJid;
+    public Chat setParentGroup(Boolean isParentGroup) {
+        this.isParentGroup = isParentGroup;
+        return this;
     }
 
-    public void setShareOwnPhoneNumber(boolean shareOwnPhoneNumber) {
-        this.shareOwnPhoneNumber = shareOwnPhoneNumber;
+    public Chat setParentGroupId(String parentGroupId) {
+        this.parentGroupId = parentGroupId;
+        return this;
     }
 
-    public void setPhoneDuplicateLidThread(boolean phoneDuplicateLidThread) {
-        this.phoneDuplicateLidThread = phoneDuplicateLidThread;
+    public Chat setDefaultSubgroup(Boolean isDefaultSubgroup) {
+        this.isDefaultSubgroup = isDefaultSubgroup;
+        return this;
     }
 
-    public void setLid(Jid lid) {
-        this.lid = lid;
+    public Chat setDisplayName(String displayName) {
+        this.displayName = displayName;
+        return this;
     }
 
-    public void setAccountLid(Jid accountLid) {
+    public Chat setPhoneNumberJid(Jid phoneNumberJid) {
+        this.phoneNumberJid = phoneNumberJid;
+        return this;
+    }
+
+    public Chat setShareOwnPhoneNumber(Boolean shareOwnPn) {
+        this.shareOwnPhoneNumber = shareOwnPn;
+        return this;
+    }
+
+    public Chat setPhoneNumberDuplicateLidThread(Boolean phoneNumberhDuplicateLidThread) {
+        this.phoneNumberhDuplicateLidThread = phoneNumberhDuplicateLidThread;
+        return this;
+    }
+
+    public Chat setLid(Jid lidJid) {
+        this.lid = lidJid;
+        return this;
+    }
+
+    public Chat setUsername(String username) {
+        this.username = username;
+        return this;
+    }
+
+    public Chat setLidOriginType(String lidOriginType) {
+        this.lidOriginType = lidOriginType;
+        return this;
+    }
+
+    public Chat setCommentsCount(Integer commentsCount) {
+        this.commentsCount = commentsCount;
+        return this;
+    }
+
+    public Chat setLocked(Boolean locked) {
+        this.locked = locked;
+        return this;
+    }
+
+    public Chat setSystemMessageToInsert(PrivacySystemMessage systemMessageToInsert) {
+        this.systemMessageToInsert = systemMessageToInsert;
+        return this;
+    }
+
+    public Chat setCapiCreatedGroup(Boolean capiCreatedGroup) {
+        this.capiCreatedGroup = capiCreatedGroup;
+        return this;
+    }
+
+    public Chat setAccountLid(String accountLid) {
         this.accountLid = accountLid;
+        return this;
     }
 
-    /**
-     * Returns the name of this chat
-     *
-     * @return a non-null value
-     */
-    public String name() {
-        if (name != null) {
-            return name;
-        }
-
-        if (displayName != null) {
-            return displayName;
-        }
-
-        return jid.user();
+    public Chat setLimitSharing(Boolean limitSharing) {
+        this.limitSharing = limitSharing;
+        return this;
     }
 
-    /**
-     * Returns a boolean to represent whether this chat is a group or not
-     *
-     * @return true if this chat is a group
-     */
-    public boolean isGroupOrCommunity() {
-        return jid.server().type() == JidServer.Type.GROUP_OR_COMMUNITY;
+    public Chat setLimitSharingSettingTimestamp(Instant limitSharingSettingTimestamp) {
+        this.limitSharingSettingTimestamp = limitSharingSettingTimestamp;
+        return this;
     }
 
-    /**
-     * Returns a boolean to represent whether this chat is pinned or not
-     *
-     * @return true if this chat is pinned
-     */
-    public boolean isPinned() {
-        return pinnedTimestampSeconds != 0;
+    public Chat setLimitSharingTrigger(ChatLimitSharing.TriggerType limitSharingTrigger) {
+        this.limitSharingTrigger = limitSharingTrigger;
+        return this;
     }
 
-    /**
-     * Returns a boolean to represent whether ephemeral messages are enabled for this chat
-     *
-     * @return true if ephemeral messages are enabled for this chat
-     */
-    public boolean isEphemeral() {
-        return ephemeralMessageDuration != ChatEphemeralTimer.OFF && ephemeralMessagesToggleTimeSeconds != 0;
+    public Chat setLimitSharingInitiatedByMe(Boolean limitSharingInitiatedByMe) {
+        this.limitSharingInitiatedByMe = limitSharingInitiatedByMe;
+        return this;
     }
 
-    /**
-     * Returns all the unread messages in this chat
-     *
-     * @return a non-null collection
-     */
-    public Collection<ChatMessageInfo> unreadMessages() {
-        if (!hasUnreadMessages()) {
-            return List.of();
-        }
-
-        return messages.getMessageInfosAsStream()
-                .limit(unreadMessagesCount())
-                .toList();
+    public Chat setMaibaAiThreadEnabled(Boolean maibaAiThreadEnabled) {
+        this.maibaAiThreadEnabled = maibaAiThreadEnabled;
+        return this;
     }
 
-    /**
-     * Returns a boolean to represent whether this chat has unread messages
-     *
-     * @return true if this chat has unread messages
-     */
-    public boolean hasUnreadMessages() {
-        return unreadMessagesCount > 0;
-    }
-
-    /**
-     * Returns an optional value containing the seconds this chat was pinned
-     *
-     * @return an optional
-     */
-    public Optional<ZonedDateTime> pinnedTimestamp() {
-        return Clock.parseSeconds(pinnedTimestampSeconds);
-    }
-
-    /**
-     * Returns the timestampSeconds for the creation of this chat in seconds since
-     * {@link Instant#EPOCH}
-     *
-     * @return an optional
-     */
-    public Optional<ZonedDateTime> timestamp() {
-        return Clock.parseSeconds(timestampSeconds);
-    }
-
-    /**
-     * Returns an optional value containing the seconds in seconds since
-     * {@link Instant#EPOCH} when ephemeral messages were turned on
-     *
-     * @return an optional
-     */
-    public Optional<ZonedDateTime> ephemeralMessagesToggleTime() {
-        return Clock.parseSeconds(ephemeralMessagesToggleTimeSeconds);
-    }
-
-    /**
-     * Returns an optional value containing the latest message in chronological terms for this chat
-     *
-     * @return an optional
-     */
-    @Override
-    public Optional<ChatMessageInfo> newestMessage() {
-        return messages.getNewestMessageInfo();
-    }
-
-    /**
-     * Returns an optional value containing the first message in chronological terms for this chat
-     *
-     * @return an optional
-     */
-    @Override
-    public Optional<ChatMessageInfo> oldestMessage() {
-        return messages.getOldestMessageInfo();
-    }
-
-    /**
-     * Returns all the starred messages in this chat
-     *
-     * @return a non-null list of messages
-     */
-    public SequencedCollection<ChatMessageInfo> starredMessages() {
-        return messages.getMessageInfosAsStream()
-                .filter(ChatMessageInfo::starred)
-                .toList();
-    }
-
-    /**
-     * Adds a message to the chat in the most recent slot available
-     *
-     * @param info the message to add to the chat
-     */
-    public void addMessage(ChatMessageInfo info) {
-        Objects.requireNonNull(info, "info cannot be null");
-        messages.addMessageInfo(info);
-        updateChatTimestamp(info);
-    }
-
-    /**
-     * Remove a message from the chat
-     *
-     * @param info the message to remove
-     * @return whether the message was removed
-     */
-    @Override
-    public boolean removeMessage(String info) {
-        if(!messages.removeMessageInfoById(info)) {
-            return false;
-        }
-
-        refreshChatTimestamp();
-        return true;
-    }
-
-    private void refreshChatTimestamp() {
-        var message = newestMessage();
-        if (message.isEmpty()) {
-            this.timestampSeconds = 0L;
-        }else {
-            updateChatTimestamp(message.get());
-        }
-    }
-
-    private void updateChatTimestamp(ChatMessageInfo info) {
-        if (info.timestampSeconds().isEmpty()) {
-            return;
-        }
-
-        var newTimestamp = info.timestampSeconds()
-                .getAsLong();
-        var oldTimeStamp = newestMessage()
-                .map(value -> value.timestampSeconds().orElse(0L))
-                .orElse(0L);
-        if (oldTimeStamp > newTimestamp) {
-            return;
-        }
-
-        this.timestampSeconds = newTimestamp;
-    }
-
-    /**
-     * Removes all messages from the chat
-     */
-    @Override
-    public void removeMessages() {
-        messages.clear();
-    }
-
-    /**
-     * Returns an immutable list of messages wrapped in history syncs
-     * This is useful for the proto
-     *
-     * @return a non-null collection
-     */
-    public SequencedCollection<ChatMessageInfo> messages() {
-        return messages.getMessageInfosAsSequencedCollection();
-    }
-
-    /**
-     * Returns this object as a value
-     *
-     * @return a non-null value
-     */
-    @Override
-    public Jid toJid() {
-        var lid = this.lid;
-        if(lid != null) {
-            return lid;
-        } else {
-            return jid;
-        }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof Chat chat &&
-               unreadMessagesCount == chat.unreadMessagesCount &&
-               endOfHistoryTransfer == chat.endOfHistoryTransfer &&
-               ephemeralMessagesToggleTimeSeconds == chat.ephemeralMessagesToggleTimeSeconds &&
-               timestampSeconds == chat.timestampSeconds &&
-                notSpam == chat.notSpam &&
-                archived == chat.archived &&
-                markedAsUnread == chat.markedAsUnread &&
-                pinnedTimestampSeconds == chat.pinnedTimestampSeconds &&
-                suspended == chat.suspended &&
-                terminated == chat.terminated &&
-                support == chat.support &&
-                shareOwnPhoneNumber == chat.shareOwnPhoneNumber &&
-                phoneDuplicateLidThread == chat.phoneDuplicateLidThread &&
-               Objects.equals(jid, chat.jid) &&
-               Objects.equals(messages, chat.messages) &&
-               Objects.equals(newJid, chat.newJid) &&
-               Objects.equals(oldJid, chat.oldJid) &&
-                ephemeralMessageDuration == chat.ephemeralMessageDuration &&
-                endOfHistoryTransferType == chat.endOfHistoryTransferType &&
-               Objects.equals(name, chat.name) &&
-               Objects.equals(disappearInitiator, chat.disappearInitiator) &&
-               Objects.equals(mute, chat.mute) &&
-               Objects.equals(wallpaper, chat.wallpaper) &&
-                mediaVisibility == chat.mediaVisibility &&
-               Objects.equals(displayName, chat.displayName) &&
-               Objects.equals(phoneJid, chat.phoneJid) &&
-               Objects.equals(lid, chat.lid) &&
-               Objects.equals(accountLid, chat.accountLid) &&
-               Objects.equals(presences, chat.presences);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(jid, messages, newJid, oldJid, unreadMessagesCount, endOfHistoryTransfer, ephemeralMessageDuration, ephemeralMessagesToggleTimeSeconds, endOfHistoryTransferType, timestampSeconds, name, notSpam, archived, disappearInitiator, markedAsUnread, pinnedTimestampSeconds, mute, wallpaper, mediaVisibility, suspended, terminated, support, displayName, phoneJid, shareOwnPhoneNumber, phoneDuplicateLidThread, lid, accountLid, presences);
-    }
-
-    @Override
-    public Optional<ChatMessageInfo> getMessageById(String id) {
-        return messages.getMessageInfoById(id);
-    }
-
-    /**
-     * The constants of this enumerated type describe the various types of transfers that can regard a
-     * chat history sync
-     */
     @ProtobufEnum(name = "Conversation.EndOfHistoryTransferType")
-    public enum EndOfHistoryTransferType {
-        /**
-         * Complete, but more messages remain on the phone
-         */
+    public static enum EndOfHistoryTransferType {
         COMPLETE_BUT_MORE_MESSAGES_REMAIN_ON_PRIMARY(0),
-
-        /**
-         * Complete and no more messages remain on the phone
-         */
-        COMPLETE_AND_NO_MORE_MESSAGE_REMAIN_ON_PRIMARY(1);
-
-        final int index;
+        COMPLETE_AND_NO_MORE_MESSAGE_REMAIN_ON_PRIMARY(1),
+        COMPLETE_ON_DEMAND_SYNC_BUT_MORE_MSG_REMAIN_ON_PRIMARY(2),
+        COMPLETE_ON_DEMAND_SYNC_WITH_MORE_MSG_ON_PRIMARY_BUT_NO_ACCESS(3);
 
         EndOfHistoryTransferType(@ProtobufEnumIndex int index) {
             this.index = index;
         }
 
+        final int index;
+
+        public int index() {
+            return this.index;
+        }
     }
-    
-    static final class Messages extends AbstractCollection<HistorySyncMessage> {
-        private final ConcurrentLinkedHashMap<String, HistorySyncMessage> backing;
+
+    static final class Messages extends AbstractCollection<HistorySyncMsg> {
+        private final ConcurrentLinkedHashMap<String, HistorySyncMsg> backing;
 
         Messages() {
             this.backing = new ConcurrentLinkedHashMap<>();
         }
 
         @Override
-        public boolean add(HistorySyncMessage historySyncMessage) {
-            if(historySyncMessage == null || historySyncMessage.messageInfo() == null) {
+        public boolean add(HistorySyncMsg msg) {
+            if (msg == null || msg.message == null) {
                 return false;
-            }else {
-                backing.put(historySyncMessage.messageInfo().id(), historySyncMessage);
-                return true;
+            }
+            var id = messageId(msg.message);
+            if (id == null) {
+                return false;
+            }
+            backing.put(id, msg);
+            return true;
+        }
+
+        void addMessageInfo(ChatMessageInfo info) {
+            var id = messageId(info);
+            if (id != null) {
+                backing.put(id, new HistorySyncMsg(info, null));
             }
         }
 
-        public boolean addMessageInfo(ChatMessageInfo messageInfo) {
-            if(messageInfo == null) {
-                return false;
-            }else {
-                backing.put(messageInfo.id(), new HistorySyncMessage(messageInfo, -1));
-                return true;
+        Optional<ChatMessageInfo> getMessageInfoById(String id) {
+            if (id == null) {
+                return Optional.empty();
             }
+            var msg = backing.get(id);
+            return msg != null ? Optional.ofNullable(msg.message) : Optional.empty();
         }
 
-        public Optional<ChatMessageInfo> getMessageInfoById(String id) {
-            return Optional.ofNullable(backing.get(id))
-                    .map(HistorySyncMessage::messageInfo);
-        }
-        
-        public Optional<ChatMessageInfo> getOldestMessageInfo() {
-            return Optional.ofNullable(backing.firstEntry())
-                    .map(entry -> entry.getValue().messageInfo());
-        }
-        
-        public Optional<ChatMessageInfo> getNewestMessageInfo() {
-            return Optional.ofNullable(backing.lastEntry())
-                    .map(entry -> entry.getValue().messageInfo());
+        boolean removeMessageInfoById(String id) {
+            return id != null && backing.remove(id) != null;
         }
 
-        public boolean removeMessageInfoById(String id) {
-            return backing.remove(id) != null;
-        }
-        
-        public Stream<ChatMessageInfo> getMessageInfosAsStream() {
-            return backing.sequencedValues()
-                    .stream()
-                    .map(HistorySyncMessage::messageInfo);
+        Optional<ChatMessageInfo> getNewestMessageInfo() {
+            var entry = backing.lastEntry();
+            return entry != null ? Optional.ofNullable(entry.getValue().message) : Optional.empty();
         }
 
-        @Override
-        public Iterator<HistorySyncMessage> iterator() {
-            return backing.sequencedValues().iterator();
-        }
-        
-        @Override
-        public int size() {
-            return backing.size();
+        Optional<ChatMessageInfo> getOldestMessageInfo() {
+            var entry = backing.firstEntry();
+            return entry != null ? Optional.ofNullable(entry.getValue().message) : Optional.empty();
         }
 
-        public SequencedCollection<ChatMessageInfo> getMessageInfosAsSequencedCollection() {
-            return getMessageInfosAsSequencedCollection(backing.sequencedValues());
+        SequencedCollection<ChatMessageInfo> messageInfoView() {
+            return messageInfoView(backing.sequencedValues());
         }
 
-        private SequencedCollection<ChatMessageInfo> getMessageInfosAsSequencedCollection(SequencedCollection<HistorySyncMessage> data) {
+        private SequencedCollection<ChatMessageInfo> messageInfoView(SequencedCollection<HistorySyncMsg> data) {
             return new SequencedCollection<>() {
                 @Override
                 public SequencedCollection<ChatMessageInfo> reversed() {
-                    return getMessageInfosAsSequencedCollection(data.reversed());
+                    return messageInfoView(data.reversed());
                 }
 
                 @Override
@@ -797,23 +919,24 @@ public final class Chat implements MessageInfoParent {
 
                 @Override
                 public boolean contains(Object o) {
-                    return o instanceof ChatMessageInfo chatMessageInfo
-                            && backing.containsKey(chatMessageInfo.id());
+                    return o instanceof ChatMessageInfo info
+                            && messageId(info) != null
+                            && backing.containsKey(messageId(info));
                 }
 
                 @Override
                 public Iterator<ChatMessageInfo> iterator() {
-                    var iterator = data.iterator();
+                    var delegate = data.iterator();
                     return new Iterator<>() {
                         @Override
                         public boolean hasNext() {
-                            return iterator.hasNext();
+                            return delegate.hasNext();
                         }
 
                         @Override
                         public ChatMessageInfo next() {
-                            var result = iterator.next();
-                            return result != null ? result.messageInfo() : null;
+                            var result = delegate.next();
+                            return result != null ? result.message : null;
                         }
                     };
                 }
@@ -829,7 +952,7 @@ public final class Chat implements MessageInfoParent {
                 }
 
                 @Override
-                public boolean add(ChatMessageInfo chatMessageInfo) {
+                public boolean add(ChatMessageInfo info) {
                     throw new UnsupportedOperationException();
                 }
 
@@ -840,8 +963,8 @@ public final class Chat implements MessageInfoParent {
 
                 @Override
                 public boolean containsAll(Collection<?> c) {
-                    for(var entry : c) {
-                        if(!contains(entry)) {
+                    for (var entry : c) {
+                        if (!contains(entry)) {
                             return false;
                         }
                     }
@@ -868,6 +991,52 @@ public final class Chat implements MessageInfoParent {
                     throw new UnsupportedOperationException();
                 }
             };
+        }
+
+        @Override
+        public Iterator<HistorySyncMsg> iterator() {
+            return backing.sequencedValues().iterator();
+        }
+
+        @Override
+        public int size() {
+            return backing.size();
+        }
+
+        private static String messageId(ChatMessageInfo info) {
+            return info.key().id().orElse(null);
+        }
+    }
+
+    @ProtobufMessage(name = "HistorySyncMsg")
+    static final class HistorySyncMsg {
+        @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
+        ChatMessageInfo message;
+
+        @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
+        Long msgOrderId;
+
+        HistorySyncMsg(ChatMessageInfo message, Long msgOrderId) {
+            this.message = message;
+            this.msgOrderId = msgOrderId;
+        }
+
+        public Optional<ChatMessageInfo> message() {
+            return Optional.ofNullable(message);
+        }
+
+        public OptionalLong msgOrderId() {
+            return msgOrderId == null ? OptionalLong.empty() : OptionalLong.of(msgOrderId);
+        }
+
+        public HistorySyncMsg setMessage(ChatMessageInfo message) {
+            this.message = message;
+            return this;
+        }
+
+        public HistorySyncMsg setMsgOrderId(Long msgOrderId) {
+            this.msgOrderId = msgOrderId;
+            return this;
         }
     }
 }

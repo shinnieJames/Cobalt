@@ -3,13 +3,15 @@ package com.github.auties00.cobalt.migration;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.model.chat.Chat;
+import com.github.auties00.cobalt.model.sync.history.HistorySync;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.HistorySync;
-import com.github.auties00.cobalt.model.sync.LIDMigrationMapping;
-import com.github.auties00.cobalt.model.sync.LIDMigrationMappingSyncPayload;
-import com.github.auties00.cobalt.model.sync.PhoneNumberToLidMapping;
+import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMapping;
+import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayload;
+import com.github.auties00.cobalt.model.jid.migration.PhoneNumberToLIDMapping;
+import com.github.auties00.cobalt.model.setting.GlobalSettings;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,7 +53,7 @@ public final class LidMigrationService {
     /**
      * Chat DB migration timestamp from primary device.
      */
-    private volatile long chatDbMigrationTimestamp;
+    private volatile Instant chatDbMigrationTimestamp;
 
     /**
      * Creates a new LID migration service.
@@ -64,7 +66,6 @@ public final class LidMigrationService {
         this.state = new AtomicReference<>(LidMigrationState.NOT_STARTED);
         this.primaryPnToLidCache = new ConcurrentHashMap<>();
         this.primaryMappingsTimestamp = 0;
-        this.chatDbMigrationTimestamp = 0;
     }
 
     /**
@@ -124,7 +125,8 @@ public final class LidMigrationService {
 
         try {
             // Store migration timestamp
-            this.chatDbMigrationTimestamp = payload.chatDbMigrationTimestamp();
+            this.chatDbMigrationTimestamp = payload.chatDbMigrationTimestamp()
+                    .orElse(null);
             this.primaryMappingsTimestamp = System.currentTimeMillis();
 
             // Process mappings
@@ -189,7 +191,7 @@ public final class LidMigrationService {
         }
 
         // 2. Process conversation-level LID fields
-        var conversations = historySync.conversations();
+        var conversations = historySync.chats();
         if (conversations != null) {
             for (var conversation : conversations) {
                 if (processConversationLidData(conversation)) {
@@ -199,13 +201,13 @@ public final class LidMigrationService {
         }
 
         // 3. Extract chatDbMigrationTimestamp from GlobalSettings if present
-        var globalSettings = historySync.globalSettings();
-        if (globalSettings != null && globalSettings.chatDbLidMigrationTimestamp() > 0) {
-            var newTimestamp = globalSettings.chatDbLidMigrationTimestamp();
-            if (newTimestamp > this.chatDbMigrationTimestamp) {
-                this.chatDbMigrationTimestamp = newTimestamp;
+        var chatDbLidMigrationTimestamp = historySync.globalSettings()
+                .flatMap(GlobalSettings::chatDbLidMigrationTimestamp);
+        if (chatDbLidMigrationTimestamp.isPresent()) {
+            if (chatDbMigrationTimestamp == null || chatDbLidMigrationTimestamp.get().isAfter(chatDbMigrationTimestamp)) {
+                this.chatDbMigrationTimestamp = chatDbMigrationTimestamp;
                 LOGGER.log(System.Logger.Level.DEBUG,
-                        "Updated chatDbMigrationTimestamp from GlobalSettings: {0}", newTimestamp);
+                        "Updated chatDbMigrationTimestamp from GlobalSettings: {0}", chatDbMigrationTimestamp);
             }
         }
 
@@ -224,7 +226,7 @@ public final class LidMigrationService {
      * @param mapping the mapping to process
      * @return true if a valid mapping was processed
      */
-    private boolean processPhoneNumberToLidMapping(PhoneNumberToLidMapping mapping) {
+    private boolean processPhoneNumberToLidMapping(PhoneNumberToLIDMapping mapping) {
         if (mapping == null) {
             return false;
         }
@@ -277,12 +279,12 @@ public final class LidMigrationService {
 
         if (chatJid.hasLidServer()) {
             // LID chat: extract phone number from pnJid field
-            phoneJid = conversation.phoneJid().orElse(null);
+            phoneJid = conversation.phoneNumberJid().orElse(null);
             lidJid = chatJid;
         } else if (chatJid.hasUserServer()) {
             // PN chat: extract LID from lidJid field (the 'lid' field in Chat)
             phoneJid = chatJid;
-            lidJid = conversation.lidJid().orElse(null);
+            lidJid = conversation.lid().orElse(null);
         } else {
             phoneJid = null;
             lidJid = null;
@@ -307,7 +309,7 @@ public final class LidMigrationService {
         // Update the chat itself to ensure it has the mapping
         conversation.setLid(lidJid);
         if (!phoneJid.equals(chatJid)) {
-            conversation.setPhoneJid(phoneJid);
+            conversation.setPhoneNumberJid(phoneJid);
         }
 
         return true;
@@ -321,12 +323,7 @@ public final class LidMigrationService {
             return;
         }
 
-        var user = mapping.phoneNumber()
-                .map(Jid::user)
-                .orElse(null);
-        if(user == null) {
-            return;
-        }
+        var user = mapping.pn();
 
         // Get the effective LID (prefer latest over assigned)
         var effectiveLid = mapping.effectiveLid()
@@ -435,12 +432,12 @@ public final class LidMigrationService {
 
         // Rule 6: Check for split thread flag
         // phoneDuplicateLidThread indicates this PN chat has a duplicate LID thread
-        if (chat.phoneDuplicateLidThread()) {
+        if (chat.phoneNumberhDuplicateLidThread()) {
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.DUPLICATE_WILL_MERGE);
         }
 
         // Rule 7: Determine local LID (from chat or store) and primary LID (from cache)
-        var chatLid = chat.lidJid().orElse(null);
+        var chatLid = chat.lid().orElse(null);
         var user = jid.user();
         var primaryLid = (user != null && arePrimaryMappingsValid())
                 ? primaryPnToLidCache.get(user)
@@ -601,7 +598,7 @@ public final class LidMigrationService {
         chat.setLid(targetLid);
 
         // Store the phoneJid for backward compatibility
-        chat.setPhoneJid(originalJid);
+        chat.setPhoneNumberJid(originalJid);
 
         // Register the mapping in the store
         store.registerLidMapping(originalJid, targetLid);
@@ -656,7 +653,7 @@ public final class LidMigrationService {
         // Update chat
         store.findChatByJid(phoneJid).ifPresent(chat -> {
             chat.setLid(newLid);
-            chat.setPhoneJid(phoneJid);
+            chat.setPhoneNumberJid(phoneJid);
         });
 
         LOGGER.log(System.Logger.Level.DEBUG, "LID changed for {0}: {1} → {2}", phoneJid, oldLid, newLid);
@@ -681,8 +678,7 @@ public final class LidMigrationService {
      */
     private boolean shouldAutoStartMigration() {
         // For now, auto-start if we have mappings and the timestamp indicates we should migrate
-        return chatDbMigrationTimestamp > 0 &&
-               System.currentTimeMillis() / 1000 >= chatDbMigrationTimestamp;
+        return chatDbMigrationTimestamp != null && Instant.now().isAfter(chatDbMigrationTimestamp);
     }
 
     /**

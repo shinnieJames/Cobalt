@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.message.send.bot;
 
 import com.github.auties00.cobalt.model.info.ContextInfo;
-import com.github.auties00.cobalt.model.message.common.ContextualMessage;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
+import com.github.auties00.cobalt.model.message.ContextualMessage;
+import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessage;
 import com.github.auties00.cobalt.model.sync.BotFeedbackMessage;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -127,7 +127,7 @@ public final class BotProtobufTransform {
 
     /**
      * Resolves the inner {@link ContextInfo}, handling the
-     * botInvokeMessage {@link com.github.auties00.cobalt.model.message.common.FutureMessageContainer} wrapper.
+     * botInvokeMessage {@link com.github.auties00.cobalt.model.message.FutureMessageContainer} wrapper.
      */
     private static ContextInfo resolveInnerContextInfo(MessageContainer container) {
         return container.content() instanceof ContextualMessage contextualMessage

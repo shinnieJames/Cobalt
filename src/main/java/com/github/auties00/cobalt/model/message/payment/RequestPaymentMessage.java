@@ -1,123 +1,110 @@
 package com.github.auties00.cobalt.model.message.payment;
 
-import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
-import com.github.auties00.cobalt.model.message.common.PaymentMessage;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.payment.Money;
 import com.github.auties00.cobalt.model.payment.PaymentBackground;
-import com.github.auties00.cobalt.model.payment.PaymentMoney;
-import com.github.auties00.cobalt.util.Clock;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
 
-import java.time.ZonedDateTime;
-import java.util.Objects;
+import java.time.Instant;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
 import java.util.Optional;
+import java.util.OptionalLong;
 
-/**
- * A model class that represents a message to try to place a {@link PaymentMessage}.
- */
 @ProtobufMessage(name = "Message.RequestPaymentMessage")
-public final class RequestPaymentMessage implements PaymentMessage {
+public final class RequestPaymentMessage implements Message {
+    @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
+    MessageContainer noteMessageContainer;
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    final String currency;
+    String currencyCodeIso4217;
 
     @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
-    final long amount1000;
+    Long amount1000;
 
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
-    final Jid requestFrom;
+    String requestFrom;
 
-    @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
-    final MessageContainer noteMessage;
-
-    @ProtobufProperty(index = 5, type = ProtobufType.UINT64)
-    final long expiryTimestampSeconds;
+    @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant expiryTimestamp;
 
     @ProtobufProperty(index = 6, type = ProtobufType.MESSAGE)
-    final PaymentMoney amount;
+    Money amount;
 
     @ProtobufProperty(index = 7, type = ProtobufType.MESSAGE)
-    final PaymentBackground background;
+    PaymentBackground background;
 
-    RequestPaymentMessage(String currency, long amount1000, Jid requestFrom, MessageContainer noteMessage, long expiryTimestampSeconds, PaymentMoney amount, PaymentBackground background) {
-        this.currency = Objects.requireNonNull(currency, "currency cannot be null");
+
+    RequestPaymentMessage(MessageContainer noteMessageContainer, String currencyCodeIso4217, Long amount1000, String requestFrom, Instant expiryTimestamp, Money amount, PaymentBackground background) {
+        this.noteMessageContainer = noteMessageContainer;
+        this.currencyCodeIso4217 = currencyCodeIso4217;
         this.amount1000 = amount1000;
-        this.requestFrom = Objects.requireNonNull(requestFrom, "requestFrom cannot be null");
-        this.noteMessage = noteMessage;
-        this.expiryTimestampSeconds = expiryTimestampSeconds;
-        this.amount = Objects.requireNonNull(amount, "amount cannot be null");
+        this.requestFrom = requestFrom;
+        this.expiryTimestamp = expiryTimestamp;
+        this.amount = amount;
         this.background = background;
     }
 
-    public String currency() {
-        return currency;
-    }
-
-    public long amount1000() {
-        return amount1000;
-    }
-
-    public Jid requestFrom() {
-        return requestFrom;
-    }
-
     public Optional<MessageContainer> noteMessage() {
-        return Optional.ofNullable(noteMessage);
+        return Optional.ofNullable(noteMessageContainer);
     }
 
-    public long expiryTimestampSeconds() {
-        return expiryTimestampSeconds;
+    public Optional<String> currencyCodeIso4217() {
+        return Optional.ofNullable(currencyCodeIso4217);
     }
 
-    public PaymentMoney amount() {
-        return amount;
+    public OptionalLong amount1000() {
+        return amount1000 == null ? OptionalLong.empty() : OptionalLong.of(amount1000);
+    }
+
+    public Optional<String> requestFrom() {
+        return Optional.ofNullable(requestFrom);
+    }
+
+    public Optional<Instant> expiryTimestamp() {
+        return Optional.ofNullable(expiryTimestamp);
+    }
+
+    public Optional<Money> amount() {
+        return Optional.ofNullable(amount);
     }
 
     public Optional<PaymentBackground> background() {
         return Optional.ofNullable(background);
     }
 
-    /**
-     * Returns when the transaction expires
-     *
-     * @return an optional
-     */
-    public Optional<ZonedDateTime> expiryTimestamp() {
-        return Clock.parseSeconds(expiryTimestampSeconds);
+    public RequestPaymentMessage setNoteMessage(MessageContainer noteMessageContainer) {
+        this.noteMessageContainer = noteMessageContainer;
+        return this;
     }
 
-    @Override
-    public Type type() {
-        return Type.REQUEST_PAYMENT;
+    public RequestPaymentMessage setCurrencyCodeIso4217(String currencyCodeIso4217) {
+        this.currencyCodeIso4217 = currencyCodeIso4217;
+        return this;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof RequestPaymentMessage that
-                && Objects.equals(currency, that.currency)
-                && amount1000 == that.amount1000
-                && Objects.equals(requestFrom, that.requestFrom)
-                && Objects.equals(noteMessage, that.noteMessage)
-                && expiryTimestampSeconds == that.expiryTimestampSeconds
-                && Objects.equals(amount, that.amount)
-                && Objects.equals(background, that.background);
+    public RequestPaymentMessage setAmount1000(Long amount1000) {
+        this.amount1000 = amount1000;
+        return this;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(currency, amount1000, requestFrom, noteMessage, expiryTimestampSeconds, amount, background);
+    public RequestPaymentMessage setRequestFrom(String requestFrom) {
+        this.requestFrom = requestFrom;
+        return this;
     }
 
-    @Override
-    public String toString() {
-        return "RequestPaymentMessage[" +
-                "currency=" + currency + ", " +
-                "amount1000=" + amount1000 + ", " +
-                "requestFrom=" + requestFrom + ", " +
-                "noteMessage=" + noteMessage + ", " +
-                "expiryTimestampSeconds=" + expiryTimestampSeconds + ", " +
-                "amount=" + amount + ", " +
-                "background=" + background + ']';
+    public RequestPaymentMessage setExpiryTimestamp(Instant expiryTimestamp) {
+        this.expiryTimestamp = expiryTimestamp;
+        return this;
+    }
+
+    public RequestPaymentMessage setAmount(Money amount) {
+        this.amount = amount;
+        return this;
+    }
+
+    public RequestPaymentMessage setBackground(PaymentBackground background) {
+        this.background = background;
+        return this;
     }
 }

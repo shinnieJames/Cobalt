@@ -2,4431 +2,1713 @@
 package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.client.*;
-import com.github.auties00.cobalt.client.info.WhatsAppClientInfo;
-import com.github.auties00.cobalt.model.device.DeviceList;
-import com.github.auties00.cobalt.model.device.MissingDeviceSyncKey;
-import com.github.auties00.cobalt.model.device.PendingDeviceSync;
 import com.github.auties00.cobalt.media.MediaConnection;
 import com.github.auties00.cobalt.model.auth.SignedDeviceIdentity;
 import com.github.auties00.cobalt.model.auth.UserAgent.ReleaseChannel;
 import com.github.auties00.cobalt.model.auth.Version;
-import com.github.auties00.cobalt.model.business.BusinessCategory;
+import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.business.VerifiedBusinessName;
-import com.github.auties00.cobalt.model.call.Call;
+import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.chat.Chat;
-import com.github.auties00.cobalt.model.chat.ChatBuilder;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
-import com.github.auties00.cobalt.model.chat.GroupOrCommunityMetadata;
+import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.contact.Contact;
-import com.github.auties00.cobalt.model.contact.ContactBuilder;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
+import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey;
+import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageInfo;
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.jid.JidCompanion;
+import com.github.auties00.cobalt.model.jid.JidDevice;
 import com.github.auties00.cobalt.model.jid.JidProvider;
-import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.model.message.common.ChatMessageKey;
+import com.github.auties00.cobalt.model.message.ChatMessageKey;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
-import com.github.auties00.cobalt.model.newsletter.NewsletterBuilder;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
-import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
-import com.github.auties00.cobalt.model.sync.*;
-import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
-import com.github.auties00.cobalt.util.Clock;
-import com.github.auties00.cobalt.util.InstantProtobufMixin;
-import com.github.auties00.cobalt.util.SecureBytes;
 import com.github.auties00.libsignal.SignalProtocolAddress;
 import com.github.auties00.libsignal.SignalProtocolStore;
 import com.github.auties00.libsignal.groups.SignalSenderKeyName;
-import com.github.auties00.libsignal.groups.state.SignalSenderKeyRecord;
-import com.github.auties00.libsignal.key.*;
-import com.github.auties00.libsignal.state.SignalSessionRecord;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
+import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
+import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
+import com.github.auties00.libsignal.key.SignalPreKeyPair;
+import com.github.auties00.libsignal.key.SignalSignedKeyPair;
 
+import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentHashMap.KeySetView;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * WhatsappStore manages all session-scoped data and state for WhatsApp client connections.
- * <p>
- * This class serves as the central repository for user information, communication data, and session
- * configuration during an active WhatsApp session. It maintains both persistent data (serialized between
- * sessions) and transient runtime state (recreated on each connection).
- * <p>
- * <b>Core Responsibilities:</b>
- * <ul>
- *     <li>Account management - profile, business info, locale, and device configuration</li>
- *     <li>Communication data - chats, contacts, newsletters, and status updates</li>
- *     <li>Security infrastructure - cryptographic keys, sessions, and device linking</li>
- *     <li>Session configuration - client type, version, proxy, and feature flags</li>
- *     <li>Synchronization state - tracking data sync completion across different categories</li>
- * </ul>
- * <p>
- * <b>Client Type Support:</b>
- * The store adapts its behavior based on {@link WhatsAppClientType}:
- * <ul>
- *     <li>{@link WhatsAppClientType#WEB} - Web/Desktop client using QR/pairing code authentication</li>
- *     <li>{@link WhatsAppClientType#MOBILE} - Mobile client using phone number authentication</li>
- * </ul>
- * <p>
- * <b>Serialization:</b>
- * The store uses Protocol Buffers for efficient serialization. Configure serialization through
- * {@link #setSerializer(WhatsappStoreSerializer)} to control persistence location and behavior.
- * Some fields (like runtime connections and listeners) are not serialized.
+ * A interface representing the persistent and transient state of a
+ * WhatsApp client session.
  *
- * @see WhatsAppClient
- * @see WhatsappStoreSerializer
+ * <p>This interface unifies data access and persistence into a single
+ * abstraction. Implementations control how and where session data is stored,
+ * ranging from fully in-memory with protobuf file persistence to tiered
+ * approaches that trade memory for lazy decoding.
+ *
+ * <p>Instances are obtained exclusively through the static factory methods
+ * on this interface. All implementations are transparent to callers.
+ *
+ * @see SignalProtocolStore
  */
 @SuppressWarnings({"unused", "UnusedReturnValue"})
-@ProtobufMessage
-public final class WhatsAppStore implements SignalProtocolStore {
+public interface WhatsAppStore extends SignalProtocolStore {
     /**
-     * Default serializer..
-     */
-    private static final WhatsappStoreSerializer DEFAULT_SERIALIZER = WhatsappStoreSerializer.toProtobuf();
-
-    /**
-     * Default user name.
-     */
-    private static final String DEFAULT_NAME = "User";
-
-    /**
-     * Maximum size for device lists cache (matches WhatsApp Web's 5000 limit).
-     */
-    private static final int MAX_DEVICE_LISTS = 5000;
-    
-    // =====================================================
-    // SECTION: Core Identity & Configuration
-    // =====================================================
-
-    /**
-     * Unique identifier for this store instance.
-     * <p>
-     * Used to distinguish between multiple concurrent sessions and during serialization/deserialization.
-     * Generated once during store creation and remains constant for the lifetime of the session.
-     */
-    @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    final UUID uuid;
-
-    /**
-     * Phone number associated with this WhatsApp account.
-     * <p>
-     * Stored in international format without '+' prefix (e.g., 1234567890 for +1-234-567-890).
-     * May be null during initial Web client setup before QR code authentication completes.
-     * For Mobile clients, typically set during registration.
-     */
-    @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
-    Long phoneNumber;
-
-    /**
-     * Client type determining protocol behavior and authentication method.
-     * <p>
-     * Affects:
-     * <ul>
-     *     <li>Authentication flow (QR/pairing code vs phone number)</li>
-     *     <li>Available API features and operations</li>
-     *     <li>Data serialization format</li>
-     *     <li>Key management and encryption behavior</li>
-     * </ul>
-     */
-    @ProtobufProperty(index = 3, type = ProtobufType.ENUM)
-    final WhatsAppClientType clientType;
-
-    /**
-     * Unix timestamp (seconds) when this store instance was created.
-     * <p>
-     * Used for session age tracking and time-sensitive operations. Automatically
-     * set to current time during store creation via {@link Clock#nowSeconds()}.
-     */
-    @ProtobufProperty(index = 4, type = ProtobufType.UINT64)
-    final long initializationTimeStamp;
-
-    // =====================================================
-    // SECTION: Network & Connection Configuration
-    // =====================================================
-
-    /**
-     * Device information identifying this client to WhatsApp servers.
-     * <p>
-     * Contains:
-     * <ul>
-     *     <li>Platform type (iOS, Android, Web, Desktop)</li>
-     *     <li>OS version and device model</li>
-     *     <li>App version metadata</li>
-     *     <li>Device-specific identifiers</li>
-     * </ul>
-     * Different device types have varying capabilities and protocol requirements.
-     */
-    @ProtobufProperty(index = 6, type = ProtobufType.MESSAGE)
-    JidCompanion device;
-
-    /**
-     * Release channel for this connection.
-     * <p>
-     * Determines available protocol version and features:
-     * <ul>
-     *     <li>RELEASE - Stable public release</li>
-     *     <li>BETA - Early access to new features</li>
-     * </ul>
-     * Beta channels may provide newer functionality but with reduced stability.
-     */
-    @ProtobufProperty(index = 7, type = ProtobufType.ENUM)
-    ReleaseChannel releaseChannel;
-
-    // =====================================================
-    // SECTION: User Account & Profile
-    // =====================================================
-
-    /**
-     * Indicates whether this account appears online to other users.
-     * <p>
-     * Controls visibility of online status and "last seen" indicator according to
-     * privacy settings. When true, presence updates are sent to WhatsApp servers.
-     */
-    @ProtobufProperty(index = 9, type = ProtobufType.BOOL)
-    boolean online;
-
-    /**
-     * Locale/language code for this account.
-     * <p>
-     * Format: ISO 639-1 language + ISO 3166-1 alpha-2 country (e.g., "en_US", "pt_BR").
-     * Determines language for system messages and localized content.
-     */
-    @ProtobufProperty(index = 10, type = ProtobufType.STRING)
-    String locale;
-
-    /**
-     * Display name shown to other WhatsApp users.
-     * <p>
-     * Null until successful login. For unregistered accounts, defaults to device
-     * platform name. Updated via {@link WhatsAppClient#changeName(String)}.
-     */
-    @ProtobufProperty(index = 11, type = ProtobufType.STRING)
-    String name;
-
-    /**
-     * Verified business name for verified business accounts.
-     * <p>
-     * Only populated for business accounts that completed WhatsApp's verification process.
-     * Displays prominently in business profiles. Null for regular accounts.
-     */
-    @ProtobufProperty(index = 12, type = ProtobufType.STRING)
-    String verifiedName;
-
-    /**
-     * URL of this account's profile picture.
-     * <p>
-     * Points to WhatsApp-hosted image resource. Null when no profile picture is set
-     * or before initial login. Updated via {@link WhatsAppClient#changeProfilePicture(java.io.InputStream)}.
-     */
-    @ProtobufProperty(index = 13, type = ProtobufType.STRING)
-    URI profilePicture;
-
-    /**
-     * Personal status message (about text) displayed on profile.
-     * <p>
-     * Examples: "Hey there! I am using WhatsApp", custom status messages.
-     * Null before login. Updated via {@link WhatsAppClient#changeAbout(String)}.
-     */
-    @ProtobufProperty(index = 14, type = ProtobufType.STRING)
-    String about;
-
-    /**
-     * WhatsApp JID uniquely identifying this user.
-     * <p>
-     * Format: phone_number@s.whatsapp.net (e.g., "1234567890@s.whatsapp.net")
-     * Null until authentication completes. Used as primary identifier in all
-     * WhatsApp protocol operations.
-     */
-    @ProtobufProperty(index = 15, type = ProtobufType.STRING)
-    Jid jid;
-
-    /**
-     * LID used when real phone number is not advertised.
-     */
-    @ProtobufProperty(index = 16, type = ProtobufType.STRING)
-    Jid lid;
-
-    // =====================================================
-    // SECTION: Business Account Information
-    // =====================================================
-
-    /**
-     * Physical address of the business (Business accounts only).
-     * <p>
-     * Full street address where business is located. Displayed in business profile
-     * and used for location-based discovery. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 17, type = ProtobufType.STRING)
-    String businessAddress;
-
-    /**
-     * Geographic longitude coordinate of business location (Business accounts only).
-     * <p>
-     * Range: -180.0 to +180.0 degrees. Used with {@link #businessLatitude} for
-     * precise location mapping and discovery. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 18, type = ProtobufType.DOUBLE)
-    Double businessLongitude;
-
-    /**
-     * Geographic latitude coordinate of business location (Business accounts only).
-     * <p>
-     * Range: -90.0 to +90.0 degrees. Used with {@link #businessLongitude} for
-     * precise location mapping and discovery. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 19, type = ProtobufType.DOUBLE)
-    Double businessLatitude;
-
-    /**
-     * Description of business services and offerings (Business accounts only).
-     * <p>
-     * Free-form text displayed in business profile. Helps customers understand
-     * the nature and scope of business services. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 20, type = ProtobufType.STRING)
-    String businessDescription;
-
-    /**
-     * Website URL for the business (Business accounts only).
-     * <p>
-     * Valid HTTP/HTTPS URL linking to business's online presence. Displayed in
-     * business profile for customer reference. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 21, type = ProtobufType.STRING)
-    String businessWebsite;
-
-    /**
-     * Contact email address for business inquiries (Business accounts only).
-     * <p>
-     * Used for customer communication outside WhatsApp. Displayed in business
-     * profile. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 22, type = ProtobufType.STRING)
-    String businessEmail;
-
-    /**
-     * Business category classification (Business accounts only).
-     * <p>
-     * Defines business type (e.g., Restaurant, Retail, Services). Used for
-     * business discovery, filtering, and categorization in WhatsApp Business
-     * features. Null for non-business accounts.
-     */
-    @ProtobufProperty(index = 23, type = ProtobufType.MESSAGE)
-    BusinessCategory businessCategory;
-
-    // =====================================================
-    // SECTION: Communication Data Collections
-    // =====================================================
-
-    /**
-     * All chats (individual and group conversations) indexed by JID.
+     * Blocks until all asynchronous initialization operations for this
+     * store are complete (e.g., background deserialization of chats and
+     * newsletters).
      *
-     * @see Chat
-     * @see #findChatByJid(JidProvider)
+     * <p>Implementations that perform all initialization synchronously
+     * may provide an empty implementation of this method.
+     * @throws IOException if the store cannot be deserialized completely and/or correctly
      */
-    final ConcurrentHashMap<Jid, Chat> chats;
+    void await() throws IOException;
 
     /**
-     * All newsletters (broadcast channels) indexed by JID.
-     *
-     * @see Newsletter
-     */
-    final ConcurrentHashMap<Jid, Newsletter> newsletters;
-
-    /**
-     * All status updates (stories) visible to this account.
-     * <p>
-     * Thread-safe set of ephemeral status messages posted by contacts. Statuses
-     * are visible for 24 hours and stored separately from regular chat messages.
-     *
-     * @see ChatMessageInfo
-     */
-    final ConcurrentHashMap<String, ChatMessageInfo> status;
-
-
-    /**
-     * All contacts (address book and interaction history) indexed by JID.
-     * <p>
-     * Thread-safe map including saved contacts and WhatsApp users with whom
-     * the account has interacted. Contains names, profile pictures, and status messages.
-     *
-     * @see Contact
-     * @see #findContactByJid(JidProvider)
-     */
-    @ProtobufProperty(index = 24, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentHashMap<Jid, Contact> contacts;
-
-    /**
-     * All active and recent calls indexed by call ID.
-     * <p>
-     * Thread-safe map storing voice and video call information including state,
-     * participants, and timestamps. Maintains call history for reference and notifications.
-     *
-     * @see Call
-     */
-    @ProtobufProperty(index = 25, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentHashMap<String, Call> calls;
-
-    // =====================================================
-    // SECTION: Privacy & Security Settings
-    // =====================================================
-
-    /**
-     * Privacy settings controlling visibility of profile information and activity.
-     * <p>
-     * Thread-safe map indexed by setting type name. Each entry defines visibility
-     * rules (everyone, contacts only, nobody, etc.) for specific information types
-     * like last seen, profile picture, about, and online status.
-     *
-     * @see PrivacySettingEntry
-     * @see PrivacySettingType
-     * @see PrivacySettingValue
-     */
-    @ProtobufProperty(index = 26, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings;
-
-    // =====================================================
-    // SECTION: Session Configuration & Behavior
-    // =====================================================
-
-    /**
-     * Server-provided configuration properties controlling session behavior.
-     * <p>
-     * Thread-safe map of key-value pairs including feature flags, protocol settings,
-     * and behavioral configurations. Updated by WhatsApp servers and may change
-     * between sessions. Affects available features and protocol behavior.
-     */
-    @ProtobufProperty(index = 27, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.STRING)
-    final ConcurrentHashMap<String, String> properties;
-
-    /**
-     * Whether archived chats automatically unarchive when receiving new messages.
-     * <p>
-     * When true: new message in archived chat moves it back to main chat list.
-     * When false: archived chats remain archived regardless of new activity.
-     * Default: true
-     */
-    @ProtobufProperty(index = 28, type = ProtobufType.BOOL)
-    boolean unarchiveChats;
-
-    /**
-     * Whether to use 24-hour time format for timestamp display.
-     * <p>
-     * When true: times displayed as 13:00, 23:45, etc.
-     * When false: times displayed as 1:00 PM, 11:45 PM, etc.
-     * Default: false
-     */
-    @ProtobufProperty(index = 29, type = ProtobufType.BOOL)
-    boolean twentyFourHourFormat;
-
-    /**
-     * Default ephemeral timer for new chats.
-     * <p>
-     * When set to non-OFF value, new chats automatically enable disappearing messages
-     * with specified duration. Messages in such chats are automatically deleted after
-     * the configured time period.
-     *
-     * @see ChatEphemeralTimer
-     */
-    @ProtobufProperty(index = 30, type = ProtobufType.ENUM)
-    ChatEphemeralTimer newChatsEphemeralTimer;
-
-    /**
-     * Amount of chat history to synchronize from WhatsApp servers (Web clients only).
-     * <p>
-     * Determines message history downloaded during initial connection and history sync.
-     * Options range from recent messages only to full history, balancing storage and
-     * bandwidth requirements.
-     *
-     * @see WhatsAppWebClientHistory
-     */
-    @ProtobufProperty(index = 31, type = ProtobufType.MESSAGE)
-    WhatsAppWebClientHistory webHistoryPolicy;
-
-    /**
-     * Whether presence updates are automatically sent to WhatsApp servers.
-     * <p>
-     * When true: client automatically updates online/offline status and sends read receipts.
-     * When false: presence updates must be sent manually. Disabling prevents automatic
-     * "last seen" timestamp updates.
-     * Default: true
-     */
-    @ProtobufProperty(index = 32, type = ProtobufType.BOOL)
-    boolean automaticPresenceUpdates;
-
-    /**
-     * Whether message read receipts are automatically sent.
-     * <p>
-     * When true: read receipts (blue ticks) automatically sent when messages are processed.
-     * When false: read receipts must be sent manually via {@link WhatsAppClient#markMessageRead(MessageInfo)}.
-     * Typically true for Mobile clients, configurable for Web clients.
-     * Default: true
-     */
-    @ProtobufProperty(index = 33, type = ProtobufType.BOOL)
-    boolean automaticMessageReceipts;
-
-    /**
-     * Whether to verify MAC (Message Authentication Code) in app state patches (Web clients only).
-     * <p>
-     * When true: cryptographically verifies integrity of app state synchronization patches.
-     * Ensures data hasn't been tampered with but may cause sync issues if verification fails.
-     * When false: skips MAC verification for faster synchronization.
-     * Default: true
-     */
-    @ProtobufProperty(index = 34, type = ProtobufType.BOOL)
-    boolean checkPatchMacs;
-
-    // =====================================================
-    // SECTION: Synchronization State Tracking
-    // =====================================================
-
-    /**
-     * Indicates whether chat data has been synchronized from server.
-     * <p>
-     * Web clients: true after history sync completes.
-     * Mobile clients: true after initial bootstrap.
-     * Used to prevent duplicate synchronization and track initialization progress.
-     */
-    @ProtobufProperty(index = 35, type = ProtobufType.BOOL)
-    boolean syncedChats;
-
-    /**
-     * Indicates whether contact data has been synchronized from server.
-     * <p>
-     * Web clients: true after history sync completes.
-     * Mobile clients: true after initial bootstrap.
-     * Used to prevent duplicate synchronization and track initialization progress.
-     */
-    @ProtobufProperty(index = 36, type = ProtobufType.BOOL)
-    boolean syncedContacts;
-
-    /**
-     * Indicates whether newsletter data has been synchronized from server.
-     * <p>
-     * Both platforms: uses w:mex query to fetch newsletter information.
-     * True after initial newsletter sync completes. Prevents redundant queries.
-     */
-    @ProtobufProperty(index = 37, type = ProtobufType.BOOL)
-    boolean syncedNewsletters;
-
-    /**
-     * Indicates whether status updates have been synchronized from server.
-     * <p>
-     * Web clients: true after history sync completes.
-     * Mobile clients: true after initial bootstrap.
-     * Used to prevent duplicate synchronization and track initialization progress.
-     */
-    @ProtobufProperty(index = 38, type = ProtobufType.BOOL)
-    boolean syncedStatus;
-
-    /**
-     * Indicates whether web app state has been synchronized (Web clients only).
-     * <p>
-     * Web app state includes settings, starred messages, and other non-message data.
-     * True after initial app state sync completes. Prevents redundant synchronization.
-     */
-    @ProtobufProperty(index = 39, type = ProtobufType.BOOL)
-    boolean syncedWebAppState;
-
-    /**
-     * Flag indicating whether the business certificate has been sent (Mobile API only).
-     * <p>
-     * For WhatsApp Business accounts, a business certificate must be sent during the
-     * initial registration process. This flag tracks whether that certificate has
-     * already been transmitted to avoid duplicate submissions.
-     */
-    @ProtobufProperty(index = 40, type = ProtobufType.BOOL)
-    boolean syncedBusinessCertificate;
-
-    // =====================================================
-    // SECTION: Signal Protocol - Identity & Registration
-    // =====================================================
-
-    /**
-     * Signal protocol registration ID distinguishing this client installation.
-     * <p>
-     * Randomly generated integer (1-16380) used during Signal protocol handshake
-     * and pre-key exchange. Generated once during initial setup if not provided.
-     * Remains constant for lifetime of the installation.
-     */
-    @ProtobufProperty(index = 41, type = ProtobufType.INT32)
-    final Integer registrationId;
-
-    /**
-     * Noise protocol key pair for secure channel establishment.
-     * <p>
-     * Used during initial Noise XX handshake with WhatsApp servers to establish
-     * encrypted communication channel. Generated once during account creation and
-     * remains constant for account lifetime. Provides forward secrecy and ensures
-     * initial connection security before sensitive data exchange.
-     */
-    @ProtobufProperty(index = 42, type = ProtobufType.MESSAGE)
-    final SignalIdentityKeyPair noiseKeyPair;
-
-    /**
-     * Signal protocol identity key pair for end-to-end encryption.
-     * <p>
-     * Primary key pair used for Signal protocol implementation providing end-to-end
-     * encryption for all messages. Generated once during account creation and remains
-     * constant. Used in X3DH key agreement and message encryption/decryption.
-     */
-    @ProtobufProperty(index = 44, type = ProtobufType.MESSAGE)
-    final SignalIdentityKeyPair identityKeyPair;
-
-    /**
-     * Companion device key pair identifying linked Web/Desktop clients (Web clients only).
-     * <p>
-     * For Web clients, identifies the linked device and establishes trust with primary
-     * mobile device. Exchanged during QR code/pairing code pairing process. Null for
-     * Mobile clients or before pairing completes.
-     */
-    @ProtobufProperty(index = 45, type = ProtobufType.MESSAGE)
-    SignalIdentityKeyPair companionKeyPair;
-
-    /**
-     * Companion device signed identity information (Web clients only).
-     * <p>
-     * Contains signed identity received from primary mobile device during pairing.
-     * Null until QR code/pairing code pairing completes and identity information
-     * is synchronized from mobile device. Used to verify device authenticity.
-     */
-    @ProtobufProperty(index = 46, type = ProtobufType.MESSAGE)
-    SignedDeviceIdentity signedDeviceIdentity;
-
-    // =====================================================
-    // SECTION: Signal Protocol - Pre-Keys & Key Management
-    // =====================================================
-
-    /**
-     * Currently active signed pre-key pair.
-     * <p>
-     * Used in Signal protocol's X3DH (Extended Triple Diffie-Hellman) key agreement.
-     * Generated during initialization and rotated according to WhatsApp's security
-     * policies. Provides forward secrecy and deniability properties.
-     */
-    @ProtobufProperty(index = 47, type = ProtobufType.MESSAGE)
-    final SignalSignedKeyPair signedKeyPair;
-
-    /**
-     * Collection of one-time pre-keys for new session establishment.
-     * <p>
-     * Used in Signal protocol's asynchronous key agreement. Each key is used exactly
-     * once when a new session is initiated. When supply runs low, new batches are
-     * generated and uploaded to ensure users can always initiate encrypted sessions.
-     * <p>
-     * LinkedHashMap preserves insertion order important for key rotation and management.
-     *
-     * @see SignalPreKeyPair
-     */
-    @ProtobufProperty(index = 48, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    final LinkedHashMap<Integer, SignalPreKeyPair> preKeys;
-
-    // =====================================================
-    // SECTION: Device Identifiers (Mobile)
-    // =====================================================
-
-    /**
-     * FDID used during mobile registration.
-     * <p>
-     * Unique identifier for WhatsApp's mobile clients during registration process.
-     * Generated for Web clients but may not be actively used. Format: UUID string.
-     */
-    @ProtobufProperty(index = 49, type = ProtobufType.STRING)
-    final UUID fdid;
-
-    /**
-     * Unique device identifier for mobile clients.
-     * <p>
-     * Device-specific identifier used by WhatsApp to track individual installations.
-     * Generated as UUID without hyphens, then hex-decoded to bytes. Remains constant
-     * for lifetime of the installation.
-     */
-    @ProtobufProperty(index = 50, type = ProtobufType.BYTES)
-    final byte[] deviceId;
-
-    /**
-     * Advertising identifier for mobile analytics and tracking (Mobile clients only).
-     * <p>
-     * UUID used for analytics and advertising purposes on mobile platforms. May be
-     * reset by user through device settings. Null for Web clients.
-     */
-    @ProtobufProperty(index = 51, type = ProtobufType.STRING)
-    final UUID advertisingId;
-
-    /**
-     * Unique identity identifier for this WhatsApp account installation.
-     * <p>
-     * Cryptographically random byte array uniquely identifying this specific account
-     * installation. Different from JID (WhatsApp user ID). Provides additional layer
-     * of identity verification. Generated once during account creation and remains constant.
-     * Used in various cryptographic protocols and authentication flows.
-     */
-    @ProtobufProperty(index = 52, type = ProtobufType.BYTES)
-    final byte[] identityId;
-
-    /**
-     * Backup/recovery token for mobile clients (Mobile clients only).
-     * <p>
-     * 20-byte random value authenticating backup and restore operations. Allows users
-     * to recover chat history when reinstalling app or switching devices. Cryptographically
-     * tied to account - encrypted backups cannot be accessed without it. Must be kept secure.
-     */
-    @ProtobufProperty(index = 53, type = ProtobufType.BYTES)
-    final byte[] backupToken;
-
-    // =====================================================
-    // SECTION: Signal Protocol - Sessions & Group Keys
-    // =====================================================
-
-    /**
-     * Signal protocol sender keys for group messaging.
-     * <p>
-     * Thread-safe map storing sender key records for efficient group message encryption.
-     * Each group has a sender key allowing all members to encrypt messages that any
-     * member can decrypt. Provides efficient multi-party encryption.
-     *
-     * @see SignalSenderKeyRecord
-     * @see SignalSenderKeyName
-     */
-    @ProtobufProperty(index = 54, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys;
-
-    /**
-     * App state synchronization keys (Web clients only).
-     * <p>
-     * Ordered map of keys used for syncing application state between devices. Each key
-     * is versioned and used to encrypt/decrypt different types of app state patches.
-     * Enables consistent state across all linked devices.
-     *
-     * @see AppStateSyncKey
-     */
-    @ProtobufProperty(index = 55, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final LinkedHashMap<String, AppStateSyncKey> appStateKeys;
-
-    /**
-     * Active Signal protocol sessions for end-to-end encryption.
-     * <p>
-     * Thread-safe map storing session records for each conversation. Sessions are
-     * established during initial key exchange and persist across messages. Each
-     * session maintains its own encryption state and ratcheting keys.
-     *
-     * @see SignalSessionRecord
-     * @see SignalProtocolAddress
-     */
-    @ProtobufProperty(index = 56, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions;
-
-    /**
-     * App state sync hash states tracking synchronization status (Web clients only).
-     * <p>
-     * Thread-safe map tracking sync status for different app state types. Each
-     * {@link PatchType} has associated {@link AppStateSyncHash} that:
-     * <ul>
-     *     <li>Identifies current version of that state type</li>
-     *     <li>Enables detection of changes from mobile device</li>
-     *     <li>Facilitates efficient differential synchronization</li>
-     * </ul>
-     * Examples: contacts, chat settings, starred messages, etc.
-     *
-     * @see PatchType
-     * @see AppStateSyncHash
-     */
-    @ProtobufProperty(index = 57, type = ProtobufType.MESSAGE, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<PatchType, AppStateSyncHash> hashStates;
-
-    // =====================================================
-    // SECTION: Mobile status
-    // =====================================================
-
-    /**
-     * Flag indicating whether this client has completed registration with WhatsApp.
-     * <p>
-     * For Web clients, registration is complete after successful QR code/Pairing code pairing.
-     * For Mobile clients, registration is complete after phone number verification.
-     * <p>
-     * This flag affects which API calls are available and how the client behaves during
-     * connection establishment.
-     */
-    @ProtobufProperty(index = 58, type = ProtobufType.BOOL)
-    boolean registered;
-
-    /**
-     * Whether to show security notifications when chatting with a contact.
-     */
-    @ProtobufProperty(index = 59, type = ProtobufType.BOOL)
-    boolean showSecurityNotifications;
-
-    /**
-     * Recent stickers
-     */
-    @ProtobufProperty(index = 60, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<String, Sticker> recentStickers;
-
-    /**
-     * Favorite stickers
-     */
-    @ProtobufProperty(index = 61, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<String, Sticker> favouriteStickers;
-
-    /**
-     * Quick replies
-     */
-    @ProtobufProperty(index = 62, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<String, QuickReply> quickReplies;
-
-    /**
-     * Labels
-     */
-    @ProtobufProperty(index = 63, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<Integer, Label> labels;
-
-    @ProtobufProperty(index = 64, type = ProtobufType.MESSAGE)
-    volatile Version clientVersion;
-
-    @ProtobufProperty(index = 65, type = ProtobufType.MESSAGE)
-    Version companionVersion;
-
-    /**
-     * ADV (Authenticated Device Verification) metadata.
-     */
-    @ProtobufProperty(index = 66, type = ProtobufType.UINT64, mixins = InstantProtobufMixin.class)
-    Instant lastAdvCheckTime;
-
-    /**
-     * Map of stored identity keys for remote users.
-     * <p>
-     * Per WhatsApp Web: identity keys are stored during ADV validation (when processing
-     * device sync results with accountSignatureKey) and used as fallback when validating
-     * signed key index lists where the embedded accountSignatureKey is missing.
-     * <p>
-     * Key: SignalProtocolAddress for the user (device 0)
-     * Value: SignalIdentityKey (the account signature key / identity public key)
-     */
-    @ProtobufProperty(index = 67, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.BYTES)
-    final ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities;
-
-    /**
-     * Transient per-identity encryption range for retry detection.
-     * Not serialized - only relevant for in-flight retries.
-     *
-     * <p>Key: SignalProtocolAddress (device).
-     * Value: the earliest send sequence at which this identity was used.
-     *
-     * @apiNote WAWebSignalProtocolStoreUnifiedApi.updateIdentityRangeAfterEncryption:
-     * stores the message rowId on each identity record.
-     */
-    final ConcurrentMap<SignalProtocolAddress, Long> identityEncryptionRange = new ConcurrentHashMap<>();
-
-    /**
-     * Monotonic counter for identity range tracking, incremented per send.
-     */
-    final AtomicLong encryptionSequence = new AtomicLong();
-
-    /**
-     * Tracks missing Syncd keys and which companion devices have been queried.
-     * <p>
-     * Per WhatsApp Web WAWebSyncdStoreMissingKeys: when a sync key is missing,
-     * the client asks companion devices. If all respond without the key, it's fatal.
-     *
-     * @see MissingDeviceSyncKey
-     */
-    @ProtobufProperty(index = 68, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys;
-
-    /**
-     * ADV (Account Device Verification) secret key for HMAC verification during pairing.
-     * <p>
-     * Random 32-byte key generated during pairing initialization. Sent to the primary device
-     * in the PairingRequest protobuf and used by the primary to create an HMAC over the
-     * device identity details. The companion then verifies this HMAC using the same key.
-     * <p>
-     * This is separate from the companion key pair - it's a symmetric key used only for
-     * HMAC verification, not for encryption or signing.
-     *
-     * @apiNote WAWebAdvSignatureApi.generateADVSecretKey: generates random 32-byte key.
-     * WAWebHandlePairSuccess: uses this key for HMAC verification with hmacSha256.
-     */
-    @ProtobufProperty(index = 69, type = ProtobufType.BYTES)
-    byte[] advSecretKey;
-
-    /**
-     * Tracks device identity ranges for resend filtering.
-     * <p>
-     * Per WhatsApp Web WAWebSendMsgCommonApi.updateIdentityRange: when encrypting for devices,
-     * records the message timestamp so that during resend we can filter out devices whose
-     * identity changed after the original encryption.
-     * <p>
-     * Key: Signal protocol address string (e.g., "1234567890:0")
-     * Value: Timestamp (seconds since epoch) when the device was last encrypted to
-     *
-     * @apiNote WAWebSendMsgCommonApi.filterDeviceWithChangedIdentity
-     */
-    @ProtobufProperty(index = 70, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.UINT64)
-    final ConcurrentMap<String, Long> deviceIdentityRanges;
-
-    /**
-     * Verified business name records, keyed by user JID string.
-     * <p>
-     * Populated from verified name syncs and biz profile queries.
-     * Queried at send time to resolve the {@code <biz>} stanza child node
-     * with host_storage, actual_actors, and privacy_mode_ts attributes.
-     *
-     * @apiNote WAWebSchemaVerifiedBusinessName: the IndexedDB table that
-     * stores these records in WhatsApp Web.
-     * WAWebApiVerifiedBusinessName.getPrivacyMode: queries the record
-     * at send time.
-     */
-    @ProtobufProperty(index = 71, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<String, VerifiedBusinessName> verifiedBusinessNames;
-
-    // =====================================================
-    // SECTION: Runtime State (Non-Serialized)
-    // =====================================================
-
-    /**
-     * HTTP proxy URI for routing network traffic.
-     * <p>
-     * When configured, all network connections are routed through this proxy server.
-     * Format: {@code http://host:port} or {@code https://host:port}
-     * May include authentication: {@code http://username:password@host:port}
-     */
-    private WhatsAppClientProxy proxy;
-
-    /**
-     * Serializer responsible for persisting this store to storage.
-     * <p>
-     * Determines how and where session data is saved. Can be changed at runtime via
-     * {@link #setSerializer(WhatsappStoreSerializer)} to migrate between storage backends.
-     *
-     * @see WhatsappStoreSerializer
-     * @see #serialize()
-     */
-    private WhatsappStoreSerializer serializer;
-
-    /**
-     * Controls whether this store is persisted to storage.
-     * <p>
-     * When false, {@link #serialize()} performs no operations. Useful for temporary
-     * sessions or testing scenarios where persistence is not desired.
-     * Default: true
-     */
-    private boolean serializable;
-
-    /**
-     * Registered event listeners for this session.
-     * <p>
-     * Thread-safe set receiving callbacks for WhatsApp events (new messages, status
-     * changes, connection events). Not serialized - must be repopulated after session
-     * restoration. Add/remove via {@link WhatsAppClient#addListener(WhatsAppClientListener)} and
-     * {@link WhatsAppClient#removeListener(WhatsAppClientListener)}.
-     *
-     * @see WhatsAppClientListener
-     */
-    private final KeySetView<WhatsAppClientListener, Boolean> listeners;
-
-    /**
-     * LID to phone number JID mappings for the LID migration system.
-     * <p>
-     * Thread-safe map that enables reverse lookups from LID to phone number.
-     * Not serialized - rebuilt from contacts on session restoration.
-     * Used for contact resolution when receiving messages with LID addressing.
-     */
-    private final ConcurrentHashMap<Jid, Jid> lidToPhoneMappings;
-
-    /**
-     * Phone number JID to LID mappings for the LID migration system.
-     * <p>
-     * Thread-safe map that enables lookups from phone number to LID.
-     * Not serialized - rebuilt from contacts on session restoration.
-     */
-    private final ConcurrentHashMap<Jid, Jid> phoneToLidMappings;
-
-    /**
-     * Active media connection for uploading/downloading media files.
-     * <p>
-     * Separate connection with authentication tokens for media operations (images,
-     * videos, documents). Populated during session initialization and may be refreshed
-     * periodically. Not serialized - recreated on each connection.
-     * <p>
-     *
-     * @see MediaConnection
-     */
-    private volatile MediaConnection mediaConnection;
-
-    /**
-     * Lock object for the media connection
-     */
-    private final Object mediaConnectionLock = new Object();
-
-    /**
-     * Current state of offline message resume processing.
-     * <p>
-     * Per WhatsApp Web WAWebOfflineResumeConst.ResumeStatus: when a client connects/reconnects,
-     * it goes through an offline resume phase where queued messages from the server are processed.
-     * This state tracks the progress of that phase.
-     * <p>
-     * Not serialized - reset to INIT on each connection.
-     *
-     * @see WhatsAppClientOfflineResumeState
-     */
-    private volatile WhatsAppClientOfflineResumeState offlineResumeState = WhatsAppClientOfflineResumeState.INIT;
-
-    /**
-     * Latch for blocking senders until offline delivery completes.
-     * Reset on each connection; counted down when state transitions to COMPLETE.
-     *
-     * @apiNote WAWebEventsWaitForOfflineDeliveryEnd: waits for
-     * the {@code offline_delivery_end} event with a 5-minute timeout.
-     */
-    private volatile CountDownLatch offlineDeliveryLatch = new CountDownLatch(1);
-
-    /**
-     * Tracks users whose devices have changed and need sender key rotation.
-     * <p>
-     * Per WhatsApp Web WAWebAdvUpdateParticipantApi: when devices are added or removed
-     * for a user, their sender key distribution state needs to be updated for all groups
-     * they participate in. This set tracks which users need this update.
-     * <p>
-     * Not serialized - session-level tracking only.
-     */
-    private final KeySetView<Jid, Boolean> usersNeedingSenderKeyRotation = ConcurrentHashMap.newKeySet();
-
-    /**
-     * Pending mutations awaiting synchronization to the server.
-     */
-    private final ConcurrentMap<PatchType, SequencedCollection<PendingMutation>> webAppStatePendingMutations;
-
-    /**
-     * The web app state
-     */
-    private final ConcurrentMap<PatchType, CollectionMetadata> webAppStateCollections;
-
-    /**
-     * Tracks pending receipt records for sent messages.
-     * <p>
-     * Per WhatsApp Web WAWebApiMessageInfoStore.createOrMergeReceiptRecords: when sending a message,
-     * records the recipient device JIDs that the message was sent to. This enables tracking
-     * delivery status at the device level when receipts are received.
-     * <p>
-     * Key: Message ID (stanza ID)
-     * Value: Set of recipient device JIDs the message was sent to
-     * <p>
-     * Not serialized - session-level tracking only.
-     *
-     * @apiNote WAWebApiMessageInfoStore.createOrMergeReceiptRecords
-     */
-    private final ConcurrentMap<String, Set<Jid>> pendingMessageRecipients;
-
-    /**
-     * Lock to update the client version
-     */
-    private final Object clientVersionLock;
-
-    /**
-     * Cache for group/community metadata
-     */
-    private final ConcurrentMap<Jid, GroupOrCommunityMetadata> groupOrCommunityMetadata;
-
-    /**
-     * Cache for WhatsApp device lists with metadata (LRU, max 5000 entries).
-     * Stores full DeviceList objects including timestamps, ADV info, and expiration.
-     */
-    private final ConcurrentMap<Jid, DeviceList> deviceLists;
-
-    /**
-     * LRU access order tracking for device lists cache eviction.
-     */
-    private final LinkedList<Jid> deviceListsAccessOrder;
-
-    /**
-     * Cache for offline device timestamps (tracks when devices went offline).
-     */
-    private final ConcurrentHashMap<Jid, Long> offlineDeviceTimestamps;
-
-    /**
-     * Set of devices with unconfirmed identity changes.
-     * These devices should be excluded from message fanout until confirmed.
-     */
-    private final Set<Jid> unconfirmedIdentityChanges;
-
-    /**
-     * Set of user JIDs verified as hosted (business coex) via ADV.
-     * Per WhatsApp Web WAWebBizCoexHostedAddVerification: this cache is used to verify
-     * that hosted device messages are from users we've previously verified as hosted.
-     * This prevents a malicious server from claiming a user is hosted when they're not.
-     */
-    private final Set<Jid> coexHostedVerificationCache;
-
-    /**
-     * Queue for pending device sync requests that failed and need retry.
-     */
-    private final ConcurrentLinkedQueue<PendingDeviceSync> pendingDeviceSyncs;
-
-    /**
-     * Tracks sender key distribution status per group.
-     * <p>
-     * Per WhatsApp Web WAWebApiParticipantStore: for each group, maintains a map of
-     * participant JIDs to their sender key status (whether they've received the sender key).
-     * <p>
-     * Key: Group JID (as string)
-     * Value: Set of participant device JIDs that have received the sender key
-     * <p>
-     * Not serialized - session-level tracking only. Rebuilt on message send if missing.
-     *
-     * @apiNote WAWebApiParticipantStore.getGroupSenderKeyListFromParticipantRecord:
-     * uses senderKey map to determine skDistribList (need key) vs skList (have key).
-     */
-    private final ConcurrentMap<String, Set<String>> groupSenderKeyDistribution;
-
-    /**
-     * Tracks message IDs that have been overwritten by a revoke.
-     * <p>
-     * Per WhatsApp Web WAWebResendUserMsg/WAWebResendGroupMsg: when a message is revoked,
-     * its isOverwrittenByRevoke flag is set to true. If a phash mismatch occurs and
-     * we attempt to resend, we should skip if the message has been revoked.
-     * <p>
-     * Not serialized - session-level tracking only.
-     *
-     * @apiNote WAWebResendUserMsg, WAWebResendGroupMsg: checks a.data.isOverwrittenByRevoke
-     */
-    private final KeySetView<String, Boolean> revokedMessageIds = ConcurrentHashMap.newKeySet();
-
-    // =====================================================
-    // SECTION: Constructor & Factory Methods
-    // =====================================================
-
-
-    /**
-     * Private constructor used by builder and deserialization
-     */
-    WhatsAppStore(
-            UUID uuid,
-            Long phoneNumber,
-            WhatsAppClientType clientType,
-            long initializationTimeStamp,
-            JidCompanion device,
-            ReleaseChannel releaseChannel,
-            boolean online,
-            String locale,
-            String name,
-            String verifiedName,
-            URI profilePicture,
-            String about,
-            Jid jid,
-            Jid lid,
-            String businessAddress,
-            Double businessLongitude,
-            Double businessLatitude,
-            String businessDescription,
-            String businessWebsite,
-            String businessEmail,
-            BusinessCategory businessCategory,
-            ConcurrentHashMap<Jid, Contact> contacts,
-            ConcurrentHashMap<String, Call> calls,
-            ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings,
-            ConcurrentHashMap<String, String> properties,
-            boolean unarchiveChats,
-            boolean twentyFourHourFormat,
-            ChatEphemeralTimer newChatsEphemeralTimer,
-            WhatsAppWebClientHistory webHistoryPolicy,
-            boolean automaticPresenceUpdates,
-            boolean automaticMessageReceipts,
-            boolean checkPatchMacs,
-            boolean syncedChats,
-            boolean syncedContacts,
-            boolean syncedNewsletters,
-            boolean syncedStatus,
-            boolean syncedWebAppState,
-            boolean syncedBusinessCertificate,
-            Integer registrationId,
-            SignalIdentityKeyPair noiseKeyPair,
-            SignalIdentityKeyPair identityKeyPair,
-            SignalIdentityKeyPair companionKeyPair,
-            SignedDeviceIdentity signedDeviceIdentity,
-            SignalSignedKeyPair signedKeyPair,
-            LinkedHashMap<Integer, SignalPreKeyPair> preKeys,
-            UUID fdid,
-            byte[] deviceId,
-            UUID advertisingId,
-            byte[] identityId,
-            byte[] backupToken,
-            ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys,
-            LinkedHashMap<String, AppStateSyncKey> appStateKeys,
-            ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions,
-            ConcurrentMap<PatchType, AppStateSyncHash> hashStates,
-            boolean registered,
-            boolean showSecurityNotifications,
-            ConcurrentMap<String, Sticker> recentStickers,
-            ConcurrentMap<String, Sticker> favouriteStickers,
-            ConcurrentMap<String, QuickReply> quickReplies,
-            ConcurrentMap<Integer, Label> labels,
-            Version clientVersion,
-            Version companionVersion,
-            Instant lastAdvCheckTime,
-            ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities,
-            ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys,
-            byte[] advSecretKey,
-            ConcurrentMap<String, Long> deviceIdentityRanges,
-            ConcurrentMap<String, VerifiedBusinessName> verifiedBusinessNames
-    ) {
-        this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
-        this.phoneNumber = phoneNumber; 
-        this.clientType = Objects.requireNonNull(clientType, "clientType cannot be null");
-        this.online = online;
-        this.locale = locale; 
-        this.name = name; 
-        this.verifiedName = verifiedName; 
-        this.businessAddress = businessAddress; 
-        this.businessLongitude = businessLongitude; 
-        this.businessLatitude = businessLatitude; 
-        this.businessDescription = businessDescription; 
-        this.businessWebsite = businessWebsite; 
-        this.businessEmail = businessEmail; 
-        this.businessCategory = businessCategory;
-        this.profilePicture = profilePicture; 
-        this.about = about; 
-        this.jid = jid;  
-        this.lid = lid;  
-        this.properties = Objects.requireNonNull(properties, "properties cannot be null");  
-        this.contacts = Objects.requireNonNull(contacts, "contacts cannot be null");
-        this.privacySettings = Objects.requireNonNull(privacySettings, "privacySettings cannot be null");
-        this.calls = Objects.requireNonNull(calls, "calls cannot be null");
-        this.unarchiveChats = unarchiveChats;
-        this.twentyFourHourFormat = twentyFourHourFormat;
-        this.initializationTimeStamp = initializationTimeStamp;
-        this.newChatsEphemeralTimer = Objects.requireNonNullElse(newChatsEphemeralTimer, ChatEphemeralTimer.OFF);
-        this.webHistoryPolicy = webHistoryPolicy;
-        this.automaticPresenceUpdates = automaticPresenceUpdates;
-        this.automaticMessageReceipts = automaticMessageReceipts;
-        this.releaseChannel = Objects.requireNonNullElse(releaseChannel, ReleaseChannel.RELEASE);
-        this.device = Objects.requireNonNull(device, "device cannot be null");
-        this.checkPatchMacs = checkPatchMacs;
-        this.syncedChats = syncedChats;
-        this.syncedContacts = syncedContacts;
-        this.syncedNewsletters = syncedNewsletters;
-        this.syncedStatus = syncedStatus;
-        this.syncedWebAppState = syncedWebAppState;
-        this.syncedBusinessCertificate = syncedBusinessCertificate;
-        this.favouriteStickers = favouriteStickers;
-        this.quickReplies = quickReplies;
-        this.labels = labels;
-        this.chats = new ConcurrentHashMap<>();
-        this.newsletters = new ConcurrentHashMap<>();
-        this.status = new ConcurrentHashMap<>();
-        this.listeners = ConcurrentHashMap.newKeySet();
-        this.lidToPhoneMappings = new ConcurrentHashMap<>();
-        this.phoneToLidMappings = new ConcurrentHashMap<>();
-        for (var contact : contacts.values()) {
-            contact.lid()
-                    .ifPresent(entry -> registerLidMapping(contact.jid(), entry));
-        }
-        this.registrationId = Objects.requireNonNullElseGet(registrationId, () -> SecureBytes.nextInt(16380) + 1);
-        this.noiseKeyPair = Objects.requireNonNullElseGet(noiseKeyPair, SignalIdentityKeyPair::random);
-        this.identityKeyPair = Objects.requireNonNullElseGet(identityKeyPair, SignalIdentityKeyPair::random);
-        this.companionKeyPair = companionKeyPair;
-        this.signedKeyPair = Objects.requireNonNullElseGet(signedKeyPair, () -> SignalSignedKeyPair.of(this.registrationId, this.identityKeyPair));
-        this.preKeys = Objects.requireNonNull(preKeys, "preKeys cannot be null");
-        this.fdid = Objects.requireNonNullElseGet(fdid, UUID::randomUUID);
-        this.deviceId = Objects.requireNonNullElseGet(deviceId, () -> HexFormat.of().parseHex(UUID.randomUUID().toString().replace("-", "")));
-        this.advertisingId = Objects.requireNonNullElseGet(advertisingId, UUID::randomUUID);
-        this.identityId = Objects.requireNonNullElseGet(identityId, () -> SecureBytes.random(16));
-        this.backupToken = Objects.requireNonNullElseGet(backupToken, () -> SecureBytes.random(20));
-        this.signedDeviceIdentity = signedDeviceIdentity;
-        this.senderKeys = Objects.requireNonNull(senderKeys, "senderKeys cannot be null");
-        this.appStateKeys = Objects.requireNonNull(appStateKeys, "appStateKeys cannot be null");
-        this.sessions = Objects.requireNonNull(sessions, "sessions cannot be null");
-        this.hashStates = Objects.requireNonNull(hashStates, "hashStates cannot be null");
-        this.registered = registered;
-        this.showSecurityNotifications = showSecurityNotifications;
-        this.recentStickers = recentStickers;
-        this.clientVersion = clientVersion;
-        this.clientVersionLock = new Object();
-        this.companionVersion = companionVersion;
-        this.webAppStatePendingMutations = new ConcurrentHashMap<>();
-        this.webAppStateCollections = new ConcurrentHashMap<>();
-        this.pendingMessageRecipients = new ConcurrentHashMap<>();
-        this.serializable = true;
-        this.groupOrCommunityMetadata = new ConcurrentHashMap<>();
-        this.deviceLists = new ConcurrentHashMap<>();
-        this.deviceListsAccessOrder = new LinkedList<>();
-        this.offlineDeviceTimestamps = new ConcurrentHashMap<>();
-        this.unconfirmedIdentityChanges = ConcurrentHashMap.newKeySet();
-        this.coexHostedVerificationCache = ConcurrentHashMap.newKeySet();
-        this.pendingDeviceSyncs = new ConcurrentLinkedQueue<>();
-        this.groupSenderKeyDistribution = new ConcurrentHashMap<>();
-        this.lastAdvCheckTime = lastAdvCheckTime;
-        this.remoteIdentities = Objects.requireNonNullElseGet(remoteIdentities, ConcurrentHashMap::new);
-        this.missingSyncKeys = Objects.requireNonNullElseGet(missingSyncKeys, ConcurrentHashMap::new);
-        this.advSecretKey = advSecretKey;
-        this.deviceIdentityRanges = Objects.requireNonNullElseGet(deviceIdentityRanges, ConcurrentHashMap::new);
-        this.verifiedBusinessNames = Objects.requireNonNullElseGet(verifiedBusinessNames, ConcurrentHashMap::new);
-    }
-
-    // =====================================================
-    // SECTION: Serialization & Persistence
-    // =====================================================
-
-    /**
-     * Returns whether this store is configured for serialization.
-     *
-     * @return true if this store will be persisted via {@link #serialize()}
-     */
-    public boolean serializable() {
-        return serializable;
-    }
-
-    /**
-     * Configures whether this store should be persisted to storage.
-     * <p>
-     * When set to false, {@link #serialize()} performs no operations. Useful for
-     * temporary sessions or testing where persistence is not desired.
-     *
-     * @param serializable whether to enable serialization
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSerializable(boolean serializable) {
-        this.serializable = serializable;
-        return this;
-    }
-
-    /**
-     * Returns the serializer responsible for persisting this store.
-     *
-     * @return the current serializer, may be null if not configured
-     */
-    public WhatsappStoreSerializer serializer() {
-        return Objects.requireNonNullElse(serializer, DEFAULT_SERIALIZER);
-    }
-
-    /**
-     * Sets the serializer responsible for persisting this store.
-     * <p>
-     * Can be changed at runtime to migrate between storage backend.
-     *
-     * @param serializer the new serializer, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSerializer(WhatsappStoreSerializer serializer) {
-        this.serializer = serializer;
-        return this;
-    }
-
-    /**
-     * Persists this store to storage using the configured serializer.
-     * <p>
-     * Only performs serialization if {@link #serializable} is true and a serializer
-     * is configured. Called automatically during normal operation and before disconnection.
+     * Flushes all pending changes to the underlying storage.
      *
      * @return this store instance for method chaining
+     * @throws IOException if the session cannot be saved
      */
-    public WhatsAppStore serialize() {
-        if (serializable && serializer != null) {
-            serializer.serialize(this);
-        }
-        return this;
-    }
-
-    // =====================================================
-    // SECTION: Contact Management
-    // =====================================================
+    WhatsAppStore save() throws IOException;
 
     /**
-     * Finds a contact by either phone number JID or LID.
-     * <p>
-     * First attempts direct lookup by the provided JID, then tries
-     * the alternate addressing mode if the first lookup fails.
+     * Permanently deletes this session from storage.
      *
-     * @param jid the JID to search for (phone or LID)
-     * @return Optional containing the contact if found
+     * <p>After this method returns, the session data cannot be recovered.
+     * @throws IOException if the session cannot be deleted
      */
-    public Optional<Contact> findContactByJid(JidProvider jid) {
-        return switch (jid) {
-            case Contact contact -> Optional.of(contact);
-            case null -> Optional.empty();
-            case Chat _, Newsletter _, Jid _, JidServer _-> {
-                var targetJid = jid.toJid();
-                if(targetJid.hasUserServer()) {
-                    var jidContact = contacts.get(targetJid);
-                    if(jidContact != null) {
-                        yield Optional.of(jidContact);
-                    } else {
-                        yield findLidByPhone(targetJid)
-                                .map(contacts::get);
-                    }
-                } else if(targetJid.hasLidServer()) {
-                    var lidContact = contacts.get(targetJid);
-                    if(lidContact != null) {
-                        yield Optional.of(lidContact);
-                    } else {
-                        yield findPhoneByLid(targetJid)
-                                .map(contacts::get);
-                    }
-                } else {
-                    var contact = contacts.get(targetJid);
-                    yield Optional.ofNullable(contact);
-                }
-            }
-        };
-    }
-
-    /**
-     * Returns all contacts stored in this session.
-     *
-     * @return immutable collection of all contacts
-     */
-    public Collection<Contact> contacts() {
-        return Collections.unmodifiableCollection(contacts.values());
-    }
-
-    /**
-     * Adds a new contact to the store using just a JID.
-     * <p>
-     * Creates a minimal contact with only the JID populated. Additional information
-     * can be added later through contact updates from WhatsApp servers.
-     *
-     * @param jid the JID of the contact to add, must not be null
-     * @return the newly created contact
-     * @throws NullPointerException if jid is null
-     */
-    public Contact addNewContact(Jid jid) {
-        Objects.requireNonNull(jid, "jid cannot be null");
-        var newContact = new ContactBuilder()
-                .jid(jid)
-                .lid(phoneToLidMappings.get(jid))
-                .build();
-        return addContact(newContact);
-    }
-
-    /**
-     * Adds or updates a contact in the store.
-     * <p>
-     * If a contact with the same JID already exists, it will be replaced with the new one.
-     *
-     * @param contact the contact to add or update, must not be null
-     * @return the contact that was added (same as parameter)
-     * @throws NullPointerException if contact is null
-     */
-    public Contact addContact(Contact contact) {
-        Objects.requireNonNull(contact, "contact cannot be null");
-        contacts.put(contact.jid(), contact);
-        return contact;
-    }
-
-    /**
-     * Removes a contact from the store.
-     *
-     * @param contactJid the JID of the contact to remove, may be null
-     * @return Optional containing the removed contact if it existed, empty otherwise
-     */
-    public Optional<Contact> removeContact(JidProvider contactJid) {
-        if(contactJid == null) {
-            return Optional.empty();
-        } else {
-            var targetJid = jid.toJid();
-            if(targetJid.hasUserServer()) {
-                var jidContact = contacts.remove(targetJid);
-                if(jidContact != null) {
-                    return Optional.of(jidContact);
-                } else {
-                    return findLidByPhone(targetJid)
-                            .map(contacts::remove);
-                }
-            } else if(targetJid.hasLidServer()) {
-                var lidContact = contacts.remove(targetJid);
-                if(lidContact != null) {
-                    return Optional.of(lidContact);
-                } else {
-                    return findPhoneByLid(targetJid)
-                            .map(contacts::remove);
-                }
-            } else {
-                var chat = contacts.remove(targetJid);
-                return Optional.ofNullable(chat);
-            }
-        }
-    }
-
-    // =====================================================
-    // SECTION: LID Migration Support
-    // =====================================================
-
-    /**
-     * Registers a LID mapping for a contact.
-     * <p>
-     * This creates bidirectional mappings between phone number JID and LID
-     * to enable lookups in both directions during LID migration.
-     *
-     * @param phoneJid the phone number JID
-     * @param lidJid the LID JID
-     */
-    public void registerLidMapping(Jid phoneJid, Jid lidJid) {
-        if (phoneJid == null || lidJid == null) {
-            return;
-        }
-        var normalizedPhone = phoneJid.withoutData();
-        var normalizedLid = lidJid.withoutData();
-        lidToPhoneMappings.put(normalizedLid, normalizedPhone);
-        phoneToLidMappings.put(normalizedPhone, normalizedLid);
-    }
-
-    /**
-     * Finds the phone number JID for a given LID.
-     *
-     * @param lidJid the LID to look up
-     * @return Optional containing the phone number JID if found
-     */
-    public Optional<Jid> findPhoneByLid(Jid lidJid) {
-        return lidJid == null ? Optional.empty() : Optional.ofNullable(lidToPhoneMappings.get(lidJid.withoutData()));
-    }
-
-    /**
-     * Finds the LID for a given phone number JID.
-     *
-     * @param phoneJid the phone number JID to look up
-     * @return Optional containing the LID if found
-     */
-    public Optional<Jid> findLidByPhone(Jid phoneJid) {
-        if (phoneJid == null) {
-            return Optional.empty();
-        } else {
-            var localJid = jid;
-            if(localJid != null && Objects.equals(phoneJid.user(), localJid.user())) {
-                return Optional.ofNullable(lid)
-                        .map(lid -> lid.withDevice(phoneJid.device()));
-            } else {
-                var result = phoneToLidMappings.get(phoneJid.withoutData());
-                return Optional.ofNullable(result);
-            }
-        }
-    }
-
-    // =====================================================
-    // SECTION: Chat & Message Management
-    // =====================================================
-
-    /**
-     * Finds a chat by its JID.
-     *
-     * @param jid the JID to search for, may be null
-     * @return Optional containing the chat if found, empty otherwise
-     */
-    public Optional<Chat> findChatByJid(JidProvider jid) {
-        return switch (jid) {
-            case null -> Optional.empty();
-            case Chat chat -> Optional.of(chat);
-            case Contact _, Newsletter _, Jid _, JidServer _-> {
-                var targetJid = jid.toJid();
-                if(targetJid.hasUserServer()) {
-                    var jidChat = chats.get(targetJid);
-                    if(jidChat != null) {
-                        yield Optional.of(jidChat);
-                    } else {
-                        yield findLidByPhone(targetJid)
-                                .map(chats::get);
-                    }
-                } else if(targetJid.hasLidServer()) {
-                    var lidChat = chats.get(targetJid);
-                    if(lidChat != null) {
-                        yield Optional.of(lidChat);
-                    } else {
-                        yield findPhoneByLid(targetJid)
-                                .map(chats::get);
-                    }
-                } else {
-                    var chat = chats.get(targetJid);
-                    yield Optional.ofNullable(chat);
-                }
-            }
-        };
-    }
-
-    /**
-     * Queries the first message whose id matches the one provided in the specified chat or newsletter
-     *
-     * @param provider the chat to search in
-     * @param id       the jid to search
-     * @return a non-null optional
-     */
-    public Optional<? extends MessageInfo> findMessageById(JidProvider provider, String id) {
-        return provider == null || id == null ? Optional.empty() : switch (provider) {
-            case Chat chat -> findMessageById(chat, id);
-            case Newsletter newsletter -> findMessageById(newsletter, id);
-            case Contact contact -> findChatByJid(contact.jid())
-                    .flatMap(chat -> findMessageById(chat, id));
-            case Jid contactJid -> {
-                if (contactJid.server().type() == JidServer.Type.NEWSLETTER) {
-                    yield findNewsletterByJid(contactJid)
-                            .flatMap(newsletter -> findMessageById(newsletter, id));
-                } else if (Jid.statusBroadcastAccount().equals(contactJid)) {
-                    yield Optional.ofNullable(status.get(id));
-                } else {
-                    yield findChatByJid(contactJid)
-                            .flatMap(chat -> findMessageById(chat, id));
-                }
-            }
-            case JidServer jidServer -> findChatByJid(jidServer.toJid())
-                    .flatMap(chat -> findMessageById(chat, id));
-        };
-    }
-
-    /**
-     * Queries the first message whose id matches the one provided in the specified newsletter
-     *
-     * @param newsletter newsletter chat to search in
-     * @param id         the jid to search
-     * @return a non-null optional
-     */
-    public Optional<NewsletterMessageInfo> findMessageById(Newsletter newsletter, String id) {
-        return newsletter == null || id == null ? Optional.empty() : newsletter.messages()
-                .parallelStream()
-                .filter(entry -> Objects.equals(id, entry.id()) || Objects.equals(id, String.valueOf(entry.serverId())))
-                .findFirst();
-    }
-
-
-    /**
-     * Queries the first message whose id matches the one provided in the specified chat
-     *
-     * @param chat the chat to search in
-     * @param id   the jid to search
-     * @return a non-null optional
-     */
-    public Optional<ChatMessageInfo> findMessageById(Chat chat, String id) {
-        return chat == null || id == null ? Optional.empty() : chat.messages()
-                .parallelStream()
-                .filter(message -> Objects.equals(message.key().id(), id))
-                .findAny();
-    }
-
-    /**
-     * Returns all chats stored in this session.
-     *
-     * @return immutable collection of all chats
-     */
-    public Collection<Chat> chats() {
-        return Collections.unmodifiableCollection(chats.values());
-    }
-
-    /**
-     * Adds or updates a chat in the store.
-     * <p>
-     * If a chat with the same JID already exists, it will be replaced.
-     *
-     * @param chat the chat to add or update, must not be null
-     * @return the chat that was added (same as parameter)
-     * @throws NullPointerException if chat is null
-     */
-    public Chat addChat(Chat chat) {
-        Objects.requireNonNull(chat, "chat cannot be null");
-        chats.put(chat.jid(), chat);
-        return chat;
-    }
-
-    /**
-     * Adds a chat in memory
-     *
-     * @param chatJid the chat to add
-     * @return the input chat
-     * @throws NullPointerException if chatJid is null
-     */
-    public Chat addNewChat(Jid chatJid) {
-        Objects.requireNonNull(chatJid, "chatJid cannot be null");
-        var chat = new ChatBuilder()
-                .jid(chatJid)
-                .build();
-        addChat(chat);
-        return chat;
-    }
-
-    /**
-     * Removes a chat from the store.
-     *
-     * @param chatJid the JID of the chat to remove, may be null
-     * @return Optional containing the removed chat if it existed, empty otherwise
-     */
-    public Optional<Chat> removeChat(JidProvider chatJid) {
-        if(chatJid == null) {
-            return Optional.empty();
-        } else {
-            var targetJid = jid.toJid();
-            if(targetJid.hasUserServer()) {
-                var jidChat = chats.remove(targetJid);
-                if(jidChat != null) {
-                    return Optional.of(jidChat);
-                } else {
-                    return findLidByPhone(targetJid)
-                            .map(chats::remove);
-                }
-            } else if(targetJid.hasLidServer()) {
-                var lidChat = chats.remove(targetJid);
-                if(lidChat != null) {
-                    return Optional.of(lidChat);
-                } else {
-                    return findPhoneByLid(targetJid)
-                            .map(chats::remove);
-                }
-            } else {
-                var chat = chats.remove(targetJid);
-                return Optional.ofNullable(chat);
-            }
-        }
-    }
-
-    public ChatMessageInfo addStatus(ChatMessageInfo messageInfo) {
-        Objects.requireNonNull(messageInfo, "messageInfo cannot be null");
-        status.put(messageInfo.key().id(), messageInfo);
-        return messageInfo;
-    }
-
-    public Optional<ChatMessageInfo> removeStatus(String id) {
-        return Optional.ofNullable(status.remove(id));
-    }
-
-    // =====================================================
-    // SECTION: Call Management
-    // =====================================================
-
-    public Optional<Call> findCallById(String callId) {
-        return callId == null
-                ? Optional.empty()
-                : Optional.ofNullable(calls.get(callId));
-    }
-
-    /**
-     * Adds a new call to the store.
-     * <p>
-     * If a call with the same id already exists, it will be replaced.
-     *
-     * @param call the call to add or update, must not be null
-     * @return the call that was added (same as parameter)
-     * @throws NullPointerException if call is null
-     */
-    public Call addCall(Call call) {
-        Objects.requireNonNull(call, "call cannot be null");
-        calls.put(call.id(), call);
-        return call;
-    }
-
-    /**
-     * Removes a call from the store.
-     *
-     * @param id the id of the call to remove, may be null
-     * @return an {@code Optional} containing the removed call if it existed, otherwise an empty {@code Optional}
-     */
-    public Optional<Call> removeCall(String id) {
-        return id == null
-                ? Optional.empty()
-                : Optional.ofNullable(calls.remove(id));
-    }
-
-    // =====================================================
-    // SECTION: Newsletter Management
-    // =====================================================
-
-    /**
-     * Finds a newsletter by its JID.
-     *
-     * @param jid the JID to search for, may be null
-     * @return Optional containing the newsletter if found, empty otherwise
-     */
-    public Optional<Newsletter> findNewsletterByJid(JidProvider jid) {
-        return jid == null
-                ? Optional.empty()
-                : Optional.ofNullable(newsletters.get(jid.toJid()));
-    }
-
-    /**
-     * Returns all newsletters stored in this session.
-     *
-     * @return immutable collection of all newsletters
-     */
-    public Collection<Newsletter> newsletters() {
-        return Collections.unmodifiableCollection(newsletters.values());
-    }
-
-    /**
-     * Adds or updates a newsletter in the store.
-     *
-     * @param newsletter the newsletter to add or update, must not be null
-     * @return the newsletter that was added (same as parameter)
-     * @throws NullPointerException if newsletter is null
-     */
-    public Newsletter addNewsletter(Newsletter newsletter) {
-        newsletters.put(newsletter.jid(), newsletter);
-        return newsletter;
-    }
-
-    /**
-     * Adds a newsletter in memory
-     *
-     * @param newsletterJid the newsletter to add
-     * @return the input newsletter
-     * @throws NullPointerException if newsletterJid is null
-     */
-    public Newsletter addNewNewsletter(Jid newsletterJid) {
-        Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
-        var newsletter = new NewsletterBuilder()
-                .jid(newsletterJid)
-                .build();
-        addNewsletter(newsletter);
-        return newsletter;
-    }
-
-    /**
-     * Removes a newsletter from the store.
-     *
-     * @param newsletterJid the JID of the newsletter to remove, may be null
-     * @return Optional containing the removed newsletter if it existed, empty otherwise
-     */
-    public Optional<Newsletter> removeNewsletter(JidProvider newsletterJid) {
-        return newsletterJid == null
-                ? Optional.empty()
-                : Optional.ofNullable(newsletters.remove(newsletterJid.toJid()));
-    }
-
-    // =====================================================
-    // SECTION: Accessors & Mutators
-    // =====================================================
+    void delete() throws IOException;
 
     /**
      * Returns the unique identifier for this store instance.
      *
-     * @return the UUID, never null
+     * @return the UUID, never {@code null}
      */
-    public UUID uuid() {
-        return uuid;
-    }
-
-    /**
-     * Returns the phone number associated with this account.
-     *
-     * @return Optional containing the phone number in international format, empty if not set
-     */
-    public OptionalLong phoneNumber() {
-        return phoneNumber == null ? OptionalLong.empty() : OptionalLong.of(phoneNumber);
-    }
-
-    /**
-     * Sets the phone number for this account.
-     *
-     * @param phoneNumber the phone number in international format, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setPhoneNumber(Long phoneNumber) {
-        this.phoneNumber = phoneNumber;
-        return this;
-    }
+    UUID uuid();
 
     /**
      * Returns the client type for this session.
      *
-     * @return the client type, never null
+     * @return the client type, never {@code null}
      */
-    public WhatsAppClientType clientType() {
-        return clientType;
-    }
+    WhatsAppClientType clientType();
 
     /**
-     * Returns the proxy URI if configured.
+     * Returns the Unix timestamp (seconds) when this store was created.
      *
-     * @return Optional containing the proxy URI, empty if not configured
+     * @return the initialization timestamp in seconds since epoch, never {@code null}
      */
-    public Optional<WhatsAppClientProxy> proxy() {
-        return Optional.ofNullable(proxy);
-    }
-
-    /**
-     * Sets the proxy URI for network connections.
-     *
-     * @param proxy the proxy URI, may be null to disable proxy
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setProxy(WhatsAppClientProxy proxy) {
-        this.proxy = proxy;
-        return this;
-    }
-
-    /**
-     * Returns the device information.
-     *
-     * @return the device info,cannot be null
-     */
-    public JidCompanion device() {
-        return device;
-    }
-
-    /**
-     * Sets the device information.
-     *
-     * @param device the device info, cannot be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setDevice(JidCompanion device) {
-        this.device = Objects.requireNonNull(device, "device cannot be null");
-        return this;
-    }
-
-    /**
-     * Returns the release channel.
-     *
-     * @return the release channel, cannot be null
-     */
-    public ReleaseChannel releaseChannel() {
-        return releaseChannel;
-    }
-
-    /**
-     * Sets the release channel.
-     *
-     * @param releaseChannel the release channel, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setReleaseChannel(ReleaseChannel releaseChannel) {
-        this.releaseChannel = Objects.requireNonNull(releaseChannel, "releaseChannel cannot be null");
-        return this;
-    }
-
-    /**
-     * Returns whether this account appears online.
-     *
-     * @return true if online, false otherwise
-     */
-    public boolean online() {
-        return online;
-    }
-
-    /**
-     * Sets whether this account appears online.
-     *
-     * @param online true to appear online, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setOnline(boolean online) {
-        this.online = online;
-        return this;
-    }
-
-    /**
-     * Returns the locale code.
-     *
-     * @return Optional containing the locale, empty if not set
-     */
-    public Optional<String> locale() {
-        return Optional.ofNullable(locale);
-    }
-
-    /**
-     * Sets the locale code.
-     *
-     * @param locale the locale in format "language_COUNTRY", may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setLocale(String locale) {
-        this.locale = locale;
-        return this;
-    }
-
-    /**
-     * Returns the display name.
-     *
-     * @return Optional containing the name, empty if not yet set or before login
-     */
-    public String name() {
-        return Objects.requireNonNullElse(name, DEFAULT_NAME);
-    }
-
-    /**
-     * Sets the display name.
-     *
-     * @param name the display name, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setName(String name) {
-        this.name = name;
-        return this;
-    }
-
-    /**
-     * Returns the verified business name.
-     *
-     * @return Optional containing the verified name, empty for non-business accounts
-     */
-    public Optional<String> verifiedName() {
-        return Optional.ofNullable(verifiedName);
-    }
-
-    /**
-     * Sets the verified business name.
-     *
-     * @param verifiedName the verified name, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setVerifiedName(String verifiedName) {
-        this.verifiedName = verifiedName;
-        return this;
-    }
-
-    /**
-     * Returns the profile picture URI.
-     *
-     * @return Optional containing the profile picture URI, empty if not set
-     */
-    public Optional<URI> profilePicture() {
-        return Optional.ofNullable(profilePicture);
-    }
-
-    /**
-     * Sets the profile picture URI.
-     *
-     * @param profilePicture the profile picture URI, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setProfilePicture(URI profilePicture) {
-        this.profilePicture = profilePicture;
-        return this;
-    }
-
-    /**
-     * Returns the about text.
-     *
-     * @return Optional containing the about text, empty if not set
-     */
-    public Optional<String> about() {
-        return Optional.ofNullable(about);
-    }
-
-    /**
-     * Sets the about text.
-     *
-     * @param about the about text, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setAbout(String about) {
-        this.about = about;
-        return this;
-    }
-
-    /**
-     * Returns the WhatsApp JID.
-     *
-     * @return Optional containing the JID, empty before authentication completes
-     */
-    public Optional<Jid> jid() {
-        return Optional.ofNullable(jid);
-    }
-
-    /**
-     * Sets the WhatsApp JID.
-     *
-     * @param jid the JID, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setJid(Jid jid) {
-        this.jid = jid;
-        return this;
-    }
-
-    /**
-     * Returns the LID.
-     *
-     * @return Optional containing the LID, empty if not set
-     */
-    public Optional<Jid> lid() {
-        return Optional.ofNullable(lid);
-    }
-
-    /**
-     * Sets the LID.
-     *
-     * @param lid the LID, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setLid(Jid lid) {
-        this.lid = lid;
-        return this;
-    }
-
-    /**
-     * Returns the business address.
-     *
-     * @return Optional containing the business address, empty for non-business accounts
-     */
-    public Optional<String> businessAddress() {
-        return Optional.ofNullable(businessAddress);
-    }
-
-    /**
-     * Sets the business address.
-     *
-     * @param businessAddress the business address, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessAddress(String businessAddress) {
-        this.businessAddress = businessAddress;
-        return this;
-    }
-
-    /**
-     * Returns the business longitude.
-     *
-     * @return Optional containing the longitude, empty for non-business accounts
-     */
-    public OptionalDouble businessLongitude() {
-        return businessLongitude == null ? OptionalDouble.empty() : OptionalDouble.of(businessLongitude);
-    }
-
-    /**
-     * Sets the business longitude.
-     *
-     * @param businessLongitude the longitude (-180.0 to 180.0), may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessLongitude(Double businessLongitude) {
-        this.businessLongitude = businessLongitude;
-        return this;
-    }
-
-    /**
-     * Returns the business latitude.
-     *
-     * @return Optional containing the latitude, empty for non-business accounts
-     */
-    public OptionalDouble businessLatitude() {
-        return businessLatitude == null ? OptionalDouble.empty() : OptionalDouble.of(businessLatitude);
-    }
-
-    /**
-     * Sets the business latitude.
-     *
-     * @param businessLatitude the latitude (-90.0 to 90.0), may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessLatitude(Double businessLatitude) {
-        this.businessLatitude = businessLatitude;
-        return this;
-    }
-
-    /**
-     * Returns the business description
-     *
-     * @return Optional containing the description, empty for non-business accounts
-     */
-    public Optional<String> businessDescription() {
-        return Optional.ofNullable(businessDescription);
-    }
-
-    /**
-     * Sets the business description.
-     *
-     * @param businessDescription the description, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessDescription(String businessDescription) {
-        this.businessDescription = businessDescription;
-        return this;
-    }
-
-    /**
-     * Returns the business website.
-     *
-     * @return Optional containing the website URL, empty for non-business accounts
-     */
-    public Optional<String> businessWebsite() {
-        return Optional.ofNullable(businessWebsite);
-    }
-
-    /**
-     * Sets the business website.
-     *
-     * @param businessWebsite the website URL, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessWebsite(String businessWebsite) {
-        this.businessWebsite = businessWebsite;
-        return this;
-    }
-
-    /**
-     * Returns the business email.
-     *
-     * @return Optional containing the email, empty for non-business accounts
-     */
-    public Optional<String> businessEmail() {
-        return Optional.ofNullable(businessEmail);
-    }
-
-    /**
-     * Sets the business email.
-     *
-     * @param businessEmail the email, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessEmail(String businessEmail) {
-        this.businessEmail = businessEmail;
-        return this;
-    }
-
-    /**
-     * Returns the business category.
-     *
-     * @return Optional containing the category, empty for non-business accounts
-     */
-    public Optional<BusinessCategory> businessCategory() {
-        return Optional.ofNullable(businessCategory);
-    }
-
-    /**
-     * Sets the business category.
-     *
-     * @param businessCategory the category, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setBusinessCategory(BusinessCategory businessCategory) {
-        this.businessCategory = businessCategory;
-        return this;
-    }
-
-    /**
-     * Returns the session properties.
-     *
-     * @return immutable map of properties, never null
-     */
-    public Map<String, String> properties() {
-        return Collections.unmodifiableMap(properties);
-    }
-
-    /**
-     * Returns all status updates.
-     *
-     * @return immutable collection of status updates, never null
-     */
-    public Collection<ChatMessageInfo> status() {
-        return Collections.unmodifiableCollection(status.values());
-    }
-
-    /**
-     * Returns all calls.
-     *
-     * @return immutable collection of calls, never null
-     */
-    public Collection<Call> calls() {
-        return Collections.unmodifiableCollection(calls.values());
-    }
-
-    /**
-     * Returns the privacy settings.
-     *
-     * @return immutable privacy settings, never null
-     */
-    public Collection<PrivacySettingEntry> privacySettings() {
-        return Collections.unmodifiableCollection(privacySettings.values());
-    }
-
-    /**
-     * Returns whether chats unarchive automatically.
-     *
-     * @return true if chats unarchive on new messages, false otherwise
-     */
-    public boolean unarchiveChats() {
-        return unarchiveChats;
-    }
-
-    /**
-     * Sets whether chats unarchive automatically.
-     *
-     * @param unarchiveChats true to enable automatic unarchiving, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setUnarchiveChats(boolean unarchiveChats) {
-        this.unarchiveChats = unarchiveChats;
-        return this;
-    }
-
-    /**
-     * Returns whether 24-hour time format is used.
-     *
-     * @return true if using 24-hour format, false for 12-hour format
-     */
-    public boolean twentyFourHourFormat() {
-        return twentyFourHourFormat;
-    }
-
-    /**
-     * Sets whether to use 24-hour time format.
-     *
-     * @param twentyFourHourFormat true for 24-hour format, false for 12-hour format
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setTwentyFourHourFormat(boolean twentyFourHourFormat) {
-        this.twentyFourHourFormat = twentyFourHourFormat;
-        return this;
-    }
-
-    /**
-     * Returns the initialization timestamp.
-     *
-     * @return the timestamp in seconds since Unix epoch
-     */
-    public long initializationTimeStamp() {
-        return initializationTimeStamp;
-    }
-
-    /**
-     * Returns the default ephemeral timer for new chats.
-     *
-     * @return the ephemeral timer, never null
-     */
-    public ChatEphemeralTimer newChatsEphemeralTimer() {
-        return newChatsEphemeralTimer;
-    }
-
-    /**
-     * Sets the default ephemeral timer for new chats.
-     *
-     * @param newChatsEphemeralTimer the ephemeral timer, never null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setNewChatsEphemeralTimer(ChatEphemeralTimer newChatsEphemeralTimer) {
-        this.newChatsEphemeralTimer = Objects.requireNonNull(newChatsEphemeralTimer, "newChatsEphemeralTimer cannot be null");
-        return this;
-    }
-
-    /**
-     * Returns the history sync policy.
-     *
-     * @return Optional containing the history policy, empty if not configured
-     */
-    public Optional<WhatsAppWebClientHistory> webHistoryPolicy() {
-        return Optional.ofNullable(webHistoryPolicy);
-    }
-
-    /**
-     * Sets the history sync policy.
-     *
-     * @param webHistoryPolicy the history policy, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setWebHistoryPolicy(WhatsAppWebClientHistory webHistoryPolicy) {
-        this.webHistoryPolicy = webHistoryPolicy;
-        return this;
-    }
-
-    /**
-     * Returns whether automatic presence updates are enabled.
-     *
-     * @return true if enabled, false otherwise
-     */
-    public boolean automaticPresenceUpdates() {
-        return automaticPresenceUpdates;
-    }
-
-    /**
-     * Sets whether to send automatic presence updates.
-     *
-     * @param automaticPresenceUpdates true to enable, false to disable
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setAutomaticPresenceUpdates(boolean automaticPresenceUpdates) {
-        this.automaticPresenceUpdates = automaticPresenceUpdates;
-        return this;
-    }
-
-    /**
-     * Returns whether automatic message receipts are enabled.
-     *
-     * @return true if enabled, false otherwise
-     */
-    public boolean automaticMessageReceipts() {
-        return automaticMessageReceipts;
-    }
-
-    /**
-     * Sets whether to send automatic message receipts.
-     *
-     * @param automaticMessageReceipts true to enable, false to disable
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setAutomaticMessageReceipts(boolean automaticMessageReceipts) {
-        this.automaticMessageReceipts = automaticMessageReceipts;
-        return this;
-    }
-
-    /**
-     * Returns whether patch MAC verification is enabled.
-     *
-     * @return true if enabled, false otherwise
-     */
-    public boolean checkPatchMacs() {
-        return checkPatchMacs;
-    }
-
-    /**
-     * Sets whether to verify patch MACs.
-     *
-     * @param checkPatchMacs true to enable verification, false to disable
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setCheckPatchMacs(boolean checkPatchMacs) {
-        this.checkPatchMacs = checkPatchMacs;
-        return this;
-    }
-
-    /**
-     * Returns whether chats have been synchronized.
-     *
-     * @return true if synchronized, false otherwise
-     */
-    public boolean syncedChats() {
-        return syncedChats;
-    }
-
-    /**
-     * Sets whether chats have been synchronized.
-     *
-     * @param syncedChats true if synchronized, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSyncedChats(boolean syncedChats) {
-        this.syncedChats = syncedChats;
-        return this;
-    }
-
-    /**
-     * Returns whether contacts have been synchronized.
-     *
-     * @return true if synchronized, false otherwise
-     */
-    public boolean syncedContacts() {
-        return syncedContacts;
-    }
-
-    /**
-     * Sets whether contacts have been synchronized.
-     *
-     * @param syncedContacts true if synchronized, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSyncedContacts(boolean syncedContacts) {
-        this.syncedContacts = syncedContacts;
-        return this;
-    }
-
-    /**
-     * Returns whether newsletters have been synchronized.
-     *
-     * @return true if synchronized, false otherwise
-     */
-    public boolean syncedNewsletters() {
-        return syncedNewsletters;
-    }
-
-    /**
-     * Sets whether newsletters have been synchronized.
-     *
-     * @param syncedNewsletters true if synchronized, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSyncedNewsletters(boolean syncedNewsletters) {
-        this.syncedNewsletters = syncedNewsletters;
-        return this;
-    }
-
-    /**
-     * Returns whether status updates have been synchronized.
-     *
-     * @return true if synchronized, false otherwise
-     */
-    public boolean syncedStatus() {
-        return syncedStatus;
-    }
-
-    /**
-     * Sets whether status updates have been synchronized.
-     *
-     * @param syncedStatus true if synchronized, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSyncedStatus(boolean syncedStatus) {
-        this.syncedStatus = syncedStatus;
-        return this;
-    }
-
-    /**
-     * Returns whether web app state has been synchronized.
-     *
-     * @return true if synchronized, false otherwise
-     */
-    public boolean syncedWebAppState() {
-        return syncedWebAppState;
-    }
-
-    /**
-     * Sets whether web app state has been synchronized.
-     *
-     * @param syncedWebAppState true if synchronized, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSyncedWebAppState(boolean syncedWebAppState) {
-        this.syncedWebAppState = syncedWebAppState;
-        return this;
-    }
-
-    /**
-     * Returns whether business certificate has been synchronized. (Mobile API only)
-     *
-     * @return true if synchronized, false otherwise
-     */
-    public boolean syncedBusinessCertificate() {
-        return this.syncedBusinessCertificate;
-    }
-    /**
-     * Sets whether business certificate has been synchronized. (Mobile API only)
-     *
-     * @param syncedBusinessCertificate true if synchronized, false otherwise
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSyncedBusinessCertificate(boolean syncedBusinessCertificate) {
-        this.syncedBusinessCertificate = syncedBusinessCertificate;
-        return this;
-    }
-
-    public WhatsAppClientListener addListener(WhatsAppClientListener listener) {
-        listeners.add(listener);
-        return listener;
-    }
-
-    public boolean removeListener(WhatsAppClientListener listener) {
-        return listeners.remove(listener);
-    }
-
-    /**
-     * Returns the event listeners.
-     *
-     * @return immutable collection of event listeners, never null
-     */
-    public Collection<WhatsAppClientListener> listeners() {
-        return Collections.unmodifiableCollection(listeners);
-    }
-
-
-    public MediaConnection waitForMediaConnection() throws InterruptedException {
-        if(mediaConnection == null) {
-            synchronized (mediaConnectionLock) {
-                if(mediaConnection == null) {
-                    mediaConnectionLock.wait();
-                }
-            }
-        }
-        return mediaConnection;
-    }
-
-    /**
-     * Sets the media connection.
-     *
-     * @param mediaConnection the media connection, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setMediaConnection(MediaConnection mediaConnection) {
-        this.mediaConnection = mediaConnection;
-        synchronized (mediaConnectionLock) {
-            this.mediaConnectionLock.notifyAll();
-        }
-        return this;
-    }
-
-    /**
-     * Returns the current offline resume state.
-     *
-     * @return the current offline resume state, never null
-     */
-    public WhatsAppClientOfflineResumeState offlineResumeState() {
-        return offlineResumeState;
-    }
-
-    /**
-     * Sets the offline resume state.
-     *
-     * @param state the new state, must not be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setOfflineResumeState(WhatsAppClientOfflineResumeState state) {
-        this.offlineResumeState = Objects.requireNonNull(state, "state cannot be null");
-        if (state == WhatsAppClientOfflineResumeState.COMPLETE) {
-            offlineDeliveryLatch.countDown();
-        } else if (state == WhatsAppClientOfflineResumeState.INIT) {
-            // Reset latch on reconnect
-            offlineDeliveryLatch = new CountDownLatch(1);
-        }
-        return this;
-    }
-
-    /**
-     * Checks if the offline resume from restart is complete.
-     * <p>
-     * Per WhatsApp Web WAWebBlockingOfflineResumeManager.isResumeFromRestartComplete():
-     * Returns true when the state is neither INIT nor RESUME_ON_RESTART.
-     * <p>
-     * This is used to determine whether operations like immediate device syncs
-     * should be triggered (true) or deferred to a pending queue (false).
-     *
-     * @return true if offline resume from restart is complete, false otherwise
-     */
-    /**
-     * Blocks until offline delivery is complete, or the timeout expires.
-     *
-     * @apiNote WAWebEventsWaitForOfflineDeliveryEnd.waitForOfflineDeliveryEnd:
-     * waits for the {@code offline_delivery_end} event with a 5-minute
-     * timeout before allowing outgoing messages.
-     */
-    public void waitForOfflineDeliveryEnd() {
-        if (offlineResumeState == WhatsAppClientOfflineResumeState.COMPLETE) {
-            return;
-        }
-        try {
-            offlineDeliveryLatch.await(5, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    public boolean isResumeFromRestartComplete() {
-        return offlineResumeState != WhatsAppClientOfflineResumeState.INIT
-                && offlineResumeState != WhatsAppClientOfflineResumeState.RESUME_ON_RESTART;
-    }
-
-    /**
-     * Returns the companion identity.
-     *
-     * @return Optional containing the companion identity, empty if not set
-     */
-    public Optional<SignedDeviceIdentity> signedDeviceIdentity() {
-        return Optional.ofNullable(signedDeviceIdentity);
-    }
-
-    /**
-     * Sets the companion identity.
-     *
-     * @param signedDeviceIdentity the companion identity, may be null
-     * @return this store instance for method chaining
-     */
-    public WhatsAppStore setSignedDeviceIdentity(SignedDeviceIdentity signedDeviceIdentity) {
-        this.signedDeviceIdentity = signedDeviceIdentity;
-        return this;
-    }
-
-    /**
-     * Returns the signed key pair.
-     *
-     * @return the signed key pair, never null
-     */
-    public SignalSignedKeyPair signedKeyPair() {
-        return signedKeyPair;
-    }
-
-    /**
-     * Returns the FDID.
-     *
-     * @return the FDID, never null
-     */
-    public UUID fdid() {
-        return fdid;
-    }
-
-    /**
-     * Returns the device ID.
-     *
-     * @return the device ID, never null
-     */
-    public byte[] deviceId() {
-        return deviceId;
-    }
-
-    /**
-     * Returns the advertising ID.
-     *
-     * @return the advertising ID, never null
-     */
-    public UUID advertisingId() {
-        return advertisingId;
-    }
-
-    /**
-     * Returns the identity ID.
-     *
-     * @return the identity ID, never null
-     */
-    public byte[] identityId() {
-        return identityId;
-    }
-
-    /**
-     * Returns the backup token.
-     *
-     * @return the backup token, never null
-     */
-    public byte[] backupToken() {
-        return backupToken;
-    }
+    Instant initializationTimeStamp();
 
     /**
      * Returns the Signal protocol registration ID.
      *
      * @return the registration ID, a value between 1 and 16380
      */
-    public int registrationId() {
-        return this.registrationId;
-    }
+    int registrationId();
 
     /**
-     * Returns the Noise protocol key pair.
+     * Returns the Noise protocol key pair for secure channel establishment.
      *
-     * @return the non-null noise key pair used for secure channel establishment
+     * @return the noise key pair, never {@code null}
      */
-    public SignalIdentityKeyPair noiseKeyPair() {
-        return this.noiseKeyPair;
-    }
+    SignalIdentityKeyPair noiseKeyPair();
 
     /**
-     * Returns the Signal protocol identity key pair.
+     * Returns the Signal protocol identity key pair for end-to-end encryption.
      *
-     * @return the non-null identity key pair used for end-to-end encryption
+     * @return the identity key pair, never {@code null}
      */
-    public SignalIdentityKeyPair identityKeyPair() {
-        return this.identityKeyPair;
-    }
-    
-    /**
-     * Returns the companion device key pair.
-     *
-     * @return Optional containing the companion device key pair, empty if not set
-     */
-    public Optional<SignalIdentityKeyPair> companionKeyPair() {
-        return Optional.ofNullable(companionKeyPair);
-    }
+    SignalIdentityKeyPair identityKeyPair();
 
     /**
-     * Sets the companion device key pair.
-     * <p>
-     * This is typically called during the pairing process when establishing a
-     * Web/Desktop client connection to a mobile device.
+     * Returns the currently active signed pre-key pair.
      *
-     * @param companionKeyPair the new companion key pair, must not be null
+     * @return the signed key pair, never {@code null}
      */
-    public void setCompanionKeyPair(SignalIdentityKeyPair companionKeyPair) {
-        this.companionKeyPair = companionKeyPair;
-    }
+    SignalSignedKeyPair signedKeyPair();
+
+    /**
+     * Returns the FDID used during mobile registration.
+     *
+     * @return the FDID, never {@code null}
+     */
+    UUID fdid();
+
+    /**
+     * Returns the unique device identifier for mobile clients.
+     *
+     * @return the device ID bytes, never {@code null}
+     */
+    byte[] deviceId();
+
+    /**
+     * Returns the advertising identifier for mobile analytics.
+     *
+     * @return the advertising ID, never {@code null}
+     */
+    UUID advertisingId();
+
+    /**
+     * Returns the unique identity identifier for this installation.
+     *
+     * @return the identity ID bytes, never {@code null}
+     */
+    byte[] identityId();
+
+    /**
+     * Returns the backup/recovery token for mobile clients.
+     *
+     * @return the backup token bytes, never {@code null}
+     */
+    byte[] backupToken();
+
+    /**
+     * Returns the phone number associated with this WhatsApp account.
+     *
+     * <p>The phone number is in international format without the {@code +} prefix
+     * (e.g., {@code 1234567890} for +1-234-567-890). It may not be present during
+     * initial Web client setup before QR code authentication completes.
+     *
+     * @return an {@code OptionalLong} containing the phone number, or an empty
+     *         {@code OptionalLong} if not yet set
+     */
+    OptionalLong phoneNumber();
+
+    /**
+     * Sets the phone number for this account.
+     *
+     * @param phoneNumber the phone number in international format, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setPhoneNumber(Long phoneNumber);
+
+    /**
+     * Returns the device information identifying this client.
+     *
+     * @return the device info, never {@code null}
+     */
+    JidDevice device();
+
+    /**
+     * Sets the device information.
+     *
+     * @param device the device info, must not be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setDevice(JidDevice device);
+
+    /**
+     * Returns the release channel for this connection.
+     *
+     * @return the release channel, never {@code null}
+     */
+    ReleaseChannel releaseChannel();
+
+    /**
+     * Sets the release channel.
+     *
+     * @param releaseChannel the release channel, must not be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setReleaseChannel(ReleaseChannel releaseChannel);
+
+    /**
+     * Returns whether this account appears online to other users.
+     *
+     * @return {@code true} if online, {@code false} otherwise
+     */
+    boolean online();
+
+    /**
+     * Sets whether this account appears online.
+     *
+     * @param online {@code true} to appear online, {@code false} otherwise
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setOnline(boolean online);
+
+    /**
+     * Returns the locale/language code for this account.
+     *
+     * @return an {@code Optional} containing the locale, or empty if not set
+     */
+    Optional<String> locale();
+
+    /**
+     * Sets the locale code.
+     *
+     * @param locale the locale in format "language_COUNTRY", may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setLocale(String locale);
+
+    /**
+     * Returns the display name shown to other WhatsApp users.
+     *
+     * @return the name, defaults to "User" if not set
+     */
+    String name();
+
+    /**
+     * Sets the display name.
+     *
+     * @param name the display name, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setName(String name);
+
+    /**
+     * Returns the verified business name for verified business accounts.
+     *
+     * @return an {@code Optional} containing the verified name, or empty for
+     *         non-business accounts
+     */
+    Optional<String> verifiedName();
+
+    /**
+     * Sets the verified business name.
+     *
+     * @param verifiedName the verified name, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setVerifiedName(String verifiedName);
+
+    /**
+     * Returns the URL of this account's profile picture.
+     *
+     * @return an {@code Optional} containing the profile picture URI, or empty
+     *         if not set
+     */
+    Optional<URI> profilePicture();
+
+    /**
+     * Sets the profile picture URI.
+     *
+     * @param profilePicture the profile picture URI, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setProfilePicture(URI profilePicture);
+
+    /**
+     * Returns the personal status message (about text) displayed on profile.
+     *
+     * @return an {@code Optional} containing the about text, or empty if not set
+     */
+    Optional<String> about();
+
+    /**
+     * Sets the about text.
+     *
+     * @param about the about text, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbout(String about);
+
+    /**
+     * Returns the WhatsApp JID uniquely identifying this user.
+     *
+     * @return an {@code Optional} containing the JID, or empty before
+     *         authentication completes
+     */
+    Optional<Jid> jid();
+
+    /**
+     * Sets the WhatsApp JID.
+     *
+     * @param jid the JID, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setJid(Jid jid);
+
+    /**
+     * Returns the LID used when real phone number is not advertised.
+     *
+     * @return an {@code Optional} containing the LID, or empty if not set
+     */
+    Optional<Jid> lid();
+
+    /**
+     * Sets the LID.
+     *
+     * @param lid the LID, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setLid(Jid lid);
+
+    /**
+     * Returns the physical address of the business.
+     *
+     * @return an {@code Optional} containing the address, or empty for
+     *         non-business accounts
+     */
+    Optional<String> businessAddress();
+
+    /**
+     * Sets the business address.
+     *
+     * @param businessAddress the business address, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessAddress(String businessAddress);
+
+    /**
+     * Returns the geographic longitude of the business location.
+     *
+     * @return an {@code OptionalDouble} containing the longitude, or empty for
+     *         non-business accounts
+     */
+    OptionalDouble businessLongitude();
+
+    /**
+     * Sets the business longitude.
+     *
+     * @param businessLongitude the longitude (-180.0 to 180.0), may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessLongitude(Double businessLongitude);
+
+    /**
+     * Returns the geographic latitude of the business location.
+     *
+     * @return an {@code OptionalDouble} containing the latitude, or empty for
+     *         non-business accounts
+     */
+    OptionalDouble businessLatitude();
+
+    /**
+     * Sets the business latitude.
+     *
+     * @param businessLatitude the latitude (-90.0 to 90.0), may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessLatitude(Double businessLatitude);
+
+    /**
+     * Returns the business description.
+     *
+     * @return an {@code Optional} containing the description, or empty for
+     *         non-business accounts
+     */
+    Optional<String> businessDescription();
+
+    /**
+     * Sets the business description.
+     *
+     * @param businessDescription the description, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessDescription(String businessDescription);
+
+    /**
+     * Returns the business website URL.
+     *
+     * @return an {@code Optional} containing the website URL, or empty for
+     *         non-business accounts
+     */
+    Optional<String> businessWebsite();
+
+    /**
+     * Sets the business website.
+     *
+     * @param businessWebsite the website URL, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessWebsite(String businessWebsite);
+
+    /**
+     * Returns the business email address.
+     *
+     * @return an {@code Optional} containing the email, or empty for
+     *         non-business accounts
+     */
+    Optional<String> businessEmail();
+
+    /**
+     * Sets the business email.
+     *
+     * @param businessEmail the email, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessEmail(String businessEmail);
+
+    /**
+     * Returns the business category classification.
+     *
+     * @return an {@code Optional} containing the category, or empty for
+     *         non-business accounts
+     */
+    Optional<BusinessCategory> businessCategory();
+
+    /**
+     * Sets the business category.
+     *
+     * @param businessCategory the category, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBusinessCategory(BusinessCategory businessCategory);
+
+    /**
+     * Returns whether archived chats automatically unarchive on new messages.
+     *
+     * @return {@code true} if chats unarchive automatically
+     */
+    boolean unarchiveChats();
+
+    /**
+     * Sets whether chats unarchive automatically.
+     *
+     * @param unarchiveChats {@code true} to enable automatic unarchiving
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setUnarchiveChats(boolean unarchiveChats);
+
+    /**
+     * Returns whether 24-hour time format is used.
+     *
+     * @return {@code true} if using 24-hour format
+     */
+    boolean twentyFourHourFormat();
+
+    /**
+     * Sets whether to use 24-hour time format.
+     *
+     * @param twentyFourHourFormat {@code true} for 24-hour format
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setTwentyFourHourFormat(boolean twentyFourHourFormat);
+
+    /**
+     * Returns the default ephemeral timer for new chats.
+     *
+     * @return the ephemeral timer, never {@code null}
+     */
+    ChatEphemeralTimer newChatsEphemeralTimer();
+
+    /**
+     * Sets the default ephemeral timer for new chats.
+     *
+     * @param timer the ephemeral timer, must not be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setNewChatsEphemeralTimer(ChatEphemeralTimer timer);
+
+    /**
+     * Returns the history sync policy for Web clients.
+     *
+     * @return an {@code Optional} containing the history policy, or empty
+     *         if not configured
+     */
+    Optional<WhatsAppWebClientHistory> webHistoryPolicy();
+
+    /**
+     * Sets the history sync policy.
+     *
+     * @param policy the history policy, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setWebHistoryPolicy(WhatsAppWebClientHistory policy);
+
+    /**
+     * Returns whether automatic presence updates are enabled.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean automaticPresenceUpdates();
+
+    /**
+     * Sets whether to send automatic presence updates.
+     *
+     * @param enabled {@code true} to enable
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAutomaticPresenceUpdates(boolean enabled);
+
+    /**
+     * Returns whether automatic message receipts are enabled.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean automaticMessageReceipts();
+
+    /**
+     * Sets whether to send automatic message receipts.
+     *
+     * @param enabled {@code true} to enable
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAutomaticMessageReceipts(boolean enabled);
+
+    /**
+     * Returns whether patch MAC verification is enabled.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean checkPatchMacs();
+
+    /**
+     * Sets whether to verify patch MACs.
+     *
+     * @param enabled {@code true} to enable verification
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setCheckPatchMacs(boolean enabled);
+
+    /**
+     * Returns whether chat data has been synchronized from the server.
+     *
+     * @return {@code true} if synchronized
+     */
+    boolean syncedChats();
+
+    /**
+     * Sets whether chats have been synchronized.
+     *
+     * @param synced {@code true} if synchronized
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSyncedChats(boolean synced);
+
+    /**
+     * Returns whether contact data has been synchronized from the server.
+     *
+     * @return {@code true} if synchronized
+     */
+    boolean syncedContacts();
+
+    /**
+     * Sets whether contacts have been synchronized.
+     *
+     * @param synced {@code true} if synchronized
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSyncedContacts(boolean synced);
+
+    /**
+     * Returns whether newsletter data has been synchronized from the server.
+     *
+     * @return {@code true} if synchronized
+     */
+    boolean syncedNewsletters();
+
+    /**
+     * Sets whether newsletters have been synchronized.
+     *
+     * @param synced {@code true} if synchronized
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSyncedNewsletters(boolean synced);
+
+    /**
+     * Returns whether status updates have been synchronized from the server.
+     *
+     * @return {@code true} if synchronized
+     */
+    boolean syncedStatus();
+
+    /**
+     * Sets whether status updates have been synchronized.
+     *
+     * @param synced {@code true} if synchronized
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSyncedStatus(boolean synced);
+
+    /**
+     * Returns whether web app state has been synchronized.
+     *
+     * @return {@code true} if synchronized
+     */
+    boolean syncedWebAppState();
+
+    /**
+     * Sets whether web app state has been synchronized.
+     *
+     * @param synced {@code true} if synchronized
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSyncedWebAppState(boolean synced);
+
+    /**
+     * Returns whether the business certificate has been synchronized.
+     *
+     * @return {@code true} if synchronized
+     */
+    boolean syncedBusinessCertificate();
+
+    /**
+     * Sets whether the business certificate has been synchronized.
+     *
+     * @param synced {@code true} if synchronized
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSyncedBusinessCertificate(boolean synced);
+
+    /**
+     * Returns whether the client has completed registration with WhatsApp.
+     *
+     * @return {@code true} if registered
+     */
+    boolean registered();
+
+    /**
+     * Sets the registration status.
+     *
+     * @param registered {@code true} if registered
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setRegistered(boolean registered);
+
+    /**
+     * Returns whether to show security notifications when chatting.
+     *
+     * @return {@code true} if security notifications are shown
+     */
+    boolean showSecurityNotifications();
+
+    /**
+     * Sets whether to show security notifications.
+     *
+     * @param show {@code true} to show
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setShowSecurityNotifications(boolean show);
+
+    /**
+     * Returns the signed device identity from the primary device.
+     *
+     * @return an {@code Optional} containing the identity, or empty if not set
+     */
+    Optional<SignedDeviceIdentity> signedDeviceIdentity();
+
+    /**
+     * Sets the signed device identity.
+     *
+     * @param identity the signed device identity, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSignedDeviceIdentity(SignedDeviceIdentity identity);
 
     /**
      * Returns the ADV secret key used for HMAC verification during pairing.
-     * <p>
-     * This is a random 32-byte key generated during pairing initialization
-     * and used for HMAC verification of the device identity from the primary device.
      *
-     * @return Optional containing the ADV secret key, empty if not set
-     *
-     * @apiNote WAWebAdvSignatureApi.getADVSecretKey: retrieves the stored secret key.
+     * @return an {@code Optional} containing the 32-byte key, or empty if not set
      */
-    public Optional<byte[]> advSecretKey() {
-        return Optional.ofNullable(advSecretKey);
-    }
+    Optional<byte[]> advSecretKey();
 
     /**
-     * Sets the ADV secret key for HMAC verification during pairing.
-     * <p>
-     * This should be called when initializing the pairing process. The key is
-     * then sent to the primary device and used for HMAC verification.
+     * Sets the ADV secret key.
      *
-     * @param advSecretKey the ADV secret key (should be 32 bytes), or null to clear
-     *
-     * @apiNote WAWebAdvSignatureApi.setADVSecretKey: stores the secret key.
+     * @param key the ADV secret key (should be 32 bytes), or {@code null} to clear
+     * @return this store instance for method chaining
      */
-    public void setAdvSecretKey(byte[] advSecretKey) {
-        this.advSecretKey = advSecretKey;
-    }
+    WhatsAppStore setAdvSecretKey(byte[] key);
 
     /**
-     * Generates and sets a new random ADV secret key.
-     * <p>
-     * This should be called during pairing initialization to create a fresh
-     * secret key for HMAC verification.
-     *
-     * @return the newly generated 32-byte ADV secret key
-     *
-     * @apiNote WAWebAdvSignatureApi.generateADVSecretKey: generates random 32-byte key.
-     */
-    public byte[] generateAdvSecretKey() {
-        this.advSecretKey = SecureBytes.random(32);
-        return this.advSecretKey;
-    }
-
-    /**
-     * Clears the ADV secret key.
-     * <p>
-     * This should be called after pairing completes successfully or fails,
-     * as the key is only needed during the pairing handshake.
-     *
-     * @apiNote WAWebAdvSignatureApi.clearADVSecretKey: clears the stored key.
-     */
-    public void clearAdvSecretKey() {
-        this.advSecretKey = null;
-    }
-
-    /**
-     * Returns all registered pre-keys in the order they were added.
+     * Returns all registered pre-keys in insertion order.
      *
      * @return a non-null sequenced collection of pre-key pairs
      */
-    public SequencedCollection<SignalPreKeyPair> preKeys() {
-        return preKeys.sequencedValues();
-    }
+    SequencedCollection<SignalPreKeyPair> preKeys();
 
     /**
      * Checks whether any pre-keys are currently available.
-     * <p>
-     * If this returns false, new pre-keys should be generated and uploaded to
-     * WhatsApp servers to allow new sessions to be established.
      *
-     * @return true if pre-keys are available, false otherwise
+     * @return {@code true} if pre-keys are available
      */
-    public boolean hasPreKeys() {
-        return !preKeys.isEmpty();
-    }
-
-    /**
-     * Finds a pre-key by its ID.
-     *
-     * @param id the pre-key ID to search for, may be null
-     * @return an Optional containing the pre-key if found, empty otherwise
-     */
-    public Optional<SignalPreKeyPair> findPreKeyById(Integer id) {
-        return id == null ? Optional.empty() : Optional.ofNullable(preKeys.get(id));
-    }
-
-    /**
-     * Adds a pre-key to the collection.
-     * <p>
-     * This is part of the {@link SignalProtocolStore} interface implementation.
-     *
-     * @param preKey the pre-key to add, must not be null
-     * @throws NullPointerException if preKey is null
-     */
-    @Override
-    public void addPreKey(SignalPreKeyPair preKey) {
-        Objects.requireNonNull(preKey, "preKey cannot be null");
-        preKeys.put(preKey.id(), preKey);
-    }
-
-    /**
-     * Removes a pre-key from the collection.
-     * <p>
-     * Pre-keys are typically removed after being used to establish a new session,
-     * ensuring they are only used once.
-     *
-     * @param id the ID of the pre-key to remove
-     * @return true if a pre-key was removed, false if no pre-key with that ID existed
-     */
-    @Override
-    public boolean removePreKey(int id) {
-        return preKeys.remove(id) != null;
-    }
-
-    /**
-     * Finds the signed pre-key by its ID.
-     * <p>
-     * Currently, only one signed pre-key is maintained at a time, so this method
-     * only returns the current signed key pair if the ID matches.
-     *
-     * @param id the signed pre-key ID to search for
-     * @return an Optional containing the signed pre-key if the ID matches, empty otherwise
-     */
-    @Override
-    public Optional<SignalSignedKeyPair> findSignedPreKeyById(Integer id) {
-        return id == signedKeyPair.id() ? Optional.of(signedKeyPair) : Optional.empty();
-    }
-
-    /**
-     * Adds a signed pre-key.
-     * <p>
-     * This operation is not supported.
-     *
-     * @param signalSignedKeyPair the signed pre-key to add
-     * @throws UnsupportedOperationException always thrown
-     */
-    @Override
-    public void addSignedPreKey(SignalSignedKeyPair signalSignedKeyPair) {
-        throw new UnsupportedOperationException("Cannot add signed pre keys to a Keys instance");
-    }
-
-    /**
-     * Finds a Signal protocol session by address.
-     *
-     * @param address the address to search for, must not be null
-     * @return an Optional containing the session if found, empty otherwise
-     */
-    @Override
-    public Optional<SignalSessionRecord> findSessionByAddress(SignalProtocolAddress address) {
-        return Optional.ofNullable(sessions.get(address));
-    }
-
-    /**
-     * Adds or updates a Signal protocol session.
-     *
-     * @param address the address for this session, must not be null
-     * @param record  the session record, must not be null
-     */
-    public void addSession(SignalProtocolAddress address, SignalSessionRecord record) {
-        sessions.put(address, record);
-    }
-
-    /**
-     * Finds a sender key by name for group messaging.
-     *
-     * @param name the sender key name (group + sender + device), must not be null
-     * @return an Optional containing the sender key record if found, empty otherwise
-     */
-    @Override
-    public Optional<SignalSenderKeyRecord> findSenderKeyByName(SignalSenderKeyName name) {
-        return Optional.ofNullable(senderKeys.get(name));
-    }
-
-    /**
-     * Adds or updates a sender key for group messaging.
-     *
-     * @param name      the sender key name, must not be null
-     * @param newRecord the sender key record, must not be null
-     */
-    @Override
-    public void addSenderKey(SignalSenderKeyName name, SignalSenderKeyRecord newRecord) {
-        senderKeys.put(name, newRecord);
-    }
+    boolean hasPreKeys();
 
     /**
      * Removes a Signal protocol session by address.
      *
      * @param address the address of the session to remove
-     * @return true if a session was removed
+     * @return {@code true} if a session was removed
      */
-    public boolean removeSession(SignalProtocolAddress address) {
-        return sessions.remove(address) != null;
-    }
+    boolean removeSession(SignalProtocolAddress address);
 
     /**
      * Removes all sender key records where the given device JID is the sender.
      *
      * @param deviceJid the device JID whose sender keys should be removed
      */
-    public void removeSenderKeysForDevice(Jid deviceJid) {
-        var signalAddress = deviceJid.toSignalAddress();
-        senderKeys.keySet().removeIf(name ->
-                name.sender().equals(signalAddress)
-        );
-    }
-
+    void removeSenderKeysForDevice(Jid deviceJid);
 
     /**
-     * Removes the sender keys for a sender key name
+     * Removes the sender keys for a sender key name.
      *
      * @param senderKeyName the sender key name
      */
-    public void removeSenderKeysForDevice(SignalSenderKeyName senderKeyName) {
-        Objects.requireNonNull(senderKeyName, "senderKeyName cannot be null");
-        senderKeys.remove(senderKeyName);
-    }
+    void removeSenderKeysForDevice(SignalSenderKeyName senderKeyName);
 
     /**
      * Cleans up all Signal sessions and sender keys for a device.
-     * Should be called when a device identity change is detected or a device is removed.
      *
      * @param deviceJid the device JID to clean up
      */
-    public void cleanupSignalSessionsForDevice(Jid deviceJid) {
-        var signalAddress = deviceJid.toSignalAddress();
-        removeSession(signalAddress);
-        removeSenderKeysForDevice(deviceJid);
-    }
+    void cleanupSignalSessionsForDevice(Jid deviceJid);
 
     /**
-     * Marks a user as needing sender key rotation for all groups they participate in.
-     * <p>
-     * Per WhatsApp Web WAWebAdvUpdateParticipantApi: when devices are added or removed
-     * for a user, sender key distribution state needs to be updated. This ensures
-     * removed devices can't decrypt future messages and new devices receive sender keys.
+     * Returns all contacts stored in this session.
      *
-     * @param userJid the user JID whose device list changed
+     * @return an unmodifiable collection of all contacts
      */
-    public void markUserNeedsSenderKeyRotation(Jid userJid) {
-        usersNeedingSenderKeyRotation.add(userJid.toUserJid());
-    }
+    Collection<Contact> contacts();
 
     /**
-     * Checks if a user needs sender key rotation and clears the flag.
-     * <p>
-     * Called by MessageSenderKeyDistributionService when determining if sender keys
-     * need to be redistributed for a group containing this user.
+     * Finds a contact by either phone number JID or LID.
      *
-     * @param userJid the user JID to check
-     * @return true if the user needed sender key rotation (flag is cleared), false otherwise
+     * @param jid the JID to search for (phone or LID)
+     * @return an {@code Optional} containing the contact if found
      */
-    public boolean checkAndClearSenderKeyRotationNeeded(Jid userJid) {
-        return usersNeedingSenderKeyRotation.remove(userJid.toUserJid());
-    }
+    Optional<Contact> findContactByJid(JidProvider jid);
 
     /**
-     * Checks if any of the provided users need sender key rotation.
+     * Adds or updates a contact in the store.
      *
-     * @param userJids the user JIDs to check
-     * @return true if any user needs sender key rotation
+     * @param contact the contact to add or update, must not be {@code null}
+     * @return the contact that was added
      */
-    public boolean anyUserNeedsSenderKeyRotation(Collection<Jid> userJids) {
-        return userJids.stream()
-                .map(Jid::toUserJid)
-                .anyMatch(usersNeedingSenderKeyRotation::contains);
-    }
-
-    // =====================================================
-    // SECTION: Sender Key Distribution Tracking
-    // =====================================================
+    Contact addContact(Contact contact);
 
     /**
-     * Marks a participant as having received the sender key for a group.
-     * <p>
-     * Per WhatsApp Web WAWebApiParticipantStore.markHasSenderKey: after successfully
-     * sending a sender key distribution message to a device, mark that device as
-     * having the sender key. Subsequent messages to that group won't include the
-     * sender key distribution for this device.
+     * Adds a new contact with only its JID populated.
      *
-     * @param groupJid       the group JID
-     * @param participantJid the participant device JID that received the sender key
-     *
-     * @apiNote WAWebApiParticipantStore.markHasSenderKey
+     * @param jid the JID of the contact to add, must not be {@code null}
+     * @return the newly created contact
      */
-    public void markSenderKeyDistributed(Jid groupJid, Jid participantJid) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        Objects.requireNonNull(participantJid, "participantJid cannot be null");
-
-        var groupKey = groupJid.toString();
-        groupSenderKeyDistribution
-                .computeIfAbsent(groupKey, k -> ConcurrentHashMap.newKeySet())
-                .add(participantJid.toString());
-    }
+    Contact addNewContact(Jid jid);
 
     /**
-     * Checks if a participant has received the sender key for a group.
-     * <p>
-     * Per WhatsApp Web WAWebApiParticipantStore.getGroupSenderKeyListFromParticipantRecord:
-     * determines whether a device should be in skDistribList (needs key) or skList (has key).
+     * Removes a contact from the store.
      *
-     * @param groupJid       the group JID
-     * @param participantJid the participant device JID to check
-     * @return true if the participant has received the sender key for this group
-     *
-     * @apiNote WAWebApiParticipantStore.getGroupSenderKeyListFromParticipantRecord
+     * @param contactJid the JID of the contact to remove, may be {@code null}
+     * @return an {@code Optional} containing the removed contact if it existed
      */
-    public boolean hasSenderKeyDistributed(Jid groupJid, Jid participantJid) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        Objects.requireNonNull(participantJid, "participantJid cannot be null");
-
-        var groupKey = groupJid.toString();
-        var participants = groupSenderKeyDistribution.get(groupKey);
-        if (participants == null) {
-            return false;
-        }
-        return participants.contains(participantJid.toString());
-    }
+    Optional<Contact> removeContact(JidProvider contactJid);
 
     /**
-     * Clears the sender key distribution status for all participants in a group.
-     * <p>
-     * Per WhatsApp Web WAWebApiParticipantStore: when the sender key is rotated
-     * (e.g., after a participant is removed), all distribution status is cleared
-     * so the new key will be sent to all participants.
+     * Registers a bidirectional LID mapping for a contact.
      *
-     * @param groupJid the group JID
-     *
-     * @apiNote WAWebApiParticipantStore: clears hasSenderKey when key is rotated
+     * @param phoneJid the phone number JID
+     * @param lidJid   the LID JID
      */
-    public void clearSenderKeyDistribution(Jid groupJid) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        groupSenderKeyDistribution.remove(groupJid.toString());
-    }
+    void registerLidMapping(Jid phoneJid, Jid lidJid);
 
     /**
-     * Clears the sender key distribution status for a specific participant across all groups.
-     * <p>
-     * Called when a participant's device list changes and they need to receive
-     * new sender keys.
+     * Finds the phone number JID for a given LID.
      *
-     * @param participantJid the participant JID whose status should be cleared
+     * @param lidJid the LID to look up
+     * @return an {@code Optional} containing the phone number JID if found
      */
-    public void clearSenderKeyDistributionForParticipant(Jid participantJid) {
-        Objects.requireNonNull(participantJid, "participantJid cannot be null");
-        var participantKey = participantJid.toString();
-
-        for (var participants : groupSenderKeyDistribution.values()) {
-            participants.remove(participantKey);
-        }
-    }
+    Optional<Jid> findPhoneByLid(Jid lidJid);
 
     /**
-     * Allocates a new send sequence number and records it against
-     * each device's identity, so that later retries can detect
-     * identity key changes.
+     * Finds the LID for a given phone number JID.
      *
-     * @param devices the device JIDs that were encrypted to
-     * @return the allocated sequence number
-     *
-     * @apiNote WAWebSendMsgCommonApi.updateIdentityRange: stores the
-     * message rowId on each identity record used during encryption
-     * via {@code updateIdentityRangeAfterEncryption}.
+     * @param phoneJid the phone number JID to look up
+     * @return an {@code Optional} containing the LID if found
      */
-    public long updateIdentityRange(Collection<Jid> devices) {
-        var seq = encryptionSequence.incrementAndGet();
-        for (var device : devices) {
-            var address = device.toSignalAddress();
-            // WAWebSignalProtocolStoreUnifiedApi: only set if null or > seq
-            // (i.e. record the *earliest* sequence for this identity)
-            identityEncryptionRange.merge(address, seq, Math::min);
-        }
-        return seq;
-    }
+    Optional<Jid> findLidByPhone(Jid phoneJid);
 
     /**
-     * Checks whether any device's identity key may have changed since
-     * the given send sequence.
+     * Converts a LID to its phone number equivalent by searching contacts.
      *
-     * <p>A device is considered changed if its identity range entry is
-     * absent (identity was replaced, clearing the entry) or if the
-     * recorded sequence is greater than the given one (identity was
-     * used for a newer send after being replaced).
-     *
-     * @param sendSequence the sequence returned by {@link #updateIdentityRange}
-     * @param device       the device JID to check
-     * @return {@code true} if the identity may have changed
-     *
-     * @apiNote WAWebSendMsgCommonApi.filterDeviceWithChangedIdentity
+     * @param lidJid the LID JID
+     * @return an {@code Optional} containing the phone number JID
      */
-    public boolean hasIdentityChanged(long sendSequence, Jid device) {
-        var recorded = identityEncryptionRange.get(device.toSignalAddress());
-        return recorded == null || recorded > sendSequence;
-    }
+    Optional<Jid> getPhoneNumberByLid(Jid lidJid);
 
     /**
-     * Clears the identity range entry for a device, indicating that
-     * its identity key has changed and any cached encryption is stale.
+     * Converts a phone number JID to its LID equivalent.
      *
-     * <p>Called when an identity key change is detected (e.g. during
-     * prekey processing or ADV validation).
-     *
-     * @param device the device JID whose range should be cleared
+     * @param phoneNumberJid the phone number JID
+     * @return an {@code Optional} containing the LID JID
      */
-    public void clearIdentityRange(Jid device) {
-        identityEncryptionRange.remove(device.toSignalAddress());
-    }
+    Optional<Jid> getLidByPhoneNumber(Jid phoneNumberJid);
 
     /**
-     * Marks the sender key as forgotten for a specific participant in a group.
-     * <p>
-     * Per WhatsApp Web WAWebApiParticipantStore.markForgetSenderKey: this is different
-     * from clearing/rotating - it marks that the participant should no longer receive
-     * messages via sender key encryption until they rejoin or are explicitly re-added.
-     * Used when participants leave a group.
+     * Returns all chats stored in this session.
      *
-     * @param groupJid       the group JID
-     * @param participantJid the participant JID whose sender key status should be forgotten
-     *
-     * @apiNote WAWebApiParticipantStore.markForgetSenderKey
+     * @return an unmodifiable collection of all chats
      */
-    public void forgetSenderKeyDistributed(Jid groupJid, Jid participantJid) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        Objects.requireNonNull(participantJid, "participantJid cannot be null");
-
-        var groupKey = groupJid.toString();
-        var participants = groupSenderKeyDistribution.get(groupKey);
-        if (participants != null) {
-            participants.remove(participantJid.toString());
-        }
-    }
+    Collection<Chat> chats();
 
     /**
-     * Marks a message as having been overwritten by a revoke.
-     * <p>
-     * Per WhatsApp Web: when a message is revoked, we track this so that any
-     * pending resend operations are skipped.
+     * Finds a chat by its JID.
      *
-     * @param messageId the message ID to mark as revoked
-     *
-     * @apiNote WAWebResendUserMsg, WAWebResendGroupMsg: isOverwrittenByRevoke check
+     * @param jid the JID to search for, may be {@code null}
+     * @return an {@code Optional} containing the chat if found
      */
-    public void markMessageAsRevoked(String messageId) {
-        Objects.requireNonNull(messageId, "messageId cannot be null");
-        revokedMessageIds.add(messageId);
-    }
+    Optional<Chat> findChatByJid(JidProvider jid);
 
     /**
-     * Checks if a message has been overwritten by a revoke.
-     * <p>
-     * Per WhatsApp Web WAWebResendUserMsg/WAWebResendGroupMsg: if a message has been
-     * revoked, resend operations should be skipped.
+     * Adds or updates a chat in the store.
      *
-     * @param messageId the message ID to check
-     * @return true if the message was overwritten by a revoke
-     *
-     * @apiNote WAWebResendUserMsg, WAWebResendGroupMsg: a.data.isOverwrittenByRevoke
+     * @param chat the chat to add or update, must not be {@code null}
+     * @return the chat that was added
      */
-    public boolean isMessageOverwrittenByRevoke(String messageId) {
-        Objects.requireNonNull(messageId, "messageId cannot be null");
-        return revokedMessageIds.contains(messageId);
-    }
+    Chat addChat(Chat chat);
 
     /**
-     * Clears the revoke tracking for a message.
-     * <p>
-     * Called when a message ID is no longer needed for tracking
-     * (e.g., after expiry or cleanup).
+     * Adds a new empty chat for the given JID.
      *
-     * @param messageId the message ID to clear
+     * @param chatJid the chat JID, must not be {@code null}
+     * @return the newly created chat
      */
-    public void clearRevokeStatus(String messageId) {
-        Objects.requireNonNull(messageId, "messageId cannot be null");
-        revokedMessageIds.remove(messageId);
-    }
+    Chat addNewChat(Jid chatJid);
 
     /**
-     * Retrieves a sequenced collection of web app state keys.
+     * Removes a chat from the store.
      *
-     * @return an unmodifiable sequenced collection
+     * @param chatJid the JID of the chat to remove, may be {@code null}
+     * @return an {@code Optional} containing the removed chat if it existed
      */
-    public SequencedCollection<AppStateSyncKey> appStateKeys() {
-        return Collections.unmodifiableSequencedCollection(appStateKeys.sequencedValues());
-    }
+    Optional<Chat> removeChat(JidProvider chatJid);
+
+    /**
+     * Queries the first message whose id matches the one provided in the
+     * specified chat or newsletter.
+     *
+     * @param provider the chat or newsletter to search in
+     * @param id       the message id to search
+     * @return an {@code Optional} containing the message if found
+     */
+    Optional<? extends MessageInfo> findMessageById(JidProvider provider, String id);
+
+    /**
+     * Queries the first message whose id matches the one provided in the
+     * specified chat.
+     *
+     * @param chat the chat to search in
+     * @param id   the message id to search
+     * @return an {@code Optional} containing the message if found
+     */
+    Optional<ChatMessageInfo> findMessageById(Chat chat, String id);
+
+    /**
+     * Queries the first message whose id matches the one provided in the
+     * specified newsletter.
+     *
+     * @param newsletter the newsletter to search in
+     * @param id         the message id to search
+     * @return an {@code Optional} containing the message if found
+     */
+    Optional<NewsletterMessageInfo> findMessageById(Newsletter newsletter, String id);
+
+    /**
+     * Finds a chat message by its key.
+     *
+     * @param key the message key to search
+     * @return an {@code Optional} containing the message if found
+     */
+    Optional<ChatMessageInfo> findChatMessageByKey(ChatMessageKey key);
+
+    /**
+     * Returns all status updates stored in this session.
+     *
+     * @return an unmodifiable collection of status updates
+     */
+    Collection<ChatMessageInfo> status();
+
+    /**
+     * Adds a status update to the store.
+     *
+     * @param messageInfo the status message, must not be {@code null}
+     * @return the status message that was added
+     */
+    ChatMessageInfo addStatus(ChatMessageInfo messageInfo);
+
+    /**
+     * Removes a status update from the store.
+     *
+     * @param id the status message id to remove
+     * @return an {@code Optional} containing the removed status if it existed
+     */
+    Optional<ChatMessageInfo> removeStatus(String id);
+
+    /**
+     * Returns all calls stored in this session.
+     *
+     * @return an unmodifiable collection of all calls
+     */
+    Collection<CallOffer> calls();
+
+    /**
+     * Finds a call by its ID.
+     *
+     * @param callId the call ID to search for
+     * @return an {@code Optional} containing the call if found
+     */
+    Optional<CallOffer> findCallById(String callId);
+
+    /**
+     * Adds a call to the store.
+     *
+     * @param call the call to add, must not be {@code null}
+     * @return the call that was added
+     */
+    CallOffer addCall(CallOffer call);
+
+    /**
+     * Removes a call from the store.
+     *
+     * @param id the call ID to remove
+     * @return an {@code Optional} containing the removed call if it existed
+     */
+    Optional<CallOffer> removeCall(String id);
+
+    /**
+     * Returns all newsletters stored in this session.
+     *
+     * @return an unmodifiable collection of all newsletters
+     */
+    Collection<Newsletter> newsletters();
+
+    /**
+     * Finds a newsletter by its JID.
+     *
+     * @param jid the JID to search for, may be {@code null}
+     * @return an {@code Optional} containing the newsletter if found
+     */
+    Optional<Newsletter> findNewsletterByJid(JidProvider jid);
+
+    /**
+     * Adds or updates a newsletter in the store.
+     *
+     * @param newsletter the newsletter to add, must not be {@code null}
+     * @return the newsletter that was added
+     */
+    Newsletter addNewsletter(Newsletter newsletter);
+
+    /**
+     * Adds a new empty newsletter for the given JID.
+     *
+     * @param newsletterJid the newsletter JID, must not be {@code null}
+     * @return the newly created newsletter
+     */
+    Newsletter addNewNewsletter(Jid newsletterJid);
+
+    /**
+     * Removes a newsletter from the store.
+     *
+     * @param newsletterJid the JID of the newsletter to remove, may be {@code null}
+     * @return an {@code Optional} containing the removed newsletter if it existed
+     */
+    Optional<Newsletter> removeNewsletter(JidProvider newsletterJid);
+
+    /**
+     * Returns the privacy settings.
+     *
+     * @return an unmodifiable collection of privacy settings
+     */
+    Collection<PrivacySettingEntry> privacySettings();
+
+    /**
+     * Finds a privacy setting by its type.
+     *
+     * @param type the privacy setting type
+     * @return an {@code Optional} containing the setting if found
+     */
+    Optional<PrivacySettingEntry> findPrivacySetting(PrivacySettingType type);
+
+    /**
+     * Adds or updates a privacy setting.
+     *
+     * @param entry the privacy setting entry, must not be {@code null}
+     */
+    void addPrivacySetting(PrivacySettingEntry entry);
+
+    /**
+     * Finds a recent sticker by its hash.
+     *
+     * @param stickerHash the sticker hash
+     * @return an {@code Optional} containing the sticker if found
+     */
+    Optional<Sticker> findRecentSticker(String stickerHash);
+
+    /**
+     * Adds a recent sticker to the store.
+     *
+     * @param stickerHash the sticker hash, must not be {@code null}
+     * @param sticker     the sticker, must not be {@code null}
+     */
+    void addRecentSticker(String stickerHash, Sticker sticker);
+
+    /**
+     * Removes a recent sticker from the store.
+     *
+     * @param stickerHash the sticker hash
+     * @return an {@code Optional} containing the removed sticker if it existed
+     */
+    Optional<Sticker> removeRecentSticker(String stickerHash);
+
+    /**
+     * Finds a favourite sticker by its hash.
+     *
+     * @param stickerHash the sticker hash
+     * @return an {@code Optional} containing the sticker if found
+     */
+    Optional<Sticker> findFavouriteSticker(String stickerHash);
+
+    /**
+     * Adds a favourite sticker to the store.
+     *
+     * @param stickerHash the sticker hash, must not be {@code null}
+     * @param sticker     the sticker, must not be {@code null}
+     */
+    void addFavouriteSticker(String stickerHash, Sticker sticker);
+
+    /**
+     * Removes a favourite sticker from the store.
+     *
+     * @param stickerHash the sticker hash
+     * @return an {@code Optional} containing the removed sticker if it existed
+     */
+    Optional<Sticker> removeFavouriteSticker(String stickerHash);
+
+    /**
+     * Finds a quick reply by its shortcut.
+     *
+     * @param shortcut the quick reply shortcut
+     * @return an {@code Optional} containing the quick reply if found
+     */
+    Optional<QuickReply> findQuickReply(String shortcut);
+
+    /**
+     * Adds a quick reply to the store.
+     *
+     * @param action the quick reply, must not be {@code null}
+     */
+    void addQuickReply(QuickReply action);
+
+    /**
+     * Removes a quick reply from the store.
+     *
+     * @param shortcut the quick reply shortcut
+     * @return an {@code Optional} containing the removed quick reply if it existed
+     */
+    Optional<QuickReply> removeQuickReply(String shortcut);
+
+    /**
+     * Finds a label by its ID.
+     *
+     * @param labelId the label ID
+     * @return an {@code Optional} containing the label if found
+     */
+    Optional<Label> findLabel(int labelId);
+
+    /**
+     * Adds a label to the store.
+     *
+     * @param label the label, must not be {@code null}
+     */
+    void addLabel(Label label);
+
+    /**
+     * Removes a label from the store.
+     *
+     * @param labelId the label ID
+     * @return an {@code Optional} containing the removed label if it existed
+     */
+    Optional<Label> removeLabel(int labelId);
+
+    /**
+     * Returns all app state sync keys.
+     *
+     * @return an unmodifiable sequenced collection of sync keys
+     */
+    SequencedCollection<AppStateSyncKey> appStateKeys();
 
     /**
      * Finds an app state sync key by its key ID.
      *
-     * @param id the key ID to search for, must not be null
-     * @return an Optional containing the app state sync key if found, empty otherwise
+     * @param id the key ID, must not be {@code null}
+     * @return an {@code Optional} containing the key if found
      */
-    public Optional<AppStateSyncKey> findWebAppStateKeyById(byte[] id) {
-        return Optional.ofNullable(appStateKeys.get(HexFormat.of().formatHex(id)));
-    }
+    Optional<AppStateSyncKey> findWebAppStateKeyById(byte[] id);
 
     /**
-     * Adds multiple app state sync keys to the collection.
-     * <p>
-     * Keys without a valid key ID are silently skipped.
+     * Adds multiple app state sync keys.
      *
-     * @param keys the collection of keys to add, must not be null
+     * @param keys the collection of keys to add, must not be {@code null}
      */
-    public void addWebAppStateKeys(Collection<AppStateSyncKey> keys) {
-        for (var key : keys) {
-            var keyId = key.keyId();
-            if(keyId == null) {
-                continue;
-            }
-
-            var keyIdValue = keyId.value();
-            if(keyIdValue == null) {
-                continue;
-            }
-
-            appStateKeys.put(HexFormat.of().formatHex(keyIdValue), key);
-        }
-    }
+    void addWebAppStateKeys(Collection<AppStateSyncKey> keys);
 
     /**
      * Finds a hash state by patch type.
      *
-     * @param patchType the type of app state to query, must not be null
-     * @return an Optional containing the hash state if found, empty otherwise
+     * @param patchType the patch type to query
+     * @return an {@code Optional} containing the hash state if found
      */
-    public Optional<AppStateSyncHash> findWebAppHashStateByName(PatchType patchType) {
-        return Optional.ofNullable(hashStates.get(patchType));
-    }
+    Optional<AppStateSyncHash> findWebAppHashStateByName(PatchType patchType);
 
     /**
      * Adds or updates a hash state for app state synchronization.
      *
-     * @param state the hash state to add, must not be null
+     * @param state the hash state to add, must not be {@code null}
      */
-    public void addWebAppHashState(AppStateSyncHash state) {
-        hashStates.put(state.type(), state);
-    }
+    void addWebAppHashState(AppStateSyncHash state);
 
     /**
      * Returns all missing sync keys being tracked.
      *
-     * @return unmodifiable collection of missing sync keys
+     * @return an unmodifiable collection of missing sync keys
      */
-    public Collection<MissingDeviceSyncKey> missingSyncKeys() {
-        return Collections.unmodifiableCollection(missingSyncKeys.values());
-    }
+    Collection<MissingDeviceSyncKey> missingSyncKeys();
 
     /**
      * Finds a missing sync key by its ID.
      *
-     * @param keyId the ID of the key
-     * @return an Optional containing the missing key entry if found
+     * @param keyId the key ID
+     * @return an {@code Optional} containing the missing key entry if found
      */
-    public Optional<MissingDeviceSyncKey> findMissingSyncKey(byte[] keyId) {
-        return Optional.ofNullable(missingSyncKeys.get(HexFormat.of().formatHex(keyId)));
-    }
+    Optional<MissingDeviceSyncKey> findMissingSyncKey(byte[] keyId);
 
     /**
      * Adds or updates a missing sync key entry.
      *
      * @param missingKey the missing key entry to add
      */
-    public void addMissingSyncKey(MissingDeviceSyncKey missingKey) {
-        missingSyncKeys.put(HexFormat.of().formatHex(missingKey.keyId()), missingKey);
-    }
+    void addMissingSyncKey(MissingDeviceSyncKey missingKey);
 
     /**
-     * Removes a missing sync key entry (e.g., when the key is found).
+     * Removes a missing sync key entry.
      *
-     * @param keyId the ID of the key to remove
+     * @param keyId the key ID to remove
      */
-    public void removeMissingSyncKey(byte[] keyId) {
-        missingSyncKeys.remove(HexFormat.of().formatHex(keyId));
-    }
+    void removeMissingSyncKey(byte[] keyId);
 
     /**
-     * Checks for expired missing sync keys.
-     * <p>
-     * Per WhatsApp Web WAWebSyncdStoreMissingKeys: a key is expired if
-     * (now - key.timestamp) > timeout
+     * Finds expired missing sync keys.
      *
      * @param timeout the duration after which a key is considered expired
-     * @return the list of expired missing sync keys
+     * @return a sequenced collection of expired keys
      */
-    public SequencedCollection<MissingDeviceSyncKey> findExpiredMissingSyncKeys(Duration timeout) {
-        var now = Instant.now();
-        return missingSyncKeys.values()
-                .stream()
-                .filter(key -> Duration.between(key.timestamp(), now).compareTo(timeout) > 0)
-                .toList();
-    }
+    SequencedCollection<MissingDeviceSyncKey> findExpiredMissingSyncKeys(Duration timeout);
 
     /**
      * Gets the earliest timestamp of all missing sync keys.
-     * Used to calculate when the timeout should fire.
      *
-     * @return the earliest timestamp, or empty if no missing keys
+     * @return an {@code Optional} containing the earliest timestamp, or empty
+     *         if no missing keys
      */
-    public Optional<Instant> getEarliestMissingSyncKeyTimestamp() {
-        return missingSyncKeys.values().stream()
-                .map(MissingDeviceSyncKey::timestamp)
-                .min(Instant::compareTo);
-    }
+    Optional<Instant> getEarliestMissingSyncKeyTimestamp();
 
     /**
-     * Calculates the timeout delay for missing sync key check.
-     * <p>
-     * Per WhatsApp Web: timeout = timeoutDuration - (now - earliestKey.timestamp)
+     * Calculates the timeout delay for the missing sync key check.
      *
      * @param timeout the timeout duration
-     * @return the remaining delay until timeout, or empty if no missing keys
+     * @return an {@code Optional} containing the remaining delay, or empty
+     *         if no missing keys
      */
-    public Optional<Duration> calculateMissingSyncKeyTimeoutDelay(Duration timeout) {
-        return getEarliestMissingSyncKeyTimestamp()
-                .map(earliest -> {
-                    var elapsed = Duration.between(earliest, Instant.now());
-                    var remaining = timeout.minus(elapsed);
-                    return remaining.isNegative() ? Duration.ZERO : remaining;
-                });
-    }
-
-    // =====================================================
-    // SECTION: Device Identity Range Operations
-    // =====================================================
+    Optional<Duration> calculateMissingSyncKeyTimeoutDelay(Duration timeout);
 
     /**
-     * Updates the identity range timestamp for a device.
-     * <p>
-     * Per WhatsApp Web WAWebSendMsgCommonApi.updateIdentityRange: records the timestamp
-     * when a device was last encrypted to. Only updates if the new timestamp is earlier
-     * than the existing one (or no existing entry).
-     *
-     * @param signalAddress    the Signal protocol address string
-     * @param messageTimestamp the timestamp of the message being sent
-     *
-     * @apiNote WAWebSendMsgCommonApi.updateIdentityRange
-     */
-    public void updateDeviceIdentityRange(String signalAddress, long messageTimestamp) {
-        deviceIdentityRanges.compute(signalAddress, (k, existing) ->
-                (existing == null || existing > messageTimestamp) ? messageTimestamp : existing);
-    }
-
-    /**
-     * Gets the identity range timestamp for a device.
-     *
-     * @param signalAddress the Signal protocol address string
-     * @return the timestamp, or null if no range recorded
-     *
-     * @apiNote WAWebSendMsgCommonApi.filterDeviceWithChangedIdentity
-     */
-    public Long getDeviceIdentityRange(String signalAddress) {
-        return deviceIdentityRanges.get(signalAddress);
-    }
-
-    /**
-     * Checks if a device should be included in a resend based on identity range.
-     * <p>
-     * Per WhatsApp Web WAWebSendMsgCommonApi.filterDeviceWithChangedIdentity:
-     * excludes devices whose identity changed after the original encryption.
-     *
-     * @param signalAddress     the Signal protocol address string
-     * @param originalTimestamp the timestamp of the original message send
-     * @return true if the device should be included (identity unchanged)
-     *
-     * @apiNote WAWebSendMsgCommonApi.filterDeviceWithChangedIdentity
-     */
-    public boolean shouldIncludeDeviceInResend(String signalAddress, long originalTimestamp) {
-        var rangeTimestamp = deviceIdentityRanges.get(signalAddress);
-        // Include device if no range recorded OR range is <= original message
-        return rangeTimestamp == null || rangeTimestamp <= originalTimestamp;
-    }
-
-    // =====================================================
-    // SECTION: Receipt Records Operations
-    // =====================================================
-
-    /**
-     * Creates or merges receipt records for a sent message.
-     * <p>
-     * Per WhatsApp Web WAWebApiMessageInfoStore.createOrMergeReceiptRecords: when sending
-     * a message, records the recipient device JIDs so that delivery/read receipts can be
-     * tracked at the device level.
-     *
-     * @param messageId    the message ID (stanza ID)
-     * @param recipientJids the recipient device JIDs the message was sent to
-     *
-     * @apiNote WAWebApiMessageInfoStore.createOrMergeReceiptRecords
-     */
-    public void createOrMergeReceiptRecords(String messageId, Collection<Jid> recipientJids) {
-        if (messageId == null || recipientJids == null || recipientJids.isEmpty()) {
-            return;
-        }
-        pendingMessageRecipients.compute(messageId, (k, existing) -> {
-            var set = existing != null ? existing : ConcurrentHashMap.<Jid>newKeySet();
-            set.addAll(recipientJids);
-            return set;
-        });
-    }
-
-    /**
-     * Gets the recipient JIDs for a sent message.
-     *
-     * @param messageId the message ID (stanza ID)
-     * @return the set of recipient device JIDs, or empty set if not found
-     *
-     * @apiNote WAWebApiMessageInfoStore
-     */
-    public Set<Jid> getMessageRecipients(String messageId) {
-        var recipients = pendingMessageRecipients.get(messageId);
-        return recipients != null ? Collections.unmodifiableSet(recipients) : Set.of();
-    }
-
-    /**
-     * Removes receipt records for a message (e.g., after all receipts received).
-     *
-     * @param messageId the message ID to remove records for
-     *
-     * @apiNote WAWebApiMessageInfoStore
-     */
-    public void removeReceiptRecords(String messageId) {
-        pendingMessageRecipients.remove(messageId);
-    }
-
-    /**
-     * Returns the recipient device JIDs recorded for a sent message.
-     *
-     * @param messageId the message ID (stanza ID)
-     * @return an unmodifiable copy of the recipient set, or an empty set
-     *         if no records exist for this message
-     *
-     * @apiNote WAWebEncryptAndSendStatusMsg.calculateRevokeSenderList:
-     * retrieves original recipients to narrow the revoke audience.
-     */
-    public Set<Jid> findReceiptRecords(String messageId) {
-        if (messageId == null) {
-            return Set.of();
-        }
-        var recipients = pendingMessageRecipients.get(messageId);
-        return recipients != null ? Set.copyOf(recipients) : Set.of();
-    }
-
-    /**
-     * Adds a pending mutation to the queue for the specified collection.
+     * Gets metadata for a web app state collection.
      *
      * @param collectionName the collection name
-     * @param patch the patch to queue
+     * @return the collection metadata
      */
-    public void addPendingMutations(PatchType collectionName, Collection<? extends PendingMutation> patch) {
-        webAppStatePendingMutations
-            .computeIfAbsent(collectionName, k -> new ArrayList<>())
-            .addAll(patch);
-    }
+    CollectionMetadata findWebAppState(PatchType collectionName);
+
+    /**
+     * Updates a collection's version and LT-Hash.
+     *
+     * @param collectionName the collection name
+     * @param newVersion     the new version
+     * @param newLtHash      the new LT-Hash
+     */
+    void updateWebAppStateVersion(PatchType collectionName, long newVersion, byte[] newLtHash);
+
+    /**
+     * Marks a web app state collection as dirty.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateDirty(PatchType collectionName);
+
+    /**
+     * Marks a web app state collection as in-flight.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateInFlight(PatchType collectionName);
+
+    /**
+     * Marks a web app state collection as up-to-date.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateUpToDate(PatchType collectionName);
+
+    /**
+     * Marks a web app state collection as pending.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStatePending(PatchType collectionName);
+
+    /**
+     * Marks a web app state collection as blocked.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateBlocked(PatchType collectionName);
+
+    /**
+     * Marks a web app state collection in error retry state.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateErrorRetry(PatchType collectionName);
+
+    /**
+     * Marks a web app state collection in fatal error state.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateErrorFatal(PatchType collectionName);
+
+    /**
+     * Adds pending mutations to the queue for the specified collection.
+     *
+     * @param collectionName the collection name
+     * @param patch          the patches to queue
+     */
+    void addPendingMutations(PatchType collectionName, Collection<? extends PendingMutation> patch);
 
     /**
      * Gets all pending mutations for the specified collection.
      *
      * @param collectionName the collection name
-     * @return list of pending patches
+     * @return an unmodifiable sequenced collection of pending mutations
      */
-    public SequencedCollection<PendingMutation> findPendingMutations(PatchType collectionName) {
-        var collectionPending = webAppStatePendingMutations.get(collectionName);
-        return collectionPending == null ? List.of() : Collections.unmodifiableSequencedCollection(collectionPending);
-    }
+    SequencedCollection<PendingMutation> findPendingMutations(PatchType collectionName);
 
     /**
-     * Removes pending mutations by their indices.
+     * Removes pending mutations for a collection.
      *
      * @param collectionName the collection name
      */
-    public void removePendingMutations(PatchType collectionName) {
-        webAppStatePendingMutations.remove(collectionName);
-    }
+    void removePendingMutations(PatchType collectionName);
 
     /**
      * Clears all pending mutations for a collection.
      *
      * @param collectionName the collection name
      */
-    public void clearPendingMutations(PatchType collectionName) {
-        webAppStatePendingMutations.remove(collectionName);
-    }
+    void clearPendingMutations(PatchType collectionName);
 
     /**
-     * Returns whether the client has completed registration.
+     * Marks a participant as having received the sender key for a group.
      *
-     * @return true if registered, false otherwise
+     * @param groupJid       the group JID
+     * @param participantJid the participant device JID
      */
-    public boolean registered() {
-        return this.registered;
-    }
+    void markSenderKeyDistributed(Jid groupJid, Jid participantJid);
 
     /**
-     * Sets the registration status.
+     * Checks if a participant has received the sender key for a group.
      *
-     * @param registered true if the client is now registered, false otherwise
+     * @param groupJid       the group JID
+     * @param participantJid the participant device JID
+     * @return {@code true} if the participant has received the sender key
      */
-    public void setRegistered(boolean registered) {
-        this.registered = registered;
-    }
+    boolean hasSenderKeyDistributed(Jid groupJid, Jid participantJid);
 
     /**
-     * Checks if the given identity is trusted for the specified address.
-     * <p>
-     * This is part of the {@link SignalProtocolStore} interface. Currently returns
-     * false as trust verification is handled elsewhere.
+     * Clears the sender key distribution status for all participants in a group.
      *
-     * @param signalProtocolAddress       the address to check
-     * @param signalIdentityPublicKey     the identity key to verify
-     * @param signalKeyDirection          the direction of the key (sending or receiving)
-     * @return false (trust verification not implemented here)
+     * @param groupJid the group JID
      */
-    @Override
-    public boolean isTrustedIdentity(SignalProtocolAddress signalProtocolAddress, SignalIdentityPublicKey signalIdentityPublicKey, SignalKeyDirection signalKeyDirection) {
-        return true;
-    }
+    void clearSenderKeyDistribution(Jid groupJid);
 
     /**
-     * Adds a trusted identity for the specified address.
-     * <p>
-     * This is part of the {@link SignalProtocolStore} interface. Currently a no-op
-     * as trust management is handled elsewhere.
+     * Clears the sender key distribution status for a participant across all groups.
      *
-     * @param signalProtocolAddress       the address
-     * @param signalIdentityPublicKey     the identity key to trust
+     * @param participantJid the participant JID
      */
-    @Override
-    public void addTrustedIdentity(SignalProtocolAddress signalProtocolAddress, SignalIdentityPublicKey signalIdentityPublicKey) {
+    void clearSenderKeyDistributionForParticipant(Jid participantJid);
 
-    }
+    /**
+     * Marks the sender key as forgotten for a specific participant in a group.
+     *
+     * @param groupJid       the group JID
+     * @param participantJid the participant JID
+     */
+    void forgetSenderKeyDistributed(Jid groupJid, Jid participantJid);
+
+    /**
+     * Marks a user as needing sender key rotation.
+     *
+     * @param userJid the user JID whose device list changed
+     */
+    void markUserNeedsSenderKeyRotation(Jid userJid);
+
+    /**
+     * Checks if a user needs sender key rotation and clears the flag.
+     *
+     * @param userJid the user JID to check
+     * @return {@code true} if the user needed rotation (flag is cleared)
+     */
+    boolean checkAndClearSenderKeyRotationNeeded(Jid userJid);
+
+    /**
+     * Checks if any of the provided users need sender key rotation.
+     *
+     * @param userJids the user JIDs to check
+     * @return {@code true} if any user needs rotation
+     */
+    boolean anyUserNeedsSenderKeyRotation(Collection<Jid> userJids);
+
+    /**
+     * Allocates a new send sequence number and records it against
+     * each device's identity.
+     *
+     * @param devices the device JIDs that were encrypted to
+     * @return the allocated sequence number
+     */
+    long updateIdentityRange(Collection<Jid> devices);
+
+    /**
+     * Checks whether a device's identity key may have changed since
+     * the given send sequence.
+     *
+     * @param sendSequence the sequence returned by {@link #updateIdentityRange}
+     * @param device       the device JID to check
+     * @return {@code true} if the identity may have changed
+     */
+    boolean hasIdentityChanged(long sendSequence, Jid device);
+
+    /**
+     * Clears the identity range entry for a device.
+     *
+     * @param device the device JID whose range should be cleared
+     */
+    void clearIdentityRange(Jid device);
 
     /**
      * Saves an identity key for a remote user.
-     * <p>
-     * Per WhatsApp Web: identity keys are stored during ADV validation and used as
-     * fallback when validating signed key index lists with missing embedded keys.
      *
-     * @param address     the signal address for the user (should use device 0)
+     * @param address     the signal address for the user
      * @param identityKey the identity key to save
      */
-    public void saveIdentity(SignalProtocolAddress address, SignalIdentityPublicKey identityKey) {
-        Objects.requireNonNull(address, "address cannot be null");
-        Objects.requireNonNull(identityKey, "identityKey cannot be null");
-        remoteIdentities.put(address, identityKey);
-    }
+    void saveIdentity(SignalProtocolAddress address, SignalIdentityPublicKey identityKey);
 
     /**
      * Finds a stored identity key for a user.
-     * <p>
-     * If the address matches the local user, returns the local identity key.
-     * Otherwise, looks up the remote identity from the stored map.
      *
      * @param address the signal address for the user
-     * @return Optional containing the identity key if found
+     * @return an {@code Optional} containing the identity key if found
      */
-    public Optional<SignalIdentityPublicKey> findIdentityByAddress(SignalProtocolAddress address) {
-        if (address == null) {
-            return Optional.empty();
-        } else {
-            var localJid = jid;
-            if (localJid != null && address.equals(localJid.toSignalAddress())) {
-                return Optional.of(identityKeyPair.publicKey());
-            } else {
-                return Optional.ofNullable(remoteIdentities.get(address));
-            }
-        }
-    }
+    Optional<SignalIdentityPublicKey> findIdentityByAddress(SignalProtocolAddress address);
 
     /**
-     * Marks a collection as dirty.
+     * Returns the recipient device JIDs recorded for a sent message.
      *
-     * @param collectionName the collection name
+     * @param messageId the message ID
+     * @return an unmodifiable copy of the recipient set
      */
-    public void markWebAppStateDirty(PatchType collectionName) {
-        webAppStateCollections.compute(collectionName, (_, current) -> {
-            if (current == null || current.state() == CollectionState.UP_TO_DATE) {
-                return new CollectionMetadata(
-                        collectionName,
-                        current != null ? current.version() : 0,
-                        current != null ? MutationLTHash.copy(current.ltHash()) : MutationLTHash.copy(MutationLTHash.EMPTY_HASH),
-                        System.currentTimeMillis(),
-                        CollectionState.DIRTY,
-                        0,  // Reset retry count
-                        0   // Reset error timestamp
-                );
-            }
-            return current;
-        });
-    }
+    Set<Jid> findReceiptRecords(String messageId);
 
     /**
-     * Marks a collection as in-flight.
+     * Creates or merges receipt records for a sent message.
      *
-     * @param collectionName the collection name
+     * @param messageId     the message ID
+     * @param recipientJids the recipient device JIDs
      */
-    public void markWebAppStateInFlight(PatchType collectionName) {
-        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        current.name(),
-                        current.version(),
-                        current.ltHash(),
-                        current.lastSyncTimestamp(),
-                        CollectionState.IN_FLIGHT,
-                        current.retryCount(),
-                        current.lastErrorTimestamp()
-                )
-        );
-    }
+    void createOrMergeReceiptRecords(String messageId, Collection<Jid> recipientJids);
 
     /**
-     * Marks a collection as up-to-date.
+     * Removes receipt records for a message.
      *
-     * @param collectionName the collection name
+     * @param messageId the message ID to remove records for
      */
-    public void markWebAppStateUpToDate(PatchType collectionName) {
-        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        current.name(),
-                        current.version(),
-                        current.ltHash(),
-                        System.currentTimeMillis(),
-                        CollectionState.UP_TO_DATE,
-                        0,  // Reset retry count on success
-                        0   // Reset error timestamp
-                )
-        );
-    }
+    void removeReceiptRecords(String messageId);
 
     /**
-     * Marks a collection as pending.
+     * Returns the client version.
      *
-     * @param collectionName the collection name
+     * @return the client version, never {@code null}
      */
-    public void markWebAppStatePending(PatchType collectionName) {
-        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        current.name(),
-                        current.version(),
-                        current.ltHash(),
-                        current.lastSyncTimestamp(),
-                        CollectionState.PENDING,
-                        current.retryCount(),
-                        current.lastErrorTimestamp()
-                )
-        );
-    }
+    Version clientVersion();
 
     /**
-     * Marks a collection as blocked.
+     * Sets the client version.
      *
-     * @param collectionName the collection name
+     * @param version the client version, may be {@code null}
+     * @return this store instance for method chaining
      */
-    public void markWebAppStateBlocked(PatchType collectionName) {
-        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        current.name(),
-                        current.version(),
-                        current.ltHash(),
-                        current.lastSyncTimestamp(),
-                        CollectionState.BLOCKED,
-                        current.retryCount(),
-                        System.currentTimeMillis()
-                )
-        );
-    }
+    WhatsAppStore setClientVersion(Version version);
 
     /**
-     * Marks a collection in error retry state.
+     * Returns the companion version.
      *
-     * @param collectionName the collection name
+     * @return an {@code Optional} containing the companion version, or empty
+     *         if not set
      */
-    public void markWebAppStateErrorRetry(PatchType collectionName) {
-        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        current.name(),
-                        current.version(),
-                        current.ltHash(),
-                        current.lastSyncTimestamp(),
-                        CollectionState.ERROR_RETRY,
-                        current.retryCount() + 1,
-                        System.currentTimeMillis()
-                )
-        );
-    }
+    Optional<Version> companionVersion();
 
     /**
-     * Marks a collection in fatal error state.
+     * Sets the companion version.
      *
-     * @param collectionName the collection name
+     * @param version the companion version, may be {@code null}
+     * @return this store instance for method chaining
      */
-    public void markWebAppStateErrorFatal(PatchType collectionName) {
-        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        current.name(),
-                        current.version(),
-                        current.ltHash(),
-                        current.lastSyncTimestamp(),
-                        CollectionState.ERROR_FATAL,
-                        current.retryCount(),
-                        System.currentTimeMillis()
-                )
-        );
-    }
-
-    /**
-     * Gets metadata for a collection.
-     *
-     * @param collectionName the collection name
-     * @return the collection metadata
-     */
-    public CollectionMetadata findWebAppState(PatchType collectionName) {
-        return webAppStateCollections.computeIfAbsent(collectionName, key ->
-                new CollectionMetadata(
-                        key,
-                        0,
-                        MutationLTHash.copy(MutationLTHash.EMPTY_HASH),
-                        0,
-                        CollectionState.UP_TO_DATE,
-                        0,
-                        0
-                )
-        );
-    }
-
-    /**
-     * Updates a collection's version and LT-Hash.
-     *
-     * @param collectionName the collection name
-     * @param newVersion the new version
-     * @param newLtHash the new LT-Hash
-     */
-    public void updateWebAppStateVersion(PatchType collectionName, long newVersion, byte[] newLtHash) {
-        webAppStateCollections.compute(collectionName, (_, current) ->
-                new CollectionMetadata(
-                        collectionName,
-                        newVersion,
-                        MutationLTHash.copy(newLtHash),
-                        System.currentTimeMillis(),
-                        current != null ? current.state() : CollectionState.UP_TO_DATE,
-                        0,  // Reset retry count on successful update
-                        0   // Reset error timestamp
-                )
-        );
-    }
-
-    // =====================================================
-    // SECTION: Object Methods
-    // =====================================================
-
-
-    @Override
-    public boolean equals(Object o) {
-        return o == this || o instanceof WhatsAppStore that
-               && serializable == that.serializable
-               && online == that.online
-               && unarchiveChats == that.unarchiveChats
-               && twentyFourHourFormat == that.twentyFourHourFormat
-               && automaticPresenceUpdates == that.automaticPresenceUpdates
-               && automaticMessageReceipts == that.automaticMessageReceipts
-               && checkPatchMacs == that.checkPatchMacs
-               && syncedChats == that.syncedChats
-               && syncedContacts == that.syncedContacts
-               && syncedNewsletters == that.syncedNewsletters
-               && syncedStatus == that.syncedStatus
-               && syncedWebAppState == that.syncedWebAppState
-               && syncedBusinessCertificate == that.syncedBusinessCertificate
-               && registered == that.registered
-               && Objects.equals(uuid, that.uuid)
-               && Objects.equals(phoneNumber, that.phoneNumber)
-               && clientType == that.clientType
-               && Objects.equals(serializer, that.serializer)
-               && Objects.equals(initializationTimeStamp, that.initializationTimeStamp)
-               && Objects.equals(proxy, that.proxy)
-               && Objects.equals(device, that.device)
-               && releaseChannel == that.releaseChannel
-               && Objects.equals(locale, that.locale)
-               && Objects.equals(name, that.name)
-               && Objects.equals(verifiedName, that.verifiedName)
-               && Objects.equals(profilePicture, that.profilePicture)
-               && Objects.equals(about, that.about)
-               && Objects.equals(jid, that.jid)
-               && Objects.equals(lid, that.lid)
-               && Objects.equals(businessAddress, that.businessAddress)
-               && Objects.equals(businessLongitude, that.businessLongitude)
-               && Objects.equals(businessLatitude, that.businessLatitude)
-               && Objects.equals(businessDescription, that.businessDescription)
-               && Objects.equals(businessWebsite, that.businessWebsite)
-               && Objects.equals(businessEmail, that.businessEmail)
-               && Objects.equals(businessCategory, that.businessCategory)
-               && Objects.equals(chats, that.chats)
-               && Objects.equals(newsletters, that.newsletters)
-               && Objects.equals(status, that.status)
-               && Objects.equals(contacts, that.contacts)
-               && Objects.equals(calls, that.calls)
-               && Objects.equals(privacySettings, that.privacySettings)
-               && Objects.equals(properties, that.properties)
-               && newChatsEphemeralTimer == that.newChatsEphemeralTimer
-               && Objects.equals(webHistoryPolicy, that.webHistoryPolicy)
-               && Objects.equals(registrationId, that.registrationId)
-               && Objects.equals(noiseKeyPair, that.noiseKeyPair)
-               && Objects.equals(identityKeyPair, that.identityKeyPair)
-               && Objects.equals(companionKeyPair, that.companionKeyPair)
-               && Objects.equals(signedDeviceIdentity, that.signedDeviceIdentity)
-               && Objects.equals(signedKeyPair, that.signedKeyPair)
-               && Objects.equals(preKeys, that.preKeys)
-               && Objects.equals(fdid, that.fdid)
-               && Objects.deepEquals(deviceId, that.deviceId)
-               && Objects.equals(advertisingId, that.advertisingId)
-               && Objects.deepEquals(identityId, that.identityId)
-               && Objects.deepEquals(backupToken, that.backupToken)
-               && Objects.equals(senderKeys, that.senderKeys)
-               && Objects.equals(appStateKeys, that.appStateKeys)
-               && Objects.equals(sessions, that.sessions)
-               && Objects.equals(hashStates, that.hashStates)
-               && Objects.equals(listeners, that.listeners)
-               && Objects.equals(mediaConnection, that.mediaConnection);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(uuid, phoneNumber, clientType, serializer, serializable,
-                initializationTimeStamp, proxy, device, releaseChannel,
-                online, locale, name, verifiedName, profilePicture,
-                about, jid, lid, businessAddress, businessLongitude, businessLatitude,
-                businessDescription, businessWebsite, businessEmail, businessCategory,
-                chats, newsletters, status, contacts, calls, privacySettings, properties,
-                unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer, webHistoryPolicy,
-                automaticPresenceUpdates, automaticMessageReceipts, checkPatchMacs, syncedChats, 
-                syncedContacts, syncedNewsletters, syncedStatus, syncedWebAppState, syncedBusinessCertificate,
-                registrationId, noiseKeyPair, identityKeyPair, companionKeyPair, signedDeviceIdentity,
-                signedKeyPair, preKeys, fdid, Arrays.hashCode(deviceId), advertisingId, Arrays.hashCode(identityId), 
-                Arrays.hashCode(backupToken), senderKeys, appStateKeys, sessions, hashStates, registered, listeners, mediaConnection);
-    }
-
-    @Override
-    public String toString() {
-        return "WhatsappStore[" +
-               "uuid=" + uuid +
-               ", phoneNumber=" + phoneNumber +
-               ", clientType=" + clientType +
-               ", jid=" + jid +
-               ']';
-    }
-
-    public Optional<PrivacySettingEntry> findPrivacySetting(PrivacySettingType type) {
-        return type == null
-                ? Optional.empty()
-                : Optional.ofNullable(privacySettings.get(type));
-    }
-
-    public void addPrivacySetting(PrivacySettingEntry entry) {
-        Objects.requireNonNull(entry, "entry cannot be null");
-        privacySettings.put(entry.type(), entry);
-    }
-
-    public Optional<ChatMessageInfo> findChatMessageByKey(ChatMessageKey key) {
-        var chat = chats.get(key.chatJid());
-        if(chat == null) {
-            return Optional.empty();
-        }
-
-        return chat.getMessageById(key.id());
-    }
-
-    public boolean showSecurityNotifications() {
-        return showSecurityNotifications;
-    }
-
-    public void setShowSecurityNotifications(boolean showSecurityNotifications) {
-        this.showSecurityNotifications = showSecurityNotifications;
-    }
-
-    public Optional<Sticker> findRecentSticker(String stickerHash) {
-        return Optional.ofNullable(recentStickers.get(stickerHash));
-    }
-
-    public void addRecentSticker(String stickerHash, Sticker sticker) {
-        Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
-        Objects.requireNonNull(sticker, "sticker cannot be null");
-        recentStickers.put(stickerHash, sticker);
-    }
-
-    public Optional<Sticker> removeRecentSticker(String stickerHash) {
-        return Optional.ofNullable(recentStickers.remove(stickerHash));
-    }
-
-    public Optional<Sticker> findFavouriteSticker(String stickerHash) {
-        return Optional.ofNullable(favouriteStickers.get(stickerHash));
-    }
-
-    public void addFavouriteSticker(String stickerHash, Sticker sticker) {
-        Objects.requireNonNull(stickerHash, "stickerHash cannot be null");
-        Objects.requireNonNull(sticker, "sticker cannot be null");
-        favouriteStickers.put(stickerHash, sticker);
-    }
-
-    public Optional<Sticker> removeFavouriteSticker(String stickerHash) {
-        return Optional.ofNullable(favouriteStickers.remove(stickerHash));
-    }
-
-    public Optional<QuickReply> findQuickReply(String shortcut) {
-        return Optional.ofNullable(quickReplies.get(shortcut));
-    }
-
-    public void addQuickReply(QuickReply action) {
-        Objects.requireNonNull(action, "action cannot be null");
-        quickReplies.put(action.shortcut(), action);
-    }
-
-    public Optional<Label> findLabel(int labelId) {
-        return Optional.ofNullable(labels.get(labelId));
-    }
-
-    public Optional<Label> removeLabel(int labelId) {
-        return Optional.ofNullable(labels.remove(labelId));
-    }
-
-    public void addLabel(Label label) {
-        Objects.requireNonNull(label, "label cannot be null");
-        labels.put(label.id(), label);
-    }
-
-    public Optional<QuickReply> removeQuickReply(String shortcut) {
-        return shortcut == null
-                ? Optional.empty()
-                : Optional.ofNullable(quickReplies.remove(shortcut));
-    }
-
-    public Version clientVersion() {
-        if(clientVersion == null) {
-            synchronized (clientVersionLock) {
-                if(clientVersion == null) {
-                    clientVersion = WhatsAppClientInfo.of(device.platform())
-                            .version();
-                }
-            }
-        }
-        return clientVersion;
-    }
-
-    public void setClientVersion(Version clientVersion) {
-        this.clientVersion = clientVersion;
-    }
-
-    public Optional<Version> companionVersion() {
-        return Optional.ofNullable(companionVersion);
-    }
-
-    public void setCompanionVersion(Version companionVersion) {
-        this.companionVersion = companionVersion;
-    }
-
-    /**
-     * Gets group metadata.
-     *
-     * @param groupJid the group JID
-     * @return the group metadata, or empty if not found
-     */
-    public Optional<GroupOrCommunityMetadata> findGroupOrCommunityMetadata(Jid groupJid) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        return Optional.ofNullable(groupOrCommunityMetadata.get(groupJid));
-    }
-
-    /**
-     * Stores group metadata.
-     *
-     * @param groupData the group metadata
-     */
-    public void addGroupOrCommunityMetadata(GroupOrCommunityMetadata groupData) {
-        Objects.requireNonNull(groupData, "groupData cannot be null");
-        groupOrCommunityMetadata.put(groupData.jid(), groupData);
-    }
-
-    /**
-     * Clears group metadata.
-     *
-     * @param groupJid the group JID
-     */
-    public void removeGroupOrCommunityMetadata(Jid groupJid) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        groupOrCommunityMetadata.remove(groupJid);
-    }
-
-    /**
-     * Finds the verified business name record for the given JID.
-     *
-     * @param jid the user JID
-     * @return the record, or empty if not found
-     *
-     * @apiNote WAWebApiVerifiedBusinessName.getVerifiedBusinessNameRecord:
-     * looks up the record by user JID string.
-     */
-    public Optional<VerifiedBusinessName> findVerifiedBusinessName(Jid jid) {
-        Objects.requireNonNull(jid, "jid cannot be null");
-        return Optional.ofNullable(verifiedBusinessNames.get(jid.toUserJid().toString()));
-    }
-
-    /**
-     * Adds or replaces a verified business name record.
-     *
-     * @param record the record to store
-     *
-     * @apiNote WAWebApiVerifiedBusinessName.createOrUpdateVerifiedBusinessName:
-     * stores the record keyed by user JID string.
-     */
-    public void addVerifiedBusinessName(VerifiedBusinessName record) {
-        Objects.requireNonNull(record, "record cannot be null");
-        verifiedBusinessNames.put(record.jid().toUserJid().toString(), record);
-    }
-
-    /**
-     * Removes the verified business name record for the given JID.
-     *
-     * @param jid the user JID
-     */
-    public void removeVerifiedBusinessName(Jid jid) {
-        Objects.requireNonNull(jid, "jid cannot be null");
-        verifiedBusinessNames.remove(jid.toUserJid().toString());
-    }
+    WhatsAppStore setCompanionVersion(Version version);
 
     /**
      * Gets the device list for a user with full metadata.
-     * <p>
-     * Per WhatsApp Web: cached device lists are always returned regardless of age.
-     * The staleness check (using timestamp + num_days_key_index_list_expiration)
-     * is only used by the ADV scheduler to determine when to proactively refresh.
      *
      * @param userJid the user JID
-     * @return the device list with metadata, or empty if not cached
+     * @return an {@code Optional} containing the device list, or empty
+     *         if not cached
      */
-    public Optional<DeviceList> findDeviceList(Jid userJid) {
-        Objects.requireNonNull(userJid, "userJid cannot be null");
-
-        synchronized (deviceListsAccessOrder) {
-            var deviceList = deviceLists.get(userJid);
-            if (deviceList == null) {
-                // Check alternate JID (PN ↔ LID mapping)
-                Jid alternateJid;
-                if (userJid.hasUserServer()) {
-                    alternateJid = findLidByPhone(userJid).orElse(null);
-                } else if (userJid.hasLidServer()) {
-                    alternateJid = findPhoneByLid(userJid).orElse(null);
-                } else {
-                    alternateJid = null;
-                }
-
-                if (alternateJid != null) {
-                    var alternateList = deviceLists.get(alternateJid);
-                    if (alternateList != null) {
-                        deviceListsAccessOrder.remove(alternateJid);
-                        deviceListsAccessOrder.addLast(alternateJid);
-                        return Optional.of(alternateList);
-                    }
-                }
-
-                return Optional.empty();
-            }
-
-            // Update LRU access order
-            deviceListsAccessOrder.remove(userJid);
-            deviceListsAccessOrder.addLast(userJid);
-
-            return Optional.of(deviceList);
-        }
-    }
-
-    /**
-     * Gets simple JID list for backward compatibility.
-     *
-     * @param userJid the user JID
-     * @return list of device JIDs
-     */
-    public Set<Jid> findDeviceJids(Jid userJid) {
-        return findDeviceList(userJid)
-                .map(DeviceList::deviceJids)
-                .orElse(Set.of());
-    }
+    Optional<DeviceList> findDeviceList(Jid userJid);
 
     /**
      * Returns all cached device lists.
-     * Used for periodic ADV checks and expiration validation.
      *
-     * @return collection of all cached device lists
+     * @return an unmodifiable collection of device lists
      */
-    public Collection<DeviceList> deviceLists() {
-        synchronized (deviceListsAccessOrder) {
-            return List.copyOf(deviceLists.values());
-        }
-    }
+    Collection<DeviceList> deviceLists();
 
     /**
      * Stores a device list for a user with LRU eviction.
      *
      * @param deviceList the device list to store
      */
-    public void addDeviceList(DeviceList deviceList) {
-        Objects.requireNonNull(deviceList, "deviceList cannot be null");
-
-        synchronized (deviceListsAccessOrder) {
-            var userJid = deviceList.userJid();
-
-            // Evict oldest entry if cache is full
-            if (deviceLists.size() >= MAX_DEVICE_LISTS && !deviceLists.containsKey(userJid)) {
-                var oldest = deviceListsAccessOrder.removeFirst();
-                deviceLists.remove(oldest);
-            }
-
-            // Update or add entry
-            deviceLists.put(userJid, deviceList);
-            deviceListsAccessOrder.remove(userJid);
-            deviceListsAccessOrder.addLast(userJid);
-        }
-    }
+    void addDeviceList(DeviceList deviceList);
 
     /**
      * Clears the device list cache for a user.
      *
      * @param userJid the user JID
      */
-    public void removeDeviceList(Jid userJid) {
-        Objects.requireNonNull(userJid, "userJid cannot be null");
-        synchronized (deviceListsAccessOrder) {
-            deviceLists.remove(userJid);
-            deviceListsAccessOrder.remove(userJid);
-        }
-    }
+    void removeDeviceList(Jid userJid);
 
     /**
      * Clears all device lists from cache.
      */
-    public void clearDeviceLists() {
-        synchronized (deviceListsAccessOrder) {
-            deviceLists.clear();
-            deviceListsAccessOrder.clear();
-        }
-    }
+    void clearDeviceLists();
 
     /**
      * Gets the last ADV check time.
      *
-     * @return the last check time, or empty if never checked
+     * @return an {@code Optional} containing the last check time, or empty
+     *         if never checked
      */
-    public Optional<Instant> lastAdvCheckTime() {
-        return Optional.ofNullable(lastAdvCheckTime);
-    }
+    Optional<Instant> lastAdvCheckTime();
 
     /**
      * Updates the last ADV check time to now.
      */
-    public void updateAdvCheckTime() {
-        this.lastAdvCheckTime = Instant.now();
-    }
+    void updateAdvCheckTime();
 
     /**
-     * Marks a device as offline for temporary caching.
+     * Gets all pending device sync requests.
      *
-     * @param deviceJid the device JID
+     * @return an unmodifiable list of pending syncs
      */
-    public void markDeviceOffline(Jid deviceJid) {
-        offlineDeviceTimestamps.put(deviceJid, System.currentTimeMillis());
-    }
-
-    /**
-     * Checks if a device is currently marked as offline.
-     *
-     * @param deviceJid the device JID
-     * @return true if offline and not expired (< 24 hours)
-     */
-    public boolean isDeviceOffline(Jid deviceJid) {
-        var timestamp = offlineDeviceTimestamps.get(deviceJid);
-        if (timestamp == null) {
-            return false;
-        }
-        var elapsed = System.currentTimeMillis() - timestamp;
-        return elapsed < 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-    }
-
-    /**
-     * Marks a device as online (removes from offline cache).
-     *
-     * @param deviceJid the device JID
-     */
-    public void markDeviceOnline(Jid deviceJid) {
-        offlineDeviceTimestamps.remove(deviceJid);
-    }
-
-    /**
-     * Cleans up expired offline device entries (older than 24 hours).
-     */
-    public void cleanupExpiredOfflineDevices() {
-        var now = System.currentTimeMillis();
-        var expirationTime = 24 * 60 * 60 * 1000; // 24 hours
-
-        offlineDeviceTimestamps.entrySet().removeIf(entry ->
-            now - entry.getValue() >= expirationTime
-        );
-    }
+    List<PendingDeviceSync> pendingDevicesSyncs();
 
     /**
      * Adds a pending device sync request for retry.
      *
      * @param sync the pending sync
      */
-    public void addPendingDeviceSync(PendingDeviceSync sync) {
-        pendingDeviceSyncs.offer(sync);
-    }
-
-    /**
-     * Gets all pending device sync requests.
-     *
-     * @return list of pending syncs
-     */
-    public List<PendingDeviceSync> pendingDevicesSyncs() {
-        return List.copyOf(pendingDeviceSyncs);
-    }
+    void addPendingDeviceSync(PendingDeviceSync sync);
 
     /**
      * Removes a pending device sync request.
      *
      * @param sync the sync to remove
      */
-    public void removePendingDeviceSync(PendingDeviceSync sync) {
-        pendingDeviceSyncs.remove(sync);
-    }
+    void removePendingDeviceSync(PendingDeviceSync sync);
 
     /**
      * Clears all pending device sync requests.
      */
-    public void clearPendingDeviceSyncs() {
-        pendingDeviceSyncs.clear();
-    }
-
-    /**
-     * Cleans up expired pending device syncs (older than 24 hours).
-     */
-    public void cleanupExpiredPendingDeviceSyncs() {
-        pendingDeviceSyncs.removeIf(PendingDeviceSync::isExpired);
-    }
-
-    /**
-     * Marks a device as having an unconfirmed identity change.
-     * The device should be excluded from fanout until confirmed.
-     *
-     * @param deviceJid the device JID
-     */
-    public void markIdentityChange(Jid deviceJid) {
-        unconfirmedIdentityChanges.add(deviceJid);
-    }
-
-    /**
-     * Confirms an identity change for a device, removing it from the exclusion list.
-     *
-     * @param deviceJid the device JID
-     */
-    public void confirmIdentityChange(Jid deviceJid) {
-        unconfirmedIdentityChanges.remove(deviceJid);
-    }
+    void clearPendingDeviceSyncs();
 
     /**
      * Gets all devices with unconfirmed identity changes.
      *
-     * @return immutable set of device JIDs with unconfirmed identity changes
+     * @return an unmodifiable set of device JIDs
      */
-    public Set<Jid> unconfirmedIdentityChanges() {
-        return Collections.unmodifiableSet(unconfirmedIdentityChanges);
-    }
+    Set<Jid> unconfirmedIdentityChanges();
+
+    /**
+     * Marks a device as having an unconfirmed identity change.
+     *
+     * @param deviceJid the device JID
+     */
+    void markIdentityChange(Jid deviceJid);
+
+    /**
+     * Confirms an identity change for a device.
+     *
+     * @param deviceJid the device JID
+     */
+    void confirmIdentityChange(Jid deviceJid);
 
     /**
      * Clears all unconfirmed identity changes.
      */
-    public void clearUnconfirmedIdentityChanges() {
-        unconfirmedIdentityChanges.clear();
-    }
-
-    // =====================================================
-    // SECTION: Coex Hosted Verification Cache
-    // =====================================================
+    void clearUnconfirmedIdentityChanges();
 
     /**
      * Adds a user JID to the coex hosted verification cache.
-     * Per WhatsApp Web: this is called when we verify a user as hosted via ADV
-     * (during device list sync or message processing).
      *
-     * @param userJid the user JID to add (will be normalized to user JID)
+     * @param userJid the user JID to add
      */
-    public void addToCoexHostedVerificationCache(Jid userJid) {
-        if (userJid != null) {
-            coexHostedVerificationCache.add(userJid.toUserJid());
-        }
-    }
+    void addToCoexHostedVerificationCache(Jid userJid);
 
     /**
      * Checks if a user JID is in the coex hosted verification cache.
      *
      * @param userJid the user JID to check
-     * @return true if the user has been verified as hosted
+     * @return {@code true} if the user has been verified as hosted
      */
-    public boolean isInCoexHostedVerificationCache(Jid userJid) {
-        if (userJid == null) {
-            return false;
-        }
-        return coexHostedVerificationCache.contains(userJid.toUserJid());
-    }
-
-    /**
-     * Asserts that a user JID is in the coex hosted verification cache.
-     * Per WhatsApp Web: this throws an exception if the user hasn't been verified as hosted,
-     * which prevents accepting messages from potentially spoofed hosted devices.
-     *
-     * @param userJid the user JID to verify
-     * @throws IllegalStateException if the user is not in the cache
-     */
-    public void assertCoexHostedVerification(Jid userJid) {
-        if (!isInCoexHostedVerificationCache(userJid)) {
-            throw new IllegalStateException(
-                    "User " + userJid + " not found in coex verification cache"
-            );
-        }
-    }
+    boolean isInCoexHostedVerificationCache(Jid userJid);
 
     /**
      * Clears the coex hosted verification cache.
-     * Should be called on logout/disconnect.
      */
-    public void clearCoexHostedVerificationCache() {
-        coexHostedVerificationCache.clear();
-    }
-
-    public boolean hasJid(JidProvider entry) {
-        if(entry == null) {
-            return false;
-        } else {
-            var localJid = jid;
-            var localLid = lid;
-            var remoteJid = entry.toJid();
-            return remoteJid.equals(localJid) || remoteJid.equals(localLid);
-        }
-    }
-
-    public boolean hasUserJid(JidProvider entry) {
-        if(entry == null) {
-            return false;
-        } else {
-            var localJid = jid;
-            var localLid = lid;
-            var remoteJid = entry.toJid();
-            return (localJid != null && remoteJid.hasUser(localJid.user()))
-                    || (localLid != null && remoteJid.hasUser(localLid.user()));
-        }
-    }
+    void clearCoexHostedVerificationCache();
 
     /**
-     * Converts a LID to its phone number equivalent.
-     * Per WhatsApp Web WAWebLidMigrationUtils
+     * Finds the verified business name record for the given JID.
      *
-     * @param lidJid the LID JID
-     * @return an Optional containing the phone number JID, or empty if not found
+     * @param jid the user JID
+     * @return an {@code Optional} containing the record if found
      */
-    public Optional<Jid> getPhoneNumberByLid(Jid lidJid) {
-        if (lidJid == null || !lidJid.hasLidServer()) {
-            return Optional.empty();
-        }
-        // Try to find phone number from contact with matching LID
-        return contacts.values().stream()
-                .filter(contact -> contact.lid().map(lid -> lid.equals(lidJid)).orElse(false))
-                .findFirst()
-                .map(Contact::jid);
-    }
+    Optional<VerifiedBusinessName> findVerifiedBusinessName(Jid jid);
 
     /**
-     * Converts a phone number JID to its LID equivalent.
-     * Per WhatsApp Web WAWebLidMigrationUtils.toUserLid
+     * Adds or replaces a verified business name record.
      *
-     * @param phoneNumberJid the phone number JID
-     * @return an Optional containing the LID JID, or empty if not found
+     * @param record the record to store
      */
-    public Optional<Jid> getLidByPhoneNumber(Jid phoneNumberJid) {
-        if (phoneNumberJid == null) {
-            return Optional.empty();
-        }
-        // Check if already a LID
-        if (phoneNumberJid.hasLidServer()) {
-            return Optional.of(phoneNumberJid);
-        }
-        // Try to find LID from contact
-        var contact = findContactByJid(phoneNumberJid).orElse(null);
-        if (contact != null) {
-            var contactLid = contact.lid();
-            if (contactLid.isPresent()) {
-                return contactLid;
-            }
-        }
-        // Try to find LID from chat
-        var chat = findChatByJid(phoneNumberJid).orElse(null);
-        if (chat != null) {
-            return chat.accountLid();
-        }
-        return Optional.empty();
-    }
+    void addVerifiedBusinessName(VerifiedBusinessName record);
+
+    /**
+     * Removes the verified business name record for the given JID.
+     *
+     * @param jid the user JID
+     */
+    void removeVerifiedBusinessName(Jid jid);
+
+    /**
+     * Returns the metadata for the group or community identified by the
+     * given JID, if it has been stored.
+     *
+     * @param groupJid the group or community JID
+     * @return an {@code Optional} containing the metadata if found
+     */
+    Optional<ChatMetadata> findChatMetadata(Jid groupJid);
+
+    /**
+     * Stores the metadata for a group or community, replacing any
+     * previously stored metadata for the same JID.
+     *
+     * @param metadata the non-{@code null} metadata to store
+     */
+    void addChatMetadata(ChatMetadata metadata);
+
+    /**
+     * Removes the stored metadata for the group or community identified
+     * by the given JID.
+     *
+     * @param groupJid the group or community JID
+     */
+    void removeChatMetadata(Jid groupJid);
+
+    /**
+     * Adds an event listener to this session.
+     *
+     * @param listener the listener to add
+     * @return the listener that was added
+     */
+    WhatsAppClientListener addListener(WhatsAppClientListener listener);
+
+    /**
+     * Removes an event listener from this session.
+     *
+     * @param listener the listener to remove
+     * @return {@code true} if the listener was removed
+     */
+    boolean removeListener(WhatsAppClientListener listener);
+
+    /**
+     * Returns all registered event listeners.
+     *
+     * @return an unmodifiable collection of listeners
+     */
+    Collection<WhatsAppClientListener> listeners();
+
+    /**
+     * Returns the configured proxy.
+     *
+     * @return an {@code Optional} containing the proxy, or empty if not configured
+     */
+    Optional<WhatsAppClientProxy> proxy();
+
+    /**
+     * Sets the proxy for network connections.
+     *
+     * @param proxy the proxy, may be {@code null} to disable proxy
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setProxy(WhatsAppClientProxy proxy);
+
+    /**
+     * Blocks until a media connection is available.
+     *
+     * @return the media connection, never {@code null}
+     * @throws InterruptedException if the current thread is interrupted
+     */
+    MediaConnection awaitMediaConnection() throws InterruptedException;
+
+    /**
+     * Sets the media connection.
+     *
+     * @param mediaConnection the media connection, may be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setMediaConnection(MediaConnection mediaConnection);
+
+    /**
+     * Returns the current offline resume state.
+     *
+     * @return the current state, never {@code null}
+     */
+    WhatsAppClientOfflineResumeState offlineResumeState();
+
+    /**
+     * Sets the offline resume state.
+     *
+     * @param state the new state, must not be {@code null}
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setOfflineResumeState(WhatsAppClientOfflineResumeState state);
+
+    /**
+     * Checks if the offline resume from restart is complete.
+     *
+     * @return {@code true} if offline resume is complete
+     */
+    boolean isResumeFromRestartComplete();
+
+    /**
+     * Blocks until offline delivery is complete, or the timeout expires.
+     */
+    void waitForOfflineDeliveryEnd();
 }

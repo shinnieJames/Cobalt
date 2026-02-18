@@ -19,14 +19,17 @@ import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
 import com.github.auties00.cobalt.device.key.DevicePreKeyHandler;
 import com.github.auties00.cobalt.model.auth.ADVEncryptionType;
 import com.github.auties00.cobalt.model.auth.SignedDeviceIdentity;
-import com.github.auties00.cobalt.model.chat.ChatParticipant;
-import com.github.auties00.cobalt.model.device.*;
+import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
 import com.github.auties00.cobalt.model.info.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.info.MessageInfoStubType;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.ChatMessageKey;
-import com.github.auties00.cobalt.model.message.common.ChatMessageKeyBuilder;
-import com.github.auties00.cobalt.model.message.common.MessageStatus;
+import com.github.auties00.cobalt.model.message.ChatMessageKey;
+import com.github.auties00.cobalt.model.message.ChatMessageKeyBuilder;
+import com.github.auties00.cobalt.model.message.MessageStatus;
+import com.github.auties00.cobalt.model.device.info.DeviceInfo;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
+import com.github.auties00.cobalt.model.device.info.DeviceListHashInfo;
+import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABProp;
@@ -268,14 +271,12 @@ public final class DeviceService {
      */
     private boolean isHostedOverrideAdvAccountSignatureKeyEnabled() {
         // WAWebBizCoexGatingUtils: first check if hosted devices are enabled at all
-        var hostedDevicesEnabled = abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES_AB_PROP_CODE)
-                .orElse(false);
+        var hostedDevicesEnabled = abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES);
         if (!hostedDevicesEnabled) {
             return false;
         }
         // WAWebBizCoexGatingUtils: then check the override flag
-        return abPropsService.getBool(ABProp.OVERRIDE_ADV_ACCOUNT_SIGNATURE_KEY_ENABLED_AB_PROP_CODE)
-                .orElse(false);
+        return abPropsService.getBool(ABProp.OVERRIDE_ADV_ACCOUNT_SIGNATURE_KEY_ENABLED);
     }
 
     /**
@@ -524,8 +525,7 @@ public final class DeviceService {
             checkPnToLidMapping(toFetch, "device_sync_request");
 
             // WAWebUsernameGatingUtils.usernameUsyncEnabled: check if username protocol should be included
-            var includeUsernameProtocol = abPropsService.getBool(ABProp.USERNAME_USYNC_AB_PROP_CODE)
-                    .orElse(false);
+            var includeUsernameProtocol = abPropsService.getBool(ABProp.USERNAME_USYNC);
 
             // WAWebUsync.USyncQuery.execute: batch fetch from server via deprecatedSendIq
             var batches = DeviceUSyncQueryBuilder.build(toFetch, context, hashInfos, includeUsernameProtocol);
@@ -644,8 +644,7 @@ public final class DeviceService {
                                 newTimestamp = cachedList.get().timestamp();
                             } else {
                                 // WAWebHandleAdvListResetApi: pastUnixTime((expirationDays-1) * DAY_SECONDS)
-                                var expirationDays = abPropsService.getInt(ABProp.NUM_DAYS_KEY_INDEX_LIST_EXPIRATION_AB_PROP_CODE)
-                                        .orElse(35);
+                                var expirationDays = abPropsService.getInt(ABProp.NUM_DAYS_KEY_INDEX_LIST_EXPIRATION);
                                 var pastSeconds = (expirationDays - 1) * 24 * 60 * 60L;
                                 newTimestamp = Instant.now().minusSeconds(pastSeconds);
                             }
@@ -1458,10 +1457,10 @@ public final class DeviceService {
         var myDeviceJid = resolveMyDeviceJid(groupJid);
         try {
             // WAWebDBDeviceListFanout.getFanOutList: get devices for all participants
-            var metadata = client.queryGroupOrCommunityMetadata(groupJid);
+            var metadata = client.queryChatMetadata(groupJid);
             var participants = metadata.participants()
                     .stream()
-                    .map(ChatParticipant::jid)
+                    .map(GroupParticipant::userJid)
                     .toList();
             var deviceLists = getDeviceLists(participants, "message", null, false);
 
@@ -1547,8 +1546,7 @@ public final class DeviceService {
      */
     private boolean isBizHostedDevicesEnabled() {
         // WAWebBizCoexGatingUtils: defaults to false when AB prop is not set
-        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES_AB_PROP_CODE)
-                .orElse(false);
+        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES);
     }
 
     /**

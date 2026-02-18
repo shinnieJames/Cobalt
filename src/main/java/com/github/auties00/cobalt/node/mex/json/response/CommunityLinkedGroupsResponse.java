@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.node.mex.json.response;
 
 import com.alibaba.fastjson2.JSON;
-import com.github.auties00.cobalt.model.chat.CommunityLinkedGroup;
+import com.github.auties00.cobalt.model.chat.community.CommunityLinkedGroup;
 import com.github.auties00.cobalt.model.chat.CommunityLinkedGroupBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 
@@ -64,7 +64,7 @@ public final class CommunityLinkedGroupsResponse {
             var totalParticipantsCount = node.getInteger("total_participants_count");
             var link = new CommunityLinkedGroupBuilder()
                     .jid(Jid.of(id))
-                    .participants(totalParticipantsCount)
+                    .participantCount(totalParticipantsCount)
                     .build();
             links.add(link);
         }

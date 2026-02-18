@@ -6,12 +6,15 @@ import com.github.auties00.cobalt.exception.*;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.action.*;
-import com.github.auties00.cobalt.model.bot.*;
-import com.github.auties00.cobalt.model.business.*;
-import com.github.auties00.cobalt.model.call.Call;
+import com.github.auties00.cobalt.model.business.BusinessVerifiedNameCertificate;
+import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.call.CallBuilder;
-import com.github.auties00.cobalt.model.call.CallStatus;
 import com.github.auties00.cobalt.model.chat.*;
+import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
+import com.github.auties00.cobalt.model.chat.ChatMute;
+import com.github.auties00.cobalt.model.chat.ChatMetadata;
+import com.github.auties00.cobalt.model.chat.community.CommunityMetadata;
+import com.github.auties00.cobalt.model.chat.group.*;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.info.*;
@@ -19,20 +22,31 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.media.MediaProvider;
-import com.github.auties00.cobalt.model.message.common.*;
+import com.github.auties00.cobalt.model.message.*;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.server.ProtocolMessageBuilder;
 import com.github.auties00.cobalt.model.message.standard.NewsletterAdminInviteMessageBuilder;
 import com.github.auties00.cobalt.model.message.standard.ReactionMessageBuilder;
 import com.github.auties00.cobalt.model.message.standard.TextMessage;
-import com.github.auties00.cobalt.model.newsletter.*;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntryBuilder;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
 import com.github.auties00.cobalt.model.setting.Setting;
-import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.RecordSync.Operation;
+import com.github.auties00.cobalt.model.bot.profile.BotProfessionalStatus;
+import com.github.auties00.cobalt.model.bot.profile.BotProfile;
+import com.github.auties00.cobalt.model.bot.profile.BotProfileCategory;
+import com.github.auties00.cobalt.model.bot.profile.BotProfileCommand;
+import com.github.auties00.cobalt.model.bot.profile.BotProfilePrompt;
+import com.github.auties00.cobalt.model.business.catalog.BusinessCatalogEntry;
+import com.github.auties00.cobalt.model.business.catalog.BusinessCatalog;
+import com.github.auties00.cobalt.model.business.catalog.BusinessItemAvailability;
+import com.github.auties00.cobalt.model.business.catalog.BusinessReviewStatus;
+import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
+import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
+import com.github.auties00.cobalt.model.newsletter.*;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -44,11 +58,12 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
 import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
 import com.github.auties00.cobalt.store.WhatsAppStore;
+import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.stream.SocketRequest;
 import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.sync.WebAppStateService;
-import com.github.auties00.cobalt.util.Clock;
 import com.github.auties00.cobalt.util.SecureBytes;
+import com.github.auties00.cobalt.util.WhatsAppIdGenerator;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -59,7 +74,6 @@ import javax.crypto.Cipher;
 import javax.crypto.KDF;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.HKDFParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -70,7 +84,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Instant;
-import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -108,6 +121,7 @@ public final class WhatsAppClient {
     private final ABPropsService abPropsService;
 
     private final MessageService messageService;
+    private final WamService wamService;
 
     private WhatsAppSocketClient socketClient;
     private final SocketStream socketStream;
@@ -127,8 +141,9 @@ public final class WhatsAppClient {
         this.lidMigrationService = new LidMigrationService(this);
         this.deviceService = new DeviceService(this, abPropsService, sessionCipher);
         this.messageService = new MessageService(this, sessionCipher, groupCipher, deviceService, abPropsService);
+        this.wamService = new WamService(this);
         this.pendingSocketRequests = new ConcurrentHashMap<>();
-        this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, messageService, abPropsService, deviceService);
+        this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, messageService, abPropsService, deviceService, wamService);
         this.messagePreviewHandler = messagePreviewHandler;
     }
 
@@ -240,6 +255,8 @@ public final class WhatsAppClient {
     }
 
     private void disconnect(WhatsAppClientDisconnectReason reason, boolean canRemoveShutdownHook) {
+        wamService.close();
+
         if (socketClient != null) {
             socketClient.disconnect();
         }
@@ -248,11 +265,9 @@ public final class WhatsAppClient {
         pendingSocketRequests.clear();
 
         if (reason == WhatsAppClientDisconnectReason.LOGGED_OUT || reason == WhatsAppClientDisconnectReason.BANNED) {
-            store.setSerializable(false);
-            var serializer = store.serializer();
-            serializer.deleteSession(store.clientType(), store.uuid());
+            WhatsAppStore.deleteSession(store.clientType(), store.uuid());
         } else {
-            store.serialize();
+            store.save();
         }
 
         socketStream.reset();
@@ -486,7 +501,7 @@ public final class WhatsAppClient {
 
         var usyncNode = new NodeBuilder()
                 .description("usync")
-                .attribute("sid", SecureBytes.randomSid())
+                .attribute("sid", WhatsAppIdGenerator.generateSid())
                 .attribute("mode", "query")
                 .attribute("last", "true")
                 .attribute("index", "0")
@@ -522,6 +537,7 @@ public final class WhatsAppClient {
                 .flatMap(Node::toContentString).orElse(null);
         var category = profile.getChild("category")
                 .flatMap(Node::toContentString)
+                .map(BotProfileCategory::of)
                 .orElse(null);
         var isDefault = profile.getChild("default")
                 .flatMap(Node::toContentBool)
@@ -554,10 +570,11 @@ public final class WhatsAppClient {
                 ? creatorNode.getChild("profile_url").flatMap(Node::toContentString).orElse(null)
                 : null;
 
-        var posingAsProfessional = profile.getChild("posing_as_professional")
+        var professionalStatus = profile.getChild("posing_as_professional")
                 .flatMap(node -> node.getAttributeAsString("type"))
+                .map(BotProfessionalStatus::of)
                 .orElse(null);
-        
+
         return new BotProfileBuilder()
                 .jid(botJid)
                 .name(name)
@@ -572,7 +589,7 @@ public final class WhatsAppClient {
                 .isMetaCreated(isMetaCreated)
                 .creatorName(creatorName)
                 .creatorProfileUrl(creatorProfileUrl)
-                .posingAsProfessional(posingAsProfessional)
+                .professionalStatus(professionalStatus)
                 .build();
     }
 
@@ -649,7 +666,7 @@ public final class WhatsAppClient {
                 .build();
         var syncNode = new NodeBuilder()
                 .description("usync")
-                .attribute("sid", SecureBytes.randomSid())
+                .attribute("sid", WhatsAppIdGenerator.generateSid())
                 .attribute("mode", "query")
                 .attribute("last", "true")
                 .attribute("index", "0")
@@ -782,7 +799,7 @@ public final class WhatsAppClient {
                 .build();
         var syncNode = new NodeBuilder()
                 .description("usync")
-                .attribute("sid", SecureBytes.randomSid())
+                .attribute("sid", WhatsAppIdGenerator.generateSid())
                 .attribute("mode", "query")
                 .attribute("last", "true")
                 .attribute("index", "0")
@@ -818,7 +835,7 @@ public final class WhatsAppClient {
                 .attribute("type", "image")
                 .build();
         var community = chat.toJid().hasServer(JidServer.groupOrCommunity())
-                        && queryGroupOrCommunityMetadata(chat.toJid()).isCommunity();
+                        && queryChatMetadata(chat.toJid()) instanceof CommunityMetadata;
         var iqNode = new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:profile:picture")
@@ -1235,8 +1252,60 @@ public final class WhatsAppClient {
         var result = sendNode(iqNode);
         return result.streamChild("product_catalog")
                 .flatMap(entry -> entry.streamChildren("product"))
-                .map(BusinessCatalogEntry::of)
+                .map(this::parseCatalogEntry)
                 .toList();
+    }
+
+    private BusinessCatalogEntry parseCatalogEntry(Node node) {
+        var id = node.getRequiredAttributeAsString("id");
+        var hidden = node.getAttributeAsBool("is_hidden", false);
+        var name = node.getChild("name")
+                .flatMap(Node::toContentString)
+                .orElseThrow(() -> new NoSuchElementException("Missing name for catalog entry"));
+        var encryptedImage = node.getChild("media")
+                .flatMap(entry -> entry.getChild("original_image_url"))
+                .flatMap(Node::toContentString)
+                .map(URI::create)
+                .orElseThrow(() -> new NoSuchElementException("Missing image for catalog entry"));
+        var statusInfo = node.getChild("status_info")
+                .flatMap(entry -> entry.getChild("status"))
+                .flatMap(Node::toContentString)
+                .flatMap(BusinessReviewStatus::ofName)
+                .orElse(BusinessReviewStatus.NO_REVIEW);
+        var availability = node.getChild("availability")
+                .flatMap(Node::toContentString)
+                .flatMap(BusinessItemAvailability::ofName)
+                .orElse(BusinessItemAvailability.UNKNOWN);
+        var sellerId = node.getChild("retailer_id")
+                .flatMap(Node::toContentString)
+                .orElseThrow(() -> new NoSuchElementException("Missing seller id for catalog entry"));
+        var uri = node.getChild("url")
+                .flatMap(Node::toContentString)
+                .map(URI::create)
+                .orElseThrow(() -> new NoSuchElementException("Missing uri for catalog entry"));
+        var description = node.getChild("description")
+                .flatMap(Node::toContentString)
+                .orElse("");
+        var price = node.getChild("price")
+                .flatMap(Node::toContentString)
+                .map(Long::parseUnsignedLong)
+                .orElseThrow(() -> new NoSuchElementException("Missing price for catalog entry"));
+        var currency = node.getChild("currency")
+                .flatMap(Node::toContentString)
+                .orElseThrow(() -> new NoSuchElementException("Missing currency for catalog entry"));
+        return new BusinessCatalogEntryBuilder()
+                .id(id)
+                .encryptedImage(encryptedImage)
+                .reviewStatus(statusInfo)
+                .availability(availability)
+                .name(name)
+                .sellerId(sellerId)
+                .uri(uri)
+                .description(description)
+                .price(price)
+                .currency(currency)
+                .hidden(hidden)
+                .build();
     }
 
     /**
@@ -1254,7 +1323,7 @@ public final class WhatsAppClient {
      *
      * @return a CompletableFuture
      */
-    public Collection<BusinessCollectionEntry> queryBusinessCollections() {
+    public Collection<BusinessCatalog> queryBusinessCollections() {
         return queryBusinessCollections(50);
     }
 
@@ -1264,7 +1333,7 @@ public final class WhatsAppClient {
      * @param collectionsLimit the maximum value of collections to query
      * @return a CompletableFuture
      */
-    public Collection<BusinessCollectionEntry> queryBusinessCollections(int collectionsLimit) {
+    public Collection<BusinessCatalog> queryBusinessCollections(int collectionsLimit) {
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
         return queryBusinessCollections(localJid.withoutData(), collectionsLimit);
@@ -1277,7 +1346,7 @@ public final class WhatsAppClient {
      * @param collectionsLimit the maximum value of collections to query
      * @return a CompletableFuture
      */
-    public Collection<BusinessCollectionEntry> queryBusinessCollections(JidProvider contact, int collectionsLimit) {
+    public Collection<BusinessCatalog> queryBusinessCollections(JidProvider contact, int collectionsLimit) {
         var collectionLimitNode = new NodeBuilder()
                 .description("collection_limit")
                 .content(String.valueOf(collectionsLimit).getBytes(StandardCharsets.UTF_8))
@@ -1310,12 +1379,29 @@ public final class WhatsAppClient {
         return parseCollections(result);
     }
 
-    private List<BusinessCollectionEntry> parseCollections(Node result) {
+    private List<BusinessCatalog> parseCollections(Node result) {
         return Objects.requireNonNull(result, "Cannot query business collections, missing newsletters node")
                 .streamChild("collections")
                 .flatMap(entry -> entry.streamChildren("collection"))
-                .map(BusinessCollectionEntry::of)
+                .map(this::parseBusinessCollectionEntry)
                 .toList();
+    }
+
+    private BusinessCatalog parseBusinessCollectionEntry(Node node) {
+        var id = node.getChild("id")
+                .flatMap(Node::toContentString)
+                .orElseThrow(() -> new NoSuchElementException("Missing id from business collections"));
+        var name = node.getChild("name")
+                .flatMap(Node::toContentString)
+                .orElseThrow(() -> new NoSuchElementException("Missing name from business collections"));
+        var products = node.streamChildren("product")
+                .map(BusinessCatalogEntry::of)
+                .toList();
+        return new BusinessCollectionEntryBuilder()
+                .id(id)
+                .name(name)
+                .products(products)
+                .build();
     }
 
     /**
@@ -1324,7 +1410,7 @@ public final class WhatsAppClient {
      * @param contact the business
      * @return a CompletableFuture
      */
-    public Collection<BusinessCollectionEntry> queryBusinessCollections(JidProvider contact) {
+    public Collection<BusinessCatalog> queryBusinessCollections(JidProvider contact) {
         return queryBusinessCollections(contact, 50);
     }
 
@@ -1397,7 +1483,7 @@ public final class WhatsAppClient {
                     .ifPresent(chat -> chat.addPresence(localContact.get().jid(), presence));
         }
 
-        localContact.get().setLastSeen(ZonedDateTime.now());
+        localContact.get().setLastSeen(Instant.now());
     }
 
     /**
@@ -1925,7 +2011,7 @@ public final class WhatsAppClient {
                 var info = new NewsletterMessageInfoBuilder()
                         .id(oldNewsletterInfo.id())
                         .serverId(oldNewsletterInfo.serverId())
-                        .timestampSeconds(Clock.nowSeconds())
+                        .timestampSeconds(Instant.now().getEpochSecond())
                         .message(MessageContainer.ofEditedMessage(newMessage))
                         .status(MessageStatus.PENDING)
                         .build();
@@ -1947,7 +2033,7 @@ public final class WhatsAppClient {
                         .senderJid(localJid)
                         .key(key)
                         .message(MessageContainer.ofEditedMessage(newMessage))
-                        .timestampSeconds(Clock.nowSeconds())
+                        .timestampSeconds(Instant.now().getEpochSecond())
                         .broadcast(oldChatInfo.chatJid().hasServer(JidServer.broadcast()))
                         .build();
                 // TODO: Edit message Map.of("edit", getEditBit(info))
@@ -1968,7 +2054,7 @@ public final class WhatsAppClient {
         var revokeInfo = new NewsletterMessageInfoBuilder()
                 .id(info.id())
                 .serverId(info.serverId())
-                .timestampSeconds(Clock.nowSeconds())
+                .timestampSeconds(Instant.now().getEpochSecond())
                 .message(MessageContainer.empty())
                 .status(MessageStatus.PENDING)
                 .build();
@@ -2242,8 +2328,10 @@ public final class WhatsAppClient {
 
     private void pinChat(JidProvider chat, boolean pin) {
         if (store.clientType() == WhatsAppClientType.MOBILE) {
-            store.findChatByJid(chat)
-                    .ifPresent(entry -> entry.setPinnedTimestampSeconds(pin ? (int) Clock.nowSeconds() : 0));
+            store.findChatByJid(chat).ifPresent(entry -> {
+                var result = Instant.now().getEpochSecond();
+                entry.setPinnedTimestampSeconds(pin ? (int) result : 0);
+            });
             return;
         }
         var pinAction = new PinActionBuilder()
@@ -2361,7 +2449,7 @@ public final class WhatsAppClient {
     private void sendMessageReceipt(MessageInfo info, String type) {
         var id = info.id();
         var parentJid = info.parentJid();
-        var timestamp = Clock.nowSeconds();
+        var timestamp = Instant.now().getEpochSecond();
         var senderJid = info.senderJid();
 
         var builder = new NodeBuilder()
@@ -2382,12 +2470,15 @@ public final class WhatsAppClient {
     //<editor-fold desc="Groups and communities">
 
     /**
-     * Queries the metadata of a group
+     * Queries the metadata of a group or community.
      *
-     * @param chat the target group
-     * @return a CompletableFuture
+     * @param chat the target group or community
+     * @return the non-{@code null} metadata
+     * @throws IllegalArgumentException if the JID is not a group or
+     *         community
+     * @throws NoSuchElementException if the server response is invalid
      */
-    public GroupOrCommunityMetadata queryGroupOrCommunityMetadata(JidProvider chat) {
+    public ChatMetadata queryChatMetadata(JidProvider chat) {
         if (!chat.toJid().hasServer(JidServer.groupOrCommunity())) {
             throw new IllegalArgumentException("Expected a group/community");
         }
@@ -2403,22 +2494,22 @@ public final class WhatsAppClient {
                 .attribute("type", "get")
                 .content(body);
         var response = sendNode(iqNode);
-        return handleGroupMetadata(response);
+        return handleChatMetadata(response);
     }
 
-    private GroupOrCommunityMetadata handleGroupMetadata(Node response) {
+    private ChatMetadata handleChatMetadata(Node response) {
         var metadataNode = Optional.of(response)
                 .filter(entry -> entry.hasDescription("group"))
                 .or(() -> response.getChild("group"))
                 .orElseThrow(() -> new NoSuchElementException("Erroneous response: %s".formatted(response)));
-        var metadata = parseGroupMetadata(metadataNode);
+        var metadata = parseChatMetadata(metadataNode);
         var chat = store.findChatByJid(metadata.jid())
                 .orElseGet(() -> store().addNewChat(metadata.jid()));
         chat.setName(metadata.subject());
         return metadata;
     }
 
-    private GroupOrCommunityMetadata parseGroupMetadata(Node node) {
+    private ChatMetadata parseChatMetadata(Node node) {
         var groupIdUser = node.getRequiredAttributeAsString("id");
         var groupId = Jid.of(groupIdUser, JidServer.groupOrCommunity());
         var subject = node.getAttributeAsString("subject", "");
@@ -2433,12 +2524,11 @@ public final class WhatsAppClient {
         var descriptionId = node.getChild("description")
                 .flatMap(descriptionNode -> descriptionNode.getAttributeAsString("id"))
                 .orElse(null);
-        long ephemeral = node.getChild("ephemeral")
-                .map(ephemeralNode -> ephemeralNode.getAttributeAsLong("expiration", 0))
-                .orElse(0L);
+        var ephemeral = node.getChild("ephemeral")
+                .map(ephemeralNode -> ChatEphemeralTimer.of((int) ephemeralNode.getAttributeAsLong("expiration", 0)))
+                .orElse(null);
         var communityNode = node.getChild("parent")
                 .orElse(null);
-        var policies = new HashMap<ChatSetting, ChatSettingPolicy>();
         var lidAddressingMode = node.hasAttribute("addressing_mode", "lid");
         var linkedParent = node.getChild("linked_parent")
                 .flatMap(parent -> parent.getAttributeAsJid("jid"))
@@ -2446,51 +2536,124 @@ public final class WhatsAppClient {
         var isIncognito = node.hasChild("incognito");
         var defaultSubgroup = node.hasAttribute("default_sub_group", true);
         if (communityNode == null) {
-            policies.put(GroupSetting.EDIT_GROUP_INFO, ChatSettingPolicy.of(node.hasChild("announce")));
-            policies.put(GroupSetting.SEND_MESSAGES, ChatSettingPolicy.of(node.hasChild("restrict")));
-            var addParticipantsMode = node.getChild("member_add_mode")
+            var restrict = node.hasChild("announce");
+            var announce = node.hasChild("restrict");
+            var memberAddModeAdminOnly = node.getChild("member_add_mode")
                     .flatMap(Node::toContentString)
-                    .orElse(null);
-            policies.put(GroupSetting.ADD_PARTICIPANTS, ChatSettingPolicy.of(Objects.equals(addParticipantsMode, "admin_add")));
-            var groupJoin = node.getChild("membership_approval_mode")
+                    .map(mode -> Objects.equals(mode, "admin_add"))
+                    .orElse(false);
+            var groupMembershipApprovalMode = node.getChild("membership_approval_mode")
                     .flatMap(entry -> entry.getChild("group_join"))
                     .map(entry -> entry.hasAttribute("state", "on"))
                     .orElse(false);
-            policies.put(GroupSetting.APPROVE_PARTICIPANTS, ChatSettingPolicy.of(groupJoin));
+            var memberLinkModeAdminOnly = node.getChild("member_link_mode")
+                    .flatMap(Node::toContentString)
+                    .map(mode -> Objects.equals(mode, "admin_link"))
+                    .orElse(false);
+            var noFrequentlyForwarded = node.hasChild("no_frequently_forwarded");
+            var groupSupport = node.hasChild("support");
+            var groupSuspended = node.hasChild("suspended");
+            var groupReportToAdminMode = node.hasChild("allow_admin_reports");
+            var generalSubgroup = node.hasChild("general_chat");
+            var groupGeneralChatAutoAddDisabled = node.hasChild("auto_add_disabled");
+            var hiddenSubgroup = node.hasChild("hidden_group");
+            var groupHasCapi = node.hasChild("capi");
+            var groupSafetyCheck = node.hasChild("group_safety_check");
             var participants = node.streamChildren("participant")
                     .filter(entry -> !entry.hasAttribute("error"))
                     .map(entry -> {
                         var id = entry.getRequiredAttributeAsJid("jid");
                         var role = entry.getAttributeAsString("type")
-                                .map(ChatRole::of)
-                                .orElse(ChatRole.USER);
-                        return ChatParticipant.ofGroup(id, role);
+                                .map(GroupPartipantRole::of)
+                                .orElse(GroupPartipantRole.USER);
+                        return new GroupParticipantBuilder()
+                                .userJid(id)
+                                .rank(role)
+                                .build();
                     })
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            return new GroupOrCommunityMetadataBuilder()
+            return new GroupMetadataBuilder()
                     .jid(groupId)
                     .subject(subject)
                     .subjectAuthorJid(subjectAuthor)
-                    .subjectTimestampSeconds(subjectTimestampSeconds)
-                    .foundationTimestampSeconds(foundationTimestampSeconds)
+                    .subjectTimestamp(subjectTimestampSeconds == 0 ? null : Instant.ofEpochSecond(subjectTimestampSeconds))
+                    .foundationTimestamp(foundationTimestampSeconds == 0 ? null : Instant.ofEpochSecond(foundationTimestampSeconds))
                     .founderJid(founder)
                     .description(description)
                     .descriptionId(descriptionId)
-                    .settings(policies)
+                    .restrict(restrict)
+                    .announce(announce)
+                    .memberAddModeAdminOnly(memberAddModeAdminOnly)
+                    .membershipApprovalMode(groupMembershipApprovalMode)
+                    .memberLinkModeAdminOnly(memberLinkModeAdminOnly)
+                    .noFrequentlyForwarded(noFrequentlyForwarded)
                     .participants(participants)
-                    .ephemeralExpirationSeconds(ephemeral)
-                    .isLidAddressingMode(lidAddressingMode)
-                    .isCommunity(false)
-                    .isIncognito(isIncognito)
+                    .ephemeralExpiration(ephemeral)
                     .parentCommunityJid(linkedParent)
+                    .isLidAddressingMode(lidAddressingMode)
+                    .isIncognito(isIncognito)
                     .defaultSubgroup(defaultSubgroup)
+                    .generalSubgroup(generalSubgroup)
+                    .hiddenSubgroup(hiddenSubgroup)
+                    .support(groupSupport)
+                    .suspended(groupSuspended)
+                    .reportToAdminMode(groupReportToAdminMode)
+                    .generalChatAutoAddDisabled(groupGeneralChatAutoAddDisabled)
+                    .hasCapi(groupHasCapi)
+                    .groupSafetyCheck(groupSafetyCheck)
                     .build();
         } else {
-            policies.put(CommunitySetting.MODIFY_GROUPS, ChatSettingPolicy.of(communityNode.hasChild("allow_non_admin_sub_group_creation")));
-            var addParticipantsMode = node.getChild("member_add_mode")
+            var restrict = node.hasChild("locked");
+            var announce = node.hasChild("announcement");
+            var noFrequentlyForwarded = node.hasChild("no_frequently_forwarded");
+            var communityMembershipApprovalMode = node.getChild("membership_approval_mode")
+                    .flatMap(entry -> entry.getChild("group_join"))
+                    .map(entry -> entry.hasAttribute("state", "on"))
+                    .orElse(false);
+            var memberAddModeAdminOnly = node.getChild("member_add_mode")
                     .flatMap(Node::toContentString)
+                    .map(mode -> Objects.equals(mode, "admin_add"))
+                    .orElse(false);
+            var memberLinkModeAdminOnly = node.getChild("member_link_mode")
+                    .flatMap(Node::toContentString)
+                    .map(mode -> Objects.equals(mode, "admin_link"))
+                    .orElse(false);
+            var allowNonAdminSubGroupCreation = node.hasChild("allow_non_admin_sub_group_creation");
+            var support = node.hasChild("support");
+            var suspended = node.hasChild("suspended");
+            var reportToAdminMode = node.hasChild("allow_admin_reports");
+            var communityGeneralSubgroup = node.hasChild("general_chat");
+            var generalChatAutoAddDisabled = node.hasChild("auto_add_disabled");
+            var hiddenSubgroup = node.hasChild("hidden_group");
+            var hasCapi = node.hasChild("capi");
+            var groupSafetyCheck = node.hasChild("group_safety_check");
+            var participantLabelEnabled = node.hasChild("participant_label_enabled");
+            var limitSharingEnabled = node.hasChild("limit_sharing_enabled");
+            var isParentGroupClosed = communityNode.hasAttribute("default_membership_approval_mode", "request_required");
+            var size = node.getAttributeAsInt("size", null);
+            var growthLockedNode = node.getChild("growth_locked").orElse(null);
+            var growthLockType = growthLockedNode != null
+                    ? growthLockedNode.getAttributeAsString("type").orElse(null)
+                    : null;
+            var growthLockExpirationSeconds = growthLockedNode != null
+                    ? growthLockedNode.getAttributeAsLong("expiration", 0)
+                    : 0L;
+            var growthLockExpiration = growthLockExpirationSeconds > 0
+                    ? Instant.ofEpochSecond(growthLockExpirationSeconds)
+                    : null;
+            var descriptionNode = node.getChild("description").orElse(null);
+            var descriptionTimestampSeconds = descriptionNode != null
+                    ? descriptionNode.getAttributeAsLong("t", 0)
+                    : 0L;
+            var descriptionTimestamp = descriptionTimestampSeconds > 0
+                    ? Instant.ofEpochSecond(descriptionTimestampSeconds)
+                    : null;
+            var descriptionAuthor = descriptionNode != null
+                    ? descriptionNode.getAttributeAsJid("participant", null)
+                    : null;
+            var evolutionVersion = node.getChild("evolution_version")
+                    .map(ev -> ev.getAttributeAsInt("value", null))
                     .orElse(null);
-            policies.put(CommunitySetting.ADD_PARTICIPANTS, ChatSettingPolicy.of(Objects.equals(addParticipantsMode, "admin_add")));
             var linkedGroupsQueryBody = new NodeBuilder()
                     .description("linked_groups_participants")
                     .build();
@@ -2505,7 +2668,7 @@ public final class WhatsAppClient {
                     .streamChild("linked_groups_participants")
                     .flatMap(participantsNodeBody -> participantsNodeBody.streamChildren("participant"))
                     .flatMap(participantNode -> participantNode.streamAttributeAsJid("jid"))
-                    .map(ChatParticipant::ofCommunity)
+                    .map(jid -> new GroupParticipantBuilder().userJid(jid).build())
                     .collect(Collectors.toCollection(LinkedHashSet::new));
             var communityGroupsQueryBody = CommunityRequests.linkedGroups(groupId, "INTERACTIVE");
             var communityGroupsQuery = new NodeBuilder()
@@ -2525,33 +2688,60 @@ public final class WhatsAppClient {
                     .flatMap(CommunityLinkedGroupsResponse::ofJson)
                     .map(CommunityLinkedGroupsResponse::linkedGroups)
                     .orElseGet(LinkedHashSet::new);
-            return new GroupOrCommunityMetadataBuilder()
+            return new CommunityMetadataBuilder()
                     .jid(groupId)
                     .subject(subject)
                     .subjectAuthorJid(subjectAuthor)
-                    .subjectTimestampSeconds(subjectTimestampSeconds)
-                    .foundationTimestampSeconds(foundationTimestampSeconds)
+                    .subjectTimestamp(Instant.ofEpochSecond(subjectTimestampSeconds))
+                    .foundationTimestamp(Instant.ofEpochSecond(foundationTimestampSeconds))
                     .founderJid(founder)
                     .description(description)
                     .descriptionId(descriptionId)
-                    .settings(policies)
+                    .descriptionTimestamp(descriptionTimestamp)
+                    .descriptionAuthorJid(descriptionAuthor)
+                    .restrict(restrict)
+                    .announce(announce)
+                    .noFrequentlyForwarded(noFrequentlyForwarded)
+                    .membershipApprovalMode(communityMembershipApprovalMode)
+                    .memberLinkModeAdminOnly(memberLinkModeAdminOnly)
+                    .allowNonAdminSubGroupCreation(allowNonAdminSubGroupCreation)
+                    .memberAddModeAdminOnly(memberAddModeAdminOnly)
+                    .growthLockExpiration(growthLockExpiration)
+                    .growthLockType(growthLockType)
+                    .reportToAdminMode(reportToAdminMode)
+                    .size(size)
+                    .support(support)
+                    .suspended(suspended)
+                    .isParentGroupClosed(isParentGroupClosed)
+                    .defaultSubgroup(defaultSubgroup)
+                    .generalSubgroup(communityGeneralSubgroup)
+                    .hiddenSubgroup(hiddenSubgroup)
+                    .groupSafetyCheck(groupSafetyCheck)
+                    .generalChatAutoAddDisabled(generalChatAutoAddDisabled)
+                    .hasCapi(hasCapi)
+                    .evolutionVersion(evolutionVersion)
+                    .participantLabelEnabled(participantLabelEnabled)
+                    .limitSharingEnabled(limitSharingEnabled)
                     .participants(participants)
-                    .ephemeralExpirationSeconds(ephemeral)
-                    .isCommunity(true)
+                    .ephemeralExpiration(ephemeral)
                     .communityGroups(communityLinkedGroups)
                     .isLidAddressingMode(lidAddressingMode)
+                    .isIncognito(isIncognito)
                     .build();
         }
     }
 
-    private Stream<ChatParticipant> parseGroupParticipant(Node node) {
+    private Stream<GroupParticipant> parseGroupParticipant(Node node) {
         if (node.hasAttribute("error")) {
             return Stream.empty();
         }
 
         var id = node.getRequiredAttributeAsJid("jid");
-        var role = ChatRole.of(node.getRequiredAttributeAsString("type"));
-        var result = ChatParticipant.ofGroup(id, role);
+        var role = GroupPartipantRole.of(node.getRequiredAttributeAsString("type"));
+        var result = new GroupParticipantBuilder()
+                .userJid(id)
+                .rank(role)
+                .build();
         return Stream.of(result);
     }
 
@@ -2717,16 +2907,16 @@ public final class WhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
 
-        var metadata = queryGroupOrCommunityMetadata(chat.toJid());
+        var metadata = queryChatMetadata(chat.toJid());
         var participantsSet = metadata.participants()
                 .stream()
-                .map(ChatParticipant::jid)
+                .map(GroupParticipant::userJid)
                 .collect(Collectors.toUnmodifiableSet());
         var targets = Arrays.stream(contacts)
                 .map(JidProvider::toJid)
                 .filter(participantsSet::contains)
                 .collect(Collectors.toUnmodifiableSet());
-        return executeActionOnParticipants(chat, metadata.isCommunity(), GroupAction.PROMOTE, targets);
+        return executeActionOnParticipants(chat, metadata instanceof CommunityMetadata, GroupAction.PROMOTE, targets);
     }
 
     /**
@@ -2740,16 +2930,16 @@ public final class WhatsAppClient {
         if (!chat.toJid().hasServer(JidServer.groupOrCommunity())) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var metadata = queryGroupOrCommunityMetadata(chat.toJid());
+        var metadata = queryChatMetadata(chat.toJid());
         var participantsSet = metadata.participants()
                 .stream()
-                .map(ChatParticipant::jid)
+                .map(GroupParticipant::userJid)
                 .collect(Collectors.toUnmodifiableSet());
         var targets = Arrays.stream(contacts)
                 .map(JidProvider::toJid)
                 .filter(participantsSet::contains)
                 .collect(Collectors.toUnmodifiableSet());
-        return executeActionOnParticipants(chat, metadata.isCommunity(), GroupAction.DEMOTE, targets);
+        return executeActionOnParticipants(chat, metadata instanceof CommunityMetadata, GroupAction.DEMOTE, targets);
     }
 
     /**
@@ -2763,16 +2953,16 @@ public final class WhatsAppClient {
         if (!chat.toJid().hasServer(JidServer.groupOrCommunity())) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var metadata = queryGroupOrCommunityMetadata(chat.toJid());
+        var metadata = queryChatMetadata(chat.toJid());
         var participantsSet = metadata.participants()
                 .stream()
-                .map(ChatParticipant::jid)
+                .map(GroupParticipant::userJid)
                 .collect(Collectors.toUnmodifiableSet());
         var targets = Arrays.stream(contacts)
                 .map(JidProvider::toJid)
                 .filter(entry -> !participantsSet.contains(entry))
                 .collect(Collectors.toUnmodifiableSet());
-        return executeActionOnParticipants(chat, metadata.isCommunity(), GroupAction.ADD, targets);
+        return executeActionOnParticipants(chat, metadata instanceof CommunityMetadata, GroupAction.ADD, targets);
     }
 
     /**
@@ -2786,16 +2976,16 @@ public final class WhatsAppClient {
         if (!chat.toJid().hasServer(JidServer.groupOrCommunity())) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var metadata = queryGroupOrCommunityMetadata(chat.toJid());
+        var metadata = queryChatMetadata(chat.toJid());
         var participantsSet = metadata.participants()
                 .stream()
-                .map(ChatParticipant::jid)
+                .map(GroupParticipant::userJid)
                 .collect(Collectors.toUnmodifiableSet());
         var targets = Arrays.stream(contacts)
                 .map(JidProvider::toJid)
                 .filter(participantsSet::contains)
                 .collect(Collectors.toUnmodifiableSet());
-        return executeActionOnParticipants(chat, metadata.isCommunity(), GroupAction.REMOVE, targets);
+        return executeActionOnParticipants(chat, metadata instanceof CommunityMetadata, GroupAction.REMOVE, targets);
     }
 
     private List<Jid> executeActionOnParticipants(JidProvider chat, boolean community, GroupAction action, Set<Jid> jids) {
@@ -2875,13 +3065,13 @@ public final class WhatsAppClient {
         if (!chat.toJid().hasServer(JidServer.groupOrCommunity())) {
             throw new IllegalArgumentException("Expected a group/community");
         }
-        var descriptionId = queryGroupOrCommunityMetadata(chat.toJid())
+        var descriptionId = queryChatMetadata(chat.toJid())
                 .descriptionId()
                 .orElse(null);
         var bodyBuilder = new NodeBuilder()
                 .description("description");
         if (description != null) {
-            bodyBuilder.attribute("id", SecureBytes.randomSid());
+            bodyBuilder.attribute("id", WhatsAppIdGenerator.generateSid());
             var bodyNode = new NodeBuilder()
                     .description("body")
                     .content(description.getBytes(StandardCharsets.UTF_8))
@@ -2934,7 +3124,7 @@ public final class WhatsAppClient {
      * @param contacts at least one contact to add to the group
      * @return a CompletableFuture
      */
-    public Optional<GroupOrCommunityMetadata> createGroup(String subject, JidProvider... contacts) {
+    public Optional<ChatMetadata> createGroup(String subject, JidProvider... contacts) {
         return createGroup(subject, ChatEphemeralTimer.OFF, contacts);
     }
 
@@ -2946,7 +3136,7 @@ public final class WhatsAppClient {
      * @param contacts at least one contact to add to the group
      * @return a CompletableFuture
      */
-    public Optional<GroupOrCommunityMetadata> createGroup(String subject, ChatEphemeralTimer timer, JidProvider... contacts) {
+    public Optional<ChatMetadata> createGroup(String subject, ChatEphemeralTimer timer, JidProvider... contacts) {
         return createGroup(subject, timer, null, contacts);
     }
 
@@ -2957,7 +3147,7 @@ public final class WhatsAppClient {
      * @param parentCommunity the community to whom the new group will be linked
      * @return a CompletableFuture
      */
-    public Optional<GroupOrCommunityMetadata> createGroup(String subject, JidProvider parentCommunity) {
+    public Optional<ChatMetadata> createGroup(String subject, JidProvider parentCommunity) {
         return createGroup(subject, ChatEphemeralTimer.OFF, parentCommunity, new JidProvider[0]);
     }
 
@@ -2969,14 +3159,14 @@ public final class WhatsAppClient {
      * @param parentCommunity the community to whom the new group will be linked
      * @return a CompletableFuture
      */
-    public Optional<GroupOrCommunityMetadata> createGroup(String subject, ChatEphemeralTimer timer, JidProvider parentCommunity) {
+    public Optional<ChatMetadata> createGroup(String subject, ChatEphemeralTimer timer, JidProvider parentCommunity) {
         return createGroup(subject, timer, parentCommunity, new JidProvider[0]);
     }
 
-    private Optional<GroupOrCommunityMetadata> createGroup(String subject, ChatEphemeralTimer timer, JidProvider parentCommunity, JidProvider... contacts) {
+    private Optional<ChatMetadata> createGroup(String subject, ChatEphemeralTimer timer, JidProvider parentCommunity, JidProvider... contacts) {
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
-        var timestamp = Clock.nowSeconds();
+        var timestamp = Instant.now().getEpochSecond();
         if (subject == null || subject.isBlank()) {
             throw new IllegalArgumentException("The subject of a group cannot be blank");
         }
@@ -3034,7 +3224,7 @@ public final class WhatsAppClient {
                 .content(body);
         var future = sendNode(iqNode);
         return future.getChild("group")
-                .map(this::handleGroupMetadata);
+                .map(this::handleChatMetadata);
     }
 
     /**
@@ -3048,9 +3238,9 @@ public final class WhatsAppClient {
             throw new IllegalArgumentException("Expected a group/community");
         }
 
-        var metadata = queryGroupOrCommunityMetadata(group);
-        if (metadata.isCommunity()) {
-            var communityJid = metadata.parentCommunityJid().orElse(metadata.jid());
+        var metadata = queryChatMetadata(group);
+        if (metadata instanceof CommunityMetadata) {
+            var communityJid = metadata.jid();
             var linkedGroupsNode = new NodeBuilder()
                     .description("linked_groups")
                     .attribute("parent_group_jid", communityJid)
@@ -3133,7 +3323,7 @@ public final class WhatsAppClient {
      * @param body    the nullable description of the new community
      * @return a CompletableFuture
      */
-    public Optional<GroupOrCommunityMetadata> createCommunity(String subject, String body) {
+    public Optional<ChatMetadata> createCommunity(String subject, String body) {
         var descriptionId = HexFormat.of().formatHex(SecureBytes.random(12));
         var children = new ArrayList<Node>();
         var bodyNode = new NodeBuilder()
@@ -3170,9 +3360,9 @@ public final class WhatsAppClient {
         return parseGroupResult(resultNode);
     }
 
-    private Optional<GroupOrCommunityMetadata> parseGroupResult(Node node) {
+    private Optional<ChatMetadata> parseGroupResult(Node node) {
         return node.getChild("group")
-                .map(this::handleGroupMetadata);
+                .map(this::handleChatMetadata);
     }
 
     /**
@@ -3197,102 +3387,109 @@ public final class WhatsAppClient {
     }
 
     /**
-     * Changes a group setting
+     * Changes who can edit the metadata (subject, description, profile
+     * picture) of a group or community.
      *
-     * @param chat    the non-null group affected by this change
-     * @param setting the non-null setting
-     * @param policy  the non-null policy
+     * @param chat   the non-null group or community affected by this change
+     * @param policy the non-null policy
      */
-    public void changeGroupOrCommunitySetting(JidProvider chat, ChatSetting setting, ChatSettingPolicy policy) {
+    public void changeGroupEditInfoSetting(JidProvider chat, ChatPolicy policy) {
+        changeGroupSetting(chat, new NodeBuilder()
+                .description(policy == ChatPolicy.ADMINS ? "locked" : "unlocked")
+                .build());
+    }
+
+    /**
+     * Changes who can send messages in a group or community.
+     *
+     * @param chat   the non-null group or community affected by this change
+     * @param policy the non-null policy
+     */
+    public void changeGroupSendMessagesSetting(JidProvider chat, ChatPolicy policy) {
+        changeGroupSetting(chat, new NodeBuilder()
+                .description(policy == ChatPolicy.ADMINS ? "announcement" : "not_announcement")
+                .build());
+    }
+
+    /**
+     * Changes who can add new members to a group or community.
+     *
+     * @param chat   the non-null group or community affected by this change
+     * @param policy the non-null policy
+     */
+    public void changeGroupAddParticipantsSetting(JidProvider chat, ChatPolicy policy) {
+        changeGroupSetting(chat, new NodeBuilder()
+                .description("member_add_mode")
+                .content(policy == ChatPolicy.ADMINS ? "admin_add".getBytes(StandardCharsets.UTF_8) : "all_member_add".getBytes(StandardCharsets.UTF_8))
+                .build());
+    }
+
+    /**
+     * Changes whether admin approval is required for new members to join a
+     * group or community.
+     *
+     * @param chat   the non-null group or community affected by this change
+     * @param policy the non-null policy
+     */
+    public void changeGroupApproveParticipantsSetting(JidProvider chat, ChatPolicy policy) {
+        var groupJoinNode = new NodeBuilder()
+                .description("group_join")
+                .attribute("state", policy == ChatPolicy.ADMINS ? "on" : "off")
+                .build();
+        changeGroupSetting(chat, new NodeBuilder()
+                .description("membership_approval_mode")
+                .content(groupJoinNode)
+                .build());
+    }
+
+    private void changeGroupSetting(JidProvider chat, Node body) {
         if (!chat.toJid().hasServer(JidServer.groupOrCommunity())) {
             throw new IllegalArgumentException("This method only accepts groups");
         }
-        var metadata = queryGroupOrCommunityMetadata(chat);
-        switch (setting) {
-            case GroupSetting groupSetting -> {
-                if (metadata.isCommunity()) {
-                    throw new IllegalArgumentException("Cannot change community setting '" + setting + "' in a group");
-                }
-                var body = switch (groupSetting) {
-                    case EDIT_GROUP_INFO -> new NodeBuilder()
-                            .description(policy == ChatSettingPolicy.ADMINS ? "locked" : "unlocked")
-                            .build();
-                    case SEND_MESSAGES -> new NodeBuilder()
-                            .description(policy == ChatSettingPolicy.ADMINS ? "announcement" : "not_announcement")
-                            .build();
-                    case ADD_PARTICIPANTS -> new NodeBuilder()
-                            .description("member_add_mode")
-                            .content(policy == ChatSettingPolicy.ADMINS ? "admin_add".getBytes(StandardCharsets.UTF_8) : "all_member_add".getBytes(StandardCharsets.UTF_8))
-                            .build();
-                    case APPROVE_PARTICIPANTS -> {
-                        var groupJoinNode = new NodeBuilder()
-                                .description("group_join")
-                                .attribute("state", policy == ChatSettingPolicy.ADMINS ? "on" : "off")
-                                .build();
-                        yield new NodeBuilder()
-                                .description("membership_approval_mode")
-                                .content(groupJoinNode)
-                                .build();
-                    }
-                };
-                var iqNode = new NodeBuilder()
-                        .description("iq")
-                        .attribute("xmlns", "w:g2")
-                        .attribute("to", chat)
-                        .attribute("type", "set")
-                        .content(body);
-                sendNode(iqNode);
-            }
-            case CommunitySetting communitySetting -> {
-                if (!metadata.isCommunity()) {
-                    throw new IllegalArgumentException("Cannot change group setting '" + setting + "' in a community");
-                }
+        var iqNode = new NodeBuilder()
+                .description("iq")
+                .attribute("xmlns", "w:g2")
+                .attribute("to", chat)
+                .attribute("type", "set")
+                .content(body);
+        sendNode(iqNode);
+    }
 
-                switch (communitySetting) {
-                    case MODIFY_GROUPS -> {
-                        var request = CommunityRequests.changeModifyGroupsSetting(chat.toJid(), policy == ChatSettingPolicy.ANYONE);
-                        var body = new NodeBuilder()
-                                .description("query")
-                                .attribute("query_id", "24745914578387890")
-                                .content(request.getBytes())
-                                .build();
-                        var iqNode = new NodeBuilder()
-                                .description("iq")
-                                .attribute("xmlns", "w:mex")
-                                .attribute("to", JidServer.user())
-                                .attribute("type", "get")
-                                .content(body);
-                        var result = sendNode(iqNode);
-                        var resultJsonSource = result.getChild("result")
-                                .flatMap(Node::toContentString)
-                                .orElse(null);
-                        if (resultJsonSource == null) {
-                            throw new IllegalArgumentException("Cannot change community setting: " + result);
-                        }
+    /**
+     * Changes whether non-admin members can create subgroups in a community.
+     *
+     * @param community the non-null community to change
+     * @param policy    the non-null policy ({@link ChatPolicy#ANYONE}
+     *                  to allow non-admins, {@link ChatPolicy#ADMINS}
+     *                  to restrict)
+     */
+    public void changeCommunitySubGroupCreationSetting(JidProvider community, ChatPolicy policy) {
+        if (!community.toJid().hasServer(JidServer.groupOrCommunity())) {
+            throw new IllegalArgumentException("This method only accepts communities");
+        }
+        var request = CommunityRequests.changeModifyGroupsSetting(community.toJid(), policy == ChatPolicy.ANYONE);
+        var body = new NodeBuilder()
+                .description("query")
+                .attribute("query_id", "24745914578387890")
+                .content(request.getBytes())
+                .build();
+        var iqNode = new NodeBuilder()
+                .description("iq")
+                .attribute("xmlns", "w:mex")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
+                .content(body);
+        var result = sendNode(iqNode);
+        var resultJsonSource = result.getChild("result")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        if (resultJsonSource == null) {
+            throw new IllegalArgumentException("Cannot change community setting: " + result);
+        }
 
-                        var resultJson = JSON.parseObject(resultJsonSource);
-                        if (resultJson.containsKey("errors")) {
-                            throw new IllegalArgumentException("Cannot change community setting: " + resultJsonSource);
-                        }
-                    }
-                    case ADD_PARTICIPANTS -> {
-                        var body = new NodeBuilder()
-                                .description("member_add_mode")
-                                .content(policy == ChatSettingPolicy.ANYONE ? "all_member_add".getBytes() : "admin_add".getBytes())
-                                .build();
-                        var iqNode = new NodeBuilder()
-                                .description("iq")
-                                .attribute("xmlns", "w:g2")
-                                .attribute("to", chat)
-                                .attribute("type", "set")
-                                .content(body);
-                        var result = sendNode(iqNode);
-                        if (result.getChild("error").isPresent()) {
-                            throw new IllegalArgumentException("Cannot change community setting: " + result);
-                        }
-                    }
-                }
-            }
+        var resultJson = JSON.parseObject(resultJsonSource);
+        if (resultJson.containsKey("errors")) {
+            throw new IllegalArgumentException("Cannot change community setting: " + resultJsonSource);
         }
     }
 
@@ -3825,7 +4022,7 @@ public final class WhatsAppClient {
                 .attribute("index", "0")
                 .attribute("last", "true")
                 .attribute("mode", "delta")
-                .attribute("sid", SecureBytes.randomSid())
+                .attribute("sid", WhatsAppIdGenerator.generateSid())
                 .content(queryNode, listNode, sideListNode)
                 .build();
         var iqNode = new NodeBuilder()
@@ -3934,7 +4131,7 @@ public final class WhatsAppClient {
      * @param contact the non-null contact
      * @param video   whether it's a video call or an audio call
      */
-    public Call startCall(JidProvider contact, boolean video) {
+    public CallOffer startCall(JidProvider contact, boolean video) {
         if (store.clientType() != WhatsAppClientType.MOBILE) {
             throw new IllegalArgumentException("Calling is only available for the mobile api");
         }
@@ -3944,7 +4141,7 @@ public final class WhatsAppClient {
         return sendCallMessage(contact, video);
     }
 
-    private Call sendCallMessage(JidProvider jid, boolean video) {
+    private CallOffer sendCallMessage(JidProvider jid, boolean video) {
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
         var callId = ChatMessageKey.randomId(store.clientType());
@@ -3988,15 +4185,16 @@ public final class WhatsAppClient {
         return onCallSent(localJid, jid.toJid(), callId, result);
     }
 
-    private Call onCallSent(Jid callerJid, Jid chatJid, String callId, Node result) {
+    private CallOffer onCallSent(Jid callerJid, Jid chatJid, String callId, Node result) {
         var call = new CallBuilder()
                 .chatJid(chatJid.toJid())
                 .callerJid(callerJid)
-                .id(callId)
-                .timestampSeconds(Clock.nowSeconds())
+                .callId(callId)
+                .timestamp(Instant.now())
                 .video(false)
-                .status(CallStatus.RINGING)
-                .offline(false)
+                .status(CallOffer.Status.RINGING)
+                .offlineOffer(false)
+                .outgoing(true)
                 .build();
         store.addCall(call);
         for (var listener : store.listeners()) {
@@ -4027,7 +4225,7 @@ public final class WhatsAppClient {
      *
      * @param call the non-null call to reject
      */
-    public boolean stopCall(Call call) {
+    public boolean stopCall(CallOffer call) {
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
         if (store.clientType() != WhatsAppClientType.MOBILE) {
@@ -4038,7 +4236,7 @@ public final class WhatsAppClient {
             var rejectNode = new NodeBuilder()
                     .description("terminate")
                     .attribute("reason", "timeout")
-                    .attribute("call-id", call.id())
+                    .attribute("call-id", call.callId())
                     .attribute("call-creator", call.callerJid())
                     .build();
             var body = new NodeBuilder()
@@ -4050,7 +4248,7 @@ public final class WhatsAppClient {
         } else {
             var rejectNode = new NodeBuilder()
                     .description("reject")
-                    .attribute("call-id", call.id())
+                    .attribute("call-id", call.callId())
                     .attribute("call-creator", call.callerJid())
                     .attribute("count", 0)
                     .build();
@@ -4343,11 +4541,11 @@ public final class WhatsAppClient {
         return this;
     }
 
-    public WhatsAppClient addCallListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Call> consumer) {
+    public WhatsAppClient addCallListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, CallOffer> consumer) {
         Objects.requireNonNull(consumer, "consumer cannot be null");
         addListener(new WhatsAppClientListener() {
             @Override
-            public void onCall(WhatsAppClient arg0, Call arg1) {
+            public void onCall(WhatsAppClient arg0, CallOffer arg1) {
                 consumer.accept(arg0, arg1);
             }
         });
@@ -4398,11 +4596,11 @@ public final class WhatsAppClient {
         return this;
     }
 
-    public WhatsAppClient addWebHistorySyncPastParticipantsListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Jid, Collection<ChatPastParticipant>> consumer) {
+    public WhatsAppClient addWebHistorySyncPastParticipantsListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Jid, Collection<GroupPastParticipant>> consumer) {
         Objects.requireNonNull(consumer, "consumer cannot be null");
         addListener(new WhatsAppClientListener() {
             @Override
-            public void onWebHistorySyncPastParticipants(WhatsAppClient arg0, Jid arg1, Collection<ChatPastParticipant> arg2) {
+            public void onWebHistorySyncPastParticipants(WhatsAppClient arg0, Jid arg1, Collection<GroupPastParticipant> arg2) {
                 consumer.accept(arg0, arg1, arg2);
             }
         });

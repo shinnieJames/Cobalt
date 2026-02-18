@@ -100,10 +100,8 @@ public final class DevicePhashCalculator {
      * both AB props are enabled.
      */
     private boolean isOpenGroupBotParticipantAddEnabled() {
-        var webAiGroupOpenSupport = abPropsService.getBool(ABProp.WEB_AI_GROUP_OPEN_SUPPORT_AB_PROP_CODE)
-                .orElse(false);
-        var aiGroupParticipationEnabled = abPropsService.getBool(ABProp.AI_GROUP_PARTICIPATION_ENABLED_AB_PROP_CODE)
-                .orElse(false);
+        var webAiGroupOpenSupport = abPropsService.getBool(ABProp.WEB_AI_GROUP_OPEN_SUPPORT);
+        var aiGroupParticipationEnabled = abPropsService.getBool(ABProp.AI_GROUP_PARTICIPATION_ENABLED);
         return webAiGroupOpenSupport && aiGroupParticipationEnabled;
     }
 

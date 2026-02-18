@@ -1,92 +1,72 @@
 package com.github.auties00.cobalt.model.message.payment;
 
-import com.github.auties00.cobalt.model.message.common.PaymentMessage;
-import com.github.auties00.cobalt.util.Clock;
-import it.auties.protobuf.annotation.ProtobufEnum;
-import it.auties.protobuf.annotation.ProtobufEnumIndex;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
+import com.github.auties00.cobalt.model.message.Message;
 
-import java.time.ZonedDateTime;
-import java.util.Objects;
+import java.time.Instant;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
 import java.util.Optional;
 
-/**
- * A model class that represents a message to decline a {@link RequestPaymentMessage}.
- */
 @ProtobufMessage(name = "Message.PaymentInviteMessage")
-public final class PaymentInviteMessage implements PaymentMessage {
+public final class PaymentInviteMessage implements Message {
     @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
-    final ServiceType serviceType;
+    ServiceType serviceType;
 
-    @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
-    final long expiryTimestampSeconds;
+    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    Instant expiryTimestamp;
 
-    PaymentInviteMessage(ServiceType serviceType, Long expiryTimestampSeconds) {
-        this.serviceType = Objects.requireNonNull(serviceType, "serviceType cannot be null");
-        this.expiryTimestampSeconds = expiryTimestampSeconds;
+    @ProtobufProperty(index = 3, type = ProtobufType.BOOL)
+    Boolean incentiveEligible;
+
+
+    PaymentInviteMessage(ServiceType serviceType, Instant expiryTimestamp, Boolean incentiveEligible) {
+        this.serviceType = serviceType;
+        this.expiryTimestamp = expiryTimestamp;
+        this.incentiveEligible = incentiveEligible;
     }
 
-    public ServiceType serviceType() {
-        return serviceType;
+    public Optional<ServiceType> serviceType() {
+        return Optional.ofNullable(serviceType);
     }
 
-    public long expiryTimestampSeconds() {
-        return expiryTimestampSeconds;
+    public Optional<Instant> expiryTimestamp() {
+        return Optional.ofNullable(expiryTimestamp);
     }
 
-    public Optional<ZonedDateTime> expiryTimestamp() {
-        return Clock.parseSeconds(expiryTimestampSeconds);
+    public boolean incentiveEligible() {
+        return incentiveEligible != null && incentiveEligible;
     }
 
-    @Override
-    public Type type() {
-        return Type.PAYMENT_INVITE;
+    public PaymentInviteMessage setServiceType(ServiceType serviceType) {
+        this.serviceType = serviceType;
+        return this;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof PaymentInviteMessage that
-                && Objects.equals(serviceType, that.serviceType)
-                && expiryTimestampSeconds == that.expiryTimestampSeconds;
+    public PaymentInviteMessage setExpiryTimestamp(Instant expiryTimestamp) {
+        this.expiryTimestamp = expiryTimestamp;
+        return this;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(serviceType, expiryTimestampSeconds);
-    }
-
-    @Override
-    public String toString() {
-        return "PaymentInviteMessage[" +
-                "serviceType=" + serviceType + ", " +
-                "expiryTimestamp=" + expiryTimestampSeconds + ']';
+    public PaymentInviteMessage setIncentiveEligible(Boolean incentiveEligible) {
+        this.incentiveEligible = incentiveEligible;
+        return this;
     }
 
     @ProtobufEnum(name = "Message.PaymentInviteMessage.ServiceType")
-    public enum ServiceType {
-        /**
-         * Unknown service provider
-         */
+    public static enum ServiceType {
         UNKNOWN(0),
-        /**
-         * Facebook Pay
-         */
-        FACEBOOK_PAY(1),
-        /**
-         * Novi
-         */
+        FBPAY(1),
         NOVI(2),
-        /**
-         * Upi
-         */
         UPI(3);
-
-        final int index;
 
         ServiceType(@ProtobufEnumIndex int index) {
             this.index = index;
+        }
+
+        final int index;
+
+        public int index() {
+            return this.index;
         }
     }
 }

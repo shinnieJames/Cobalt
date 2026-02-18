@@ -15,9 +15,9 @@ import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.info.DeviceContextInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.common.ChatMessageKeyBuilder;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
-import com.github.auties00.cobalt.model.message.common.MessageStatus;
+import com.github.auties00.cobalt.model.message.ChatMessageKeyBuilder;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.message.server.DeviceSentMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -485,7 +485,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
      */
     private void flushSignalStore() {
         try {
-            store.serializer().serialize(store);
+            store.save();
         } catch (Exception e) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to flush signal store: {0}", e.getMessage());

@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.device.icdc;
 
 import com.github.auties00.cobalt.device.DeviceConstants;
 import com.github.auties00.cobalt.model.auth.ADVEncryptionType;
-import com.github.auties00.cobalt.model.device.DeviceInfo;
-import com.github.auties00.cobalt.model.device.DeviceList;
+import com.github.auties00.cobalt.model.device.info.DeviceInfo;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
@@ -184,7 +184,7 @@ public final class IcdcComputer {
      */
     private int getHashLength() {
         return Math.max(
-                abPropsService.getInt(ABProp.MD_ICDC_HASH_LENGTH_AB_PROP_CODE).orElse(MIN_HASH_LENGTH),
+                abPropsService.getInt(ABProp.MD_ICDC_HASH_LENGTH),
                 MIN_HASH_LENGTH
         );
     }
@@ -205,7 +205,6 @@ public final class IcdcComputer {
      * @apiNote WAWebBizCoexGatingUtils.bizHostedDevicesEnabled.
      */
     private boolean isBizHostedDevicesEnabled() {
-        return abPropsService.getBool(ABProp.BIZ_HOSTED_DEVICES_ENABLED_AB_PROP_CODE)
-                .orElse(false);
+        return abPropsService.getBool(ABProp.BIZ_HOSTED_DEVICES_ENABLED);
     }
 }

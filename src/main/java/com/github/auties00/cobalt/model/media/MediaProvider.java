@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.media;
 
 import com.github.auties00.cobalt.model.action.StickerAction;
-import com.github.auties00.cobalt.model.message.common.MediaMessage;
+import com.github.auties00.cobalt.model.message.MediaMessage;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.sync.ExternalBlobReference;
 import com.github.auties00.cobalt.model.sync.HistorySyncNotification;
@@ -10,98 +10,130 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * A sealed interface that represents a class that can provide data about a media
+ * A unified interface for accessing media metadata across different
+ * message and data types that carry downloadable media content.
+ *
+ * <p>This sealed interface provides a common set of accessors and mutators
+ * for the fields that all media-bearing types share: a download URL, a CDN
+ * direct path, an encryption key, SHA-256 hashes for both plaintext and
+ * ciphertext, a file size, and a {@link MediaPath} that describes the CDN
+ * route and encryption key label.
+ *
+ * <p>Implementations of this interface include end-to-end encrypted media
+ * messages ({@link MediaMessage}), application state synchronization blobs
+ * ({@link ExternalBlobReference}), history sync notification payloads
+ * ({@link HistorySyncNotification}), and sticker-related structures
+ * ({@link StickerAction}, {@link Sticker}).
  */
 public sealed interface MediaProvider
         permits StickerAction, MediaMessage, Sticker, ExternalBlobReference, HistorySyncNotification {
     /**
-     * Returns the url to the media
+     * Returns the CDN URL from which the encrypted media file can be
+     * downloaded.
      *
-     * @return a nullable String
+     * @return an {@link Optional} containing the media URL, or empty if
+     *         not set
      */
     Optional<String> mediaUrl();
 
     /**
-     * Sets the media url of this provider
+     * Sets the CDN URL for the media file.
      *
+     * @param mediaUrl the media URL
      */
     void setMediaUrl(String mediaUrl);
 
     /**
-     * Returns the direct path to the media
+     * Returns the CDN direct path from which the encrypted media file can
+     * be fetched.
      *
-     * @return a nullable String
+     * @return an {@link Optional} containing the direct path, or empty if
+     *         not set
      */
     Optional<String> mediaDirectPath();
 
     /**
-     * Sets the direct path of this provider
+     * Sets the CDN direct path for the media file.
      *
+     * @param mediaDirectPath the direct path
      */
     void setMediaDirectPath(String mediaDirectPath);
 
     /**
-     * Returns the key of this media
+     * Returns the symmetric encryption key used to decrypt the media file.
      *
-     * @return a non-null array of bytes
+     * @return an {@link Optional} containing the media key, or empty if
+     *         not set
      */
     Optional<byte[]> mediaKey();
 
     /**
-     * Sets the media key of this provider
+     * Sets the symmetric encryption key for the media file.
      *
+     * @param bytes the media key bytes
      */
     void setMediaKey(byte[] bytes);
 
     /**
-     * Sets the timestamp of the media key
+     * Sets the epoch-second timestamp at which the media key was generated.
      *
+     * @param timestamp the media key timestamp in epoch seconds, or
+     *        {@code null} to clear
      */
     void setMediaKeyTimestamp(Long timestamp);
 
     /**
-     * Returns the sha256 of this media
+     * Returns the SHA-256 digest of the plaintext (decrypted) media file,
+     * used for integrity verification after decryption.
      *
-     * @return a non-null array of bytes
+     * @return an {@link Optional} containing the SHA-256 hash, or empty if
+     *         not set
      */
     Optional<byte[]> mediaSha256();
 
     /**
-     * Sets the sha256 of the media in this provider
+     * Sets the SHA-256 digest of the plaintext media file.
      *
+     * @param bytes the plaintext SHA-256 hash
      */
     void setMediaSha256(byte[] bytes);
 
     /**
-     * Returns the sha256 of this encrypted media
+     * Returns the SHA-256 digest of the encrypted media file, used for
+     * integrity verification before decryption.
      *
-     * @return a non-null array of bytes
+     * @return an {@link Optional} containing the encrypted SHA-256 hash,
+     *         or empty if not set
      */
     Optional<byte[]> mediaEncryptedSha256();
 
     /**
-     * Sets the sha256 of the encrypted media in this provider
+     * Sets the SHA-256 digest of the encrypted media file.
      *
+     * @param bytes the encrypted SHA-256 hash
      */
     void setMediaEncryptedSha256(byte[] bytes);
 
     /**
-     * Returns the size of this media
+     * Returns the size of the media file in bytes.
      *
-     * @return a long
+     * @return an {@link OptionalLong} containing the file size, or empty
+     *         if not set
      */
     OptionalLong mediaSize();
 
     /**
-     * Sets the size of this media
+     * Sets the size of the media file in bytes.
      *
+     * @param mediaSize the file size in bytes
      */
     void setMediaSize(long mediaSize);
 
     /**
-     * Returns the type of this attachment
+     * Returns the {@link MediaPath} that describes the CDN route and
+     * encryption key derivation label for this media type.
      *
-     * @return a non-null attachment
+     * @return the media path for this provider, never {@code null}
      */
     MediaPath mediaPath();
 }

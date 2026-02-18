@@ -11,10 +11,10 @@ import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.*;
 import com.github.auties00.cobalt.model.info.ChatMessageInfo;
 import com.github.auties00.cobalt.model.info.MessageInfo;
-import com.github.auties00.cobalt.model.info.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.model.message.common.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.props.ABPropsService;
 
 import java.util.Objects;

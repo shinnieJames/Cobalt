@@ -1,0 +1,82 @@
+package com.github.auties00.cobalt.model.sync.action.chat;
+
+import com.github.auties00.cobalt.model.sync.SyncAction;
+
+import java.util.Collections;
+import java.util.List;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@ProtobufMessage(name = "SyncActionValue.QuickReplyAction")
+public final class QuickReplyAction implements SyncAction {
+    @ProtobufProperty(index = 1, type = ProtobufType.STRING)
+    String shortcut;
+
+    @ProtobufProperty(index = 2, type = ProtobufType.STRING)
+    String message;
+
+    @ProtobufProperty(index = 3, type = ProtobufType.STRING)
+    List<String> keywords;
+
+    @ProtobufProperty(index = 4, type = ProtobufType.INT32)
+    Integer count;
+
+    @ProtobufProperty(index = 5, type = ProtobufType.BOOL)
+    Boolean deleted;
+
+
+    QuickReplyAction(String shortcut, String message, List<String> keywords, Integer count, Boolean deleted) {
+        this.shortcut = shortcut;
+        this.message = message;
+        this.keywords = keywords;
+        this.count = count;
+        this.deleted = deleted;
+    }
+
+    public Optional<String> shortcut() {
+        return Optional.ofNullable(shortcut);
+    }
+
+    public Optional<String> message() {
+        return Optional.ofNullable(message);
+    }
+
+    public List<String> keywords() {
+        return keywords == null ? List.of() : Collections.unmodifiableList(keywords);
+    }
+
+    public OptionalInt count() {
+        return count == null ? OptionalInt.empty() : OptionalInt.of(count);
+    }
+
+    public boolean deleted() {
+        return deleted != null && deleted;
+    }
+
+    public QuickReplyAction setShortcut(String shortcut) {
+        this.shortcut = shortcut;
+        return this;
+    }
+
+    public QuickReplyAction setMessage(String message) {
+        this.message = message;
+        return this;
+    }
+
+    public QuickReplyAction setKeywords(List<String> keywords) {
+        this.keywords = keywords;
+        return this;
+    }
+
+    public QuickReplyAction setCount(Integer count) {
+        this.count = count;
+        return this;
+    }
+
+    public QuickReplyAction setDeleted(Boolean deleted) {
+        this.deleted = deleted;
+        return this;
+    }
+}

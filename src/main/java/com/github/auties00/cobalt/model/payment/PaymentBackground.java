@@ -1,145 +1,535 @@
 package com.github.auties00.cobalt.model.payment;
 
-import it.auties.protobuf.annotation.ProtobufEnum;
-import it.auties.protobuf.annotation.ProtobufEnumIndex;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
-import it.auties.protobuf.model.ProtobufType;
-
-import java.util.Objects;
+import java.time.Instant;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.*;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 
+/**
+ * A background image displayed behind a payment message in the WhatsApp chat view.
+ *
+ * <p>The background carries an image resource identified by {@link #id() id}, together with
+ * its dimensions, MIME type, and ARGB colour values used for placeholder rendering before
+ * the image has loaded. The actual encrypted image bytes are referenced indirectly through
+ * the {@link #mediaData() mediaData} field, which provides the media key, SHA-256 hashes,
+ * and the CDN direct path needed to download and decrypt the image.
+ *
+ * <p>The {@link #type() type} field classifies the background variant. Currently the
+ * protocol defines {@link Type#DEFAULT DEFAULT} for the standard payment background and
+ * {@link Type#UNKNOWN UNKNOWN} as a fallback.
+ *
+ * <p>This model mirrors the {@code PaymentBackground} protobuf message defined in the
+ * WhatsApp Web end-to-end protocol and is referenced by both
+ * {@link com.github.auties00.cobalt.model.message.payment.RequestPaymentMessage
+ * RequestPaymentMessage} and
+ * {@link com.github.auties00.cobalt.model.message.payment.SendPaymentMessage
+ * SendPaymentMessage}.
+ */
 @ProtobufMessage(name = "PaymentBackground")
 public final class PaymentBackground {
+    /**
+     * The unique identifier of the background image resource.
+     */
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    final String id;
+    String id;
 
+    /**
+     * The size of the background image file in bytes.
+     */
     @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
-    final long mediaSize;
+    Long fileLength;
 
+    /**
+     * The width of the background image in pixels.
+     */
     @ProtobufProperty(index = 3, type = ProtobufType.UINT32)
-    final int width;
+    Integer width;
 
+    /**
+     * The height of the background image in pixels.
+     */
     @ProtobufProperty(index = 4, type = ProtobufType.UINT32)
-    final int height;
+    Integer height;
 
+    /**
+     * The MIME type of the background image, such as {@code "image/jpeg"} or
+     * {@code "image/png"}.
+     */
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
-    final String mimetype;
+    String mimetype;
 
+    /**
+     * The ARGB colour value displayed as a placeholder while the background image is
+     * loading. The value is encoded as a 32-bit fixed-width integer where each byte
+     * represents, from most significant to least significant, the alpha, red, green,
+     * and blue channels.
+     */
     @ProtobufProperty(index = 6, type = ProtobufType.FIXED32)
-    final int placeholderArgb;
+    Integer placeholderArgb;
 
+    /**
+     * The ARGB colour value used for primary text rendered over the payment background.
+     */
     @ProtobufProperty(index = 7, type = ProtobufType.FIXED32)
-    final int textArgb;
+    Integer textArgb;
 
+    /**
+     * The ARGB colour value used for secondary or subtext rendered over the payment
+     * background.
+     */
     @ProtobufProperty(index = 8, type = ProtobufType.FIXED32)
-    final int subtextArgb;
+    Integer subtextArgb;
 
+    /**
+     * The encrypted media data for the background image, containing the media key,
+     * SHA-256 hashes, and the CDN direct path.
+     */
     @ProtobufProperty(index = 9, type = ProtobufType.MESSAGE)
-    final PaymentMediaData mediaData;
+    MediaData mediaData;
 
+    /**
+     * The variant of this payment background.
+     */
     @ProtobufProperty(index = 10, type = ProtobufType.ENUM)
-    final PaymentBackgroundType type;
+    Type type;
 
-    PaymentBackground(String id, long mediaSize, int width, int height, String mimetype, int placeholderArgb, int textArgb, int subtextArgb, PaymentMediaData mediaData, PaymentBackgroundType type) {
-        this.id = Objects.requireNonNull(id, "id cannot be null");
-        this.mediaSize = mediaSize;
+    /**
+     * Constructs a new {@code PaymentBackground} with the given properties.
+     *
+     * @param id              the image resource identifier
+     * @param fileLength      the file size in bytes
+     * @param width           the image width in pixels
+     * @param height          the image height in pixels
+     * @param mimetype        the MIME type of the image
+     * @param placeholderArgb the placeholder ARGB colour
+     * @param textArgb        the primary text ARGB colour
+     * @param subtextArgb     the secondary text ARGB colour
+     * @param mediaData       the encrypted media data
+     * @param type            the background variant
+     */
+    PaymentBackground(String id, Long fileLength, Integer width, Integer height, String mimetype, Integer placeholderArgb, Integer textArgb, Integer subtextArgb, MediaData mediaData, Type type) {
+        this.id = id;
+        this.fileLength = fileLength;
         this.width = width;
         this.height = height;
-        this.mimetype = Objects.requireNonNull(mimetype, "mimetype cannot be null");
+        this.mimetype = mimetype;
         this.placeholderArgb = placeholderArgb;
         this.textArgb = textArgb;
         this.subtextArgb = subtextArgb;
         this.mediaData = mediaData;
-        this.type = Objects.requireNonNull(type, "type cannot be null");
+        this.type = type;
     }
 
-    public String id() {
-        return id;
+    /**
+     * Returns the unique identifier of the background image resource.
+     *
+     * @return an {@code Optional} containing the image identifier, or empty if not set
+     */
+    public Optional<String> id() {
+        return Optional.ofNullable(id);
     }
 
-    public long mediaSize() {
-        return mediaSize;
+    /**
+     * Returns the size of the background image file in bytes.
+     *
+     * @return an {@code OptionalLong} containing the file length, or empty if not set
+     */
+    public OptionalLong fileLength() {
+        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
     }
 
-    public int width() {
-        return width;
+    /**
+     * Returns the width of the background image in pixels.
+     *
+     * @return an {@code OptionalInt} containing the width, or empty if not set
+     */
+    public OptionalInt width() {
+        return width == null ? OptionalInt.empty() : OptionalInt.of(width);
     }
 
-    public int height() {
-        return height;
+    /**
+     * Returns the height of the background image in pixels.
+     *
+     * @return an {@code OptionalInt} containing the height, or empty if not set
+     */
+    public OptionalInt height() {
+        return height == null ? OptionalInt.empty() : OptionalInt.of(height);
     }
 
-    public String mimetype() {
-        return mimetype;
+    /**
+     * Returns the MIME type of the background image.
+     *
+     * @return an {@code Optional} containing the MIME type, or empty if not set
+     */
+    public Optional<String> mimetype() {
+        return Optional.ofNullable(mimetype);
     }
 
-    public int placeholderArgb() {
-        return placeholderArgb;
+    /**
+     * Returns the ARGB placeholder colour value.
+     *
+     * @return an {@code OptionalInt} containing the ARGB value, or empty if not set
+     */
+    public OptionalInt placeholderArgb() {
+        return placeholderArgb == null ? OptionalInt.empty() : OptionalInt.of(placeholderArgb);
     }
 
-    public int textArgb() {
-        return textArgb;
+    /**
+     * Returns the ARGB primary text colour value.
+     *
+     * @return an {@code OptionalInt} containing the ARGB value, or empty if not set
+     */
+    public OptionalInt textArgb() {
+        return textArgb == null ? OptionalInt.empty() : OptionalInt.of(textArgb);
     }
 
-    public int subtextArgb() {
-        return subtextArgb;
+    /**
+     * Returns the ARGB secondary text colour value.
+     *
+     * @return an {@code OptionalInt} containing the ARGB value, or empty if not set
+     */
+    public OptionalInt subtextArgb() {
+        return subtextArgb == null ? OptionalInt.empty() : OptionalInt.of(subtextArgb);
     }
 
-    public Optional<PaymentMediaData> mediaData() {
+    /**
+     * Returns the encrypted media data for the background image.
+     *
+     * @return an {@code Optional} containing the media data, or empty if not set
+     */
+    public Optional<MediaData> mediaData() {
         return Optional.ofNullable(mediaData);
     }
 
-    public PaymentBackgroundType type() {
-        return type;
+    /**
+     * Returns the variant of this payment background.
+     *
+     * @return an {@code Optional} containing the type, or empty if not set
+     */
+    public Optional<Type> type() {
+        return Optional.ofNullable(type);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof PaymentBackground that
-                && Objects.equals(id, that.id)
-                && mediaSize == that.mediaSize
-                && width == that.width
-                && height == that.height
-                && Objects.equals(mimetype, that.mimetype)
-                && placeholderArgb == that.placeholderArgb
-                && textArgb == that.textArgb
-                && subtextArgb == that.subtextArgb
-                && Objects.equals(mediaData, that.mediaData)
-                && Objects.equals(type, that.type);
+    /**
+     * Sets the unique identifier of the background image resource.
+     *
+     * @param id the image identifier
+     * @return this instance
+     */
+    public PaymentBackground setId(String id) {
+        this.id = id;
+        return this;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(id, mediaSize, width, height, mimetype, placeholderArgb, textArgb, subtextArgb, mediaData, type);
+    /**
+     * Sets the size of the background image file in bytes.
+     *
+     * @param fileLength the file length
+     * @return this instance
+     */
+    public PaymentBackground setFileLength(Long fileLength) {
+        this.fileLength = fileLength;
+        return this;
     }
 
-    @Override
-    public String toString() {
-        return "PaymentBackground[" +
-                "id=" + id +
-                ", mediaSize=" + mediaSize +
-                ", width=" + width +
-                ", height=" + height +
-                ", mimetype=" + mimetype +
-                ", placeholderArgb=" + placeholderArgb +
-                ", textArgb=" + textArgb +
-                ", subtextArgb=" + subtextArgb +
-                ", mediaData=" + mediaData +
-                ", type=" + type +
-                ']';
+    /**
+     * Sets the width of the background image in pixels.
+     *
+     * @param width the width
+     * @return this instance
+     */
+    public PaymentBackground setWidth(Integer width) {
+        this.width = width;
+        return this;
     }
 
-    @ProtobufEnum
-    public enum PaymentBackgroundType {
+    /**
+     * Sets the height of the background image in pixels.
+     *
+     * @param height the height
+     * @return this instance
+     */
+    public PaymentBackground setHeight(Integer height) {
+        this.height = height;
+        return this;
+    }
+
+    /**
+     * Sets the MIME type of the background image.
+     *
+     * @param mimetype the MIME type
+     * @return this instance
+     */
+    public PaymentBackground setMimetype(String mimetype) {
+        this.mimetype = mimetype;
+        return this;
+    }
+
+    /**
+     * Sets the ARGB placeholder colour value.
+     *
+     * @param placeholderArgb the ARGB colour
+     * @return this instance
+     */
+    public PaymentBackground setPlaceholderArgb(Integer placeholderArgb) {
+        this.placeholderArgb = placeholderArgb;
+        return this;
+    }
+
+    /**
+     * Sets the ARGB primary text colour value.
+     *
+     * @param textArgb the ARGB colour
+     * @return this instance
+     */
+    public PaymentBackground setTextArgb(Integer textArgb) {
+        this.textArgb = textArgb;
+        return this;
+    }
+
+    /**
+     * Sets the ARGB secondary text colour value.
+     *
+     * @param subtextArgb the ARGB colour
+     * @return this instance
+     */
+    public PaymentBackground setSubtextArgb(Integer subtextArgb) {
+        this.subtextArgb = subtextArgb;
+        return this;
+    }
+
+    /**
+     * Sets the encrypted media data for the background image.
+     *
+     * @param mediaData the media data
+     * @return this instance
+     */
+    public PaymentBackground setMediaData(MediaData mediaData) {
+        this.mediaData = mediaData;
+        return this;
+    }
+
+    /**
+     * Sets the variant of this payment background.
+     *
+     * @param type the background variant
+     * @return this instance
+     */
+    public PaymentBackground setType(Type type) {
+        this.type = type;
+        return this;
+    }
+
+    /**
+     * The variant of a payment background image.
+     *
+     * <p>The WhatsApp protocol currently defines two variants: {@link #DEFAULT} for
+     * the standard payment background and {@link #UNKNOWN} as a fallback when the
+     * type is not recognized or not set.
+     */
+    @ProtobufEnum(name = "PaymentBackground.Type")
+    public enum Type {
+        /**
+         * The background type is not recognized or was not specified.
+         */
         UNKNOWN(0),
+
+        /**
+         * The standard default payment background.
+         */
         DEFAULT(1);
 
-        final int index;
-
-        PaymentBackgroundType(@ProtobufEnumIndex int index) {
+        /**
+         * Constructs a new {@code Type} with the given protobuf index.
+         *
+         * @param index the protobuf enum index
+         */
+        Type(@ProtobufEnumIndex int index) {
             this.index = index;
         }
 
+        /**
+         * The protobuf enum index of this background type.
+         */
+        final int index;
+
+        /**
+         * Returns the protobuf enum index of this background type.
+         *
+         * @return the numeric index
+         */
+        public int index() {
+            return this.index;
+        }
+    }
+
+    /**
+     * Encrypted media data associated with a {@link PaymentBackground}, providing the
+     * cryptographic keys and CDN path needed to download and decrypt the background
+     * image.
+     *
+     * <p>The {@link #mediaKey() mediaKey} is the AES-256 key used to decrypt the
+     * downloaded ciphertext. The {@link #fileSha256() fileSha256} is the SHA-256 hash
+     * of the plaintext file, while {@link #fileEncSha256() fileEncSha256} is the
+     * SHA-256 hash of the encrypted file as stored on the CDN. The
+     * {@link #directPath() directPath} is the CDN path from which the encrypted file
+     * can be downloaded.
+     */
+    @ProtobufMessage(name = "PaymentBackground.MediaData")
+    public static final class MediaData {
+        /**
+         * The AES-256 encryption key used to decrypt the background image after
+         * downloading it from the CDN.
+         */
+        @ProtobufProperty(index = 1, type = ProtobufType.BYTES)
+        byte[] mediaKey;
+
+        /**
+         * The epoch-second timestamp indicating when the media key was generated.
+         */
+        @ProtobufProperty(index = 2, type = ProtobufType.INT64)
+        Long mediaKeyTimestamp;
+
+        /**
+         * The SHA-256 hash of the plaintext (decrypted) background image file.
+         */
+        @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
+        byte[] fileSha256;
+
+        /**
+         * The SHA-256 hash of the encrypted background image file as stored on the CDN.
+         */
+        @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
+        byte[] fileEncSha256;
+
+        /**
+         * The CDN direct path from which the encrypted background image can be
+         * downloaded.
+         */
+        @ProtobufProperty(index = 5, type = ProtobufType.STRING)
+        String directPath;
+
+        /**
+         * Constructs a new {@code MediaData} with the given properties.
+         *
+         * @param mediaKey          the AES-256 media encryption key
+         * @param mediaKeyTimestamp  the epoch-second timestamp of key generation
+         * @param fileSha256        the SHA-256 hash of the plaintext file
+         * @param fileEncSha256     the SHA-256 hash of the encrypted file
+         * @param directPath        the CDN direct path
+         */
+        MediaData(byte[] mediaKey, Long mediaKeyTimestamp, byte[] fileSha256, byte[] fileEncSha256, String directPath) {
+            this.mediaKey = mediaKey;
+            this.mediaKeyTimestamp = mediaKeyTimestamp;
+            this.fileSha256 = fileSha256;
+            this.fileEncSha256 = fileEncSha256;
+            this.directPath = directPath;
+        }
+
+        /**
+         * Returns the AES-256 encryption key for the background image.
+         *
+         * @return an {@code Optional} containing the media key bytes, or empty if
+         *         not set
+         */
+        public Optional<byte[]> mediaKey() {
+            return Optional.ofNullable(mediaKey);
+        }
+
+        /**
+         * Returns the timestamp at which the media key was generated, as an
+         * {@link Instant}.
+         *
+         * @return an {@code Optional} containing the key generation timestamp, or
+         *         empty if not set
+         */
+        public Optional<Instant> mediaKeyTimestamp() {
+            return Optional.ofNullable(mediaKeyTimestamp)
+                    .map(Instant::ofEpochSecond);
+        }
+
+        /**
+         * Returns the SHA-256 hash of the plaintext background image file.
+         *
+         * @return an {@code Optional} containing the hash bytes, or empty if not set
+         */
+        public Optional<byte[]> fileSha256() {
+            return Optional.ofNullable(fileSha256);
+        }
+
+        /**
+         * Returns the SHA-256 hash of the encrypted background image file.
+         *
+         * @return an {@code Optional} containing the hash bytes, or empty if not set
+         */
+        public Optional<byte[]> fileEncSha256() {
+            return Optional.ofNullable(fileEncSha256);
+        }
+
+        /**
+         * Returns the CDN direct path for the encrypted background image.
+         *
+         * @return an {@code Optional} containing the path, or empty if not set
+         */
+        public Optional<String> directPath() {
+            return Optional.ofNullable(directPath);
+        }
+
+        /**
+         * Sets the AES-256 encryption key for the background image.
+         *
+         * @param mediaKey the media key bytes
+         * @return this instance
+         */
+        public MediaData setMediaKey(byte[] mediaKey) {
+            this.mediaKey = mediaKey;
+            return this;
+        }
+
+        /**
+         * Sets the epoch-second timestamp of when the media key was generated.
+         *
+         * @param mediaKeyTimestamp the timestamp as epoch seconds
+         * @return this instance
+         */
+        public MediaData setMediaKeyTimestamp(Long mediaKeyTimestamp) {
+            this.mediaKeyTimestamp = mediaKeyTimestamp;
+            return this;
+        }
+
+        /**
+         * Sets the SHA-256 hash of the plaintext background image file.
+         *
+         * @param fileSha256 the hash bytes
+         * @return this instance
+         */
+        public MediaData setFileSha256(byte[] fileSha256) {
+            this.fileSha256 = fileSha256;
+            return this;
+        }
+
+        /**
+         * Sets the SHA-256 hash of the encrypted background image file.
+         *
+         * @param fileEncSha256 the hash bytes
+         * @return this instance
+         */
+        public MediaData setFileEncSha256(byte[] fileEncSha256) {
+            this.fileEncSha256 = fileEncSha256;
+            return this;
+        }
+
+        /**
+         * Sets the CDN direct path for the encrypted background image.
+         *
+         * @param directPath the CDN path
+         * @return this instance
+         */
+        public MediaData setDirectPath(String directPath) {
+            this.directPath = directPath;
+            return this;
+        }
     }
 }
