@@ -1,245 +1,248 @@
 package com.github.auties00.cobalt.model.sync;
 
 import com.github.auties00.cobalt.model.device.DeviceCapabilities;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
 import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestAction;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
-import com.github.auties00.cobalt.model.sync.action.bot.UGCBot;
+import com.github.auties00.cobalt.model.sync.action.bot.UGCBotAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
 import com.github.auties00.cobalt.model.sync.action.business.CtwaPerCustomerDataSharingAction;
 import com.github.auties00.cobalt.model.sync.action.business.MarketingMessageAction;
 import com.github.auties00.cobalt.model.sync.action.business.MarketingMessageBroadcastAction;
+import com.github.auties00.cobalt.model.sync.action.call.*;
 import com.github.auties00.cobalt.model.sync.action.chat.*;
 import com.github.auties00.cobalt.model.sync.action.contact.*;
+import com.github.auties00.cobalt.model.sync.action.device.*;
 import com.github.auties00.cobalt.model.sync.action.media.*;
-import com.github.auties00.cobalt.model.sync.action.misc.*;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentInfoAction;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
-import com.github.auties00.cobalt.model.sync.setting.*;
-import com.github.auties00.cobalt.model.sync.setting.privacy.PrivacySettingChannelsPersonalisedRecommendationAction;
-import com.github.auties00.cobalt.model.sync.setting.privacy.PrivacySettingDisableLinkPreviewsAction;
-import com.github.auties00.cobalt.model.sync.setting.privacy.PrivacySettingRelayAllCalls;
-import com.github.auties00.cobalt.model.sync.setting.privacy.PrivateProcessingSettingAction;
+import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingChannelsPersonalisedRecommendationAction;
+import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsAction;
+import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCalls;
+import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
+import com.github.auties00.cobalt.model.sync.action.setting.*;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue")
 public final class SyncActionValue {
-    @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant timestamp;
 
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    StarAction starAction;
+    final StarAction starAction;
 
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
-    ContactAction contactAction;
+    final ContactAction contactAction;
 
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
-    MuteAction muteAction;
+    final MuteAction muteAction;
 
     @ProtobufProperty(index = 5, type = ProtobufType.MESSAGE)
-    PinAction pinAction;
+    final PinAction pinAction;
 
     @ProtobufProperty(index = 7, type = ProtobufType.MESSAGE)
-    PushNameSetting pushNameSetting;
+    final PushNameSetting pushNameSetting;
 
     @ProtobufProperty(index = 8, type = ProtobufType.MESSAGE)
-    QuickReplyAction quickReplyAction;
+    final QuickReplyAction quickReplyAction;
 
     @ProtobufProperty(index = 11, type = ProtobufType.MESSAGE)
-    RecentEmojiWeightsAction recentEmojiWeightsAction;
+    final RecentEmojiWeightsAction recentEmojiWeightsAction;
 
     @ProtobufProperty(index = 14, type = ProtobufType.MESSAGE)
-    LabelEditAction labelEditAction;
+    final LabelEditAction labelEditAction;
 
     @ProtobufProperty(index = 15, type = ProtobufType.MESSAGE)
-    LabelAssociationAction labelAssociationAction;
+    final LabelAssociationAction labelAssociationAction;
 
     @ProtobufProperty(index = 16, type = ProtobufType.MESSAGE)
-    LocaleSetting localeSetting;
+    final LocaleSetting localeSetting;
 
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
-    ArchiveChatAction archiveChatAction;
+    final ArchiveChatAction archiveChatAction;
 
     @ProtobufProperty(index = 18, type = ProtobufType.MESSAGE)
-    DeleteMessageForMeAction deleteMessageForMeAction;
+    final DeleteMessageForMeAction deleteMessageForMeAction;
 
     @ProtobufProperty(index = 19, type = ProtobufType.MESSAGE)
-    KeyExpiration keyExpiration;
+    final KeyExpirationAction keyExpirationAction;
 
     @ProtobufProperty(index = 20, type = ProtobufType.MESSAGE)
-    MarkChatAsReadAction markChatAsReadAction;
+    final MarkChatAsReadAction markChatAsReadAction;
 
     @ProtobufProperty(index = 21, type = ProtobufType.MESSAGE)
-    ClearChatAction clearChatAction;
+    final ClearChatAction clearChatAction;
 
     @ProtobufProperty(index = 22, type = ProtobufType.MESSAGE)
-    DeleteChatAction deleteChatAction;
+    final DeleteChatAction deleteChatAction;
 
     @ProtobufProperty(index = 23, type = ProtobufType.MESSAGE)
-    UnarchiveChatsSetting unarchiveChatsSetting;
+    final UnarchiveChatsSetting unarchiveChatsSetting;
 
     @ProtobufProperty(index = 24, type = ProtobufType.MESSAGE)
-    PrimaryFeature primaryFeature;
+    final PrimaryFeatureAction primaryFeatureAction;
 
     @ProtobufProperty(index = 26, type = ProtobufType.MESSAGE)
-    AndroidUnsupportedActions androidUnsupportedActions;
+    final AndroidUnsupportedActions androidUnsupportedActions;
 
     @ProtobufProperty(index = 27, type = ProtobufType.MESSAGE)
-    AgentAction agentAction;
+    final AgentAction agentAction;
 
     @ProtobufProperty(index = 28, type = ProtobufType.MESSAGE)
-    SubscriptionAction subscriptionAction;
+    final SubscriptionAction subscriptionAction;
 
     @ProtobufProperty(index = 29, type = ProtobufType.MESSAGE)
-    UserStatusMuteAction userStatusMuteAction;
+    final UserStatusMuteAction userStatusMuteAction;
 
     @ProtobufProperty(index = 30, type = ProtobufType.MESSAGE)
-    TimeFormatAction timeFormatAction;
+    final TimeFormatAction timeFormatAction;
 
     @ProtobufProperty(index = 31, type = ProtobufType.MESSAGE)
-    NuxAction nuxAction;
+    final NuxAction nuxAction;
 
     @ProtobufProperty(index = 32, type = ProtobufType.MESSAGE)
-    PrimaryVersionAction primaryVersionAction;
+    final PrimaryVersionAction primaryVersionAction;
 
     @ProtobufProperty(index = 33, type = ProtobufType.MESSAGE)
-    StickerAction stickerAction;
+    final StickerAction stickerAction;
 
     @ProtobufProperty(index = 34, type = ProtobufType.MESSAGE)
-    RemoveRecentStickerAction removeRecentStickerAction;
+    final RemoveRecentStickerAction removeRecentStickerAction;
 
     @ProtobufProperty(index = 35, type = ProtobufType.MESSAGE)
-    ChatAssignmentAction chatAssignment;
+    final ChatAssignmentAction chatAssignment;
 
     @ProtobufProperty(index = 36, type = ProtobufType.MESSAGE)
-    ChatAssignmentOpenedStatusAction chatAssignmentOpenedStatus;
+    final ChatAssignmentOpenedStatusAction chatAssignmentOpenedStatus;
 
     @ProtobufProperty(index = 37, type = ProtobufType.MESSAGE)
-    PnForLidChatAction pnForLidChatAction;
+    final PnForLidChatAction pnForLidChatAction;
 
     @ProtobufProperty(index = 38, type = ProtobufType.MESSAGE)
-    MarketingMessageAction marketingMessageAction;
+    final MarketingMessageAction marketingMessageAction;
 
     @ProtobufProperty(index = 39, type = ProtobufType.MESSAGE)
-    MarketingMessageBroadcastAction marketingMessageBroadcastAction;
+    final MarketingMessageBroadcastAction marketingMessageBroadcastAction;
 
     @ProtobufProperty(index = 40, type = ProtobufType.MESSAGE)
-    ExternalWebBetaAction externalWebBetaAction;
+    final ExternalWebBetaAction externalWebBetaAction;
 
     @ProtobufProperty(index = 41, type = ProtobufType.MESSAGE)
-    PrivacySettingRelayAllCalls privacySettingRelayAllCalls;
+    final PrivacySettingRelayAllCalls privacySettingRelayAllCalls;
 
     @ProtobufProperty(index = 42, type = ProtobufType.MESSAGE)
-    CallLogAction callLogAction;
+    final CallLogAction callLogAction;
 
     @ProtobufProperty(index = 43, type = ProtobufType.MESSAGE)
-    UGCBot ugcBot;
+    final UGCBotAction ugcBotAction;
 
     @ProtobufProperty(index = 44, type = ProtobufType.MESSAGE)
-    StatusPrivacyAction statusPrivacy;
+    final StatusPrivacyAction statusPrivacy;
 
     @ProtobufProperty(index = 45, type = ProtobufType.MESSAGE)
-    BotWelcomeRequestAction botWelcomeRequestAction;
+    final BotWelcomeRequestAction botWelcomeRequestAction;
 
     @ProtobufProperty(index = 46, type = ProtobufType.MESSAGE)
-    DeleteIndividualCallLogAction deleteIndividualCallLog;
+    final DeleteIndividualCallLogAction deleteIndividualCallLog;
 
     @ProtobufProperty(index = 47, type = ProtobufType.MESSAGE)
-    LabelReorderingAction labelReorderingAction;
+    final LabelReorderingAction labelReorderingAction;
 
     @ProtobufProperty(index = 48, type = ProtobufType.MESSAGE)
-    PaymentInfoAction paymentInfoAction;
+    final PaymentInfoAction paymentInfoAction;
 
     @ProtobufProperty(index = 49, type = ProtobufType.MESSAGE)
-    CustomPaymentMethodsAction customPaymentMethodsAction;
+    final CustomPaymentMethodsAction customPaymentMethodsAction;
 
     @ProtobufProperty(index = 50, type = ProtobufType.MESSAGE)
-    LockChatAction lockChatAction;
+    final LockChatAction lockChatAction;
 
     @ProtobufProperty(index = 51, type = ProtobufType.MESSAGE)
     ChatLockSettings chatLockSettings;
 
     @ProtobufProperty(index = 52, type = ProtobufType.MESSAGE)
-    WamoUserIdentifierAction wamoUserIdentifierAction;
+    final WamoUserIdentifierAction wamoUserIdentifierAction;
 
     @ProtobufProperty(index = 53, type = ProtobufType.MESSAGE)
-    PrivacySettingDisableLinkPreviewsAction privacySettingDisableLinkPreviewsAction;
+    final PrivacySettingDisableLinkPreviewsAction privacySettingDisableLinkPreviewsAction;
 
     @ProtobufProperty(index = 54, type = ProtobufType.MESSAGE)
     DeviceCapabilities deviceCapabilities;
 
     @ProtobufProperty(index = 55, type = ProtobufType.MESSAGE)
-    NoteEditAction noteEditAction;
+    final NoteEditAction noteEditAction;
 
     @ProtobufProperty(index = 56, type = ProtobufType.MESSAGE)
-    FavoritesAction favoritesAction;
+    final FavoritesAction favoritesAction;
 
     @ProtobufProperty(index = 57, type = ProtobufType.MESSAGE)
-    MerchantPaymentPartnerAction merchantPaymentPartnerAction;
+    final MerchantPaymentPartnerAction merchantPaymentPartnerAction;
 
     @ProtobufProperty(index = 58, type = ProtobufType.MESSAGE)
-    WaffleAccountLinkStateAction waffleAccountLinkStateAction;
+    final WaffleAccountLinkStateAction waffleAccountLinkStateAction;
 
     @ProtobufProperty(index = 59, type = ProtobufType.MESSAGE)
-    UsernameChatStartModeAction usernameChatStartMode;
+    final UsernameChatStartModeAction usernameChatStartMode;
 
     @ProtobufProperty(index = 60, type = ProtobufType.MESSAGE)
-    NotificationActivitySettingAction notificationActivitySettingAction;
+    final NotificationActivitySettingAction notificationActivitySettingAction;
 
     @ProtobufProperty(index = 61, type = ProtobufType.MESSAGE)
-    LidContactAction lidContactAction;
+    final LidContactAction lidContactAction;
 
     @ProtobufProperty(index = 62, type = ProtobufType.MESSAGE)
-    CtwaPerCustomerDataSharingAction ctwaPerCustomerDataSharingAction;
+    final CtwaPerCustomerDataSharingAction ctwaPerCustomerDataSharingAction;
 
     @ProtobufProperty(index = 63, type = ProtobufType.MESSAGE)
-    PaymentTosAction paymentTosAction;
+    final PaymentTosAction paymentTosAction;
 
     @ProtobufProperty(index = 64, type = ProtobufType.MESSAGE)
-    PrivacySettingChannelsPersonalisedRecommendationAction privacySettingChannelsPersonalisedRecommendationAction;
+    final PrivacySettingChannelsPersonalisedRecommendationAction privacySettingChannelsPersonalisedRecommendationAction;
 
     @ProtobufProperty(index = 66, type = ProtobufType.MESSAGE)
-    DetectedOutcomesStatusAction detectedOutcomesStatusAction;
+    final DetectedOutcomesStatusAction detectedOutcomesStatusAction;
 
     @ProtobufProperty(index = 68, type = ProtobufType.MESSAGE)
-    MaibaAIFeaturesControlAction maibaAiFeaturesControlAction;
+    final MaibaAIFeaturesControlAction maibaAiFeaturesControlAction;
 
     @ProtobufProperty(index = 69, type = ProtobufType.MESSAGE)
-    BusinessBroadcastListAction businessBroadcastListAction;
+    final BusinessBroadcastListAction businessBroadcastListAction;
 
     @ProtobufProperty(index = 70, type = ProtobufType.MESSAGE)
-    MusicUserIdAction musicUserIdAction;
+    final MusicUserIdAction musicUserIdAction;
 
     @ProtobufProperty(index = 71, type = ProtobufType.MESSAGE)
-    StatusPostOptInNotificationPreferencesAction statusPostOptInNotificationPreferencesAction;
+    final StatusPostOptInNotificationPreferencesAction statusPostOptInNotificationPreferencesAction;
 
     @ProtobufProperty(index = 72, type = ProtobufType.MESSAGE)
-    AvatarUpdatedAction avatarUpdatedAction;
+    final AvatarUpdatedAction avatarUpdatedAction;
 
     @ProtobufProperty(index = 74, type = ProtobufType.MESSAGE)
-    PrivateProcessingSettingAction privateProcessingSettingAction;
+    final PrivateProcessingSettingAction privateProcessingSettingAction;
 
     @ProtobufProperty(index = 75, type = ProtobufType.MESSAGE)
-    NewsletterSavedInterestsAction newsletterSavedInterestsAction;
+    final NewsletterSavedInterestsAction newsletterSavedInterestsAction;
 
     @ProtobufProperty(index = 76, type = ProtobufType.MESSAGE)
-    AiThreadRenameAction aiThreadRenameAction;
+    final AiThreadRenameAction aiThreadRenameAction;
 
     @ProtobufProperty(index = 77, type = ProtobufType.MESSAGE)
-    InteractiveMessageAction interactiveMessageAction;
+    final InteractiveMessageAction interactiveMessageAction;
 
     @ProtobufProperty(index = 78, type = ProtobufType.MESSAGE)
-    SettingsSyncAction settingsSyncAction;
+    final SettingsSyncAction settingsSyncAction;
 
 
-    SyncActionValue(Instant timestamp, StarAction starAction, ContactAction contactAction, MuteAction muteAction, PinAction pinAction, PushNameSetting pushNameSetting, QuickReplyAction quickReplyAction, RecentEmojiWeightsAction recentEmojiWeightsAction, LabelEditAction labelEditAction, LabelAssociationAction labelAssociationAction, LocaleSetting localeSetting, ArchiveChatAction archiveChatAction, DeleteMessageForMeAction deleteMessageForMeAction, KeyExpiration keyExpiration, MarkChatAsReadAction markChatAsReadAction, ClearChatAction clearChatAction, DeleteChatAction deleteChatAction, UnarchiveChatsSetting unarchiveChatsSetting, PrimaryFeature primaryFeature, AndroidUnsupportedActions androidUnsupportedActions, AgentAction agentAction, SubscriptionAction subscriptionAction, UserStatusMuteAction userStatusMuteAction, TimeFormatAction timeFormatAction, NuxAction nuxAction, PrimaryVersionAction primaryVersionAction, StickerAction stickerAction, RemoveRecentStickerAction removeRecentStickerAction, ChatAssignmentAction chatAssignment, ChatAssignmentOpenedStatusAction chatAssignmentOpenedStatus, PnForLidChatAction pnForLidChatAction, MarketingMessageAction marketingMessageAction, MarketingMessageBroadcastAction marketingMessageBroadcastAction, ExternalWebBetaAction externalWebBetaAction, PrivacySettingRelayAllCalls privacySettingRelayAllCalls, CallLogAction callLogAction, UGCBot ugcBot, StatusPrivacyAction statusPrivacy, BotWelcomeRequestAction botWelcomeRequestAction, DeleteIndividualCallLogAction deleteIndividualCallLog, LabelReorderingAction labelReorderingAction, PaymentInfoAction paymentInfoAction, CustomPaymentMethodsAction customPaymentMethodsAction, LockChatAction lockChatAction, ChatLockSettings chatLockSettings, WamoUserIdentifierAction wamoUserIdentifierAction, PrivacySettingDisableLinkPreviewsAction privacySettingDisableLinkPreviewsAction, DeviceCapabilities deviceCapabilities, NoteEditAction noteEditAction, FavoritesAction favoritesAction, MerchantPaymentPartnerAction merchantPaymentPartnerAction, WaffleAccountLinkStateAction waffleAccountLinkStateAction, UsernameChatStartModeAction usernameChatStartMode, NotificationActivitySettingAction notificationActivitySettingAction, LidContactAction lidContactAction, CtwaPerCustomerDataSharingAction ctwaPerCustomerDataSharingAction, PaymentTosAction paymentTosAction, PrivacySettingChannelsPersonalisedRecommendationAction privacySettingChannelsPersonalisedRecommendationAction, DetectedOutcomesStatusAction detectedOutcomesStatusAction, MaibaAIFeaturesControlAction maibaAiFeaturesControlAction, BusinessBroadcastListAction businessBroadcastListAction, MusicUserIdAction musicUserIdAction, StatusPostOptInNotificationPreferencesAction statusPostOptInNotificationPreferencesAction, AvatarUpdatedAction avatarUpdatedAction, PrivateProcessingSettingAction privateProcessingSettingAction, NewsletterSavedInterestsAction newsletterSavedInterestsAction, AiThreadRenameAction aiThreadRenameAction, InteractiveMessageAction interactiveMessageAction, SettingsSyncAction settingsSyncAction) {
+    SyncActionValue(Instant timestamp, StarAction starAction, ContactAction contactAction, MuteAction muteAction, PinAction pinAction, PushNameSetting pushNameSetting, QuickReplyAction quickReplyAction, RecentEmojiWeightsAction recentEmojiWeightsAction, LabelEditAction labelEditAction, LabelAssociationAction labelAssociationAction, LocaleSetting localeSetting, ArchiveChatAction archiveChatAction, DeleteMessageForMeAction deleteMessageForMeAction, KeyExpirationAction keyExpirationAction, MarkChatAsReadAction markChatAsReadAction, ClearChatAction clearChatAction, DeleteChatAction deleteChatAction, UnarchiveChatsSetting unarchiveChatsSetting, PrimaryFeatureAction primaryFeatureAction, AndroidUnsupportedActions androidUnsupportedActions, AgentAction agentAction, SubscriptionAction subscriptionAction, UserStatusMuteAction userStatusMuteAction, TimeFormatAction timeFormatAction, NuxAction nuxAction, PrimaryVersionAction primaryVersionAction, StickerAction stickerAction, RemoveRecentStickerAction removeRecentStickerAction, ChatAssignmentAction chatAssignment, ChatAssignmentOpenedStatusAction chatAssignmentOpenedStatus, PnForLidChatAction pnForLidChatAction, MarketingMessageAction marketingMessageAction, MarketingMessageBroadcastAction marketingMessageBroadcastAction, ExternalWebBetaAction externalWebBetaAction, PrivacySettingRelayAllCalls privacySettingRelayAllCalls, CallLogAction callLogAction, UGCBotAction ugcBotAction, StatusPrivacyAction statusPrivacy, BotWelcomeRequestAction botWelcomeRequestAction, DeleteIndividualCallLogAction deleteIndividualCallLog, LabelReorderingAction labelReorderingAction, PaymentInfoAction paymentInfoAction, CustomPaymentMethodsAction customPaymentMethodsAction, LockChatAction lockChatAction, ChatLockSettings chatLockSettings, WamoUserIdentifierAction wamoUserIdentifierAction, PrivacySettingDisableLinkPreviewsAction privacySettingDisableLinkPreviewsAction, DeviceCapabilities deviceCapabilities, NoteEditAction noteEditAction, FavoritesAction favoritesAction, MerchantPaymentPartnerAction merchantPaymentPartnerAction, WaffleAccountLinkStateAction waffleAccountLinkStateAction, UsernameChatStartModeAction usernameChatStartMode, NotificationActivitySettingAction notificationActivitySettingAction, LidContactAction lidContactAction, CtwaPerCustomerDataSharingAction ctwaPerCustomerDataSharingAction, PaymentTosAction paymentTosAction, PrivacySettingChannelsPersonalisedRecommendationAction privacySettingChannelsPersonalisedRecommendationAction, DetectedOutcomesStatusAction detectedOutcomesStatusAction, MaibaAIFeaturesControlAction maibaAiFeaturesControlAction, BusinessBroadcastListAction businessBroadcastListAction, MusicUserIdAction musicUserIdAction, StatusPostOptInNotificationPreferencesAction statusPostOptInNotificationPreferencesAction, AvatarUpdatedAction avatarUpdatedAction, PrivateProcessingSettingAction privateProcessingSettingAction, NewsletterSavedInterestsAction newsletterSavedInterestsAction, AiThreadRenameAction aiThreadRenameAction, InteractiveMessageAction interactiveMessageAction, SettingsSyncAction settingsSyncAction) {
         this.timestamp = timestamp;
         this.starAction = starAction;
         this.contactAction = contactAction;
@@ -253,12 +256,12 @@ public final class SyncActionValue {
         this.localeSetting = localeSetting;
         this.archiveChatAction = archiveChatAction;
         this.deleteMessageForMeAction = deleteMessageForMeAction;
-        this.keyExpiration = keyExpiration;
+        this.keyExpirationAction = keyExpirationAction;
         this.markChatAsReadAction = markChatAsReadAction;
         this.clearChatAction = clearChatAction;
         this.deleteChatAction = deleteChatAction;
         this.unarchiveChatsSetting = unarchiveChatsSetting;
-        this.primaryFeature = primaryFeature;
+        this.primaryFeatureAction = primaryFeatureAction;
         this.androidUnsupportedActions = androidUnsupportedActions;
         this.agentAction = agentAction;
         this.subscriptionAction = subscriptionAction;
@@ -276,7 +279,7 @@ public final class SyncActionValue {
         this.externalWebBetaAction = externalWebBetaAction;
         this.privacySettingRelayAllCalls = privacySettingRelayAllCalls;
         this.callLogAction = callLogAction;
-        this.ugcBot = ugcBot;
+        this.ugcBotAction = ugcBotAction;
         this.statusPrivacy = statusPrivacy;
         this.botWelcomeRequestAction = botWelcomeRequestAction;
         this.deleteIndividualCallLog = deleteIndividualCallLog;
@@ -315,495 +318,86 @@ public final class SyncActionValue {
         return Optional.ofNullable(timestamp);
     }
 
-    public Optional<StarAction> starAction() {
-        return Optional.ofNullable(starAction);
-    }
-
-    public Optional<ContactAction> contactAction() {
-        return Optional.ofNullable(contactAction);
-    }
-
-    public Optional<MuteAction> muteAction() {
-        return Optional.ofNullable(muteAction);
-    }
-
-    public Optional<PinAction> pinAction() {
-        return Optional.ofNullable(pinAction);
-    }
-
-    public Optional<PushNameSetting> pushNameSetting() {
-        return Optional.ofNullable(pushNameSetting);
-    }
-
-    public Optional<QuickReplyAction> quickReplyAction() {
-        return Optional.ofNullable(quickReplyAction);
-    }
-
-    public Optional<RecentEmojiWeightsAction> recentEmojiWeightsAction() {
-        return Optional.ofNullable(recentEmojiWeightsAction);
-    }
-
-    public Optional<LabelEditAction> labelEditAction() {
-        return Optional.ofNullable(labelEditAction);
-    }
-
-    public Optional<LabelAssociationAction> labelAssociationAction() {
-        return Optional.ofNullable(labelAssociationAction);
-    }
-
-    public Optional<LocaleSetting> localeSetting() {
-        return Optional.ofNullable(localeSetting);
-    }
-
-    public Optional<ArchiveChatAction> archiveChatAction() {
-        return Optional.ofNullable(archiveChatAction);
-    }
-
-    public Optional<DeleteMessageForMeAction> deleteMessageForMeAction() {
-        return Optional.ofNullable(deleteMessageForMeAction);
-    }
-
-    public Optional<KeyExpiration> keyExpiration() {
-        return Optional.ofNullable(keyExpiration);
-    }
-
-    public Optional<MarkChatAsReadAction> markChatAsReadAction() {
-        return Optional.ofNullable(markChatAsReadAction);
-    }
-
-    public Optional<ClearChatAction> clearChatAction() {
-        return Optional.ofNullable(clearChatAction);
-    }
-
-    public Optional<DeleteChatAction> deleteChatAction() {
-        return Optional.ofNullable(deleteChatAction);
-    }
-
-    public Optional<UnarchiveChatsSetting> unarchiveChatsSetting() {
-        return Optional.ofNullable(unarchiveChatsSetting);
-    }
-
-    public Optional<PrimaryFeature> primaryFeature() {
-        return Optional.ofNullable(primaryFeature);
-    }
-
-    public Optional<AndroidUnsupportedActions> androidUnsupportedActions() {
-        return Optional.ofNullable(androidUnsupportedActions);
-    }
-
-    public Optional<AgentAction> agentAction() {
-        return Optional.ofNullable(agentAction);
-    }
-
-    public Optional<SubscriptionAction> subscriptionAction() {
-        return Optional.ofNullable(subscriptionAction);
-    }
-
-    public Optional<UserStatusMuteAction> userStatusMuteAction() {
-        return Optional.ofNullable(userStatusMuteAction);
-    }
-
-    public Optional<TimeFormatAction> timeFormatAction() {
-        return Optional.ofNullable(timeFormatAction);
-    }
-
-    public Optional<NuxAction> nuxAction() {
-        return Optional.ofNullable(nuxAction);
-    }
-
-    public Optional<PrimaryVersionAction> primaryVersionAction() {
-        return Optional.ofNullable(primaryVersionAction);
-    }
-
-    public Optional<StickerAction> stickerAction() {
-        return Optional.ofNullable(stickerAction);
-    }
-
-    public Optional<RemoveRecentStickerAction> removeRecentStickerAction() {
-        return Optional.ofNullable(removeRecentStickerAction);
-    }
-
-    public Optional<ChatAssignmentAction> chatAssignment() {
-        return Optional.ofNullable(chatAssignment);
-    }
-
-    public Optional<ChatAssignmentOpenedStatusAction> chatAssignmentOpenedStatus() {
-        return Optional.ofNullable(chatAssignmentOpenedStatus);
-    }
-
-    public Optional<PnForLidChatAction> pnForLidChatAction() {
-        return Optional.ofNullable(pnForLidChatAction);
-    }
-
-    public Optional<MarketingMessageAction> marketingMessageAction() {
-        return Optional.ofNullable(marketingMessageAction);
-    }
-
-    public Optional<MarketingMessageBroadcastAction> marketingMessageBroadcastAction() {
-        return Optional.ofNullable(marketingMessageBroadcastAction);
-    }
-
-    public Optional<ExternalWebBetaAction> externalWebBetaAction() {
-        return Optional.ofNullable(externalWebBetaAction);
-    }
-
-    public Optional<PrivacySettingRelayAllCalls> privacySettingRelayAllCalls() {
-        return Optional.ofNullable(privacySettingRelayAllCalls);
-    }
-
-    public Optional<CallLogAction> callLogAction() {
-        return Optional.ofNullable(callLogAction);
-    }
-
-    public Optional<UGCBot> ugcBot() {
-        return Optional.ofNullable(ugcBot);
-    }
-
-    public Optional<StatusPrivacyAction> statusPrivacy() {
-        return Optional.ofNullable(statusPrivacy);
-    }
-
-    public Optional<BotWelcomeRequestAction> botWelcomeRequestAction() {
-        return Optional.ofNullable(botWelcomeRequestAction);
-    }
-
-    public Optional<DeleteIndividualCallLogAction> deleteIndividualCallLog() {
-        return Optional.ofNullable(deleteIndividualCallLog);
-    }
-
-    public Optional<LabelReorderingAction> labelReorderingAction() {
-        return Optional.ofNullable(labelReorderingAction);
-    }
-
-    public Optional<PaymentInfoAction> paymentInfoAction() {
-        return Optional.ofNullable(paymentInfoAction);
-    }
-
-    public Optional<CustomPaymentMethodsAction> customPaymentMethodsAction() {
-        return Optional.ofNullable(customPaymentMethodsAction);
-    }
-
-    public Optional<LockChatAction> lockChatAction() {
-        return Optional.ofNullable(lockChatAction);
+    public Optional<? extends SyncAction<?>> action() {
+        if (starAction != null) return Optional.of(starAction);
+        if (contactAction != null) return Optional.of(contactAction);
+        if (muteAction != null) return Optional.of(muteAction);
+        if (pinAction != null) return Optional.of(pinAction);
+        if (pushNameSetting != null) return Optional.of(pushNameSetting);
+        if (quickReplyAction != null) return Optional.of(quickReplyAction);
+        if (recentEmojiWeightsAction != null) return Optional.of(recentEmojiWeightsAction);
+        if (labelEditAction != null) return Optional.of(labelEditAction);
+        if (labelAssociationAction != null) return Optional.of(labelAssociationAction);
+        if (localeSetting != null) return Optional.of(localeSetting);
+        if (archiveChatAction != null) return Optional.of(archiveChatAction);
+        if (deleteMessageForMeAction != null) return Optional.of(deleteMessageForMeAction);
+        if (keyExpirationAction != null) return Optional.of(keyExpirationAction);
+        if (markChatAsReadAction != null) return Optional.of(markChatAsReadAction);
+        if (clearChatAction != null) return Optional.of(clearChatAction);
+        if (deleteChatAction != null) return Optional.of(deleteChatAction);
+        if (unarchiveChatsSetting != null) return Optional.of(unarchiveChatsSetting);
+        if (primaryFeatureAction != null) return Optional.of(primaryFeatureAction);
+        if (androidUnsupportedActions != null) return Optional.of(androidUnsupportedActions);
+        if (agentAction != null) return Optional.of(agentAction);
+        if (subscriptionAction != null) return Optional.of(subscriptionAction);
+        if (userStatusMuteAction != null) return Optional.of(userStatusMuteAction);
+        if (timeFormatAction != null) return Optional.of(timeFormatAction);
+        if (nuxAction != null) return Optional.of(nuxAction);
+        if (primaryVersionAction != null) return Optional.of(primaryVersionAction);
+        if (stickerAction != null) return Optional.of(stickerAction);
+        if (removeRecentStickerAction != null) return Optional.of(removeRecentStickerAction);
+        if (chatAssignment != null) return Optional.of(chatAssignment);
+        if (chatAssignmentOpenedStatus != null) return Optional.of(chatAssignmentOpenedStatus);
+        if (pnForLidChatAction != null) return Optional.of(pnForLidChatAction);
+        if (marketingMessageAction != null) return Optional.of(marketingMessageAction);
+        if (marketingMessageBroadcastAction != null) return Optional.of(marketingMessageBroadcastAction);
+        if (externalWebBetaAction != null) return Optional.of(externalWebBetaAction);
+        if (privacySettingRelayAllCalls != null) return Optional.of(privacySettingRelayAllCalls);
+        if (callLogAction != null) return Optional.of(callLogAction);
+        if (ugcBotAction != null) return Optional.of(ugcBotAction);
+        if (statusPrivacy != null) return Optional.of(statusPrivacy);
+        if (botWelcomeRequestAction != null) return Optional.of(botWelcomeRequestAction);
+        if (deleteIndividualCallLog != null) return Optional.of(deleteIndividualCallLog);
+        if (labelReorderingAction != null) return Optional.of(labelReorderingAction);
+        if (paymentInfoAction != null) return Optional.of(paymentInfoAction);
+        if (customPaymentMethodsAction != null) return Optional.of(customPaymentMethodsAction);
+        if (lockChatAction != null) return Optional.of(lockChatAction);
+        if (wamoUserIdentifierAction != null) return Optional.of(wamoUserIdentifierAction);
+        if (privacySettingDisableLinkPreviewsAction != null) return Optional.of(privacySettingDisableLinkPreviewsAction);
+        if (noteEditAction != null) return Optional.of(noteEditAction);
+        if (favoritesAction != null) return Optional.of(favoritesAction);
+        if (merchantPaymentPartnerAction != null) return Optional.of(merchantPaymentPartnerAction);
+        if (waffleAccountLinkStateAction != null) return Optional.of(waffleAccountLinkStateAction);
+        if (usernameChatStartMode != null) return Optional.of(usernameChatStartMode);
+        if (notificationActivitySettingAction != null) return Optional.of(notificationActivitySettingAction);
+        if (lidContactAction != null) return Optional.of(lidContactAction);
+        if (ctwaPerCustomerDataSharingAction != null) return Optional.of(ctwaPerCustomerDataSharingAction);
+        if (paymentTosAction != null) return Optional.of(paymentTosAction);
+        if (privacySettingChannelsPersonalisedRecommendationAction != null) return Optional.of(privacySettingChannelsPersonalisedRecommendationAction);
+        if (detectedOutcomesStatusAction != null) return Optional.of(detectedOutcomesStatusAction);
+        if (maibaAiFeaturesControlAction != null) return Optional.of(maibaAiFeaturesControlAction);
+        if (businessBroadcastListAction != null) return Optional.of(businessBroadcastListAction);
+        if (musicUserIdAction != null) return Optional.of(musicUserIdAction);
+        if (statusPostOptInNotificationPreferencesAction != null) return Optional.of(statusPostOptInNotificationPreferencesAction);
+        if (avatarUpdatedAction != null) return Optional.of(avatarUpdatedAction);
+        if (privateProcessingSettingAction != null) return Optional.of(privateProcessingSettingAction);
+        if (newsletterSavedInterestsAction != null) return Optional.of(newsletterSavedInterestsAction);
+        if (aiThreadRenameAction != null) return Optional.of(aiThreadRenameAction);
+        if (interactiveMessageAction != null) return Optional.of(interactiveMessageAction);
+        if (settingsSyncAction != null) return Optional.of(settingsSyncAction);
+        return Optional.empty();
     }
 
     public Optional<ChatLockSettings> chatLockSettings() {
         return Optional.ofNullable(chatLockSettings);
     }
 
-    public Optional<WamoUserIdentifierAction> wamoUserIdentifierAction() {
-        return Optional.ofNullable(wamoUserIdentifierAction);
-    }
-
-    public Optional<PrivacySettingDisableLinkPreviewsAction> privacySettingDisableLinkPreviewsAction() {
-        return Optional.ofNullable(privacySettingDisableLinkPreviewsAction);
-    }
-
     public Optional<DeviceCapabilities> deviceCapabilities() {
         return Optional.ofNullable(deviceCapabilities);
     }
 
-    public Optional<NoteEditAction> noteEditAction() {
-        return Optional.ofNullable(noteEditAction);
-    }
-
-    public Optional<FavoritesAction> favoritesAction() {
-        return Optional.ofNullable(favoritesAction);
-    }
-
-    public Optional<MerchantPaymentPartnerAction> merchantPaymentPartnerAction() {
-        return Optional.ofNullable(merchantPaymentPartnerAction);
-    }
-
-    public Optional<WaffleAccountLinkStateAction> waffleAccountLinkStateAction() {
-        return Optional.ofNullable(waffleAccountLinkStateAction);
-    }
-
-    public Optional<UsernameChatStartModeAction> usernameChatStartMode() {
-        return Optional.ofNullable(usernameChatStartMode);
-    }
-
-    public Optional<NotificationActivitySettingAction> notificationActivitySettingAction() {
-        return Optional.ofNullable(notificationActivitySettingAction);
-    }
-
-    public Optional<LidContactAction> lidContactAction() {
-        return Optional.ofNullable(lidContactAction);
-    }
-
-    public Optional<CtwaPerCustomerDataSharingAction> ctwaPerCustomerDataSharingAction() {
-        return Optional.ofNullable(ctwaPerCustomerDataSharingAction);
-    }
-
-    public Optional<PaymentTosAction> paymentTosAction() {
-        return Optional.ofNullable(paymentTosAction);
-    }
-
-    public Optional<PrivacySettingChannelsPersonalisedRecommendationAction> privacySettingChannelsPersonalisedRecommendationAction() {
-        return Optional.ofNullable(privacySettingChannelsPersonalisedRecommendationAction);
-    }
-
-    public Optional<DetectedOutcomesStatusAction> detectedOutcomesStatusAction() {
-        return Optional.ofNullable(detectedOutcomesStatusAction);
-    }
-
-    public Optional<MaibaAIFeaturesControlAction> maibaAiFeaturesControlAction() {
-        return Optional.ofNullable(maibaAiFeaturesControlAction);
-    }
-
-    public Optional<BusinessBroadcastListAction> businessBroadcastListAction() {
-        return Optional.ofNullable(businessBroadcastListAction);
-    }
-
-    public Optional<MusicUserIdAction> musicUserIdAction() {
-        return Optional.ofNullable(musicUserIdAction);
-    }
-
-    public Optional<StatusPostOptInNotificationPreferencesAction> statusPostOptInNotificationPreferencesAction() {
-        return Optional.ofNullable(statusPostOptInNotificationPreferencesAction);
-    }
-
-    public Optional<AvatarUpdatedAction> avatarUpdatedAction() {
-        return Optional.ofNullable(avatarUpdatedAction);
-    }
-
-    public Optional<PrivateProcessingSettingAction> privateProcessingSettingAction() {
-        return Optional.ofNullable(privateProcessingSettingAction);
-    }
-
-    public Optional<NewsletterSavedInterestsAction> newsletterSavedInterestsAction() {
-        return Optional.ofNullable(newsletterSavedInterestsAction);
-    }
-
-    public Optional<AiThreadRenameAction> aiThreadRenameAction() {
-        return Optional.ofNullable(aiThreadRenameAction);
-    }
-
-    public Optional<InteractiveMessageAction> interactiveMessageAction() {
-        return Optional.ofNullable(interactiveMessageAction);
-    }
-
-    public Optional<SettingsSyncAction> settingsSyncAction() {
-        return Optional.ofNullable(settingsSyncAction);
-    }
-
     public SyncActionValue setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
-    }
-
-    public SyncActionValue setStarAction(StarAction starAction) {
-        this.starAction = starAction;
-        return this;
-    }
-
-    public SyncActionValue setContactAction(ContactAction contactAction) {
-        this.contactAction = contactAction;
-        return this;
-    }
-
-    public SyncActionValue setMuteAction(MuteAction muteAction) {
-        this.muteAction = muteAction;
-        return this;
-    }
-
-    public SyncActionValue setPinAction(PinAction pinAction) {
-        this.pinAction = pinAction;
-        return this;
-    }
-
-    public SyncActionValue setPushNameSetting(PushNameSetting pushNameSetting) {
-        this.pushNameSetting = pushNameSetting;
-        return this;
-    }
-
-    public SyncActionValue setQuickReplyAction(QuickReplyAction quickReplyAction) {
-        this.quickReplyAction = quickReplyAction;
-        return this;
-    }
-
-    public SyncActionValue setRecentEmojiWeightsAction(RecentEmojiWeightsAction recentEmojiWeightsAction) {
-        this.recentEmojiWeightsAction = recentEmojiWeightsAction;
-        return this;
-    }
-
-    public SyncActionValue setLabelEditAction(LabelEditAction labelEditAction) {
-        this.labelEditAction = labelEditAction;
-        return this;
-    }
-
-    public SyncActionValue setLabelAssociationAction(LabelAssociationAction labelAssociationAction) {
-        this.labelAssociationAction = labelAssociationAction;
-        return this;
-    }
-
-    public SyncActionValue setLocaleSetting(LocaleSetting localeSetting) {
-        this.localeSetting = localeSetting;
-        return this;
-    }
-
-    public SyncActionValue setArchiveChatAction(ArchiveChatAction archiveChatAction) {
-        this.archiveChatAction = archiveChatAction;
-        return this;
-    }
-
-    public SyncActionValue setDeleteMessageForMeAction(DeleteMessageForMeAction deleteMessageForMeAction) {
-        this.deleteMessageForMeAction = deleteMessageForMeAction;
-        return this;
-    }
-
-    public SyncActionValue setKeyExpiration(KeyExpiration keyExpiration) {
-        this.keyExpiration = keyExpiration;
-        return this;
-    }
-
-    public SyncActionValue setMarkChatAsReadAction(MarkChatAsReadAction markChatAsReadAction) {
-        this.markChatAsReadAction = markChatAsReadAction;
-        return this;
-    }
-
-    public SyncActionValue setClearChatAction(ClearChatAction clearChatAction) {
-        this.clearChatAction = clearChatAction;
-        return this;
-    }
-
-    public SyncActionValue setDeleteChatAction(DeleteChatAction deleteChatAction) {
-        this.deleteChatAction = deleteChatAction;
-        return this;
-    }
-
-    public SyncActionValue setUnarchiveChatsSetting(UnarchiveChatsSetting unarchiveChatsSetting) {
-        this.unarchiveChatsSetting = unarchiveChatsSetting;
-        return this;
-    }
-
-    public SyncActionValue setPrimaryFeature(PrimaryFeature primaryFeature) {
-        this.primaryFeature = primaryFeature;
-        return this;
-    }
-
-    public SyncActionValue setAndroidUnsupportedActions(AndroidUnsupportedActions androidUnsupportedActions) {
-        this.androidUnsupportedActions = androidUnsupportedActions;
-        return this;
-    }
-
-    public SyncActionValue setAgentAction(AgentAction agentAction) {
-        this.agentAction = agentAction;
-        return this;
-    }
-
-    public SyncActionValue setSubscriptionAction(SubscriptionAction subscriptionAction) {
-        this.subscriptionAction = subscriptionAction;
-        return this;
-    }
-
-    public SyncActionValue setUserStatusMuteAction(UserStatusMuteAction userStatusMuteAction) {
-        this.userStatusMuteAction = userStatusMuteAction;
-        return this;
-    }
-
-    public SyncActionValue setTimeFormatAction(TimeFormatAction timeFormatAction) {
-        this.timeFormatAction = timeFormatAction;
-        return this;
-    }
-
-    public SyncActionValue setNuxAction(NuxAction nuxAction) {
-        this.nuxAction = nuxAction;
-        return this;
-    }
-
-    public SyncActionValue setPrimaryVersionAction(PrimaryVersionAction primaryVersionAction) {
-        this.primaryVersionAction = primaryVersionAction;
-        return this;
-    }
-
-    public SyncActionValue setStickerAction(StickerAction stickerAction) {
-        this.stickerAction = stickerAction;
-        return this;
-    }
-
-    public SyncActionValue setRemoveRecentStickerAction(RemoveRecentStickerAction removeRecentStickerAction) {
-        this.removeRecentStickerAction = removeRecentStickerAction;
-        return this;
-    }
-
-    public SyncActionValue setChatAssignment(ChatAssignmentAction chatAssignment) {
-        this.chatAssignment = chatAssignment;
-        return this;
-    }
-
-    public SyncActionValue setChatAssignmentOpenedStatus(ChatAssignmentOpenedStatusAction chatAssignmentOpenedStatus) {
-        this.chatAssignmentOpenedStatus = chatAssignmentOpenedStatus;
-        return this;
-    }
-
-    public SyncActionValue setPnForLidChatAction(PnForLidChatAction pnForLidChatAction) {
-        this.pnForLidChatAction = pnForLidChatAction;
-        return this;
-    }
-
-    public SyncActionValue setMarketingMessageAction(MarketingMessageAction marketingMessageAction) {
-        this.marketingMessageAction = marketingMessageAction;
-        return this;
-    }
-
-    public SyncActionValue setMarketingMessageBroadcastAction(MarketingMessageBroadcastAction marketingMessageBroadcastAction) {
-        this.marketingMessageBroadcastAction = marketingMessageBroadcastAction;
-        return this;
-    }
-
-    public SyncActionValue setExternalWebBetaAction(ExternalWebBetaAction externalWebBetaAction) {
-        this.externalWebBetaAction = externalWebBetaAction;
-        return this;
-    }
-
-    public SyncActionValue setPrivacySettingRelayAllCalls(PrivacySettingRelayAllCalls privacySettingRelayAllCalls) {
-        this.privacySettingRelayAllCalls = privacySettingRelayAllCalls;
-        return this;
-    }
-
-    public SyncActionValue setCallLogAction(CallLogAction callLogAction) {
-        this.callLogAction = callLogAction;
-        return this;
-    }
-
-    public SyncActionValue setUgcBot(UGCBot ugcBot) {
-        this.ugcBot = ugcBot;
-        return this;
-    }
-
-    public SyncActionValue setStatusPrivacy(StatusPrivacyAction statusPrivacy) {
-        this.statusPrivacy = statusPrivacy;
-        return this;
-    }
-
-    public SyncActionValue setBotWelcomeRequestAction(BotWelcomeRequestAction botWelcomeRequestAction) {
-        this.botWelcomeRequestAction = botWelcomeRequestAction;
-        return this;
-    }
-
-    public SyncActionValue setDeleteIndividualCallLog(DeleteIndividualCallLogAction deleteIndividualCallLog) {
-        this.deleteIndividualCallLog = deleteIndividualCallLog;
-        return this;
-    }
-
-    public SyncActionValue setLabelReorderingAction(LabelReorderingAction labelReorderingAction) {
-        this.labelReorderingAction = labelReorderingAction;
-        return this;
-    }
-
-    public SyncActionValue setPaymentInfoAction(PaymentInfoAction paymentInfoAction) {
-        this.paymentInfoAction = paymentInfoAction;
-        return this;
-    }
-
-    public SyncActionValue setCustomPaymentMethodsAction(CustomPaymentMethodsAction customPaymentMethodsAction) {
-        this.customPaymentMethodsAction = customPaymentMethodsAction;
-        return this;
-    }
-
-    public SyncActionValue setLockChatAction(LockChatAction lockChatAction) {
-        this.lockChatAction = lockChatAction;
         return this;
     }
 
@@ -812,123 +406,8 @@ public final class SyncActionValue {
         return this;
     }
 
-    public SyncActionValue setWamoUserIdentifierAction(WamoUserIdentifierAction wamoUserIdentifierAction) {
-        this.wamoUserIdentifierAction = wamoUserIdentifierAction;
-        return this;
-    }
-
-    public SyncActionValue setPrivacySettingDisableLinkPreviewsAction(PrivacySettingDisableLinkPreviewsAction privacySettingDisableLinkPreviewsAction) {
-        this.privacySettingDisableLinkPreviewsAction = privacySettingDisableLinkPreviewsAction;
-        return this;
-    }
-
     public SyncActionValue setDeviceCapabilities(DeviceCapabilities deviceCapabilities) {
         this.deviceCapabilities = deviceCapabilities;
-        return this;
-    }
-
-    public SyncActionValue setNoteEditAction(NoteEditAction noteEditAction) {
-        this.noteEditAction = noteEditAction;
-        return this;
-    }
-
-    public SyncActionValue setFavoritesAction(FavoritesAction favoritesAction) {
-        this.favoritesAction = favoritesAction;
-        return this;
-    }
-
-    public SyncActionValue setMerchantPaymentPartnerAction(MerchantPaymentPartnerAction merchantPaymentPartnerAction) {
-        this.merchantPaymentPartnerAction = merchantPaymentPartnerAction;
-        return this;
-    }
-
-    public SyncActionValue setWaffleAccountLinkStateAction(WaffleAccountLinkStateAction waffleAccountLinkStateAction) {
-        this.waffleAccountLinkStateAction = waffleAccountLinkStateAction;
-        return this;
-    }
-
-    public SyncActionValue setUsernameChatStartMode(UsernameChatStartModeAction usernameChatStartMode) {
-        this.usernameChatStartMode = usernameChatStartMode;
-        return this;
-    }
-
-    public SyncActionValue setNotificationActivitySettingAction(NotificationActivitySettingAction notificationActivitySettingAction) {
-        this.notificationActivitySettingAction = notificationActivitySettingAction;
-        return this;
-    }
-
-    public SyncActionValue setLidContactAction(LidContactAction lidContactAction) {
-        this.lidContactAction = lidContactAction;
-        return this;
-    }
-
-    public SyncActionValue setCtwaPerCustomerDataSharingAction(CtwaPerCustomerDataSharingAction ctwaPerCustomerDataSharingAction) {
-        this.ctwaPerCustomerDataSharingAction = ctwaPerCustomerDataSharingAction;
-        return this;
-    }
-
-    public SyncActionValue setPaymentTosAction(PaymentTosAction paymentTosAction) {
-        this.paymentTosAction = paymentTosAction;
-        return this;
-    }
-
-    public SyncActionValue setPrivacySettingChannelsPersonalisedRecommendationAction(PrivacySettingChannelsPersonalisedRecommendationAction privacySettingChannelsPersonalisedRecommendationAction) {
-        this.privacySettingChannelsPersonalisedRecommendationAction = privacySettingChannelsPersonalisedRecommendationAction;
-        return this;
-    }
-
-    public SyncActionValue setDetectedOutcomesStatusAction(DetectedOutcomesStatusAction detectedOutcomesStatusAction) {
-        this.detectedOutcomesStatusAction = detectedOutcomesStatusAction;
-        return this;
-    }
-
-    public SyncActionValue setMaibaAiFeaturesControlAction(MaibaAIFeaturesControlAction maibaAiFeaturesControlAction) {
-        this.maibaAiFeaturesControlAction = maibaAiFeaturesControlAction;
-        return this;
-    }
-
-    public SyncActionValue setBusinessBroadcastListAction(BusinessBroadcastListAction businessBroadcastListAction) {
-        this.businessBroadcastListAction = businessBroadcastListAction;
-        return this;
-    }
-
-    public SyncActionValue setMusicUserIdAction(MusicUserIdAction musicUserIdAction) {
-        this.musicUserIdAction = musicUserIdAction;
-        return this;
-    }
-
-    public SyncActionValue setStatusPostOptInNotificationPreferencesAction(StatusPostOptInNotificationPreferencesAction statusPostOptInNotificationPreferencesAction) {
-        this.statusPostOptInNotificationPreferencesAction = statusPostOptInNotificationPreferencesAction;
-        return this;
-    }
-
-    public SyncActionValue setAvatarUpdatedAction(AvatarUpdatedAction avatarUpdatedAction) {
-        this.avatarUpdatedAction = avatarUpdatedAction;
-        return this;
-    }
-
-    public SyncActionValue setPrivateProcessingSettingAction(PrivateProcessingSettingAction privateProcessingSettingAction) {
-        this.privateProcessingSettingAction = privateProcessingSettingAction;
-        return this;
-    }
-
-    public SyncActionValue setNewsletterSavedInterestsAction(NewsletterSavedInterestsAction newsletterSavedInterestsAction) {
-        this.newsletterSavedInterestsAction = newsletterSavedInterestsAction;
-        return this;
-    }
-
-    public SyncActionValue setAiThreadRenameAction(AiThreadRenameAction aiThreadRenameAction) {
-        this.aiThreadRenameAction = aiThreadRenameAction;
-        return this;
-    }
-
-    public SyncActionValue setInteractiveMessageAction(InteractiveMessageAction interactiveMessageAction) {
-        this.interactiveMessageAction = interactiveMessageAction;
-        return this;
-    }
-
-    public SyncActionValue setSettingsSyncAction(SettingsSyncAction settingsSyncAction) {
-        this.settingsSyncAction = settingsSyncAction;
         return this;
     }
 }

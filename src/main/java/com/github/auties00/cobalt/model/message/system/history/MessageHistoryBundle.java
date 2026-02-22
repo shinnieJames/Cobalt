@@ -1,11 +1,13 @@
 package com.github.auties00.cobalt.model.message.system.history;
 
-import com.github.auties00.cobalt.model.chat.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "Message.MessageHistoryBundle")
@@ -25,7 +27,7 @@ public final class MessageHistoryBundle implements ContextualMessage {
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
     String directPath;
 
-    @ProtobufProperty(index = 6, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 6, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 7, type = ProtobufType.MESSAGE)

@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.contact;
 
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 
 import java.time.Instant;
@@ -9,7 +10,34 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 @ProtobufMessage(name = "SyncActionValue.LabelEditAction")
-public final class LabelEditAction implements SyncAction {
+public final class LabelEditAction implements SyncAction<LabelEditActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "label_edit";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 3;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String name;
 
@@ -34,7 +62,7 @@ public final class LabelEditAction implements SyncAction {
     @ProtobufProperty(index = 8, type = ProtobufType.BOOL)
     Boolean isImmutable;
 
-    @ProtobufProperty(index = 9, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 9, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant muteEndTimeMs;
 
 
@@ -154,4 +182,6 @@ public final class LabelEditAction implements SyncAction {
             return this.index;
         }
     }
+
+
 }

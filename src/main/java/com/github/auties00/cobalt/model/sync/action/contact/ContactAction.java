@@ -8,7 +8,34 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.ContactAction")
-public final class ContactAction implements SyncAction {
+public final class ContactAction implements SyncAction<ContactActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "contact";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 2;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String fullName;
 
@@ -90,4 +117,6 @@ public final class ContactAction implements SyncAction {
         this.username = username;
         return this;
     }
+
+
 }

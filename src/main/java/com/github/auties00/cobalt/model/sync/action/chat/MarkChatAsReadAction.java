@@ -8,7 +8,34 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.MarkChatAsReadAction")
-public final class MarkChatAsReadAction implements SyncAction {
+public final class MarkChatAsReadAction implements SyncAction<MarkChatAsReadActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "markChatAsRead";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 3;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.BOOL)
     Boolean read;
 
@@ -38,4 +65,6 @@ public final class MarkChatAsReadAction implements SyncAction {
         this.messageRange = messageRange;
         return this;
     }
+
+
 }

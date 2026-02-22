@@ -59,7 +59,6 @@ public final class WebAppStateHandlerRegistry {
         registerHandler(PushNameSettingHandler.INSTANCE);
         registerHandler(LocaleSettingHandler.INSTANCE);
         registerHandler(UnarchiveChatsSettingHandler.INSTANCE);
-        registerHandler(SecurityNotificationSettingHandler.INSTANCE);
     }
 
     public void registerHandler(WebAppStateActionHandler handler) {

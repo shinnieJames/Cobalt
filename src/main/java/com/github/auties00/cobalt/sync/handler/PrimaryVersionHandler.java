@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent.AppVersion;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -28,7 +28,7 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
                 .orElseThrow(() -> new IllegalArgumentException("Missing primaryVersionAction"));
 
         action.version()
-                .map(Version::of)
+                .map(ClientAppVersion::of)
                 .ifPresent(client.store()::setCompanionVersion);
 
         return true;

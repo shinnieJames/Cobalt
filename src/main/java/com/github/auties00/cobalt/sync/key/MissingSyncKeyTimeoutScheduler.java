@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  * a fatal sync error is triggered.
  */
 public final class MissingSyncKeyTimeoutScheduler {
-    private static final System.Logger LOGGER = System.getLogger("MissingSyncKeyTimeoutScheduler");
+    private static final System.Logger LOGGER = System.getLogger(MissingSyncKeyTimeoutScheduler.class.getName());
 
     private final WhatsAppClient client;
     private final WhatsAppStore store;

@@ -27,7 +27,7 @@ public final class TimeFormatHandler implements WebAppStateActionHandler {
                 .orElseThrow(() -> new IllegalArgumentException("Missing timeFormatAction"));
 
         client.store()
-                .setTwentyFourHourFormat(action.twentyFourHourFormatEnabled());
+                .setTwentyFourHourFormat(action.isTwentyFourHourFormatEnabled());
 
         return true;
     }

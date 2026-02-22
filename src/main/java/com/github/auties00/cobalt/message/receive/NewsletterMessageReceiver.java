@@ -23,7 +23,7 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
  * poll, question, etc.).
  */
 final class NewsletterMessageReceiver extends MessageReceiver<NewsletterMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("NewsletterMessageReceiver");
+    private static final System.Logger LOGGER = System.getLogger(NewsletterMessageReceiver.class.getName());
 
     NewsletterMessageReceiver(WhatsAppStore store) {
         super(store);

@@ -8,7 +8,34 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.ClearChatAction")
-public final class ClearChatAction implements SyncAction {
+public final class ClearChatAction implements SyncAction<ClearChatActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "clearChat";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 6;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
     SyncActionMessageRange messageRange;
 
@@ -25,4 +52,6 @@ public final class ClearChatAction implements SyncAction {
         this.messageRange = messageRange;
         return this;
     }
+
+
 }

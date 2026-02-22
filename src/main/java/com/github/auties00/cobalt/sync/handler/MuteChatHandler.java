@@ -42,7 +42,8 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
         }
 
         switch (mutation.operation()) {
-            case SET -> chat.get().setMute(ChatMute.muted(action.muteEndTimestampSeconds()));
+            case SET -> action.muteEndTimestamp()
+                    .ifPresent(muteEndTimestamp -> chat.get().setMute(ChatMute.mutedUntil(muteEndTimestamp.getEpochSecond())));
             case REMOVE -> chat.get().setMute(ChatMute.notMuted());
         }
 

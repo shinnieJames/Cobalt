@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message;
 
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+
 @ProtobufEnum(name = "PrivacySystemMessage")
 public enum PrivacySystemMessage {
     E2EE_MSG(1),

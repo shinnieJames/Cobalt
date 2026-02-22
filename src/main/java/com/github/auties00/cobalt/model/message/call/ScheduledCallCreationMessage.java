@@ -3,13 +3,15 @@ package com.github.auties00.cobalt.model.message.call;
 import com.github.auties00.cobalt.model.message.Message;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "Message.ScheduledCallCreationMessage")
 public final class ScheduledCallCreationMessage implements Message {
-    @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant scheduledTimestampMs;
 
     @ProtobufProperty(index = 2, type = ProtobufType.ENUM)

@@ -10,12 +10,39 @@ import java.util.List;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.BusinessBroadcastListAction")
-public final class BusinessBroadcastListAction implements SyncAction {
+public final class BusinessBroadcastListAction implements SyncAction<BusinessBroadcastListActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "business_broadcast_list";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 1;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.BOOL)
     Boolean deleted;
 
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    List<BroadcastListParticipant> participants;
+    List<BroadcastListParticipantAction> participants;
 
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
     String listName;
@@ -24,7 +51,7 @@ public final class BusinessBroadcastListAction implements SyncAction {
     List<String> labelIds;
 
 
-    BusinessBroadcastListAction(Boolean deleted, List<BroadcastListParticipant> participants, String listName, List<String> labelIds) {
+    BusinessBroadcastListAction(Boolean deleted, List<BroadcastListParticipantAction> participants, String listName, List<String> labelIds) {
         this.deleted = deleted;
         this.participants = participants;
         this.listName = listName;
@@ -35,7 +62,7 @@ public final class BusinessBroadcastListAction implements SyncAction {
         return deleted != null && deleted;
     }
 
-    public List<BroadcastListParticipant> participants() {
+    public List<BroadcastListParticipantAction> participants() {
         return participants == null ? List.of() : Collections.unmodifiableList(participants);
     }
 
@@ -52,7 +79,7 @@ public final class BusinessBroadcastListAction implements SyncAction {
         return this;
     }
 
-    public BusinessBroadcastListAction setParticipants(List<BroadcastListParticipant> participants) {
+    public BusinessBroadcastListAction setParticipants(List<BroadcastListParticipantAction> participants) {
         this.participants = participants;
         return this;
     }
@@ -66,4 +93,6 @@ public final class BusinessBroadcastListAction implements SyncAction {
         this.labelIds = labelIds;
         return this;
     }
+
+
 }

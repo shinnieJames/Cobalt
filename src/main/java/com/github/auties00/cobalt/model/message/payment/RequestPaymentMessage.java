@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.model.message.payment;
 
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import com.github.auties00.cobalt.model.payment.Money;
 import com.github.auties00.cobalt.model.payment.PaymentBackground;
 
@@ -25,7 +26,7 @@ public final class RequestPaymentMessage implements Message {
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
     String requestFrom;
 
-    @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant expiryTimestamp;
 
     @ProtobufProperty(index = 6, type = ProtobufType.MESSAGE)

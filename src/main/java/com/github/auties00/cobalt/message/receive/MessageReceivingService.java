@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.dedup.MessageDedup;
 import com.github.auties00.cobalt.message.receive.crypto.MessageDecryption;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
+import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -29,7 +30,7 @@ import java.util.Objects;
  * WAWebHandleMsg.
  */
 public final class MessageReceivingService {
-    private static final System.Logger LOGGER = System.getLogger("MessageReceivingService");
+    private static final System.Logger LOGGER = System.getLogger(MessageReceivingService.class.getName());
 
     /**
      * The receiver for E2E-encrypted chat messages.
@@ -40,11 +41,6 @@ public final class MessageReceivingService {
      * The receiver for plaintext newsletter messages.
      */
     private final NewsletterMessageReceiver newsletterReceiver;
-
-    /**
-     * The central session data repository, used for stanza parsing.
-     */
-    private final WhatsAppStore store;
 
     /**
      * Dedup cache preventing duplicate processing of the same E2E message
@@ -68,7 +64,6 @@ public final class MessageReceivingService {
             WhatsAppStore store,
             MessageDecryption decryption
     ) {
-        this.store = Objects.requireNonNull(store, "store");
         this.chatReceiver = new ChatMessageReceiver(store, decryption);
         this.newsletterReceiver = new NewsletterMessageReceiver(store);
         this.dedup = new MessageDedup();
@@ -81,7 +76,7 @@ public final class MessageReceivingService {
      * <p>Newsletter messages produce
      * {@link NewsletterMessageInfo};
      * all other messages go through E2E decryption and produce
-     * {@link com.github.auties00.cobalt.model.info.ChatMessageInfo}.
+     * {@link ChatMessageInfo}.
      * Returns {@code null} for unavailable (fanout placeholder) messages.
      *
      * @param node the raw incoming {@code <message>} node

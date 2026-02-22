@@ -5,48 +5,40 @@ import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.*;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
-import com.github.auties00.cobalt.model.message.context.ContextualMessage;
-import com.github.auties00.cobalt.model.business.BusinessVerifiedNameCertificate;
+import com.github.auties00.cobalt.model.bot.profile.*;
+import com.github.auties00.cobalt.model.business.*;
+import com.github.auties00.cobalt.model.business.catalog.BusinessCatalog;
+import com.github.auties00.cobalt.model.business.catalog.BusinessCatalogEntry;
+import com.github.auties00.cobalt.model.business.catalog.BusinessItemAvailability;
+import com.github.auties00.cobalt.model.business.catalog.BusinessReviewStatus;
+import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
+import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.call.CallOffer;
-import com.github.auties00.cobalt.model.call.CallBuilder;
 import com.github.auties00.cobalt.model.chat.*;
-import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
-import com.github.auties00.cobalt.model.chat.ChatMute;
-import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.chat.community.CommunityMetadata;
 import com.github.auties00.cobalt.model.chat.group.*;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.message.*;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.message.newsletter.NewsletterAdminInviteMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
-import com.github.auties00.cobalt.model.message.newsletter.NewsletterAdminInviteMessageBuilder;
 import com.github.auties00.cobalt.model.message.text.ReactionMessageBuilder;
+import com.github.auties00.cobalt.model.newsletter.*;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntryBuilder;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
-import com.github.auties00.cobalt.model.setting.Setting;
-import com.github.auties00.cobalt.model.sync.RecordSync.Operation;
-import com.github.auties00.cobalt.model.bot.profile.BotProfessionalStatus;
-import com.github.auties00.cobalt.model.bot.profile.BotProfile;
-import com.github.auties00.cobalt.model.bot.profile.BotProfileCategory;
-import com.github.auties00.cobalt.model.bot.profile.BotProfileCommand;
-import com.github.auties00.cobalt.model.bot.profile.BotProfilePrompt;
-import com.github.auties00.cobalt.model.business.catalog.BusinessCatalogEntry;
-import com.github.auties00.cobalt.model.business.catalog.BusinessCatalog;
-import com.github.auties00.cobalt.model.business.catalog.BusinessItemAvailability;
-import com.github.auties00.cobalt.model.business.catalog.BusinessReviewStatus;
-import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
-import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
-import com.github.auties00.cobalt.model.newsletter.*;
-import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.sync.SyncAction;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -58,12 +50,12 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
 import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.stream.SocketRequest;
 import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.util.SecureBytes;
 import com.github.auties00.cobalt.util.WhatsAppIdGenerator;
+import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -1577,7 +1569,7 @@ public final class WhatsAppClient {
      * @param reaction the reaction to send, null if you want to remove the reaction
      * @return a CompletableFuture
      */
-    public MessageInfo sendReaction(MessageInfo message, ReactionEmoji reaction) {
+    public MessageInfo sendReaction(MessageInfo message, MessageReactionEmoji reaction) {
         return sendReaction(message, Objects.toString(reaction));
     }
 
@@ -1587,7 +1579,7 @@ public final class WhatsAppClient {
      * @param message  the non-null message
      * @param reaction the reaction to send, null if you want to remove the reaction. If a value that
      *                 isn't an emoji supported by Whatsapp is used, it will not get displayed
-     *                 correctly. Use {@link WhatsAppClient#sendReaction(MessageInfo, ReactionEmoji)} if
+     *                 correctly. Use {@link WhatsAppClient#sendReaction(MessageInfo, MessageReactionEmoji)} if
      *                 you need a typed emoji enum.
      * @return a CompletableFuture
      */
@@ -2088,7 +2080,7 @@ public final class WhatsAppClient {
                             .messageTimestampSeconds(info.timestampSeconds().orElse(0L))
                             .build();
                     var syncAction = ActionValueSync.of(deleteMessageAction);
-                    var entry = new PendingMutation(syncAction, Operation.SET, info.chatJid().toString(), info.id(), fromMeToFlag(info), participantToFlag(info));
+                    var entry = new PendingMutation(syncAction, SyncdOperation.SET, info.chatJid().toString(), info.id(), fromMeToFlag(info), participantToFlag(info));
                     pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
                 }
                 case MOBILE -> info.chat().ifPresent(chat -> chat.removeMessage(info.id()));
@@ -2155,7 +2147,7 @@ public final class WhatsAppClient {
                 .read(read)
                 .build();
         var syncAction = ActionValueSync.of(markAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString());
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString());
         pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
     }
 
@@ -2188,7 +2180,7 @@ public final class WhatsAppClient {
                 .autoMuted(false)
                 .build();
         var syncAction = ActionValueSync.of(muteAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString());
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString());
         pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
     }
 
@@ -2210,7 +2202,7 @@ public final class WhatsAppClient {
                 .autoMuted(false)
                 .build();
         var syncAction = ActionValueSync.of(muteAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString());
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString());
         pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
     }
 
@@ -2339,7 +2331,7 @@ public final class WhatsAppClient {
                 .build();
         var syncAction = ActionValueSync.of(pinAction);
 
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString());
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString());
         pushWebAppState(PatchType.REGULAR_LOW, List.of(entry));
     }
 
@@ -2363,7 +2355,7 @@ public final class WhatsAppClient {
                 .starred(star)
                 .build();
         var syncAction = ActionValueSync.of(starAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, info.chatJid()
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, info.chatJid()
                 .toString(), info.id(), fromMeToFlag(info), participantToFlag(info));
         pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
         return info;
@@ -2418,7 +2410,7 @@ public final class WhatsAppClient {
                 .archived(archive)
                 .build();
         var syncAction = ActionValueSync.of(archiveAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString());
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString());
         pushWebAppState(PatchType.REGULAR_LOW, List.of(entry));
     }
 
@@ -3290,7 +3282,7 @@ public final class WhatsAppClient {
         var deleteChatAction = new DeleteChatActionBuilder()
                 .build();
         var syncAction = ActionValueSync.of(deleteChatAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString(), "1");
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString(), "1");
         pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
     }
 
@@ -3312,7 +3304,7 @@ public final class WhatsAppClient {
         var clearChatAction = new ClearChatActionBuilder()
                 .build();
         var syncAction = ActionValueSync.of(clearChatAction);
-        var entry = new PendingMutation(syncAction, Operation.SET, chat.toJid().toString(), booleanToInt(keepStarredMessages), "0");
+        var entry = new PendingMutation(syncAction, SyncdOperation.SET, chat.toJid().toString(), booleanToInt(keepStarredMessages), "0");
         pushWebAppState(PatchType.REGULAR_HIGH, List.of(entry));
     }
 
@@ -4343,11 +4335,11 @@ public final class WhatsAppClient {
         return this;
     }
 
-    public WhatsAppClient addMessageReplyListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, MessageInfo, QuotedMessageInfo> consumer) {
+    public WhatsAppClient addMessageReplyListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, MessageInfo, MessageInfo> consumer) {
         Objects.requireNonNull(consumer, "consumer cannot be null");
         addListener(new WhatsAppClientListener() {
             @Override
-            public void onMessageReply(WhatsAppClient arg0, MessageInfo arg1, QuotedMessageInfo arg2) {
+            public void onMessageReply(WhatsAppClient arg0, MessageInfo arg1, MessageInfo arg2) {
                 consumer.accept(arg0, arg1, arg2);
             }
         });
@@ -4552,17 +4544,6 @@ public final class WhatsAppClient {
         return this;
     }
 
-    public WhatsAppClient addWebAppStateSettingListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Setting> consumer) {
-        Objects.requireNonNull(consumer, "consumer cannot be null");
-        addListener(new WhatsAppClientListener() {
-            @Override
-            public void onWebAppStateSetting(WhatsAppClient arg0, Setting arg1) {
-                consumer.accept(arg0, arg1);
-            }
-        });
-        return this;
-    }
-
     public WhatsAppClient addNodeReceivedListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Node> consumer) {
         Objects.requireNonNull(consumer, "consumer cannot be null");
         addListener(new WhatsAppClientListener() {
@@ -4585,11 +4566,11 @@ public final class WhatsAppClient {
         return this;
     }
 
-    public WhatsAppClient addWebAppStateActionListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Action, MessageIndexInfo> consumer) {
+    public WhatsAppClient addWebAppStateActionListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, SyncAction, String> consumer) {
         Objects.requireNonNull(consumer, "consumer cannot be null");
         addListener(new WhatsAppClientListener() {
             @Override
-            public void onWebAppStateAction(WhatsAppClient arg0, Action arg1, MessageIndexInfo arg2) {
+            public void onWebAppStateAction(WhatsAppClient arg0, SyncAction arg1, String arg2) {
                 consumer.accept(arg0, arg1, arg2);
             }
         });
@@ -4697,23 +4678,23 @@ public final class WhatsAppClient {
     }
     //</editor-fold>
 
-    public void pushWebAppState(PatchType type, List<PendingMutation> patches) {
+    public void pushWebAppState(SyncPatchType type, List<SyncPendingMutation> patches) {
         webAppStateService.pushPatches(type, patches);
     }
 
-    public void pullWebAppState(PatchType... patches) {
+    public void pullWebAppState(SyncPatchType... patches) {
         webAppStateService.pullPatches(patches);
     }
 
     private void updateBusinessCertificate(String newName) {
-        var details = new BusinessVerifiedNameDetailsBuilder()
-                .name(Objects.requireNonNullElse(newName, store.name()))
-                .issuer("smb:wa")
+        var details = new BusinessVerifiedNameCertificateDetailsBuilder()
+                .verifiedName(Objects.requireNonNullElse(newName, store.name()))
+                .issuer(BusinessVerifiedNameCertificate.CertificateIssuer.SMALL_BUSINESS)
                 .serial(Math.abs(ThreadLocalRandom.current().nextLong()))
                 .build();
-        var encodedDetails = BusinessVerifiedNameDetailsSpec.encode(details);
+        var encodedDetails = BusinessVerifiedNameCertificateDetailsSpec.encode(details);
         var certificate = new BusinessVerifiedNameCertificateBuilder()
-                .encodedDetails(encodedDetails)
+                .details(encodedDetails)
                 .signature(Curve25519.sign(store.identityKeyPair().privateKey().toEncodedPoint(), encodedDetails))
                 .build();
         var verifiedNameRequest = new NodeBuilder()

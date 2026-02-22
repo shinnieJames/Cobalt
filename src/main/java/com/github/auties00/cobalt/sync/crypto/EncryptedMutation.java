@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.sync.crypto;
 
-import com.github.auties00.cobalt.model.sync.ActionDataSyncBuilder;
-import com.github.auties00.cobalt.model.sync.ActionDataSyncSpec;
+import com.github.auties00.cobalt.model.sync.SyncActionDataBuilder;
+import com.github.auties00.cobalt.model.sync.SyncActionDataSpec;
 import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
-import com.github.auties00.cobalt.model.sync.RecordSync.Operation;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.util.SecureBytes;
 
 import javax.crypto.Cipher;
@@ -16,7 +16,7 @@ public record EncryptedMutation(
         byte[] indexMac,
         byte[] encryptedValue,
         byte[] keyId,
-        Operation operation
+        SyncdOperation operation
 ) {
     private static final int IV_LENGTH = 16;
     private static final int MAC_LENGTH = 32;
@@ -34,7 +34,7 @@ public record EncryptedMutation(
         var actionVersion = mutation.value()
                 .version()
                 .orElseThrow(() -> new IllegalArgumentException("Sync version must be present"));
-        var actionData = new ActionDataSyncBuilder()
+        var actionData = new SyncActionDataBuilder()
                 .index(patch.mutation().index().getBytes(StandardCharsets.UTF_8))
                 .value(mutation.value())
                 .padding(padding)
@@ -42,7 +42,7 @@ public record EncryptedMutation(
                 .build();
 
         // Encode to protobuf
-        var plaintext = ActionDataSyncSpec.encode(actionData);
+        var plaintext = SyncActionDataSpec.encode(actionData);
 
         // Encrypt with AES-256-CBC
         var cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");

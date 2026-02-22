@@ -151,7 +151,7 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * WhatsApp Web client this corresponds to the
      * {@code ephemeralDuration} property.
      */
-    @ProtobufProperty(index = 12, type = ProtobufType.INT64)
+    @ProtobufProperty(index = 12, type = ProtobufType.UINT32)
     ChatEphemeralTimer ephemeralExpiration;
 
     /**

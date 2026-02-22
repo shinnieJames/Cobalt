@@ -1,14 +1,22 @@
 package com.github.auties00.cobalt.message.send;
 
-import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfoBuilder;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.device.DeviceListMetadataBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.*;
-import com.github.auties00.cobalt.model.message.security.EncCommentMessageSimpleBuilder;
-import com.github.auties00.cobalt.model.message.security.EncReactionMessageSimpleBuilder;
+import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
+import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
+import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
+import com.github.auties00.cobalt.model.message.security.SecretEncryptedMessage;
+import com.github.auties00.cobalt.model.message.text.CommentMessage;
+import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
-import com.github.auties00.cobalt.model.sync.DeviceListMetadataBuilder;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfoBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.util.SecureBytes;
 
@@ -29,7 +37,7 @@ import java.util.Objects;
  *   <li>Validate addon encryption (encrypted addons must have
  *       their {@code encPayload}/{@code encIv} populated)</li>
  *   <li>Auto-convert {@link ReactionMessage} to
- *       {@link EncryptedReactionMessage} when targeting a CAG group</li>
+ *       {@link EncReactionMessage} when targeting a CAG group</li>
  *   <li>Populate {@code DeviceContextInfo} with messageSecret,
  *       paddingBytes, and device list metadata</li>
  *   <li>Wrap everything into the appropriate {@link MessageInfo}</li>
@@ -44,7 +52,7 @@ import java.util.Objects;
  * encryption for addon message types.
  */
 final class MessagePreparer {
-    private static final System.Logger LOGGER = System.getLogger("MessagePreparer");
+    private static final System.Logger LOGGER = System.getLogger(MessagePreparer.class.getName());
 
     /**
      * Size of the message secret in bytes.
@@ -106,13 +114,13 @@ final class MessagePreparer {
         var deviceInfoMetadata = new DeviceListMetadataBuilder()
                 .senderTimestamp(timestamp)
                 .build();
-        var deviceInfo = new DeviceContextInfoBuilder()
+        var deviceInfo = new ChatMessageContextInfoBuilder()
                 .deviceListMetadata(deviceInfoMetadata)
                 .deviceListMetadataVersion(2)
                 .messageSecret(messageSecret)
                 .paddingBytes(paddingBytes)
                 .build();
-        preparedContainer = preparedContainer.withDeviceInfo(deviceInfo);
+        preparedContainer = preparedContainer.withMessageContextInfo(deviceInfo);
 
         var key = new MessageKeyBuilder()
                 .id(messageId)
@@ -184,9 +192,8 @@ final class MessagePreparer {
             Jid chatJid,
             Jid selfJid
     ) {
-        var message = container.content();
 
-        return switch (message) {
+        return switch (container.content()) {
             // PollUpdateMessage: validate encryptedMetadata is populated
             // (the simpleBuilder handles encryption, so this should already be set)
             case PollUpdateMessage poll -> {
@@ -205,7 +212,7 @@ final class MessagePreparer {
                 if (parentMessage == null) {
                     throw new IllegalArgumentException("Cannot encrypt reaction: parent message not found for " + reaction.key().id());
                 }
-                var encrypted = new EncryptedReactionMessageSimpleBuilder()
+                var encrypted = new EncReactionMessageSimpleBuilder()
                         .reaction(reaction)
                     .parentMessage(parentMessage)
                         .selfJid(selfJid)
@@ -214,7 +221,7 @@ final class MessagePreparer {
             }
 
             // EncryptedReactionMessage: validate already encrypted
-            case EncryptedReactionMessage enc -> {
+            case EncReactionMessage enc -> {
                 Objects.requireNonNull(enc.encPayload(),
                         "EncryptedReactionMessage must have encPayload populated");
                 Objects.requireNonNull(enc.encIv(),
@@ -223,7 +230,7 @@ final class MessagePreparer {
             }
 
             // EncryptedEventResponseMessage: validate already encrypted
-            case EncryptedEventResponseMessage enc -> {
+            case EncEventResponseMessage enc -> {
                 Objects.requireNonNull(enc.encPayload(),
                         "EncryptedEventResponseMessage must have encPayload populated");
                 Objects.requireNonNull(enc.encIv(),
@@ -255,7 +262,7 @@ final class MessagePreparer {
             }
 
             // EncryptedCommentMessage: validate already encrypted
-            case EncryptedCommentMessage enc -> {
+            case EncCommentMessage enc -> {
                 Objects.requireNonNull(enc.encPayload(),
                         "EncryptedCommentMessage must have encPayload populated");
                 Objects.requireNonNull(enc.encIv(),
@@ -270,7 +277,7 @@ final class MessagePreparer {
 
     /**
      * Determines whether a reaction to this chat should be sent as an
-     * {@link EncryptedReactionMessage} instead of a plain
+     * {@link EncReactionMessage} instead of a plain
      * {@link ReactionMessage}.
      *
      * <p>Encrypted reactions are required for CAG (Community Announcement

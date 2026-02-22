@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.socket.implementation.threading.CentralSelecto
 import com.github.auties00.cobalt.socket.implementation.tunnel.DirectSocketClient;
 import com.github.auties00.cobalt.socket.implementation.tunnel.HttpProxySocketClient;
 import com.github.auties00.cobalt.socket.implementation.tunnel.SocksProxySocketClient;
+import com.github.auties00.cobalt.socket.implementation.websocket.WebSocketSocketClient;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,7 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
-public abstract sealed class SocketClient permits DirectSocketClient, HttpProxySocketClient, SocksProxySocketClient {
+public abstract sealed class SocketClient permits DirectSocketClient, HttpProxySocketClient, SocksProxySocketClient, WebSocketSocketClient {
     private static final int DEFAULT_READ_TIMEOUT = 10_000;
     private static final int DEFAULT_CONNECT_TIMEOUT = 30_000;
 
@@ -24,12 +25,12 @@ public abstract sealed class SocketClient permits DirectSocketClient, HttpProxyS
     public static SocketClient newPlainSocketClient(WhatsAppClientProxy proxy) {
         if(proxy == null) {
             return new DirectSocketClient();
+        } else {
+            return switch (proxy) {
+                case WhatsAppClientProxy.Http httpProxy -> new HttpProxySocketClient(httpProxy);
+                case WhatsAppClientProxy.Socks socksProxy -> new SocksProxySocketClient(socksProxy);
+            };
         }
-
-        return switch (proxy) {
-            case WhatsAppClientProxy.Http httpProxy -> new HttpProxySocketClient(httpProxy);
-            case WhatsAppClientProxy.Socks socksProxy -> new SocksProxySocketClient(socksProxy);
-        };
     }
 
     public abstract void connect(String host, int port, SocketListener listener) throws IOException, InterruptedException;

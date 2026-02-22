@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
  * and post-send phash/refreshLid handling.
  */
 final class UserMessageSender extends MessageSender<ChatMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("UserMessageSender");
+    private static final System.Logger LOGGER = System.getLogger(UserMessageSender.class.getName());
 
     private final MessageEncryption encryption;
     private final DeviceService deviceService;

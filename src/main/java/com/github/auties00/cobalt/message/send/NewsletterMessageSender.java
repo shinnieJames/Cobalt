@@ -6,11 +6,14 @@ import com.github.auties00.cobalt.message.send.ack.AckParser;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.NewsletterStanza;
-import com.github.auties00.cobalt.model.message.media.MediaMessage;
-import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.*;
+import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.media.MediaMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
+import com.github.auties00.cobalt.model.message.text.ReactionMessage;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
@@ -53,7 +56,7 @@ import com.github.auties00.cobalt.node.NodeBuilder;
  * newsletterRevoke, newsletterPollCreation, etc.
  */
 final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("NewsletterMessageSender");
+    private static final System.Logger LOGGER = System.getLogger(NewsletterMessageSender.class.getName());
 
     /**
      * The edit attribute value for newsletter message edits.

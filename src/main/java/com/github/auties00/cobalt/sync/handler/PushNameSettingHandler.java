@@ -26,13 +26,15 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
                 .pushNameSetting()
                 .orElseThrow(() -> new IllegalArgumentException("Missing pushNameSetting"));
 
+        var name = setting.name().orElse(null);
+
         client.store()
-                .setName(setting.name());
+                .setName(name);
 
         client.store()
                 .jid()
                 .flatMap(entry -> client.store().findContactByJid(entry.withoutData()))
-                .ifPresent(contact -> contact.setChosenName(setting.name()));
+                .ifPresent(contact -> contact.setChosenName(name));
 
         return true;
     }

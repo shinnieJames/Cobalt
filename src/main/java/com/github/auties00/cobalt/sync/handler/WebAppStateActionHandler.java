@@ -1,7 +1,6 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.model.sync.ActionValueSync;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -18,9 +17,6 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 public interface WebAppStateActionHandler {
     /**
      * Gets the action type name this handler processes.
-     *
-     * <p>This should match the field name in {@link ActionValueSync},
-     * for example, "archiveChatAction", "pinAction", "starAction", etc.
      *
      * @return the action type name
      */

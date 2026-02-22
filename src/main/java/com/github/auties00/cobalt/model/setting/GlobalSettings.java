@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.model.setting;
 import com.github.auties00.cobalt.model.media.MediaVisibility;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -37,7 +39,7 @@ public final class GlobalSettings {
     @ProtobufProperty(index = 9, type = ProtobufType.INT32)
     Integer disappearingModeDuration;
 
-    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant disappearingModeTimestamp;
 
     @ProtobufProperty(index = 11, type = ProtobufType.MESSAGE)
@@ -67,7 +69,7 @@ public final class GlobalSettings {
     @ProtobufProperty(index = 19, type = ProtobufType.MESSAGE)
     ChatLockSettings chatLockSettings;
 
-    @ProtobufProperty(index = 20, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 20, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant chatDbLidMigrationTimestamp;
 
 

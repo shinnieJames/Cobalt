@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.model.message.event;
 import com.github.auties00.cobalt.model.message.MessageKey;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -12,7 +14,7 @@ public final class EventResponse {
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
     MessageKey eventResponseMessageKey;
 
-    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant timestampMs;
 
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)

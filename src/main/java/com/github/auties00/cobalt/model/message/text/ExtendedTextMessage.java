@@ -12,6 +12,8 @@ import com.github.auties00.cobalt.model.message.media.MessageVideoEndCard;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -64,7 +66,7 @@ public final class ExtendedTextMessage implements ContextualMessage {
     @ProtobufProperty(index = 22, type = ProtobufType.BYTES)
     byte[] mediaKey;
 
-    @ProtobufProperty(index = 23, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 23, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 24, type = ProtobufType.UINT32)

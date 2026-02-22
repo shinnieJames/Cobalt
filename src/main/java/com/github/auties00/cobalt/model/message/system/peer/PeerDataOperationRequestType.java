@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.system.peer;
 
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+
 @ProtobufEnum(name = "Message.PeerDataOperationRequestType")
 public enum PeerDataOperationRequestType {
     UPLOAD_STICKER(0),

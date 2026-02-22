@@ -19,8 +19,6 @@ import java.util.OptionalLong;
  * the server. Static conversion methods are provided to parse the string into typed values
  * (boolean, int, long, double).
  *
- * <p>This record is immutable and thread-safe.
- *
  * @param code         the unique numeric identifier for this configuration property
  * @param defaultValue the default value to use when the server has not provided a value for
  *                     this property, must not be {@code null}

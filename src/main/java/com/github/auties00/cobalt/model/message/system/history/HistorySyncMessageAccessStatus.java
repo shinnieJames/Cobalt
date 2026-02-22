@@ -1,6 +1,9 @@
 package com.github.auties00.cobalt.model.message.system.history;
 
 import com.github.auties00.cobalt.model.message.Message;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 @ProtobufMessage(name = "Message.HistorySyncMessageAccessStatus")
 public final class HistorySyncMessageAccessStatus implements Message {

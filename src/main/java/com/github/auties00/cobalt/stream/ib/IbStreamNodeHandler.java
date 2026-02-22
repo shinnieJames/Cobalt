@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 public final class IbStreamNodeHandler extends SocketStream.Handler {
-    private static final System.Logger LOGGER = System.getLogger("IbStreamNodeHandler");
+    private static final System.Logger LOGGER = System.getLogger(IbStreamNodeHandler.class.getName());
 
     private final DeviceService deviceService;
 

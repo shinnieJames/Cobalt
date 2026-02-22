@@ -10,11 +10,11 @@ import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.*;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.props.ABPropsService;
 
 import java.util.Objects;
@@ -154,10 +154,10 @@ public final class MessageSendingService {
     public AckResult send(MessageInfo messageInfo) {
         Objects.requireNonNull(messageInfo, "messageInfo");
 
-        var parentId = messageInfo.parentJid();
+        var parentId = messageInfo.key().chatJid();
 
         // WAWebMessageDedupUtils: check if this message ID is already in flight
-        var messageId = messageInfo.id();
+        var messageId = messageInfo.key().id();
         if (messageDedup.isPending(messageId)) {
             throw new WhatsAppMessageException.Send.Unknown(
                     "Duplicate send for message ID: " + messageId, null);

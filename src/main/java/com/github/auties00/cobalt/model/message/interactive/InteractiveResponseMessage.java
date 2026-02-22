@@ -34,7 +34,7 @@ public final class InteractiveResponseMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public Optional<? extends InteractiveResponseMessageSpec> interactiveResponseMessage() {
+    public Optional<? extends InteractiveResponseMessageContent> content() {
         if (nativeFlowResponseMessage != null) return Optional.of(nativeFlowResponseMessage);
         return Optional.empty();
     }
@@ -104,7 +104,7 @@ public final class InteractiveResponseMessage implements ContextualMessage {
     }
 
     @ProtobufMessage(name = "Message.InteractiveResponseMessage.NativeFlowResponseMessage")
-    public static final class NativeFlowResponseMessage implements InteractiveResponseMessageSpec {
+    public static final class NativeFlowResponseMessage implements InteractiveResponseMessageContent {
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String name;
 

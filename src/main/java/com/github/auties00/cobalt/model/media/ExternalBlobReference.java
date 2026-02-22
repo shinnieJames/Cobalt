@@ -21,7 +21,7 @@ import java.util.OptionalLong;
  * inside {@code SyncdSnapshot} and {@code SyncdPatch} structures.
  */
 @ProtobufMessage(name = "ExternalBlobReference")
-public final class ExternalBlobReference {
+public final class ExternalBlobReference implements MediaProvider {
     /**
      * The symmetric encryption key used to decrypt the downloaded blob.
      */
@@ -79,11 +79,32 @@ public final class ExternalBlobReference {
         this.fileEncSha256 = fileEncSha256;
     }
 
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.empty();
+    }
+
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(directPath);
+    }
+
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.directPath = mediaDirectPath;
+    }
+
     /**
      * Returns the symmetric encryption key used to decrypt the downloaded blob.
      *
      * @return an {@link Optional} containing the media key, or empty if not set
      */
+    @Override
     public Optional<byte[]> mediaKey() {
         return Optional.ofNullable(mediaKey);
     }
@@ -137,11 +158,50 @@ public final class ExternalBlobReference {
      * Sets the symmetric encryption key for the blob.
      *
      * @param mediaKey the encryption key
-     * @return this instance for chaining
      */
-    public ExternalBlobReference setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
+    }
+
+    @Override
+    public void setMediaKeyTimestamp(Long timestamp) {
+
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(fileSha256);
+    }
+
+    @Override
+    public void setMediaSha256(byte[] bytes) {
+        this.fileSha256 = bytes;
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(fileEncSha256);
+    }
+
+    @Override
+    public void setMediaEncryptedSha256(byte[] bytes) {
+        this.fileEncSha256 = bytes;
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return fileSizeBytes == null ? OptionalLong.empty() : OptionalLong.of(fileSizeBytes);
+    }
+
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.fileSizeBytes = mediaSize;
+    }
+
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.APP_STATE;
     }
 
     /**

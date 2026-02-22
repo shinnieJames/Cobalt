@@ -24,7 +24,7 @@ import java.util.Objects;
  * and encryptMsgSenderKey for group sender key encryption.
  */
 public final class MessageEncryption {
-    private static final System.Logger LOGGER = System.getLogger("MessageEncryptionService");
+    private static final System.Logger LOGGER = System.getLogger(MessageEncryption.class.getName());
 
     /**
      * Current ciphertext version used for message encryption.

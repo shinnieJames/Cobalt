@@ -6,7 +6,34 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 @ProtobufMessage(name = "SyncActionValue.PinAction")
-public final class PinAction implements SyncAction {
+public final class PinAction implements SyncAction<PinActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "pin_v1";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 5;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.BOOL)
     Boolean pinned;
 
@@ -23,4 +50,6 @@ public final class PinAction implements SyncAction {
         this.pinned = pinned;
         return this;
     }
+
+
 }

@@ -24,7 +24,7 @@ import java.util.Map;
  * {@code <sender_content_binding>}.
  */
 public final class SenderContentBindingStanza {
-    private static final System.Logger LOGGER = System.getLogger("SenderContentBindingStanza");
+    private static final System.Logger LOGGER = System.getLogger(SenderContentBindingStanza.class.getName());
 
     private SenderContentBindingStanza() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");

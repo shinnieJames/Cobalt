@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.client.info;
 
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent.AppVersion;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import net.dongliu.apk.parser.ByteArrayApkFile;
 import net.dongliu.apk.parser.bean.ApkSigner;
 import net.dongliu.apk.parser.bean.CertificateMeta;
@@ -32,13 +32,13 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     private static volatile WhatsAppAndroidClientInfo businessApkInfo;
     private static final Object businessApkInfoLock = new Object();
 
-    private final Version version;
+    private final ClientAppVersion version;
     private final byte[] md5Hash;
     private final SecretKeySpec secretKey;
     private final byte[][] certificates;
     private final boolean business;
 
-    private WhatsAppAndroidClientInfo(Version version, byte[] md5Hash, SecretKeySpec secretKey, byte[][] certificates, boolean business) {
+    private WhatsAppAndroidClientInfo(ClientAppVersion version, byte[] md5Hash, SecretKeySpec secretKey, byte[][] certificates, boolean business) {
         this.version = version;
         this.md5Hash = md5Hash;
         this.secretKey = secretKey;
@@ -89,7 +89,7 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
             }
 
             try (var apkFile = new ByteArrayApkFile(response.body())) {
-                var version = Version.of(apkFile.getApkMeta().getVersionName());
+                var version = ClientAppVersion.of(apkFile.getApkMeta().getVersionName());
                 var digest = MessageDigest.getInstance("MD5");
                 digest.update(apkFile.getFileData("classes.dex"));
                 var md5Hash = digest.digest();
@@ -181,7 +181,7 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     @Override
-    public Version version() {
+    public ClientAppVersion version() {
         return version;
     }
 

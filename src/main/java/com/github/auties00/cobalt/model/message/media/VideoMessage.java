@@ -1,8 +1,14 @@
 package com.github.auties00.cobalt.model.message.media;
 
-import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.media.ProcessedVideo;
+import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveAnnotation;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveHeader;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.interactive.TemplateMessage;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -51,7 +57,7 @@ public final class VideoMessage implements InteractiveHeader, InteractiveMessage
     @ProtobufProperty(index = 13, type = ProtobufType.STRING)
     String directPath;
 
-    @ProtobufProperty(index = 14, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 14, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 16, type = ProtobufType.BYTES)

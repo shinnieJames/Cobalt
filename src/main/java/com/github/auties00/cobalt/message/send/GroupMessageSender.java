@@ -52,7 +52,7 @@ import java.util.stream.Stream;
  * used for resends after phash mismatch.
  */
 final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("GroupMessageSender");
+    private static final System.Logger LOGGER = System.getLogger(GroupMessageSender.class.getName());
 
 
     private final MessageEncryption encryption;

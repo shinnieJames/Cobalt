@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.model.message.interactive;
 
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.commerce.ProductMessage;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.location.LocationMessage;
@@ -8,11 +9,11 @@ import com.github.auties00.cobalt.model.message.media.AudioMessage;
 import com.github.auties00.cobalt.model.message.media.DocumentMessage;
 import com.github.auties00.cobalt.model.message.media.ImageMessage;
 import com.github.auties00.cobalt.model.message.media.VideoMessage;
+import it.auties.protobuf.annotation.*;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.util.Collections;
 import java.util.List;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -78,7 +79,7 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
         return Optional.ofNullable(urlTrackingMap);
     }
 
-    public Optional<? extends InteractiveMessageSpec> interactiveMessage() {
+    public Optional<? extends InteractiveMessageContent> content() {
         if (shopStorefrontMessage != null) return Optional.of(shopStorefrontMessage);
         if (collectionMessage != null) return Optional.of(collectionMessage);
         if (nativeFlowMessage != null) return Optional.of(nativeFlowMessage);
@@ -176,7 +177,7 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.CarouselMessage")
-    public static final class CarouselMessage implements InteractiveMessageSpec {
+    public static final class CarouselMessage implements InteractiveMessageContent {
         @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
         List<InteractiveMessage> cards;
 
@@ -239,7 +240,7 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.CollectionMessage")
-    public static final class CollectionMessage implements InteractiveMessageSpec {
+    public static final class CollectionMessage implements InteractiveMessageContent {
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         Jid bizJid;
 
@@ -442,7 +443,7 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.NativeFlowMessage")
-    public static final class NativeFlowMessage implements InteractiveMessageSpec {
+    public static final class NativeFlowMessage implements InteractiveMessageContent {
         @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
         List<NativeFlowButton> buttons;
 
@@ -521,7 +522,7 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.ShopMessage")
-    public static final class ShopMessage implements InteractiveMessageSpec {
+    public static final class ShopMessage implements InteractiveMessageContent {
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String id;
 

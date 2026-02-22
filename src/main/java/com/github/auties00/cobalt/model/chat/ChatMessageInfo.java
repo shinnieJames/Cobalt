@@ -41,7 +41,7 @@ public final class ChatMessageInfo implements MessageInfo {
     MessageStatus status;
 
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
-    String participant;
+    Jid senderJid;
 
     @ProtobufProperty(index = 6, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
     Instant c2STimestamp;
@@ -230,12 +230,15 @@ public final class ChatMessageInfo implements MessageInfo {
     Integer nonJidMentions;
 
 
-    ChatMessageInfo(MessageKey key, MessageContainer messageContainer, Instant messageTimestamp, MessageStatus status, String participant, Instant c2STimestamp, Boolean ignore, Boolean starred, Boolean broadcast, String pushName, byte[] mediaCiphertextSha256, Boolean multicast, Boolean urlText, Boolean urlNumber, StubType stubType, Boolean clearMedia, List<String> stubParameters, Integer duration, List<String> labels, PaymentInfo paymentInfo, LiveLocationMessage finalLiveLocation, PaymentInfo quotedPaymentInfo, Instant ephemeralStartTimestamp, Integer ephemeralDuration, Boolean ephemeralOffToOn, Boolean ephemeralOutOfSync, BizPrivacyStatus bizPrivacyStatus, String verifiedBizName, MediaData mediaData, PhotoChange photoChange, List<MessageReceipt> receipts, List<Reaction> reactions, MediaData quotedStickerData, byte[] futureproofData, StatusPSA statusPsa, List<PollVoteRecord> pollUpdates, PollAdditionalMetadata pollAdditionalMetadata, String agentId, Boolean statusAlreadyViewed, byte[] messageSecret, KeepInChat keepInChat, Jid originalSelfAuthorUserJidString, Instant revokeMessageTimestamp, PinInChat pinInChat, PremiumMessageInfo premiumMessageInfo, Boolean is1PBizBotMessage, Boolean isGroupHistoryMessage, Jid botMessageInvokerJid, ChatCommentMetadata commentMetadata, List<EventResponse> eventResponses, MessageReportingTokenInfo reportingTokenInfo, Long newsletterServerId, EventAdditionalMetadata eventAdditionalMetadata, Boolean isMentionedInStatus, List<String> statusMentions, MessageKey targetMessageId, List<MessageAddOn> messageAddOns, StatusMentionMessage statusMentionMessageInfo, Boolean isSupportAiMessage, List<String> statusMentionSources, List<MessageCitation> supportAiCitations, String botTargetId, GroupHistoryIndividualMessageInfo groupHistoryIndividualMessageInfo, GroupHistoryBundleInfo groupHistoryBundleInfo, InteractiveMessageAdditionalMetadata interactiveMessageAdditionalMetadata, QuarantinedMessage quarantinedMessage, Integer nonJidMentions) {
+    ChatMessageInfo(MessageKey key, MessageContainer messageContainer, Instant messageTimestamp, MessageStatus status, Jid senderJid, Instant c2STimestamp, Boolean ignore, Boolean starred, Boolean broadcast, String pushName, byte[] mediaCiphertextSha256, Boolean multicast, Boolean urlText, Boolean urlNumber, StubType stubType, Boolean clearMedia, List<String> stubParameters, Integer duration, List<String> labels, PaymentInfo paymentInfo, LiveLocationMessage finalLiveLocation, PaymentInfo quotedPaymentInfo, Instant ephemeralStartTimestamp, Integer ephemeralDuration, Boolean ephemeralOffToOn, Boolean ephemeralOutOfSync, BizPrivacyStatus bizPrivacyStatus, String verifiedBizName, MediaData mediaData, PhotoChange photoChange, List<MessageReceipt> receipts, List<Reaction> reactions, MediaData quotedStickerData, byte[] futureproofData, StatusPSA statusPsa, List<PollVoteRecord> pollUpdates, PollAdditionalMetadata pollAdditionalMetadata, String agentId, Boolean statusAlreadyViewed, byte[] messageSecret, KeepInChat keepInChat, Jid originalSelfAuthorUserJidString, Instant revokeMessageTimestamp, PinInChat pinInChat, PremiumMessageInfo premiumMessageInfo, Boolean is1PBizBotMessage, Boolean isGroupHistoryMessage, Jid botMessageInvokerJid, ChatCommentMetadata commentMetadata, List<EventResponse> eventResponses, MessageReportingTokenInfo reportingTokenInfo, Long newsletterServerId, EventAdditionalMetadata eventAdditionalMetadata, Boolean isMentionedInStatus, List<String> statusMentions, MessageKey targetMessageId, List<MessageAddOn> messageAddOns, StatusMentionMessage statusMentionMessageInfo, Boolean isSupportAiMessage, List<String> statusMentionSources, List<MessageCitation> supportAiCitations, String botTargetId, GroupHistoryIndividualMessageInfo groupHistoryIndividualMessageInfo, GroupHistoryBundleInfo groupHistoryBundleInfo, InteractiveMessageAdditionalMetadata interactiveMessageAdditionalMetadata, QuarantinedMessage quarantinedMessage, Integer nonJidMentions) {
         this.key = Objects.requireNonNull(key);
         this.message = messageContainer;
         this.timestamp = messageTimestamp;
         this.status = status;
-        this.participant = participant;
+        this.senderJid = senderJid;
+        if(key.senderJid().isEmpty()) {
+
+        }
         this.c2STimestamp = c2STimestamp;
         this.ignore = ignore;
         this.starred = starred;
@@ -320,8 +323,8 @@ public final class ChatMessageInfo implements MessageInfo {
         return Optional.ofNullable(status);
     }
 
-    public Optional<String> participant() {
-        return Optional.ofNullable(participant);
+    public Optional<Jid> senderJid() {
+        return Optional.ofNullable(senderJid);
     }
 
     public Optional<Instant> messageC2STimestamp() {
@@ -594,8 +597,8 @@ public final class ChatMessageInfo implements MessageInfo {
         return this;
     }
 
-    public ChatMessageInfo setParticipant(String participant) {
-        this.participant = participant;
+    public ChatMessageInfo setSenderJid(String senderJid) {
+        this.senderJid = senderJid;
         return this;
     }
 

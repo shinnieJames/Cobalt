@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.socket.implementation.context;
 
 import com.github.auties00.cobalt.socket.implementation.SocketListener;
+import com.github.auties00.cobalt.socket.implementation.websocket.WebSocketState;
 
 import javax.net.ssl.SSLEngine;
 import java.nio.ByteBuffer;
@@ -58,6 +59,11 @@ public final class SocketContext {
     private static final int INT24_BYTE_SIZE = 3;
     private static final int WRITES_CHUNK_CAPACITY = 64;
 
+    public enum FramingMode {
+        DATAGRAM,
+        WEBSOCKET
+    }
+
     /**
      * Whether the underlying channel is connected and registered with the
      * selector.
@@ -94,6 +100,12 @@ public final class SocketContext {
      * <p> Read and written exclusively by the selector thread.
      */
     public boolean tunnelled;
+
+    /**
+     * The framing mode used after the tunnel/authentication stage completes.
+     * Defaults to datagram framing.
+     */
+    public FramingMode framingMode;
 
     /**
      * The pending binary read request, or {@code null} if no read is
@@ -147,6 +159,12 @@ public final class SocketContext {
      * Accessed exclusively by the selector thread.
      */
     public ByteBuffer datagramBuffer;
+
+    /**
+     * Stateful websocket parser context. Initialized lazily when websocket
+     * framing is enabled for this channel.
+     */
+    public WebSocketState webSocketState;
 
     /**
      * Callback invoked when a complete inbound datagram has been
@@ -238,6 +256,7 @@ public final class SocketContext {
         this.listener = listener;
         this.pendingWrites = new SocketPendingWrites(WRITES_CHUNK_CAPACITY);
         this.datagramLengthBuffer = ByteBuffer.allocate(INT24_BYTE_SIZE);
+        this.framingMode = FramingMode.DATAGRAM;
         this.listenerVirtualExecutorLock = new Object();
     }
 

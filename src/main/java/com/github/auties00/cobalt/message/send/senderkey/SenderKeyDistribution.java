@@ -32,7 +32,7 @@ import java.util.*;
  * {@code <participants>} node in the group SKMSG stanza.
  */
 public final class SenderKeyDistribution {
-    private static final System.Logger LOGGER = System.getLogger("SenderKeyDistribution");
+    private static final System.Logger LOGGER = System.getLogger(SenderKeyDistribution.class.getName());
 
     private final MessageEncryption encryption;
     private final DeviceService deviceService;

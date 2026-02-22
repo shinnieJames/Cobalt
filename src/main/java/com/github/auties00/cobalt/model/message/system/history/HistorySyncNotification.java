@@ -1,16 +1,20 @@
 package com.github.auties00.cobalt.model.message.system.history;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
+import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 @ProtobufMessage(name = "Message.HistorySyncNotification")
-public final class HistorySyncNotification implements Message {
+public final class HistorySyncNotification implements Message, MediaProvider {
     @ProtobufProperty(index = 1, type = ProtobufType.BYTES)
     byte[] fileSha256;
 
@@ -38,7 +42,7 @@ public final class HistorySyncNotification implements Message {
     @ProtobufProperty(index = 9, type = ProtobufType.UINT32)
     Integer progress;
 
-    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant oldestMsgInChunkTimestampSec;
 
     @ProtobufProperty(index = 11, type = ProtobufType.BYTES)
@@ -81,6 +85,26 @@ public final class HistorySyncNotification implements Message {
 
     public OptionalLong fileLength() {
         return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+    }
+
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.empty();
+    }
+
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(directPath);
+    }
+
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.directPath = mediaDirectPath;
     }
 
     public Optional<byte[]> mediaKey() {
@@ -145,9 +169,49 @@ public final class HistorySyncNotification implements Message {
         return this;
     }
 
-    public HistorySyncNotification setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
+    }
+
+    @Override
+    public void setMediaKeyTimestamp(Long timestamp) {
+
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(fileSha256);
+    }
+
+    @Override
+    public void setMediaSha256(byte[] bytes) {
+        this.fileSha256 = bytes;
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(fileEncSha256);
+    }
+
+    @Override
+    public void setMediaEncryptedSha256(byte[] bytes) {
+        this.fileEncSha256 = bytes;
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+    }
+
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.fileLength = mediaSize;
+    }
+
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.HISTORY_SYNC;
     }
 
     public HistorySyncNotification setFileEncSha256(byte[] fileEncSha256) {

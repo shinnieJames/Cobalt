@@ -29,7 +29,8 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
         var oldLocale = client.store()
                 .locale()
                 .orElse(null);
-        var newLocale = setting.locale();
+        var newLocale = setting.locale()
+                .orElse(null);
 
         client.store()
                 .setLocale(newLocale);

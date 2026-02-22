@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.message.call;
 
-import com.github.auties00.cobalt.model.chat.ChatMessageInfoContext;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 
@@ -39,10 +39,10 @@ public final class CallOfferMessage implements ContextualMessage {
     String deeplinkPayload;
 
     @ProtobufProperty(index = 10, type = ProtobufType.MESSAGE)
-    ChatMessageInfoContext messageContextInfo;
+    ChatMessageContextInfo messageContextInfo;
 
 
-    CallOfferMessage(byte[] callKey, String conversionSource, byte[] conversionData, Integer conversionDelaySeconds, String ctwaSignals, byte[] ctwaPayload, ContextInfo contextInfo, String nativeFlowCallButtonPayload, String deeplinkPayload, ChatMessageInfoContext messageContextInfo) {
+    CallOfferMessage(byte[] callKey, String conversionSource, byte[] conversionData, Integer conversionDelaySeconds, String ctwaSignals, byte[] ctwaPayload, ContextInfo contextInfo, String nativeFlowCallButtonPayload, String deeplinkPayload, ChatMessageContextInfo messageContextInfo) {
         this.callKey = callKey;
         this.conversionSource = conversionSource;
         this.conversionData = conversionData;
@@ -91,7 +91,7 @@ public final class CallOfferMessage implements ContextualMessage {
         return Optional.ofNullable(deeplinkPayload);
     }
 
-    public Optional<ChatMessageInfoContext> messageContextInfo() {
+    public Optional<ChatMessageContextInfo> messageContextInfo() {
         return Optional.ofNullable(messageContextInfo);
     }
 
@@ -140,7 +140,7 @@ public final class CallOfferMessage implements ContextualMessage {
         return this;
     }
 
-    public CallOfferMessage setMessageContextInfo(ChatMessageInfoContext messageContextInfo) {
+    public CallOfferMessage setMessageContextInfo(ChatMessageContextInfo messageContextInfo) {
         this.messageContextInfo = messageContextInfo;
         return this;
     }

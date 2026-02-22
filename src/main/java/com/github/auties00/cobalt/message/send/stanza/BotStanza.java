@@ -37,7 +37,7 @@ import java.util.Objects;
  * WAWebSendGroupSkmsgJob: builds the bot node for group SKMSG stanzas.
  */
 public final class BotStanza {
-    private static final System.Logger LOGGER = System.getLogger("BotStanza");
+    private static final System.Logger LOGGER = System.getLogger(BotStanza.class.getName());
 
     private final MessageEncryption encryption;
     private final BotProtobufTransform protobufTransform;

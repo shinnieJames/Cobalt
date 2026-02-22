@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.system.history;
 
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+
 @ProtobufEnum(name = "Message.HistorySyncType")
 public enum HistorySyncType {
     INITIAL_BOOTSTRAP(0),

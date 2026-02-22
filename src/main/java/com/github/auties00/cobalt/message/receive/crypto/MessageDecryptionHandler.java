@@ -33,7 +33,7 @@ import java.util.Set;
  * canDecryptNext/handleError/getResult.
  */
 public final class MessageDecryptionHandler {
-    private static final System.Logger LOGGER = System.getLogger("MessageDecryptionHandler");
+    private static final System.Logger LOGGER = System.getLogger(MessageDecryptionHandler.class.getName());
 
     /**
      * Error types that block further decryption attempts when they

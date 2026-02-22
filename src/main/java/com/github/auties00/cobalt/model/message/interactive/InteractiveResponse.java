@@ -1,6 +1,9 @@
 package com.github.auties00.cobalt.model.message.interactive;
 
-public sealed interface InteractiveResponse permits SelectedDisplayText {
+import it.auties.protobuf.annotation.ProtobufDeserializer;
+import it.auties.protobuf.annotation.ProtobufSerializer;
+
+public sealed interface InteractiveResponse permits InteractiveResponse.SelectedDisplayText {
 
     final class SelectedDisplayText implements InteractiveResponse {
         String selectedDisplayText;

@@ -1,17 +1,17 @@
 package com.github.auties00.cobalt.client.info;
 
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent;
+import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 
 public sealed interface WhatsAppMobileClientInfo
         extends WhatsAppClientInfo
         permits WhatsAppAndroidClientInfo, WhatsAppIosClientInfo {
-    static WhatsAppMobileClientInfo of(UserAgent.PlatformType platform) {
+    static WhatsAppMobileClientInfo of(ClientPlatformType platform) {
         return switch (platform) {
             case ANDROID -> WhatsAppAndroidClientInfo.ofPersonal();
             case IOS -> WhatsAppIosClientInfo.ofPersonal();
             case ANDROID_BUSINESS -> WhatsAppAndroidClientInfo.ofBusiness();
             case IOS_BUSINESS -> WhatsAppIosClientInfo.ofBusiness();
-            case WINDOWS, MACOS -> throw new IllegalArgumentException("Cannot create WhatsappClientInfo for web");
+            default -> throw new IllegalStateException("Unexpected value: " + platform);
         };
     }
 

@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.model.message.commerce;
 import com.github.auties00.cobalt.model.message.Message;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -24,7 +26,7 @@ public final class InvoiceMessage implements Message {
     @ProtobufProperty(index = 5, type = ProtobufType.BYTES)
     byte[] attachmentMediaKey;
 
-    @ProtobufProperty(index = 6, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 6, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant attachmentMediaKeyTimestamp;
 
     @ProtobufProperty(index = 7, type = ProtobufType.BYTES)

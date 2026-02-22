@@ -1,12 +1,13 @@
 package com.github.auties00.cobalt.client;
 
 import com.github.auties00.cobalt.client.registration.WhatsAppMobileClientRegistration;
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent.AppVersion;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.jid.JidDevice;
 import com.github.auties00.cobalt.store.WhatsAppStore;
+import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 
-import java.nio.file.Path;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,45 +38,45 @@ public sealed class WhatsAppClientBuilder {
     }
 
     /**
-     * Creates a web client with the default storage directory.
+     * Creates a web client with the default Protobuf serializer
      *
      * @return a non-null web client instance
      */
     public Client.Web webClient() {
-        return new Client.Web(null);
+        return new Client.Web(WhatsAppStoreFactory.toProtobuf());
     }
 
     /**
-     * Creates a web client with a custom storage directory.
+     * Creates a web client with a custom factory
      *
-     * @param directory the directory for session persistence, must not be null
+     * @param factory the factory to use for data persistence, must not be null
      * @return a non-null web client instance
-     * @throws NullPointerException if directory is null
+     * @throws NullPointerException if factory is null
      */
-    public Client.Web webClient(Path directory) {
-        Objects.requireNonNull(directory, "directory must not be null");
-        return new Client.Web(directory);
+    public Client.Web webClient(WhatsAppStoreFactory factory) {
+        Objects.requireNonNull(factory, "factory must not be null");
+        return new Client.Web(factory);
     }
 
     /**
-     * Creates a mobile client with the default storage directory.
+     * Creates a mobile client with the default Protobuf serializer
      *
      * @return a non-null mobile client instance
      */
     public Client.Mobile mobileClient() {
-        return new Client.Mobile(null);
+        return new Client.Mobile(WhatsAppStoreFactory.toProtobuf());
     }
 
     /**
-     * Creates a mobile client with a custom storage directory.
+     * Creates a mobile client with a custom factory
      *
-     * @param directory the directory for session persistence, must not be null
+     * @param factory the factory to use for data persistence, must not be null
      * @return a non-null mobile client instance
-     * @throws NullPointerException if directory is null
+     * @throws NullPointerException if factory is null
      */
-    public Client.Mobile mobileClient(Path directory) {
-        Objects.requireNonNull(directory, "directory must not be null");
-        return new Client.Mobile(directory);
+    public Client.Mobile mobileClient(WhatsAppStoreFactory factory) {
+        Objects.requireNonNull(factory, "factory must not be null");
+        return new Client.Mobile(factory);
     }
 
     /**
@@ -88,10 +89,10 @@ public sealed class WhatsAppClientBuilder {
     }
 
     public static abstract sealed class Client extends WhatsAppClientBuilder {
-        final Path directory;
+        final WhatsAppStoreFactory factory;
 
-        private Client(Path directory) {
-            this.directory = directory;
+        private Client(WhatsAppStoreFactory factory) {
+            this.factory = Objects.requireNonNull(factory, "factory must not be null");
         }
 
         /**
@@ -99,7 +100,7 @@ public sealed class WhatsAppClientBuilder {
          *
          * @return a non-null options selector
          */
-        public abstract Options createConnection();
+        public abstract Options createConnection() throws IOException;
 
         /**
          * Loads a connection from the six parts key representation
@@ -108,7 +109,7 @@ public sealed class WhatsAppClientBuilder {
          * @return a non-null options selector
          * @throws NullPointerException if sixParts is null
          */
-        public abstract Options loadConnection(WhatsAppClientSixPartsKeys sixParts);
+        public abstract Optional<? extends Options> loadConnection(WhatsAppClientSixPartsKeys sixParts);
 
         /**
          * Loads the last serialized connection.
@@ -116,7 +117,7 @@ public sealed class WhatsAppClientBuilder {
          *
          * @return an {@link Optional} containing the last serialized connection, empty otherwise
          */
-        public abstract Optional<Options> loadLastConnection();
+        public abstract Optional<Options> loadLatestConnection();
 
         /**
          * Loads the last serialized connection.
@@ -124,7 +125,7 @@ public sealed class WhatsAppClientBuilder {
          *
          * @return a non-null options selector
          */
-        public abstract Options loadLastOrCreateConnection();
+        public abstract Options loadLatestOrCreateConnection() throws IOException;
 
         /**
          * Loads the connection whose id matches {@code uuid}.
@@ -133,7 +134,7 @@ public sealed class WhatsAppClientBuilder {
          * @param uuid the id to use for the connection; can be null
          * @return an {@link Optional} containing the connection whose id matches {@code uuid}, empty otherwise
          */
-        public abstract Optional<Options> loadConnection(UUID uuid);
+        public abstract Optional<? extends Options> loadConnection(UUID uuid);
 
         /**
          * Loads the connection whose id matches {@code uuid}.
@@ -142,16 +143,16 @@ public sealed class WhatsAppClientBuilder {
          * @param uuid the id to use for the connection; can be null
          * @return a non-null options selector
          */
-        public abstract Options loadOrCreateConnection(UUID uuid);
+        public abstract Options loadOrCreateConnection(UUID uuid) throws IOException;
 
         /**
-         * Loads the connection whose phone number matches the given phone number.
-         * If the phone number is null, or if no connection matches the given phone number, an empty {@link Optional} will be returned.
+         * Loads the connection whose phone number matches the given UUID.
+         * If the UUID is null, or if no connection matches the given UUID, a new connection will be created.
          *
-         * @param phoneNumber the phone value to use to create the connection, can be null
-         * @return an {@link Optional} containing the connection, empty otherwise
+         * @param phoneNumber the phone value to use to create the connection, can be null (will generate a random UUID)
+         * @return a non-null options selector
          */
-        public abstract Optional<Options> loadConnection(Long phoneNumber);
+        public abstract Optional<? extends Options> loadConnection(Long phoneNumber);
 
         /**
          * Loads the connection whose id matches {@code phoneNumber}.
@@ -160,33 +161,27 @@ public sealed class WhatsAppClientBuilder {
          * @param phoneNumber the id to use for the connection, can be null
          * @return a non-null options selector
          */
-        public abstract Options loadOrCreateConnection(Long phoneNumber);
-
-        abstract WhatsAppClientType clientType();
+        public abstract Options loadOrCreateConnection(Long phoneNumber) throws IOException;
 
         public static final class Web extends Client {
-            private Web(Path directory) {
-                super(directory);
+            private Web(WhatsAppStoreFactory factory) {
+                super(factory);
             }
-
+            
             @Override
-            WhatsAppClientType clientType() {
-                return WhatsAppClientType.WEB;
+            public Options.Web createConnection() throws IOException {
+                return loadOrCreateConnection(UUID.randomUUID());
             }
-
+            
             @Override
-            public Options.Web createConnection() {
-                return new Options.Web(WhatsAppStore.createInMemory(WhatsAppClientType.WEB, directory));
-            }
-
-            @Override
-            public Options.Web loadLastOrCreateConnection() {
-                var uuids = WhatsAppStore.listIds(WhatsAppClientType.WEB, directory);
-                if(uuids.isEmpty()) {
-                    return createConnection();
-                }else {
-                    return loadOrCreateConnection(uuids.getLast());
+            public Options.Web loadLatestOrCreateConnection() throws IOException {
+                var existingStore = factory.loadLatest(WhatsAppClientType.WEB);
+                if (existingStore.isPresent()) {
+                    return new Options.Web(existingStore.get());
                 }
+
+                var newStore = factory.create(WhatsAppClientType.WEB, UUID.randomUUID());
+                return new Options.Web(newStore);
             }
 
             @Override
@@ -194,16 +189,30 @@ public sealed class WhatsAppClientBuilder {
                 if (uuid == null) {
                     return Optional.empty();
                 }
-                return WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.WEB, uuid, directory)
-                        .map(Options.Web::new);
-            }
 
+                var store = factory.loadLatest(WhatsAppClientType.WEB);
+                if (store.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                var result = new Options.Web(store.get());
+                return Optional.of(result);
+            }
+            
             @Override
-            public Options.Web loadOrCreateConnection(UUID uuid) {
-                var sessionUuid = Objects.requireNonNullElseGet(uuid, UUID::randomUUID);
-                var store = WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.WEB, sessionUuid, directory)
-                        .orElseGet(() -> WhatsAppStore.createInMemory(WhatsAppClientType.WEB, directory));
-                return new Options.Web(store);
+            public Options.Web loadOrCreateConnection(UUID uuid) throws IOException {
+                if (uuid == null) {
+                    var store = factory.create(WhatsAppClientType.WEB, UUID.randomUUID());
+                    return new Options.Web(store);
+                }
+
+                var existingStore = factory.load(WhatsAppClientType.WEB, uuid);
+                if (existingStore.isPresent()) {
+                    return new Options.Web(existingStore.get());
+                }
+
+                var newStore = factory.create(WhatsAppClientType.WEB, uuid);
+                return new Options.Web(newStore);
             }
 
             @Override
@@ -211,122 +220,166 @@ public sealed class WhatsAppClientBuilder {
                 if (phoneNumber == null) {
                     return Optional.empty();
                 }
-                return WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.WEB, phoneNumber, directory)
-                        .map(Options.Web::new);
-            }
 
-            @Override
-            public Options.Web loadOrCreateConnection(Long phoneNumber) {
-                if (phoneNumber != null) {
-                    var loaded = WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.WEB, phoneNumber, directory);
-                    if (loaded.isPresent()) {
-                        return new Options.Web(loaded.get());
-                    }
-                }
-                return new Options.Web(WhatsAppStore.createInMemory(WhatsAppClientType.WEB, directory));
-            }
-
-            @Override
-            public Options.Web loadConnection(WhatsAppClientSixPartsKeys sixParts) {
-                Objects.requireNonNull(sixParts, "sixParts must not be null");
-                var loaded = WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.WEB, sixParts.phoneNumber(), directory);
-                if(loaded.isPresent()) {
-                    return new Options.Web(loaded.get());
-                }
-                return new Options.Web(WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.WEB, sixParts, directory));
-            }
-
-            @Override
-            public Optional<Options> loadLastConnection() {
-                var uuids = WhatsAppStore.listIds(WhatsAppClientType.WEB, directory);
-                if(uuids.isEmpty()) {
+                var existingStore = factory.load(WhatsAppClientType.WEB, phoneNumber);
+                if (existingStore.isEmpty()) {
                     return Optional.empty();
-                }else {
-                    return loadConnection(uuids.getLast());
                 }
+
+                var result = new Options.Web(existingStore.get());
+                return Optional.of(result);
+            }
+            
+            @Override
+            public Options.Web loadOrCreateConnection(Long phoneNumber) throws IOException {
+                if (phoneNumber == null) {
+                    var store = factory.create(WhatsAppClientType.WEB, UUID.randomUUID());
+                    return new Options.Web(store);
+                }
+
+                var existingStore = factory.load(WhatsAppClientType.WEB, phoneNumber);
+                if (existingStore.isPresent()) {
+                    return new Options.Web(existingStore.get());
+                }
+
+                var newStore = factory.create(WhatsAppClientType.WEB, phoneNumber);
+                return new Options.Web(newStore);
+            }
+            
+            @Override
+            public Optional<Options.Web> loadConnection(WhatsAppClientSixPartsKeys sixParts) {
+                if (sixParts == null) {
+                    return Optional.empty();
+                }
+
+                var store = factory.load(WhatsAppClientType.WEB, sixParts);
+                if (store.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                var result = new Options.Web(store.get());
+                return Optional.of(result);
+            }
+
+            @Override
+            public Optional<Options> loadLatestConnection() {
+                var store = factory.loadLatest(WhatsAppClientType.WEB);
+                if (store.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                var result = new Options.Web(store.get());
+                return Optional.of(result);
             }
         }
 
         public static final class Mobile extends Client {
-            private Mobile(Path directory) {
-                super(directory);
+            private Mobile(WhatsAppStoreFactory factory) {
+                super(factory);
             }
 
             @Override
-            WhatsAppClientType clientType() {
-                return WhatsAppClientType.MOBILE;
+            public Options.Mobile createConnection() throws IOException {
+                return loadOrCreateConnection(UUID.randomUUID());
             }
 
             @Override
-            public Options.Mobile createConnection() {
-                return new Options.Mobile(WhatsAppStore.createInMemory(WhatsAppClientType.MOBILE, directory));
-            }
-
-            @Override
-            public Options.Mobile loadLastOrCreateConnection() {
-                var uuids = WhatsAppStore.listIds(WhatsAppClientType.MOBILE, directory);
-                if(uuids.isEmpty()) {
-                    return createConnection();
-                }else {
-                    return loadOrCreateConnection(uuids.getLast());
+            public Options.Mobile loadLatestOrCreateConnection() throws IOException {
+                var existingStore = factory.loadLatest(WhatsAppClientType.MOBILE);
+                if (existingStore.isPresent()) {
+                    return new Options.Mobile(existingStore.get());
                 }
+
+                var newStore = factory.create(WhatsAppClientType.MOBILE, UUID.randomUUID());
+                return new Options.Mobile(newStore);
             }
 
             @Override
             public Optional<Options> loadConnection(UUID uuid) {
-                if(uuid == null) {
+                if (uuid == null) {
                     return Optional.empty();
                 }
-                return WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.MOBILE, uuid, directory)
-                        .map(Options.Mobile::new);
+
+                var store = factory.loadLatest(WhatsAppClientType.MOBILE);
+                if (store.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                var result = new Options.Mobile(store.get());
+                return Optional.of(result);
             }
 
             @Override
-            public Options.Mobile loadOrCreateConnection(UUID uuid) {
-                var sessionUuid = Objects.requireNonNullElseGet(uuid, UUID::randomUUID);
-                var store = WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.MOBILE, sessionUuid, directory)
-                        .orElseGet(() -> WhatsAppStore.createInMemory(WhatsAppClientType.MOBILE, directory));
-                return new Options.Mobile(store);
+            public Options.Mobile loadOrCreateConnection(UUID uuid) throws IOException {
+                if (uuid == null) {
+                    var store = factory.create(WhatsAppClientType.MOBILE, UUID.randomUUID());
+                    return new Options.Mobile(store);
+                }
+
+                var existingStore = factory.load(WhatsAppClientType.MOBILE, uuid);
+                if (existingStore.isPresent()) {
+                    return new Options.Mobile(existingStore.get());
+                }
+
+                var newStore = factory.create(WhatsAppClientType.MOBILE, uuid);
+                return new Options.Mobile(newStore);
             }
 
             @Override
             public Optional<Options> loadConnection(Long phoneNumber) {
-                if(phoneNumber == null) {
+                if (phoneNumber == null) {
                     return Optional.empty();
                 }
-                return WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.MOBILE, phoneNumber, directory)
-                        .map(Options.Mobile::new);
-            }
 
-            @Override
-            public Options.Mobile loadOrCreateConnection(Long phoneNumber) {
-                if (phoneNumber != null) {
-                    var loaded = WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.MOBILE, phoneNumber, directory);
-                    if (loaded.isPresent()) {
-                        return new Options.Mobile(loaded.get());
-                    }
-                }
-                return new Options.Mobile(WhatsAppStore.createInMemory(WhatsAppClientType.MOBILE, directory));
-            }
-
-            @Override
-            public Options.Mobile loadConnection(WhatsAppClientSixPartsKeys sixParts) {
-                Objects.requireNonNull(sixParts, "sixParts must not be null");
-                var loaded = WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.MOBILE, sixParts.phoneNumber(), directory);
-                if(loaded.isPresent()) {
-                    return new Options.Mobile(loaded.get());
-                }
-                return new Options.Mobile(WhatsAppStore.loadOrCreateInMemory(WhatsAppClientType.MOBILE, sixParts, directory));
-            }
-
-            @Override
-            public Optional<Options> loadLastConnection() {
-                var uuids = WhatsAppStore.listIds(WhatsAppClientType.MOBILE, directory);
-                if(uuids.isEmpty()) {
+                var existingStore = factory.load(WhatsAppClientType.MOBILE, phoneNumber);
+                if (existingStore.isEmpty()) {
                     return Optional.empty();
-                }else {
-                    return loadConnection(uuids.getLast());
                 }
+
+                var result = new Options.Mobile(existingStore.get());
+                return Optional.of(result);
+            }
+
+            @Override
+            public Options.Mobile loadOrCreateConnection(Long phoneNumber) throws IOException {
+                if (phoneNumber == null) {
+                    var store = factory.create(WhatsAppClientType.MOBILE, UUID.randomUUID());
+                    return new Options.Mobile(store);
+                }
+
+                var existingStore = factory.load(WhatsAppClientType.MOBILE, phoneNumber);
+                if (existingStore.isPresent()) {
+                    return new Options.Mobile(existingStore.get());
+                }
+
+                var newStore = factory.create(WhatsAppClientType.MOBILE, phoneNumber);
+                return new Options.Mobile(newStore);
+            }
+
+            @Override
+            public Optional<Options.Mobile> loadConnection(WhatsAppClientSixPartsKeys sixParts) {
+                if (sixParts == null) {
+                    return Optional.empty();
+                }
+
+                var store = factory.load(WhatsAppClientType.MOBILE, sixParts);
+                if (store.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                var result = new Options.Mobile(store.get());
+                return Optional.of(result);
+            }
+
+            @Override
+            public Optional<Options> loadLatestConnection() {
+                var store = factory.loadLatest(WhatsAppClientType.MOBILE);
+                if (store.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                var result = new Options.Mobile(store.get());
+                return Optional.of(result);
             }
         }
     }
@@ -395,7 +448,7 @@ public sealed class WhatsAppClientBuilder {
          * @param clientVersion the client version to use, can be null to use the default
          * @return the same instance for chaining
          */
-        public Options clientVersion(Version clientVersion) {
+        public Options clientVersion(ClientAppVersion clientVersion) {
             store.setClientVersion(clientVersion);
             return this;
         }
@@ -427,38 +480,83 @@ public sealed class WhatsAppClientBuilder {
                 super(store);
             }
 
+            /**
+             * Sets the display name for the companion device, visible in the "Linked Devices" tab
+             *
+             * @param name the name to set, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Mobile name(String name) {
                 return (Mobile) super.name(name);
             }
 
+            /**
+             * Sets a proxy for the connection
+             *
+             * @param proxy the proxy to use, can be null to use no proxy
+             * @return the same instance for chaining
+             */
             @Override
             public Web proxy(WhatsAppClientProxy proxy) {
                 return (Web) super.proxy(proxy);
             }
 
+            /**
+             * Sets the companion device for the connection
+             *
+             * @param device the companion device, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Web device(JidDevice device) {
                 return (Web) super.device(device);
             }
 
+            /**
+             * Sets a handler for message previews
+             *
+             * @param messagePreviewHandler the handler to use, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Web messagePreviewHandler(WhatsAppClientMessagePreviewHandler messagePreviewHandler) {
                 return (Web) super.messagePreviewHandler(messagePreviewHandler);
             }
 
+            /**
+             * Sets an error handler for the connection
+             *
+             * @param errorHandler the error handler to use, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Web errorHandler(WhatsAppClientErrorHandler errorHandler) {
                 return (Web) super.errorHandler(errorHandler);
             }
 
+            /**
+             * Controls whether the library should send receipts automatically for messages
+             * By default disabled
+             * For the web API, if enabled, the companion won't receive notifications
+             *
+             * @param automaticMessageReceipts true to enable automatic message receipts, false otherwise
+             * @return the same instance for chaining
+             */
             @Override
             public Web automaticMessageReceipts(boolean automaticMessageReceipts) {
                 return (Web) super.automaticMessageReceipts(automaticMessageReceipts);
             }
 
+            /**
+             * Sets the client version for the connection
+             * This allows customization of the WhatsApp client version identifier
+             *
+             * @param clientVersion the client version to use, can be null to use the default
+             * @return the same instance for chaining
+             */
             @Override
-            public Web clientVersion(Version clientVersion) {
+            public Web clientVersion(ClientAppVersion clientVersion) {
                 return (Web) super.clientVersion(clientVersion);
             }
 
@@ -530,80 +628,174 @@ public sealed class WhatsAppClientBuilder {
                 super(store);
             }
 
+            /**
+             * Sets a proxy for the connection
+             *
+             * @param proxy the proxy to use, can be null to use no proxy
+             * @return the same instance for chaining
+             */
             @Override
             public Mobile proxy(WhatsAppClientProxy proxy) {
                 store.setProxy(proxy);
                 return this;
             }
 
+            /**
+             * Sets the companion device for the connection
+             *
+             * @param device the companion device, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Mobile device(JidDevice device) {
                 store.setDevice(device);
                 return this;
             }
 
+            /**
+             * Sets an error handler for the connection
+             *
+             * @param errorHandler the error handler to use, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Mobile errorHandler(WhatsAppClientErrorHandler errorHandler) {
                 super.errorHandler(errorHandler);
                 return this;
             }
 
+            /**
+             * Controls whether the library should send receipts automatically for messages
+             * By default disabled
+             * For the web API, if enabled, the companion won't receive notifications
+             *
+             * @param automaticMessageReceipts true to enable automatic message receipts, false otherwise
+             * @return the same instance for chaining
+             */
             @Override
             public Mobile automaticMessageReceipts(boolean automaticMessageReceipts) {
                 super.automaticMessageReceipts(automaticMessageReceipts);
                 return this;
             }
 
+            /**
+             * Sets the client version for the connection
+             * This allows customization of the WhatsApp client version identifier
+             *
+             * @param clientVersion the client version to use, can be null to use the default
+             * @return the same instance for chaining
+             */
             @Override
-            public Mobile clientVersion(Version clientVersion) {
+            public Mobile clientVersion(ClientAppVersion clientVersion) {
                 return (Mobile) super.clientVersion(clientVersion);
             }
 
+            /**
+             * Sets the display name for the WhatsApp account
+             * This is the preferred name that contacts that haven't saved you yet see next to your phone number.
+             *
+             * @param name the name to set, can be null
+             * @return the same instance for chaining
+             */
             @Override
             public Mobile name(String name) {
                 return (Mobile) super.name(name);
             }
 
+            /**
+             * Sets the about/status message for the WhatsApp account
+             *
+             * @param about the about message to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile about(String about) {
                 store.setAbout(about);
                 return this;
             }
 
+            /**
+             * Sets the business' address
+             *
+             * @param businessAddress the address to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessAddress(String businessAddress) {
                 store.setBusinessAddress(businessAddress);
                 return this;
             }
 
+            /**
+             * Sets the business' address longitude
+             *
+             * @param businessLongitude the longitude to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessLongitude(Double businessLongitude) {
                 store.setBusinessLongitude(businessLongitude);
                 return this;
             }
 
+            /**
+             * Sets the business' address latitude
+             *
+             * @param businessLatitude the latitude to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessLatitude(Double businessLatitude) {
                 store.setBusinessLatitude(businessLatitude);
                 return this;
             }
 
+            /**
+             * Sets the business' description
+             *
+             * @param businessDescription the description to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessDescription(String businessDescription) {
                 store.setBusinessDescription(businessDescription);
                 return this;
             }
 
+            /**
+             * Sets the business' website URL
+             *
+             * @param businessWebsite the website URL to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessWebsite(String businessWebsite) {
                 store.setBusinessWebsite(businessWebsite);
                 return this;
             }
 
+            /**
+             * Sets the business' email address
+             *
+             * @param businessEmail the email address to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessEmail(String businessEmail) {
                 store.setBusinessEmail(businessEmail);
                 return this;
             }
 
+            /**
+             * Sets the business' category
+             *
+             * @param businessCategory the category to set, can be null
+             * @return the same instance for chaining
+             */
             public Mobile businessCategory(BusinessCategory businessCategory) {
                 store.setBusinessCategory(businessCategory);
                 return this;
             }
 
+            /**
+             * Creates a WhatsApp instance assuming the session is already registered
+             * This means that the verification code has already been sent to WhatsApp
+             *
+             * @return an optional containing the WhatsApp instance if registered, empty otherwise
+             */
             public Optional<WhatsAppClient> registered() {
                 if (!store.registered()) {
                     return Optional.empty();
@@ -615,6 +807,16 @@ public sealed class WhatsAppClientBuilder {
                 return Optional.of(result);
             }
 
+            /**
+             * Creates a WhatsApp instance for a session that needs registration
+             * This means that you may or may not have a verification code, but it hasn't been sent to WhatsApp yet
+             *
+             * @param phoneNumber the phone value to register, must be valid
+             * @param verification the verification handler to use, must not be null
+             * @return a non-null WhatsApp instance
+             * @throws NullPointerException if verification is null
+             * @throws IllegalArgumentException if the store already has a phone number set, and the phone number is different from the one being registered
+             */
             public WhatsAppClient register(long phoneNumber, WhatsAppClientVerificationHandler.Mobile verification) {
                 Objects.requireNonNull(verification, "verification must not be null");
 
@@ -648,26 +850,57 @@ public sealed class WhatsAppClientBuilder {
 
         }
 
+        /**
+         * Sets the store for the connection
+         *
+         * @param store the store to use, can be null
+         * @return the same instance for chaining
+         */
         public Custom store(WhatsAppStore store) {
             this.store = store;
             return this;
         }
 
+        /**
+         * Sets an error handler for the connection
+         *
+         * @param errorHandler the error handler to use, can be null
+         * @return the same instance for chaining
+         */
         public Custom errorHandler(WhatsAppClientErrorHandler errorHandler) {
             this.errorHandler = errorHandler;
             return this;
         }
 
+        /**
+         * Sets the web verification handler for the connection
+         *
+         * @param webVerificationHandler the verification handler to use, can be null
+         * @return the same instance for chaining
+         */
         public Custom webVerificationSupport(WhatsAppClientVerificationHandler.Web webVerificationHandler) {
             this.webVerificationHandler = webVerificationHandler;
             return this;
         }
 
+        /**
+         * Sets a message preview handler for the connection
+         *
+         * @param messagePreviewHandler the handler to use, can be null
+         * @return the same instance for chaining
+         */
         public Custom messagePreviewHandler(WhatsAppClientMessagePreviewHandler messagePreviewHandler) {
             this.messagePreviewHandler = messagePreviewHandler;
             return this;
         }
 
+        /**
+         * Builds a WhatsApp instance with the configured parameters
+         *
+         * @return a non-null WhatsApp instance
+         * @throws NullPointerException if store or keys are null
+         * @throws IllegalArgumentException if there is a UUID mismatch between store and keys
+         */
         public WhatsAppClient build() {
             var store = Objects.requireNonNull(this.store, "Expected a valid store");
             var webVerificationHandler = switch (store.clientType()) {

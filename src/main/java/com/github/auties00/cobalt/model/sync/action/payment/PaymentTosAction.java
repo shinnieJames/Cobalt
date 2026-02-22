@@ -1,6 +1,9 @@
 package com.github.auties00.cobalt.model.sync.action.payment;
 
+import com.github.auties00.cobalt.model.sync.SyncActionEmptyArgs;
 import com.github.auties00.cobalt.model.sync.SyncAction;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -8,7 +11,34 @@ import it.auties.protobuf.model.ProtobufType;
 import java.util.Objects;
 
 @ProtobufMessage(name = "SyncActionValue.PaymentTosAction")
-public final class PaymentTosAction implements SyncAction {
+public final class PaymentTosAction implements SyncAction<SyncActionEmptyArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "payment_tos";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
     PaymentNotice paymentNotice;
 

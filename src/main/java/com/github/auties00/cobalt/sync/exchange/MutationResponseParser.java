@@ -1,10 +1,10 @@
 package com.github.auties00.cobalt.sync.exchange;
 
-import com.github.auties00.cobalt.model.sync.PatchSyncSpec;
-import com.github.auties00.cobalt.model.sync.SnapshotSyncSpec;
-import com.github.auties00.cobalt.model.sync.PatchSync;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.model.sync.SnapshotSync;
+import com.github.auties00.cobalt.model.sync.data.SyncdPatch;
+import com.github.auties00.cobalt.model.sync.data.SyncdPatchSpec;
+import com.github.auties00.cobalt.model.sync.data.SyncdSnapshot;
+import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotSpec;
 import com.github.auties00.cobalt.node.Node;
 
 import java.util.ArrayList;
@@ -50,20 +50,20 @@ public final class MutationResponseParser {
         }
     }
 
-    private SnapshotSync parseSnapshot(Node snapshotNode) {
+    private SyncdSnapshot parseSnapshot(Node snapshotNode) {
         // Get snapshot as bytes and decode
         var snapshotBytes = snapshotNode.toContentBytes()
                 .orElseThrow(() -> new IllegalArgumentException("Snapshot node has no content"));
 
         try {
-            return SnapshotSyncSpec.decode(snapshotBytes);
+            return SyncdSnapshotSpec.decode(snapshotBytes);
         } catch (Exception e) {
             throw new RuntimeException("Failed to decode snapshot", e);
         }
     }
 
-    private SequencedCollection<PatchSync> parsePatches(Node patchesNode) {
-        var patches = new ArrayList<PatchSync>();
+    private SequencedCollection<SyncdPatch> parsePatches(Node patchesNode) {
+        var patches = new ArrayList<SyncdPatch>();
 
         // Find all patch child nodes
         var patchNodes = patchesNode.getChildren("patch");
@@ -73,7 +73,7 @@ public final class MutationResponseParser {
                     .orElseThrow(() -> new IllegalArgumentException("Patch node has no content"));
 
             try {
-                var patch = PatchSyncSpec.decode(patchBytes);
+                var patch = SyncdPatchSpec.decode(patchBytes);
                 patches.add(patch);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to decode patch", e);

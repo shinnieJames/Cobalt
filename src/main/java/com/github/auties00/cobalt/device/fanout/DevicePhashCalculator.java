@@ -21,7 +21,7 @@ import java.util.*;
  */
 public final class DevicePhashCalculator {
 
-    private static final System.Logger LOGGER = System.getLogger("DevicePhashCalculatorService");
+    private static final System.Logger LOGGER = System.getLogger(DevicePhashCalculator.class.getName());
 
     /**
      * Number of hash bytes to use for the phash (6 bytes = 8 base64 chars).

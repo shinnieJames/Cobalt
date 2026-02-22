@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.payment;
 
+import com.github.auties00.cobalt.model.sync.SyncActionEmptyArgs;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 
 import java.util.Objects;
@@ -8,7 +9,34 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.MerchantPaymentPartnerAction")
-public final class MerchantPaymentPartnerAction implements SyncAction {
+public final class MerchantPaymentPartnerAction implements SyncAction<SyncActionEmptyArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "merchant_payment_partner";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
     Status status;
 

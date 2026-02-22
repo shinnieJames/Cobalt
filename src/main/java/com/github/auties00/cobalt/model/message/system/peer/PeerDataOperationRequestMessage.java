@@ -1,15 +1,22 @@
 package com.github.auties00.cobalt.model.message.system.peer;
 
-import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.device.DeviceProps;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandRequestMetadata;
+import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -303,7 +310,7 @@ public final class PeerDataOperationRequestMessage implements Message {
         @ProtobufProperty(index = 4, type = ProtobufType.INT32)
         Integer onDemandMsgCount;
 
-        @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+        @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
         Instant oldestMsgTimestampMs;
 
         @ProtobufProperty(index = 6, type = ProtobufType.STRING)
@@ -452,7 +459,7 @@ public final class PeerDataOperationRequestMessage implements Message {
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String collectionName;
 
-        @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+        @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
         Instant timestamp;
 
 

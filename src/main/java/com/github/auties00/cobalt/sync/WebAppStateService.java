@@ -2,7 +2,12 @@ package com.github.auties00.cobalt.sync;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+import com.github.auties00.cobalt.model.media.ExternalBlobReference;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
+import com.github.auties00.cobalt.model.signal.KeyId;
 import com.github.auties00.cobalt.model.sync.*;
+import com.github.auties00.cobalt.model.sync.data.*;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -194,22 +199,25 @@ public final class WebAppStateService {
         }
     }
 
-    private SequencedCollection<MutationSync> getOrDownloadMutations(MutationSyncResponse response) {
-        var result = new ArrayList<MutationSync>();
-        if(response.snapshot() != null) {
-            for (var record : response.snapshot().records()) {
-                var sync = new MutationSync(record.operation(), record);
+    private SequencedCollection<SyncdMutation> getOrDownloadMutations(MutationSyncResponse response) {
+        var result = new ArrayList<SyncdMutation>();
+        response.snapshot().ifPresent(snapshot -> {
+            for (var record : snapshot.records()) {
+                var sync = new SyncdMutationBuilder()
+                        .operation(SyncdOperation.SET)
+                        .record(record)
+                        .build();
                 result.add(sync);
             }
-        }
+        });
 
         for (var patch : response.patches()) {
             if (patch.mutations() != null) {
                 result.addAll(patch.mutations());
             }
 
-            if (patch.hasExternalMutations()) {
-                var downloadedData = downloadExternalMutation(patch.externalMutations());
+            if (patch.externalMutations().isPresent()) {
+                var downloadedData = downloadExternalMutation(patch.externalMutations().get());
                 var externalMutations = decodeExternalMutation(downloadedData);
                 if (externalMutations.mutations() != null) {
                     result.addAll(externalMutations.mutations());
@@ -230,45 +238,63 @@ public final class WebAppStateService {
         }
     }
 
-    private MutationsSync decodeExternalMutation(InputStream downloadedData) {
+    private SyncdMutations decodeExternalMutation(InputStream downloadedData) {
         try(var protobufStream = ProtobufInputStream.fromStream(downloadedData)) {
-            return MutationsSyncSpec.decode(protobufStream);
+            return SyncdMutationsSpec.decode(protobufStream);
         }catch (Throwable throwable) {
             throw new WhatsAppWebAppStateSyncException.ExternalDecodeFailed(throwable);
         }
     }
 
-    private SequencedCollection<DecryptedMutation.Untrusted> decryptMutations(SequencedCollection<MutationSync> mutations) {
+    private SequencedCollection<DecryptedMutation.Untrusted> decryptMutations(SequencedCollection<SyncdMutation> mutations) {
         var decrypted = new ArrayList<DecryptedMutation.Untrusted>(mutations.size());
 
         for (var mutation : mutations) {
             var record = mutation.record();
-            if (record == null || record.index() == null || record.value() == null) {
+            if (record.isEmpty()) {
                 continue;
             }
 
-            // Get encryption key id
-            var keyId = record.keyId();
-            if (keyId == null || keyId.id() == null) {
+            var operation = mutation.operation();
+            if(operation.isEmpty()) {
+                continue;
+            }
+
+            var recordValueBlob = record.get()
+                    .value()
+                    .flatMap(SyncdValue::blob);
+            if(recordValueBlob.isEmpty()) {
+                continue;
+            }
+
+            var recordIndexBlob = record.get()
+                    .index()
+                    .flatMap(SyncdIndex::blob);
+            if(recordIndexBlob.isEmpty()) {
+                continue;
+            }
+
+            var keyId = record.get()
+                    .keyId()
+                    .flatMap(KeyId::id);
+            if (keyId.isEmpty()) {
                 continue;
             }
 
             // Get encryption key
             var syncKey = whatsapp.store()
-                    .findWebAppStateKeyById(keyId.id())
-                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId.id()));
-            var keyData = syncKey.keyData();
-            if (keyData == null || keyData.keyData() == null) {
-                continue;
-            }
+                    .findWebAppStateKeyById(keyId.get())
+                    .flatMap(AppStateSyncKey::keyData)
+                    .flatMap(AppStateSyncKeyData::keyData)
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId.get()));
 
             // Derive keys and decrypt
-            try (var keys = MutationKeys.ofSyncKey(keyData.keyData())) {
+            try (var keys = MutationKeys.ofSyncKey(syncKey)) {
                 var decryptedMutation = DecryptedMutation.Untrusted.of(
-                        record.value().blob(),
-                        record.index().blob(),
+                        recordValueBlob.get(),
+                        recordIndexBlob.get(),
                         keys,
-                        mutation.operation()
+                        operation.get()
                 );
                 decrypted.add(decryptedMutation);
             }catch (Exception e) {
@@ -288,21 +314,14 @@ public final class WebAppStateService {
 
         for (var mutation : mutationsToApply) {
             // Determine action name from action or setting
-            var action = mutation.value().action();
-            var setting = mutation.value().setting();
-
-            String actionName = null;
-            if (action.isPresent() && action.get().indexName() != null) {
-                actionName = action.get().indexName();
-            } else if (setting.isPresent() && setting.get().indexName() != null) {
-                actionName = setting.get().indexName();
-            }
-
-            if (actionName != null) {
-                mutationsByAction
-                        .computeIfAbsent(actionName, _ -> new ArrayList<>())
-                        .add(mutation);
-            }
+            mutation.value()
+                    .action()
+                    .map(SyncAction::actionName)
+                    .ifPresent(actionName -> {
+                        mutationsByAction
+                                .computeIfAbsent(actionName, _ -> new ArrayList<>())
+                                .add(mutation);
+                    });
         }
 
         // Step 3: Apply each action group via its handler
@@ -340,7 +359,7 @@ public final class WebAppStateService {
 
             // Check if we have a pending local mutation with the same index
             var localMutation = pendingByIndex.get(remoteIndex);
-            if(localMutation == null || remoteMutation.timestamp() >= localMutation.timestamp()) {
+            if(localMutation == null || remoteMutation.timestamp().compareTo(localMutation.timestamp()) >= 0) {
                 results.add(remoteMutation);
             }else {
                 results.add(localMutation);
@@ -364,7 +383,7 @@ public final class WebAppStateService {
             var indexMac = mutation.indexMac();
             var valueMac = mutation.valueMac();
             var mutationHash = SecureBytes.concat(indexMac, valueMac);
-            if (mutation.operation() == RecordSync.Operation.SET) {
+            if (mutation.operation() == SyncdOperation.SET) {
                 toAdd.add(mutationHash);
             } else {
                 toRemove.add(mutationHash);

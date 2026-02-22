@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.sync.crypto;
 
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
-import com.github.auties00.cobalt.model.sync.SyncActionData;
+import com.github.auties00.cobalt.model.sync.SyncActionDataSpec;
 import com.github.auties00.cobalt.model.sync.SyncActionValue;
-import com.github.auties00.cobalt.model.sync.data.SyncdMutation;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
 import javax.crypto.Cipher;
@@ -14,20 +14,21 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.Arrays;
 
 public sealed interface DecryptedMutation {
     String index();
-    SyncdMutation.SyncdOperation operation();
-    long timestamp();
+    SyncdOperation operation();
+    Instant timestamp();
 
     record Untrusted(
             String index,
             byte[] indexMac,
             byte[] valueMac,
             SyncActionValue value,
-            SyncdMutation.SyncdOperation operation,
-            long timestamp
+            SyncdOperation operation,
+            Instant timestamp
     ) implements DecryptedMutation {
         private static final int IV_LENGTH = 16;
         private static final int MAC_LENGTH = 32;
@@ -37,7 +38,7 @@ public sealed interface DecryptedMutation {
                 byte[] encryptedValue,
                 byte[] indexMac,
                 MutationKeys keys,
-                SyncdMutation.SyncdOperation operation
+                SyncdOperation operation
         ) throws GeneralSecurityException {
             if (encryptedValue.length < IV_LENGTH + MAC_LENGTH) {
                 throw new IllegalArgumentException("Encrypted value too short");
@@ -67,20 +68,26 @@ public sealed interface DecryptedMutation {
             var actionData = SyncActionDataSpec.decode(ProtobufInputStream.fromStream(plaintextStream));
 
             // Verify index MAC
+            var actionIndex = actionData.index()
+                    .orElseThrow(() -> new IllegalStateException("Missing index from action data"));
+            var actionValue = actionData.value()
+                    .orElseThrow(() -> new IllegalStateException("Missing value from action data"));
+            var actionTimestamp = actionValue.timestamp()
+                    .orElseGet(Instant::now);
             mac.init(keys.indexKey());
-            var expectedIndexMac = mac.doFinal(actionData.index());
+            var expectedIndexMac = mac.doFinal(actionIndex);
             if (!MessageDigest.isEqual(indexMac, expectedIndexMac)) {
                 throw new WhatsAppWebAppStateSyncException.IndexMacMismatch();
             }
 
             // Build mutation
             return new Untrusted(
-                    new String(actionData.index(), StandardCharsets.UTF_8),
+                    new String(actionIndex, StandardCharsets.UTF_8),
                     indexMac,
                     valueMac,
-                    actionData.value(),
+                    actionValue,
                     operation,
-                    actionData.value().timestamp()
+                    actionTimestamp
             );
         }
     }
@@ -88,8 +95,8 @@ public sealed interface DecryptedMutation {
     record Trusted(
             String index,
             SyncActionValue value,
-            SyncdMutation.SyncdOperation operation,
-            long timestamp
+            SyncdOperation operation,
+            Instant timestamp
     ) implements DecryptedMutation {
 
     }

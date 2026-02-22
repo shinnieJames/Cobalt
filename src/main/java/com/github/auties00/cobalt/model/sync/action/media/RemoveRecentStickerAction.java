@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.media;
 
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 
 import java.time.Instant;
@@ -8,8 +9,35 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.RemoveRecentStickerAction")
-public final class RemoveRecentStickerAction implements SyncAction {
-    @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+public final class RemoveRecentStickerAction implements SyncAction<RemoveRecentStickerActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "removeRecentSticker";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
+    @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant lastStickerSentTs;
 
 
@@ -25,4 +53,6 @@ public final class RemoveRecentStickerAction implements SyncAction {
         this.lastStickerSentTs = lastStickerSentTs;
         return this;
     }
+
+
 }

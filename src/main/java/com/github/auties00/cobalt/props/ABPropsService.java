@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @see ABProp
  */
 public final class ABPropsService {
-    private static final System.Logger LOGGER = System.getLogger("ABPropsService");
+    private static final System.Logger LOGGER = System.getLogger(ABPropsService.class.getName());
 
     /**
      * Default timeout for waiting for initial sync when querying props.

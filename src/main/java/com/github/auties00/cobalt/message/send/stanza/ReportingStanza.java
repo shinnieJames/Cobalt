@@ -39,7 +39,7 @@ import java.util.Objects;
  * excludes reactions, encrypted reactions, event responses, and poll votes.
  */
 public final class ReportingStanza {
-    private static final System.Logger LOGGER = System.getLogger("ReportingStanza");
+    private static final System.Logger LOGGER = System.getLogger(ReportingStanza.class.getName());
 
 
     private final ABPropsService abPropsService;

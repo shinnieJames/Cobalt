@@ -9,7 +9,34 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 @ProtobufMessage(name = "SyncActionValue.NoteEditAction")
-public final class NoteEditAction implements SyncAction {
+public final class NoteEditAction implements SyncAction<NoteEditActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "note_edit";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
     NoteType type;
 
@@ -94,4 +121,6 @@ public final class NoteEditAction implements SyncAction {
             return this.index;
         }
     }
+
+
 }

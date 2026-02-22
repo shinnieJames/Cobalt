@@ -44,12 +44,12 @@ public final class PinChatHandler implements WebAppStateActionHandler {
         switch (mutation.operation()) {
             case SET -> {
                 if (action.pinned()) {
-                    chat.get().setPinnedTimestampSeconds((int) Instant.now().getEpochSecond());
+                    chat.get().setPinned((int) Instant.now().getEpochSecond());
                 } else {
-                    chat.get().setPinnedTimestampSeconds(0);
+                    chat.get().setPinned(0);
                 }
             }
-            case REMOVE -> chat.get().setPinnedTimestampSeconds(0);
+            case REMOVE -> chat.get().setPinned(0);
         }
 
         return true;

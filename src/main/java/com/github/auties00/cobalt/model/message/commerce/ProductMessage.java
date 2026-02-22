@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.model.message.commerce;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
 import com.github.auties00.cobalt.model.message.media.ImageMessage;
 
 import it.auties.protobuf.annotation.*;
@@ -12,7 +13,7 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 @ProtobufMessage(name = "Message.ProductMessage")
-public final class ProductMessage implements InteractiveMessage.MediaSpec, ContextualMessage {
+public final class ProductMessage implements ContextualMessage, InteractiveMessage.MediaSpec {
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
     ProductSnapshot product;
 

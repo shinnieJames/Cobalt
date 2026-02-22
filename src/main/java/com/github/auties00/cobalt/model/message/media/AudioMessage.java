@@ -1,10 +1,13 @@
 package com.github.auties00.cobalt.model.message.media;
 
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -38,7 +41,7 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
     @ProtobufProperty(index = 9, type = ProtobufType.STRING)
     String directPath;
 
-    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)

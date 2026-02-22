@@ -7,7 +7,34 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.LidContactAction")
-public final class LidContactAction implements SyncAction {
+public final class LidContactAction implements SyncAction<LidContactActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "lid_contact";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 1;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String fullName;
 
@@ -50,4 +77,6 @@ public final class LidContactAction implements SyncAction {
         this.username = username;
         return this;
     }
+
+
 }

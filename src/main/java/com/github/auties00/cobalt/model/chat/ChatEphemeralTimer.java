@@ -42,15 +42,15 @@ public enum ChatEphemeralTimer {
     }
 
     @ProtobufDeserializer
-    public static ChatEphemeralTimer of(int value) {
-        return Arrays.stream(values())
+    public static ChatEphemeralTimer of(Integer value) {
+        return value == null ? OFF : Arrays.stream(values())
                 .filter(entry -> entry.period().toSeconds() == value || entry.period().toDays() == value)
                 .findFirst()
                 .orElse(OFF);
     }
 
     @ProtobufSerializer
-    public int periodSeconds() {
+    public Integer periodSeconds() {
         return (int) period.toSeconds();
     }
 }

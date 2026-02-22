@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.client;
 
+import com.github.auties00.cobalt.model.chat.group.GroupPastParticipant;
+import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.call.CallOffer;
@@ -10,7 +12,6 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
-import com.github.auties00.cobalt.model.setting.Setting;
 import com.github.auties00.cobalt.node.Node;
 
 import java.util.Collection;
@@ -78,20 +79,9 @@ public interface WhatsAppClientListener {
      *
      * @param whatsapp         an instance of the calling API
      * @param action           the action that was executed
-     * @param messageIndexInfo the data associated with this action
+     * @param index            the data associated with this action
      */
-    default void onWebAppStateAction(WhatsAppClient whatsapp, Action action, MessageIndexInfo messageIndexInfo) {
-    }
-
-    /**
-     * Called when a setting is received from WhatsApp Web.
-     * <p>
-     * This event is only triggered for web client connections.
-     *
-     * @param whatsapp an instance of the calling API
-     * @param setting  the setting that was toggled
-     */
-    default void onWebAppStateSetting(WhatsAppClient whatsapp, Setting setting) {
+    default void onWebAppStateAction(WhatsAppClient whatsapp, SyncAction action, String index) {
     }
 
     /**
@@ -234,7 +224,7 @@ public interface WhatsAppClientListener {
      * @param response the reply message
      * @param quoted   the message being replied to
      */
-    default void onMessageReply(WhatsAppClient whatsapp, MessageInfo response, QuotedMessageInfo quoted) {
+    default void onMessageReply(WhatsAppClient whatsapp, MessageInfo response, MessageInfo quoted) {
     }
 
     /**

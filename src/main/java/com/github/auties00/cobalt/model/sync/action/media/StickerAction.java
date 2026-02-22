@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.media;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
+import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 
 import it.auties.protobuf.annotation.*;
@@ -9,7 +11,34 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 @ProtobufMessage(name = "SyncActionValue.StickerAction")
-public final class StickerAction implements SyncAction {
+public final class StickerAction implements SyncAction<StickerActionArgs>, MediaProvider {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "favoriteSticker";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String url;
 
@@ -74,6 +103,26 @@ public final class StickerAction implements SyncAction {
         return Optional.ofNullable(fileEncSha256);
     }
 
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.of(url);
+    }
+
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.url = mediaUrl;
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.empty();
+    }
+
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+
+    }
+
     public Optional<byte[]> mediaKey() {
         return Optional.ofNullable(mediaKey);
     }
@@ -128,9 +177,50 @@ public final class StickerAction implements SyncAction {
         return this;
     }
 
-    public StickerAction setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
+    }
+
+    @Override
+    public void setMediaKeyTimestamp(Long timestamp) {
+
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.empty();
+    }
+
+    @Override
+    public void setMediaSha256(byte[] bytes) {
+
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(fileEncSha256);
+    }
+
+    @Override
+    public void setMediaEncryptedSha256(byte[] bytes) {
+        this.fileEncSha256= bytes;
+    }
+
+
+    @Override
+    public OptionalLong mediaSize() {
+        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+    }
+
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.fileLength = mediaSize;
+    }
+
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.STICKER;
     }
 
     public StickerAction setMimetype(String mimetype) {
@@ -182,4 +272,6 @@ public final class StickerAction implements SyncAction {
         this.isAvatarSticker = isAvatarSticker;
         return this;
     }
+
+
 }

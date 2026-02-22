@@ -237,7 +237,7 @@ public final class BusinessVerifiedNameCertificate {
          * @param issuer the {@link CertificateIssuer} to set
          * @return this instance for chaining
          */
-        public Details setsuer(CertificateIssuer issuer) {
+        public Details setIssuer(CertificateIssuer issuer) {
             this.issuer = issuer;
             return this;
         }
@@ -399,6 +399,16 @@ public final class BusinessVerifiedNameCertificate {
      */
     public sealed static interface CertificateIssuer {
         /**
+         * Singleton for {@link Enterprise}.
+         */
+        Enterprise ENTERPRISE = new Enterprise();
+
+        /**
+         * Singleton for {@link SmallBusiness}.
+         */
+        SmallBusiness SMALL_BUSINESS = new SmallBusiness();
+
+        /**
          * Returns the wire-format string value for this issuer.
          *
          * @return {@code "ent:wa"} for {@link Enterprise},
@@ -434,10 +444,19 @@ public final class BusinessVerifiedNameCertificate {
          *
          * <p>The wire value is {@code "ent:wa"}.
          */
-        record Enterprise() implements CertificateIssuer {
+        final class Enterprise implements CertificateIssuer {
+            private Enterprise() {
+
+            }
+
             @Override
             public String value() {
                 return "ent:wa";
+            }
+
+            @Override
+            public String toString() {
+                return value();
             }
         }
 
@@ -447,10 +466,19 @@ public final class BusinessVerifiedNameCertificate {
          *
          * <p>The wire value is {@code "smb:wa"}.
          */
-        record SmallBusiness() implements CertificateIssuer {
+        final class SmallBusiness implements CertificateIssuer {
+            private SmallBusiness() {
+
+            }
+
             @Override
             public String value() {
                 return "smb:wa";
+            }
+
+            @Override
+            public String toString() {
+                return value();
             }
         }
     }

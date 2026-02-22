@@ -43,11 +43,11 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
         switch (mutation.operation()) {
             case SET -> {
                 chat.get().setMarkedAsUnread(action.read());
-                chat.get().setUnreadMessagesCount(0);
+                chat.get().setUnreadCount(0);
             }
             case REMOVE -> {
                 chat.get().setMarkedAsUnread(true);
-                chat.get().setUnreadMessagesCount(-1);
+                chat.get().setUnreadCount(-1);
             }
         }
 

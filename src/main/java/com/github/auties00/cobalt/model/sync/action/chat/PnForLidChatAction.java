@@ -8,7 +8,34 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "SyncActionValue.PnForLidChatAction")
-public final class PnForLidChatAction implements SyncAction {
+public final class PnForLidChatAction implements SyncAction<PnForLidChatActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "pnForLidChat";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 8;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     Jid pnJid;
 
@@ -25,4 +52,6 @@ public final class PnForLidChatAction implements SyncAction {
         this.pnJid = pnJid;
         return this;
     }
+
+
 }

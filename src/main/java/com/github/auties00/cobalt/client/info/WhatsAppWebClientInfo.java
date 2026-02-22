@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.client.info;
 
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent.AppVersion;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 
 import java.io.IOException;
 import java.net.URI;
@@ -16,9 +16,9 @@ final class WhatsAppWebClientInfo implements WhatsAppClientInfo {
     private static final URI WEB_UPDATE_URL = URI.create("https://web.whatsapp.com");
     private static final char[] WEB_UPDATE_PATTERN = "\"client_revision\":".toCharArray();
 
-    private final Version version;
+    private final ClientAppVersion version;
 
-    private WhatsAppWebClientInfo(Version version) {
+    private WhatsAppWebClientInfo(ClientAppVersion version) {
         this.version = version;
     }
 
@@ -63,7 +63,7 @@ final class WhatsAppWebClientInfo implements WhatsAppClientInfo {
                                 clientVersion *= 10;
                                 clientVersion += value - '0';
                             }
-                            var version = new Version(2, 3000, clientVersion);
+                            var version = new ClientAppVersion(2, 3000, clientVersion);
                             return new WhatsAppWebClientInfo(version);
                         }
                     } else {
@@ -81,7 +81,7 @@ final class WhatsAppWebClientInfo implements WhatsAppClientInfo {
     }
 
     @Override
-    public Version version() {
+    public ClientAppVersion version() {
         return version;
     }
 }

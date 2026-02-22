@@ -1,10 +1,15 @@
 package com.github.auties00.cobalt.model.message.media;
 
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveHeader;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.interactive.TemplateMessage;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -41,7 +46,7 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     @ProtobufProperty(index = 10, type = ProtobufType.STRING)
     String directPath;
 
-    @ProtobufProperty(index = 11, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 11, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 12, type = ProtobufType.BOOL)

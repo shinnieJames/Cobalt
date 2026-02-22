@@ -8,7 +8,34 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 @ProtobufMessage(name = "SyncActionValue.MarketingMessageAction")
-public final class MarketingMessageAction implements SyncAction {
+public final class MarketingMessageAction implements SyncAction<MarketingMessageActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "marketingMessage";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String name;
 
@@ -118,4 +145,6 @@ public final class MarketingMessageAction implements SyncAction {
             return this.index;
         }
     }
+
+
 }

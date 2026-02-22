@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.model.message.payment;
 import com.github.auties00.cobalt.model.message.Message;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -12,7 +14,7 @@ public final class PaymentInviteMessage implements Message {
     @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
     ServiceType serviceType;
 
-    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant expiryTimestamp;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BOOL)

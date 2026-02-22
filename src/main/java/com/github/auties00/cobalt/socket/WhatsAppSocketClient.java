@@ -1,12 +1,13 @@
 package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
+import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
+import com.github.auties00.cobalt.model.device.*;
 import com.github.auties00.cobalt.model.device.pairing.*;
-import com.github.auties00.cobalt.model.device.identity.*;
-import com.github.auties00.cobalt.model.sync.HistorySyncConfigBuilder;
+import com.github.auties00.cobalt.model.device.pairing.ClientPayload.DevicePairingRegistrationData;
+import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.binary.NodeDecoder;
 import com.github.auties00.cobalt.node.binary.NodeEncoder;
@@ -45,7 +46,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-// TODO: Better exceptions
 public final class WhatsAppSocketClient {
     private static final String HOST_NAME = "g.whatsapp.net";
     private static final int PORT = 443;
@@ -128,7 +128,7 @@ public final class WhatsAppSocketClient {
         var prologue = getHandshakePrologue();
         handshakeEphemeralKeyPair = ephemeralKeyPair;
         handshakePrologue = prologue;
-        var clientHello = new ClientHelloBuilder()
+        var clientHello = new HandshakeMessageClientHelloBuilder()
                 .ephemeral(ephemeralKeyPair.publicKey().toEncodedPoint())
                 .build();
         var handshakeMessage = new HandshakeMessageBuilder()
@@ -173,7 +173,7 @@ public final class WhatsAppSocketClient {
     // the GCM counter to go out of sync for the server
     public synchronized void sendNode(Node node) throws IOException {
         if(state.get() != State.CONNECTED) {
-            throw new IOException("Socket is not connected");
+            throw new IllegalStateException("Socket is not connected");
         }
 
         try {
@@ -264,23 +264,33 @@ public final class WhatsAppSocketClient {
             throw new IllegalStateException("Handshake has not started");
         }
 
-        var serverHandshake = HandshakeMessageSpec.decode(ProtobufInputStream.fromBuffer(serverHelloPayload));
-        var serverHello = serverHandshake.serverHello();
         try(var handshake = new WhatsAppSocketHandshake(handshakePrologue)) {
+            var serverHandshake = HandshakeMessageSpec.decode(ProtobufInputStream.fromBuffer(serverHelloPayload));
+            var serverHello = serverHandshake.serverHello()
+                    .orElseThrow(() -> new IllegalArgumentException("Missing server hello"));
             handshake.updateHash(handshakeEphemeralKeyPair.publicKey().toEncodedPoint());
-            handshake.updateHash(serverHello.ephemeral());
-            var sharedEphemeral = Curve25519.sharedKey(handshakeEphemeralKeyPair.privateKey().toEncodedPoint(), serverHello.ephemeral());
+            var ephemeral = serverHello.ephemeral()
+                    .orElseThrow(() -> new IllegalArgumentException("Missing server ephemeral publicKey"));
+            handshake.updateHash(ephemeral);
+            var sharedEphemeral = Curve25519.sharedKey(handshakeEphemeralKeyPair.privateKey().toEncodedPoint(), ephemeral);
             handshake.mixIntoKey(sharedEphemeral);
-            var decodedStaticText = handshake.cipher(serverHello.staticText(), false);
+            var staticText = serverHello._static()
+                    .orElseThrow(() -> new IllegalArgumentException("Missing server static text"));
+            var decodedStaticText = handshake.cipher(staticText, false);
             var sharedStatic = Curve25519.sharedKey(handshakeEphemeralKeyPair.privateKey().toEncodedPoint(), decodedStaticText);
             handshake.mixIntoKey(sharedStatic);
-            handshake.cipher(serverHello.payload(), false);
+            var payload = serverHello.payload()
+                    .orElseThrow(() -> new IllegalArgumentException("Missing server payload"));
+            handshake.cipher(payload, false);
             var noiseKeyPair = store.noiseKeyPair();
             var encodedKey = handshake.cipher(noiseKeyPair.publicKey().toEncodedPoint(), true);
-            var sharedPrivate = Curve25519.sharedKey(noiseKeyPair.privateKey().toEncodedPoint(), serverHello.ephemeral());
+            var sharedPrivate = Curve25519.sharedKey(noiseKeyPair.privateKey().toEncodedPoint(), ephemeral);
             handshake.mixIntoKey(sharedPrivate);
             var encodedPayload = handshake.cipher(getHandshakePayload(), true);
-            var clientFinish = new ClientFinish(encodedKey, encodedPayload);
+            var clientFinish = new HandshakeMessageClientFinishBuilder()
+                    ._static(encodedKey)
+                    .payload(encodedPayload)
+                    .build();
             var clientHandshake = new HandshakeMessageBuilder()
                     .clientFinish(clientFinish)
                     .build();
@@ -301,8 +311,8 @@ public final class WhatsAppSocketClient {
 
             state.compareAndSet(State.HANDSHAKE_FINISH, State.CONNECTED);
             handshakeFuture.complete(null);
-        }catch (GeneralSecurityException exception) {
-            handshakeFuture.completeExceptionally(new IOException("Noise handshake crypto failure", exception));
+        }catch (Throwable exception) {
+            handshakeFuture.completeExceptionally(new IOException("Noise handshake failure", exception));
             disconnect(false);
         }finally {
             handshakeEphemeralKeyPair = null;
@@ -327,8 +337,8 @@ public final class WhatsAppSocketClient {
         var jid = store.jid();
         if (jid.isPresent()) {
             return new ClientPayloadBuilder()
-                    .connectReason(ClientPayload.ClientPayloadConnectReason.USER_ACTIVATED)
-                    .connectType(ClientPayload.ClientPayloadConnectType.WIFI_UNKNOWN)
+                    .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
+                    .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
                     .userAgent(agent)
                     .username(Long.parseLong(jid.get().user()))
                     .passive(true)
@@ -337,10 +347,10 @@ public final class WhatsAppSocketClient {
                     .build();
         } else {
             return new ClientPayloadBuilder()
-                    .connectReason(ClientPayload.ClientPayloadConnectReason.USER_ACTIVATED)
-                    .connectType(ClientPayload.ClientPayloadConnectType.WIFI_UNKNOWN)
+                    .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
+                    .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
                     .userAgent(agent)
-                    .regData(createRegisterData())
+                    .devicePairingData(createRegisterData())
                     .passive(false)
                     .pull(false)
                     .build();
@@ -357,8 +367,8 @@ public final class WhatsAppSocketClient {
                 .pushName(store.registered() ? store.name() : null)
                 .userAgent(agent)
                 .shortConnect(true)
-                .connectType(ClientPayload.ClientPayloadConnectType.WIFI_UNKNOWN)
-                .connectReason(ClientPayload.ClientPayloadConnectReason.USER_ACTIVATED)
+                .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
+                .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
                 .connectAttemptCount(0)
                 .device(0)
                 .oc(false)
@@ -367,12 +377,12 @@ public final class WhatsAppSocketClient {
 
     private UserAgent getUserAgent() {
         var mobile = store.clientType() == WhatsAppClientType.MOBILE;
-        return new UserAgentBuilder()
+        return new ClientPayloadUserAgentBuilder()
                 .platform(store.device().platform())
                 .appVersion(store.clientVersion())
                 .mcc("000")
                 .mnc("000")
-                .osVersion(mobile ? store.device().osVersion().toString() : null)
+                .osVersion(mobile ? store.device().osDeviceAppVersion().toString() : null)
                 .manufacturer(mobile ? store.device().manufacturer() : null)
                 .device(mobile ? store.device().model().replaceAll("_", " ") : null)
                 .osBuildNumber(mobile ? store.device().osBuildNumber() : null)
@@ -380,13 +390,13 @@ public final class WhatsAppSocketClient {
                 .releaseChannel(store.releaseChannel())
                 .localeLanguageIso6391("en")
                 .localeCountryIso31661Alpha2("US")
-                .deviceType(UserAgent.DeviceType.PHONE)
+                .deviceType(ClientPayload.ClientType.PHONE)
                 .deviceModelType(store.device().modelId())
                 .build();
     }
 
-    private CompanionRegistrationData createRegisterData() {
-        var companion = new CompanionRegistrationDataBuilder()
+    private DevicePairingRegistrationData createRegisterData() {
+        var companion = new ClientPayloadDevicePairingRegistrationDataBuilder()
                 .buildHash(store.clientVersion().toHash())
                 .eRegid(SecureBytes.intToBytes(store.registrationId(), 4))
                 .eKeytype(SecureBytes.intToBytes(SignalIdentityPublicKey.type(), 1))
@@ -396,19 +406,19 @@ public final class WhatsAppSocketClient {
                 .eSkeySig(store.signedKeyPair().signature());
         if (store.clientType() == WhatsAppClientType.WEB) {
             var props = createCompanionProps();
-            var encodedProps = props == null ? null : CompanionPropertiesSpec.encode(props);
-            companion.companionProps(encodedProps);
+            var encodedProps = props == null ? null : DevicePropsSpec.encode(props);
+            companion.deviceProps(encodedProps);
         }
 
         return companion.build();
     }
 
-    private CompanionProperties createCompanionProps() {
+    private DeviceProps createCompanionProps() {
         return switch (store.clientType()) {
             case WEB -> {
                 var historyLength = store.webHistoryPolicy()
                         .orElse(WhatsAppWebClientHistory.standard(true));
-                var config = new HistorySyncConfigBuilder()
+                var config = new DevicePropsHistorySyncConfigBuilder()
                         .inlineInitialPayloadInE2EeMsg(true)
                         .supportBotUserAgentChatHistory(true)
                         .supportCallLogHistory(true)
@@ -416,12 +426,13 @@ public final class WhatsAppSocketClient {
                         .fullSyncSizeMbLimit(historyLength.size())
                         .build();
                 var platformType = switch (store.device().platform()) {
-                    case IOS, IOS_BUSINESS -> CompanionProperties.PlatformType.IOS_PHONE;
-                    case ANDROID, ANDROID_BUSINESS -> CompanionProperties.PlatformType.ANDROID_PHONE;
-                    case WINDOWS -> CompanionProperties.PlatformType.UWP;
-                    case MACOS -> CompanionProperties.PlatformType.IOS_CATALYST;
+                    case IOS, IOS_BUSINESS -> DevicePlatformType.IOS_PHONE;
+                    case ANDROID, ANDROID_BUSINESS -> DevicePlatformType.ANDROID_PHONE;
+                    case WINDOWS -> DevicePlatformType.UWP;
+                    case MACOS -> DevicePlatformType.IOS_CATALYST;
+                    default -> throw new IllegalStateException("Unexpected value: " + store.device().platform());
                 };
-                yield new CompanionPropertiesBuilder()
+                yield new DevicePropsBuilder()
                         .os(store.name())
                         .platformType(platformType)
                         .requireFullSync(historyLength.isExtended())

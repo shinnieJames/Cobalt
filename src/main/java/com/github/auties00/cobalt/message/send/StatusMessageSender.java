@@ -45,7 +45,7 @@ import java.util.Objects;
  * new devices, and optional status_setting meta attribute.
  */
 final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("StatusMessageSender");
+    private static final System.Logger LOGGER = System.getLogger(StatusMessageSender.class.getName());
 
     private final MessageEncryption encryption;
     private final DeviceService deviceService;

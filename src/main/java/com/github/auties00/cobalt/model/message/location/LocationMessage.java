@@ -2,9 +2,13 @@ package com.github.auties00.cobalt.model.message.location;
 
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveHeader;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.interactive.TemplateMessage;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;

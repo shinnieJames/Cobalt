@@ -1,42 +1,27 @@
 package com.github.auties00.cobalt.model.sync;
 
-import com.alibaba.fastjson2.JSONArray;
-import com.github.auties00.cobalt.model.sync.data.SyncdMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
-import java.util.Collections;
+import java.util.Objects;
 
 /**
  * Represents a pending mutation that hasn't been synced to the server yet.
  *
  * <p>Pending mutations are queued locally and sent to the server during the next sync cycle.
- *
- * @param mutation     the mutation to be synced
- * @param attemptCount the number of sync attempts made for this mutation
  */
-public record SyncPendingMutation(
-        DecryptedMutation.Trusted mutation,
-        int attemptCount
-) {
+public final class SyncPendingMutation {
+    private final DecryptedMutation.Trusted mutation;
+    private final int attemptCount;
+
     /**
-     * Creates a new pending mutation with attempt count 0.
+     * Creates a new pending mutation
      *
-     * @param sync      the patch to be synced
-     * @param operation the operation to be performed on the patch
-     * @param args      the arguments to be passed to the operation
+     * @param mutation     the mutation to be synced
+     * @param attemptCount the number of sync attempts made for this mutation
      */
-    public SyncPendingMutation(SyncActionValue sync, SyncdMutation.SyncdOperation operation, String... args) {
-        var array = new JSONArray(1 + args.length);
-        if (sync.action().isPresent()) {
-            array.add(sync.action().get().indexName());
-        } else if (sync.setting().isPresent()) {
-            array.add(sync.setting().get().indexName());
-        } else {
-            throw new IllegalArgumentException("Invalid sync: expected an action or setting");
-        }
-        Collections.addAll(array, args);
-        var mutation = new DecryptedMutation.Trusted(array.toJSONString(), sync, operation, System.currentTimeMillis());
-        this(mutation, 0);
+    public SyncPendingMutation(DecryptedMutation.Trusted mutation, int attemptCount) {
+        this.mutation = mutation;
+        this.attemptCount = attemptCount;
     }
 
     /**
@@ -46,5 +31,32 @@ public record SyncPendingMutation(
      */
     public SyncPendingMutation incrementAttempt() {
         return new SyncPendingMutation(mutation, attemptCount + 1);
+    }
+
+    public DecryptedMutation.Trusted mutation() {
+        return mutation;
+    }
+
+    public int attemptCount() {
+        return attemptCount;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o == this || o instanceof SyncPendingMutation that
+                            && attemptCount == that.attemptCount
+                            && Objects.equals(mutation, that.mutation);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mutation, attemptCount);
+    }
+
+    @Override
+    public String toString() {
+        return "SyncPendingMutation[" +
+               "mutation=" + mutation + ", " +
+               "attemptCount=" + attemptCount + ']';
     }
 }

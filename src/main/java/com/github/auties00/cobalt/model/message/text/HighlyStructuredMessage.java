@@ -2,6 +2,9 @@ package com.github.auties00.cobalt.model.message.text;
 
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.interactive.TemplateMessage;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -381,7 +384,7 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
 
             @ProtobufMessage(name = "Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch")
             public static final class HSMDateTimeUnixEpoch implements DatetimeOneof {
-                @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+                @ProtobufProperty(index = 1, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
                 Instant timestamp;
 
 

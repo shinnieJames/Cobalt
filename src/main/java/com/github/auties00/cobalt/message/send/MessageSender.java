@@ -2,24 +2,35 @@ package com.github.auties00.cobalt.message.send;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.icdc.IcdcResult;
-import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
-import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
+import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
+import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.icdc.IcdcEnricher;
-import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentitySpec;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.button.InteractiveMessage;
-import com.github.auties00.cobalt.model.message.button.InteractiveResponseMessage;
-import com.github.auties00.cobalt.model.message.system.KeepInChatMessage;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageInfo;
+import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
+import com.github.auties00.cobalt.model.message.event.EventMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveResponseMessage;
+import com.github.auties00.cobalt.model.message.newsletter.NewsletterAdminInviteMessage;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
+import com.github.auties00.cobalt.model.message.poll.PollResultSnapshotMessage;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
+import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
+import com.github.auties00.cobalt.model.message.security.SecretEncryptedMessage;
 import com.github.auties00.cobalt.model.message.system.DeviceSentMessageBuilder;
+import com.github.auties00.cobalt.model.message.system.KeepInChatMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
+import com.github.auties00.cobalt.model.message.system.RequestPhoneNumberMessage;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
+import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -39,7 +50,7 @@ import java.util.Objects;
  * WAWebBackendJobsCommon: ciphertext version and media type extraction.
  */
 abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSender, GroupMessageSender, StatusMessageSender, NewsletterMessageSender, PeerMessageSender {
-    private static final System.Logger LOGGER = System.getLogger("MessageSender");
+    private static final System.Logger LOGGER = System.getLogger(MessageSender.class.getName());
 
     final WhatsAppClient client;
     final WhatsAppStore store;
@@ -78,7 +89,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * {@code getSignalProtocolStore().flushBufferToDiskIfNotMemOnlyMode()}
      * before the stanza is sent on the wire.
      */
-    void flushStore() {
+    void flushStore() throws IOException {
         store.save();
     }
 
@@ -152,7 +163,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
                     // message was sent to
                     var deviceSentMessage = new DeviceSentMessageBuilder()
                             .destinationJid(destinationJid)
-                            .message(companionContainer)
+                            .messageContainer(companionContainer)
                             .build();
                     var wrapped = MessageContainer.of(deviceSentMessage);
                     devicePlaintext = MessageContainerSpec.encode(wrapped);
@@ -190,14 +201,14 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
         return switch (message) {
             // WAWebE2EProtoUtils: reactionMessage, encReactionMessage → "reaction"
             case ReactionMessage _ -> "reaction";
-            case EncryptedReactionMessage _ -> "reaction";
+            case EncReactionMessage _ -> "reaction";
 
             // WAWebE2EProtoUtils: eventMessage, encEventResponseMessage,
             // secretEncryptedMessage(EVENT_EDIT) → "event"
             case EventMessage _ -> "event";
-            case EncryptedEventResponseMessage _ -> "event";
+            case EncEventResponseMessage _ -> "event";
             case SecretEncryptedMessage s
-                    when s.secretEncType() == SecretEncryptedMessage.SecretEncType.EVENT_EDIT -> "event";
+                    when s.secretEncType().orElse(null) == SecretEncryptedMessage.SecretEncType.EVENT_EDIT -> "event";
 
             // WAWebE2EProtoUtils: pollCreation*, pollUpdate, pollResultSnapshot → "poll"
             case PollCreationMessage _ -> "poll";
@@ -205,12 +216,12 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             case PollResultSnapshotMessage _ -> "poll";
 
             // WAWebE2EProtoUtils: extendedTextMessage with non-empty matchedText → "media"
-            case TextMessage text when text.matchedText().isPresent() -> "media";
+            case ExtendedTextMessage text when text.matchedText().isPresent() -> "media";
 
             // WAWebE2EProtoUtils: conversation, extendedText, protocolMessage,
             // interactiveMessage, keepInChat, pinInChat, newsletterAdminInvite,
             // requestPhoneNumber, editedMessage → "text"
-            case TextMessage _ -> "text";
+            case ExtendedTextMessage _ -> "text";
             case ProtocolMessage _ -> "text";
             case InteractiveMessage _ -> "text";
             case InteractiveResponseMessage _ -> "text";

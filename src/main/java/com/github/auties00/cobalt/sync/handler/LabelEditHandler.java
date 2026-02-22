@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.sync.handler;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.RecordSync;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -33,7 +34,7 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         var indexArray = JSON.parseArray(mutation.index());
         var labelId = indexArray.getInteger(1);
 
-        if (mutation.operation() == RecordSync.Operation.SET) {
+        if (mutation.operation() == SyncdOperation.SET) {
             if(action.deleted()) {
                 client.store()
                         .removeLabel(labelId);

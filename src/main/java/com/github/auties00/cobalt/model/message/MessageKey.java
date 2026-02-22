@@ -9,7 +9,7 @@ import java.util.Optional;
 @ProtobufMessage(name = "MessageKey")
 public final class MessageKey {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    Jid remoteJid;
+    Jid chatJid;
 
     @ProtobufProperty(index = 2, type = ProtobufType.BOOL)
     Boolean fromMe;
@@ -18,18 +18,18 @@ public final class MessageKey {
     String id;
 
     @ProtobufProperty(index = 4, type = ProtobufType.STRING)
-    String participant;
+    Jid senderJid;
 
 
-    MessageKey(Jid remoteJid, Boolean fromMe, String id, String participant) {
-        this.remoteJid = remoteJid;
+    MessageKey(Jid chatJid, Boolean fromMe, String id, Jid senderJid) {
+        this.chatJid = chatJid;
         this.fromMe = fromMe;
         this.id = id;
-        this.participant = participant;
+        this.senderJid = senderJid;
     }
 
-    public Optional<Jid> remoteJid() {
-        return Optional.ofNullable(remoteJid);
+    public Optional<Jid> chatJid() {
+        return Optional.ofNullable(chatJid);
     }
 
     public boolean fromMe() {
@@ -40,12 +40,16 @@ public final class MessageKey {
         return Optional.ofNullable(id);
     }
 
-    public Optional<String> participant() {
-        return Optional.ofNullable(participant);
+    public Optional<Jid> senderJid() {
+        if(senderJid != null) {
+            return Optional.of(senderJid);
+        } else {
+            return Optional.ofNullable(chatJid);
+        }
     }
 
-    public MessageKey setRemoteJid(Jid remoteJid) {
-        this.remoteJid = remoteJid;
+    public MessageKey setChatJid(Jid chatJid) {
+        this.chatJid = chatJid;
         return this;
     }
 
@@ -59,8 +63,8 @@ public final class MessageKey {
         return this;
     }
 
-    public MessageKey setParticipant(String participant) {
-        this.participant = participant;
+    public MessageKey setSenderJid(Jid senderJid) {
+        this.senderJid = senderJid;
         return this;
     }
 }

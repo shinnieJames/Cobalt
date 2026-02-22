@@ -26,7 +26,7 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var action = mutation.value()
-                .favoriteStickerAction()
+                .stickerAction()
                 .orElseThrow(() -> new IllegalArgumentException("Missing favoriteStickerAction"));
         var indexArray = JSON.parseArray(mutation.index());
         var stickerHash = indexArray.getString(1);

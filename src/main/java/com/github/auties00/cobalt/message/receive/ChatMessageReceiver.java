@@ -9,11 +9,10 @@ import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveBotInfo;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveEncryptedPayload;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanzaParser;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentitySpec;
-import com.github.auties00.cobalt.model.button.template.highlyStructured.HighlyStructuredMessage;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
-import com.github.auties00.cobalt.model.device.DeviceListMetadata;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -59,7 +58,7 @@ import java.util.Objects;
  * WAWebHandleMsgProcess.processDecryptedMessageProto: phase 2.
  */
 final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("ChatMessageReceiver");
+    private static final System.Logger LOGGER = System.getLogger(ChatMessageReceiver.class.getName());
 
     /**
      * The decryption service for Signal protocol (PKMSG/MSG/SKMSG) and
@@ -305,7 +304,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
         }
 
         try {
-            var signedIdentity = SignedDeviceIdentitySpec.decode(deviceIdentityBytes);
+            var signedIdentity = ADVSignedDeviceIdentitySpec.decode(deviceIdentityBytes);
+
             var primaryJid = stanza.senderJid().toUserJid();
             var storedKey = store.findIdentityByAddress(
                     primaryJid.toSignalAddress());
@@ -535,8 +535,10 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
             return;
         }
 
-        var skdmGroupJid = skdm.groupJid();
-        var distributionData = skdm.data();
+        var skdmGroupJid = skdm.groupJid()
+                .orElse(null);
+        var distributionData = skdm.axolotlSenderKeyDistributionMessage()
+                .orElse(null);
         if (distributionData == null || distributionData.length == 0) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Sender key distribution missing data for {0}",
@@ -646,7 +648,7 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
         var builder = new ChatMessageInfoBuilder()
                 .key(key)
                 .message(container)
-                .timestampSeconds(stanza.timestamp().getEpochSecond())
+                .timestamp(stanza.timestamp())
                 .status(MessageStatus.DELIVERED)
                 .senderJid(senderJid)
                 .broadcast(stanza.chatJid().hasBroadcastServer())
@@ -654,8 +656,8 @@ final class ChatMessageReceiver extends MessageReceiver<ChatMessageInfo> {
                 .urlText(stanza.urlText())
                 .urlNumber(stanza.urlNumber());
 
-        container.deviceInfo()
-                .flatMap(DeviceContextInfo::messageSecret)
+        container.messageContextInfo()
+                .flatMap(ChatMessageContextInfo::messageSecret)
                 .ifPresent(builder::messageSecret);
 
         return builder.build();

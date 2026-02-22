@@ -2,6 +2,9 @@ package com.github.auties00.cobalt.model.message.media;
 
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -47,7 +50,7 @@ public final class StickerPackMessage implements ContextualMessage {
     @ProtobufProperty(index = 12, type = ProtobufType.STRING)
     String packDescription;
 
-    @ProtobufProperty(index = 13, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 13, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 14, type = ProtobufType.STRING)

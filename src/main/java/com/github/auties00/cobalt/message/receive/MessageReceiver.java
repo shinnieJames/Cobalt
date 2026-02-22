@@ -1,10 +1,10 @@
 package com.github.auties00.cobalt.message.receive;
 
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
@@ -26,7 +26,7 @@ import java.util.Objects;
 abstract sealed class MessageReceiver<T extends MessageInfo>
         permits ChatMessageReceiver, NewsletterMessageReceiver {
 
-    private static final System.Logger LOGGER = System.getLogger("MessageReceiver");
+    private static final System.Logger LOGGER = System.getLogger(MessageReceiver.class.getName());
 
     /**
      * The central session data repository.

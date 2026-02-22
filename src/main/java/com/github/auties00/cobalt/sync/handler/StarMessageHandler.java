@@ -3,9 +3,9 @@ package com.github.auties00.cobalt.sync.handler;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.MessageInfo;
+import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -46,18 +46,17 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
         }
 
         switch (mutation.operation()) {
-            case SET -> startMessage(message.get(), action.starred());
-            case REMOVE -> startMessage(message.get(), false);
+            case SET -> starMessage(message.get(), action.starred());
+            case REMOVE -> starMessage(message.get(), false);
         }
 
         return true;
     }
 
-    private static void startMessage(MessageInfo message, boolean action) {
+    private static void starMessage(MessageInfo message, boolean action) {
         switch (message) {
             case ChatMessageInfo chatMessageInfo -> chatMessageInfo.setStarred(action);
             case NewsletterMessageInfo newsletterMessageInfo -> newsletterMessageInfo.setStarred(action);
-            case QuotedMessageInfo _ -> throw new InternalError();
         };
     }
 }

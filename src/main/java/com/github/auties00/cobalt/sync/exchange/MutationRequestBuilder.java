@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.sync.exchange;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
 import com.github.auties00.cobalt.sync.crypto.EncryptedMutation;
 import com.github.auties00.cobalt.sync.crypto.MutationKeys;
 import com.github.auties00.cobalt.node.Node;
@@ -84,21 +86,19 @@ public final class MutationRequestBuilder {
         }
 
         var latestKey = keys.getLast();
-        var latestKeyId = latestKey.keyId();
-        if (latestKeyId == null || latestKeyId.value() == null) {
-            throw new IllegalStateException("Latest app state sync key has no ID");
-        }
+        var latestKeyId = latestKey.keyId()
+                .flatMap(AppStateSyncKeyId::keyId)
+                .orElseThrow(() -> new IllegalArgumentException("No app state sync key found"));
 
-        var latestKeyData = latestKey.keyData();
-        if (latestKeyData == null || latestKeyData.keyData() == null) {
-            throw new IllegalStateException("Latest app state sync key has no data");
-        }
+        var latestKeyData = latestKey.keyData()
+                .flatMap(AppStateSyncKeyData::keyData)
+                .orElseThrow(() -> new IllegalStateException("Latest app state sync key data has no ID"));
 
-        try (var derivedKeys = MutationKeys.ofSyncKey(latestKeyData.keyData())) {
+        try (var derivedKeys = MutationKeys.ofSyncKey(latestKeyData)) {
             var mutationNodes = new ArrayList<Node>(patches.size());
 
             for (var patch : patches) {
-                var encrypted = EncryptedMutation.of(patch, derivedKeys, latestKeyId.value());
+                var encrypted = EncryptedMutation.of(patch, derivedKeys, latestKeyId);
 
                 var index = new NodeBuilder()
                         .description("index")

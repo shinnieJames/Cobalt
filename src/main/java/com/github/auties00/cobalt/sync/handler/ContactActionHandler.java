@@ -42,7 +42,7 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
             case SET -> {
                 action.fullName().ifPresent(contact::setFullName);
                 action.firstName().ifPresent(contact::setShortName);
-                action.lid().ifPresent(lid -> {
+                action.lidJid().ifPresent(lid -> {
                     contact.setLid(lid);
                     client.store().registerLidMapping(contactJid, lid);
                 });

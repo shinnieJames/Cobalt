@@ -10,7 +10,34 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 @ProtobufMessage(name = "SyncActionValue.QuickReplyAction")
-public final class QuickReplyAction implements SyncAction {
+public final class QuickReplyAction implements SyncAction<QuickReplyActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "quick_reply";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 2;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String shortcut;
 
@@ -79,4 +106,6 @@ public final class QuickReplyAction implements SyncAction {
         this.deleted = deleted;
         return this;
     }
+
+
 }

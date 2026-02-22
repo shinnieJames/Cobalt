@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.client.info;
 
 import com.alibaba.fastjson2.JSON;
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent.AppVersion;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 
 import java.io.IOException;
 import java.net.URI;
@@ -25,10 +25,10 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     private static final String MOBILE_IOS_STATIC = "0a1mLfGUIBVrMKF1RdvLI5lkRBvof6vn0fD2QRSM";
     private static final String MOBILE_BUSINESS_IOS_STATIC = "USUDuDYDeQhY4RF2fCSp5m3F6kJ1M2J8wS7bbNA2";
 
-    private final Version version;
+    private final ClientAppVersion version;
     private final boolean business;
 
-    private WhatsAppIosClientInfo(Version version, boolean business) {
+    private WhatsAppIosClientInfo(ClientAppVersion version, boolean business) {
         this.version = version;
         this.business = business;
     }
@@ -85,7 +85,7 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
                 version = "2." + version;
             }
 
-            var parsedVersion = Version.of(version);
+            var parsedVersion = ClientAppVersion.of(version);
             return new WhatsAppIosClientInfo(parsedVersion, business);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Cannot query iOS version", e);
@@ -93,7 +93,7 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     @Override
-    public Version version() {
+    public ClientAppVersion version() {
         return version;
     }
 

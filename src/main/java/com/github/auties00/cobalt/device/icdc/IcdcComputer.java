@@ -32,7 +32,7 @@ import java.util.Optional;
  * computeIdentityHash.
  */
 public final class IcdcComputer {
-    private static final System.Logger LOGGER = System.getLogger("IcdcComputer");
+    private static final System.Logger LOGGER = System.getLogger(IcdcComputer.class.getName());
 
     /**
      * Minimum hash length in bytes.

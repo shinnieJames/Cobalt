@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  * addressing to LID-based addressing for improved privacy.
  */
 public final class LidMigrationService {
-    private static final System.Logger LOGGER = System.getLogger("LidMigrationService");
+    private static final System.Logger LOGGER = System.getLogger(LidMigrationService.class.getName());
 
     /**
      * Timeout for waiting for primary mappings (24 hours in milliseconds).

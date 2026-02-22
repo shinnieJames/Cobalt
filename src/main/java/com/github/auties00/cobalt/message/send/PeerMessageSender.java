@@ -37,7 +37,7 @@ import java.util.Objects;
  * single-device stanza for peer messages.
  */
 final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
-    private static final System.Logger LOGGER = System.getLogger("PeerMessageSender");
+    private static final System.Logger LOGGER = System.getLogger(PeerMessageSender.class.getName());
 
     private final MessageEncryption encryption;
     private final DeviceService deviceService;

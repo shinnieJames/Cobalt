@@ -1,10 +1,12 @@
 package com.github.auties00.cobalt.sync.crypto;
 
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
-import com.github.auties00.cobalt.sync.exchange.MutationSyncResponse;
-import com.github.auties00.cobalt.model.sync.PatchSync;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
+import com.github.auties00.cobalt.model.signal.KeyId;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.data.SyncdPatch;
 import com.github.auties00.cobalt.store.WhatsAppStore;
+import com.github.auties00.cobalt.sync.exchange.MutationSyncResponse;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -34,57 +36,63 @@ public final class MutationIntegrityVerifier {
 
     private void verifySnapshotMac(MutationSyncResponse response, byte[] expectedHash) {
         var snapshot = response.snapshot();
-        if (snapshot == null || snapshot.mac() == null) {
-            return;  // No MAC to verify
+        if(snapshot.isEmpty()) {
+            return;
         }
 
-        var keyId = snapshot.keyId();
-        if (keyId == null || keyId.id() == null) {
-            throw new InternalError("Snapshot missing key ID");
+        var mac = snapshot.get().mac();
+        if(mac.isEmpty()) {
+            return;
         }
 
-        // Get sync key
-        var syncKey = store.findWebAppStateKeyById(keyId.id())
-                .orElseThrow(() -> new InternalError("Unknown sync key for snapshot"));
-
-        var keyData = syncKey.keyData();
-        if (keyData == null || keyData.keyData() == null) {
-            throw new InternalError("Sync key has no data");
+        var keyId = snapshot.get()
+                .keyId()
+                .flatMap(KeyId::id);
+        if(keyId.isEmpty()) {
+            throw new IllegalArgumentException("Snapshot missing key id");
         }
 
-        // Derive keys to get snapshot MAC key
-        try (var keys = MutationKeys.ofSyncKey(keyData.keyData())) {
+        var keyData = store.findWebAppStateKeyById(keyId.get())
+                .orElseThrow(() -> new InternalError("Unknown sync key for patch"))
+                .keyData()
+                .flatMap(AppStateSyncKeyData::keyData)
+                .orElseThrow(() -> new IllegalArgumentException("Sync key had no key data"));
+
+        try (var keys = MutationKeys.ofSyncKey(keyData)) {
             var expectedMac = computeMac(response.collectionName(), response.version(), expectedHash, keys.snapshotMacKey());
-            if (!MessageDigest.isEqual(snapshot.mac(), expectedMac)) {
+            if (!MessageDigest.isEqual(mac.get(), expectedMac)) {
                 throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(response.collectionName(), response.version());
             }
         }
     }
 
-    private void verifyPatchMac(SyncPatchType type, PatchSync patch, byte[] expectedHash) {
-        if (patch.patchMac() == null) {
-            return;  // No MAC to verify
+    private void verifyPatchMac(SyncPatchType type, SyncdPatch patch, byte[] expectedHash) {
+        var patchMac = patch.patchMac();
+        if (patchMac.isEmpty()) {
+            return;
         }
 
-        var keyId = patch.keyId();
-        if (keyId == null || keyId.id() == null) {
-            throw new InternalError("Patch missing key ID");
+        var keyId = patch.keyId()
+                .flatMap(KeyId::id);
+        if (keyId.isEmpty()) {
+            throw new IllegalArgumentException("Patch missing key id");
         }
 
         // Get sync key
-        var syncKey = store.findWebAppStateKeyById(keyId.id())
-                .orElseThrow(() -> new InternalError("Unknown sync key for patch"));
-
-        var keyData = syncKey.keyData();
-        if (keyData == null || keyData.keyData() == null) {
-            throw new InternalError("Sync key has no data");
-        }
+        var keyData = store.findWebAppStateKeyById(keyId.get())
+                .orElseThrow(() -> new InternalError("Unknown sync key for patch"))
+                .keyData()
+                .flatMap(AppStateSyncKeyData::keyData)
+                .orElseThrow(() -> new IllegalArgumentException("Sync key had no key data"));
 
         // Derive keys to get patch MAC key
-        try (var keys = MutationKeys.ofSyncKey(keyData.keyData())) {
-            var expectedMac = computeMac(type, patch.encodedVersion(), expectedHash, keys.patchMacKey());
-            if (!MessageDigest.isEqual(patch.patchMac(), expectedMac)) {
-                throw new WhatsAppWebAppStateSyncException.PatchMacMismatch(type, patch.encodedVersion());
+        try (var keys = MutationKeys.ofSyncKey(keyData)) {
+            long patchVersion = patch.version()
+                    .map(version -> version.version().orElse(0L))
+                    .orElse(0L);
+            var expectedMac = computeMac(type, patchVersion, expectedHash, keys.patchMacKey());
+            if (!MessageDigest.isEqual(patchMac.get(), expectedMac)) {
+                throw new WhatsAppWebAppStateSyncException.PatchMacMismatch(type, patchVersion);
             }
         }
     }

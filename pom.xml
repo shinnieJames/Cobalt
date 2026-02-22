@@ -168,7 +168,7 @@
         <java.version>25</java.version>
         <maven.surefire.plugin.version>3.0.0-M9</maven.surefire.plugin.version>
         <maven.gpg.plugin.version>3.0.1</maven.gpg.plugin.version>
-        <maven.compiler.plugin.version>3.14.0</maven.compiler.plugin.version>
+        <maven.compiler.plugin.version>3.15.0</maven.compiler.plugin.version>
         <maven.source.plugin.version>3.2.1</maven.source.plugin.version>
         <maven.javadoc.plugin.version>3.5.0</maven.javadoc.plugin.version>
         <maven.staging.plugin.version>0.8.0</maven.staging.plugin.version>
@@ -200,19 +200,52 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.compiler.plugin.version}</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                    <release>${java.version}</release>
-                    <annotationProcessorPaths>
-                        <annotationProcessorPath>
-                            <groupId>com.github.auties00</groupId>
-                            <artifactId>protobuf-serialization-plugin</artifactId>
-                            <version>${protoc.version}</version>
-                        </annotationProcessorPath>
-                    </annotationProcessorPaths>
-                    <compilerArgs>--enable-preview</compilerArgs>
-                </configuration>
+                <executions>
+                    <execution>
+                        <id>wam-processor-compile</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <source>${java.version}</source>
+                            <target>${java.version}</target>
+                            <release>${java.version}</release>
+                            <includes>
+                                <include>**/wam/annotation/**</include>
+                                <include>**/wam/processor/**</include>
+                                <include>module-info.java</include>
+                            </includes>
+                            <proc>none</proc>
+                            <compilerArgs>
+                                <compilerArg>--enable-preview</compilerArg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <source>${java.version}</source>
+                            <target>${java.version}</target>
+                            <release>${java.version}</release>
+                            <annotationProcessorPaths>
+                                <annotationProcessorPath>
+                                    <groupId>com.github.auties00</groupId>
+                                    <artifactId>protobuf-serialization-plugin</artifactId>
+                                    <version>${protoc.version}</version>
+                                </annotationProcessorPath>
+                                <annotationProcessorPath>
+                                    <groupId>${project.groupId}</groupId>
+                                    <artifactId>${project.artifactId}</artifactId>
+                                    <version>${project.version}</version>
+                                </annotationProcessorPath>
+                            </annotationProcessorPaths>
+                            <compilerArgs>
+                                <compilerArg>--enable-preview</compilerArg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Test the library to be sure that everything works-->
@@ -232,6 +265,12 @@
     </build>
 
     <dependencies>
+        <dependency>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>${maven.compiler.plugin.version}</version>
+        </dependency>
+
         <!-- Generate and print QR code (Web API) -->
         <dependency>
             <groupId>com.google.zxing</groupId>

@@ -1,14 +1,14 @@
 package com.github.auties00.cobalt.sync.key;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.model.device.MissingDeviceSyncKeyBuilder;
+import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKeyBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
-import com.github.auties00.cobalt.model.sync.AppStateSyncKeyIdBuilder;
-import com.github.auties00.cobalt.model.sync.AppStateSyncKeyRequestBuilder;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyIdBuilder;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyRequestBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.time.Instant;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * Companion devices that have the key respond with AppStateSyncKeyShare.
  */
 public final class MissingSyncKeyRequestService {
-    private static final System.Logger LOGGER = System.getLogger("MissingSyncKeyRequestService");
+    private static final System.Logger LOGGER = System.getLogger(MissingSyncKeyRequestService.class.getName());
 
     private final WhatsAppClient client;
     private final WhatsAppStore store;
@@ -60,7 +60,7 @@ public final class MissingSyncKeyRequestService {
         // Create the key request
         var keyIdList = keyIds.stream()
                 .map(id -> new AppStateSyncKeyIdBuilder()
-                        .value(id)
+                        .keyId(id)
                         .build())
                 .toList();
         var keyRequest = new AppStateSyncKeyRequestBuilder()
@@ -69,7 +69,7 @@ public final class MissingSyncKeyRequestService {
 
         // Create the protocol message
         var protocolMessage = new ProtocolMessageBuilder()
-                .protocolType(ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST)
+                .type(ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST)
                 .appStateSyncKeyRequest(keyRequest)
                 .build();
 
@@ -123,6 +123,7 @@ public final class MissingSyncKeyRequestService {
      * Per WhatsApp Web WAWebKeyManagementUtils.getPeerDevices:
      * Returns all devices from our own device list except the current device.
      */
+    @SuppressWarnings("OptionalIsPresent")
     private List<Jid> getCompanionDevices() {
         var myJid = store.jid()
                 .orElse(null);

@@ -3,12 +3,18 @@ package com.github.auties00.cobalt.model.message.system.peer;
 import com.github.auties00.cobalt.model.media.MediaRetryNotification;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.media.StickerMessage;
+import com.github.auties00.cobalt.model.message.system.history.FullHistorySyncOnDemandRequestMetadata;
+import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -529,7 +535,7 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
                 byte[] mediaKey;
 
-                @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+                @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
                 Instant mediaKeyTimestampMs;
 
                 @ProtobufProperty(index = 6, type = ProtobufType.INT32)

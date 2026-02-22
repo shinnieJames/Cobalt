@@ -68,7 +68,7 @@ public final class DeviceService {
     /**
      * Logger for device service operations.
      */
-    private static final System.Logger LOGGER = System.getLogger("DeviceService");
+    private static final System.Logger LOGGER = System.getLogger(DeviceService.class.getName());
 
     /**
      * Joiner for parallel USync batch processing using structured concurrency.

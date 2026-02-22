@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.model.message.media;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -38,7 +40,7 @@ public final class StickerMessage implements MediaMessage {
     @ProtobufProperty(index = 9, type = ProtobufType.UINT64)
     Long fileLength;
 
-    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
 
     @ProtobufProperty(index = 11, type = ProtobufType.UINT32)
@@ -56,7 +58,7 @@ public final class StickerMessage implements MediaMessage {
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
     ContextInfo contextInfo;
 
-    @ProtobufProperty(index = 18, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 18, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant stickerSentTs;
 
     @ProtobufProperty(index = 19, type = ProtobufType.BOOL)

@@ -8,7 +8,34 @@ import it.auties.protobuf.model.ProtobufType;
 import java.util.OptionalInt;
 
 @ProtobufMessage(name = "SyncActionValue.MarketingMessageBroadcastAction")
-public final class MarketingMessageBroadcastAction implements SyncAction {
+public final class MarketingMessageBroadcastAction implements SyncAction<MarketingMessageBroadcastActionArgs> {
+    /**
+     * Canonical WhatsApp Web action name for this action type.
+     */
+    public static final String ACTION_NAME = "marketingMessageBroadcast";
+
+    /**
+     * Canonical WhatsApp Web action version for this action type.
+     */
+    public static final int ACTION_VERSION = 7;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String actionName() {
+        return ACTION_NAME;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int actionVersion() {
+        return ACTION_VERSION;
+    }
+
+
     @ProtobufProperty(index = 1, type = ProtobufType.INT32)
     Integer repliedCount;
 
@@ -25,4 +52,6 @@ public final class MarketingMessageBroadcastAction implements SyncAction {
         this.repliedCount = repliedCount;
         return this;
     }
+
+
 }

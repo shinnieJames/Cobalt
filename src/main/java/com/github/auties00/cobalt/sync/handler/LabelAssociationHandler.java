@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.sync.handler;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.sync.RecordSync;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -46,7 +46,7 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
         }
 
         // Apply the action
-        if (mutation.operation() == RecordSync.Operation.SET) {
+        if (mutation.operation() == SyncdOperation.SET) {
             // Associate label
             if (action.labeled()) {
                 label.get().addAssignment(targetJid);

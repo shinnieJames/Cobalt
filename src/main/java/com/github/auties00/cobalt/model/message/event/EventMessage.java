@@ -5,6 +5,8 @@ import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.location.LocationMessage;
 
 import java.time.Instant;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -30,10 +32,10 @@ public final class EventMessage implements ContextualMessage {
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String joinLink;
 
-    @ProtobufProperty(index = 7, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 7, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant startTime;
 
-    @ProtobufProperty(index = 8, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 8, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant endTime;
 
     @ProtobufProperty(index = 9, type = ProtobufType.BOOL)

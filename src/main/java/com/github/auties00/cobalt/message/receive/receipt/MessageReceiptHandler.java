@@ -42,7 +42,7 @@ import java.util.Optional;
  * WAWebHandleMsgSendAck.sendAck / sendNack: sends ack/nack stanzas.
  */
 public final class MessageReceiptHandler {
-    private static final System.Logger LOGGER = System.getLogger("MessageReceiptHandler");
+    private static final System.Logger LOGGER = System.getLogger(MessageReceiptHandler.class.getName());
 
     /**
      * The minimum retry count at which the prekey bundle is included

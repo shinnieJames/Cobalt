@@ -40,7 +40,7 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
 public final class MessageStreamNodeHandler extends SocketStream.Handler {
-    private static final System.Logger LOGGER = System.getLogger("MessageStreamNodeHandler");
+    private static final System.Logger LOGGER = System.getLogger(MessageStreamNodeHandler.class.getName());
     private static final int HISTORY_SYNC_MAX_TIMEOUT = 25;
     private static final Set<HistorySync.Type> REQUIRED_HISTORY_SYNC_TYPES = Set.of(HistorySync.Type.INITIAL_BOOTSTRAP, HistorySync.Type.PUSH_NAME, HistorySync.Type.NON_BLOCKING_DATA);
 
@@ -404,7 +404,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
                 .timestampSeconds(timestampSeconds)
                 .build();
         for (var listener : whatsapp.store().listeners()) {
-            Thread.startVirtualThread(() -> listener.onWebAppStateSetting(whatsapp, setting));
+            Thread.startVirtualThread(() -> listener.onWebAppStateAction(whatsapp, setting));
         }
     }
 

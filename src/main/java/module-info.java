@@ -27,14 +27,13 @@ module com.github.auties00.cobalt {
     requires com.github.auties00.collections;
 
     // Database storage (SQLite via jOOQ)
-    requires org.jooq;
-    requires java.sql;
-    requires org.xerial.sqlitejdbc;
+    requires static org.jooq;
+    requires static java.sql;
+    requires static org.xerial.sqlitejdbc;
 
     // Mobile api
     requires net.dongliu.apkparser;
     requires com.google.i18n.phonenumbers.libphonenumber;
-    requires com.github.auties00.cobalt;
 
     // TODO: Decide exports
 }

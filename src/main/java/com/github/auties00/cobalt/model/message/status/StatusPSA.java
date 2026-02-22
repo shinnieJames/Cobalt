@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.model.message.status;
 
 import java.time.Instant;
 import java.util.Objects;
+
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
@@ -11,7 +13,7 @@ public final class StatusPSA {
     @ProtobufProperty(index = 44, type = ProtobufType.UINT64)
     Long campaignId;
 
-    @ProtobufProperty(index = 45, type = ProtobufType.UINT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 45, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
     Instant campaignExpirationTimestamp;
 
 

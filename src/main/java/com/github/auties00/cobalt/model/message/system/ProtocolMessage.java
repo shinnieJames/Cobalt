@@ -1,20 +1,31 @@
 package com.github.auties00.cobalt.model.message.system;
 
-import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.bot.ai.AIQueryFanout;
 import com.github.auties00.cobalt.model.bot.feedback.BotFeedbackMessage;
 import com.github.auties00.cobalt.model.chat.ChatDisappearingMode;
 import com.github.auties00.cobalt.model.chat.ChatLimitSharing;
 import com.github.auties00.cobalt.model.chat.group.GroupParticipantLabel;
-import com.github.auties00.cobalt.model.message.MessageKey;
-import com.github.auties00.cobalt.model.media.MediaNotifyMessage;
-import com.github.auties00.cobalt.model.message.MessageContainer;
-import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncMessage;
+import com.github.auties00.cobalt.model.media.MediaNotifyMessage;
+import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateFatalExceptionNotification;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyRequest;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyShare;
+import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessage;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestResponseMessage;
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.time.Instant;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -29,7 +40,7 @@ public final class ProtocolMessage implements Message {
     @ProtobufProperty(index = 4, type = ProtobufType.UINT32)
     Integer ephemeralExpiration;
 
-    @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 5, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant ephemeralSettingTimestamp;
 
     @ProtobufProperty(index = 6, type = ProtobufType.MESSAGE)
@@ -53,7 +64,7 @@ public final class ProtocolMessage implements Message {
     @ProtobufProperty(index = 14, type = ProtobufType.MESSAGE)
     MessageContainer editedMessageContainer;
 
-    @ProtobufProperty(index = 15, type = ProtobufType.INT64, mixins = InstantProtobufMixin.class)
+    @ProtobufProperty(index = 15, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant timestampMs;
 
     @ProtobufProperty(index = 16, type = ProtobufType.MESSAGE)

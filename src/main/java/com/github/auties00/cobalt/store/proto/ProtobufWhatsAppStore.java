@@ -4,20 +4,21 @@ package com.github.auties00.cobalt.store.proto;
 import com.github.auties00.cobalt.client.*;
 import com.github.auties00.cobalt.client.info.WhatsAppClientInfo;
 import com.github.auties00.cobalt.media.MediaConnection;
+import com.github.auties00.cobalt.model.business.BusinessVerifiedNameCertificate;
+import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel;
-import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent.AppVersion;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
-import com.github.auties00.cobalt.model.business.VerifiedBusinessName;
 import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.chat.*;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.contact.Contact;
-import com.github.auties00.cobalt.model.contact.ContactBuilder;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -26,14 +27,15 @@ import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
-import com.github.auties00.cobalt.model.newsletter.NewsletterBuilder;
-import com.github.auties00.cobalt.model.newsletter.NewsletterSpec;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
-import com.github.auties00.cobalt.store.InMemoryWhatsAppStoreSpec;
+import com.github.auties00.cobalt.model.sync.SyncCollectionMetadata;
+import com.github.auties00.cobalt.model.sync.SyncHashValue;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
 import com.github.auties00.cobalt.util.SecureBytes;
@@ -199,7 +201,7 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
     SignalIdentityKeyPair companionKeyPair;
 
     @ProtobufProperty(index = 46, type = ProtobufType.MESSAGE)
-    SignedDeviceIdentity signedDeviceIdentity;
+    ADVSignedDeviceIdentity signedDeviceIdentity;
 
     @ProtobufProperty(index = 47, type = ProtobufType.MESSAGE)
     final SignalSignedKeyPair signedKeyPair;
@@ -232,7 +234,7 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
     final ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions;
 
     @ProtobufProperty(index = 57, type = ProtobufType.MESSAGE, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<PatchType, AppStateSyncHash> hashStates;
+    final ConcurrentMap<SyncPatchType, SyncHashValue> hashStates;
 
     @ProtobufProperty(index = 58, type = ProtobufType.BOOL)
     boolean registered;
@@ -253,10 +255,10 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
     final ConcurrentMap<Integer, Label> labels;
 
     @ProtobufProperty(index = 64, type = ProtobufType.MESSAGE)
-    volatile Version clientVersion;
+    volatile ClientAppVersion clientVersion;
 
     @ProtobufProperty(index = 65, type = ProtobufType.MESSAGE)
-    Version companionVersion;
+    ClientAppVersion companionVersion;
 
     @ProtobufProperty(index = 66, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
     Instant lastAdvCheckTime;
@@ -278,7 +280,7 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
     final ConcurrentMap<String, Long> deviceIdentityRanges;
 
     @ProtobufProperty(index = 71, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-    final ConcurrentMap<String, VerifiedBusinessName> verifiedBusinessNames;
+    final ConcurrentMap<String, BusinessVerifiedNameCertificate> verifiedBusinessNames;
 
     private WhatsAppClientProxy proxy;
 
@@ -314,15 +316,15 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
 
     private final KeySetView<Jid, Boolean> usersNeedingSenderKeyRotation = ConcurrentHashMap.newKeySet();
 
-    private final ConcurrentMap<PatchType, SequencedCollection<PendingMutation>> webAppStatePendingMutations;
+    private final ConcurrentMap<SyncPatchType, SequencedCollection<SyncPendingMutation>> webAppStatePendingMutations;
 
-    private final ConcurrentMap<PatchType, CollectionMetadata> webAppStateCollections;
+    private final ConcurrentMap<SyncPatchType, SyncCollectionMetadata> webAppStateCollections;
 
     private final ConcurrentMap<String, Set<Jid>> pendingMessageRecipients;
 
     private final Object clientVersionLock;
 
-    private final ConcurrentMap<Jid, ChatMetadata> chatMetadata;
+    private final ConcurrentMap<Jid, ChatMetadata<?>> chatMetadata;
 
     private final ConcurrentMap<Jid, DeviceList> deviceLists;
 
@@ -385,7 +387,7 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
             SignalIdentityKeyPair noiseKeyPair,
             SignalIdentityKeyPair identityKeyPair,
             SignalIdentityKeyPair companionKeyPair,
-            SignedDeviceIdentity signedDeviceIdentity,
+            ADVSignedDeviceIdentity signedDeviceIdentity,
             SignalSignedKeyPair signedKeyPair,
             LinkedHashMap<Integer, SignalPreKeyPair> preKeys,
             UUID fdid,
@@ -396,21 +398,21 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
             ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys,
             LinkedHashMap<String, AppStateSyncKey> appStateKeys,
             ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions,
-            ConcurrentMap<PatchType, AppStateSyncHash> hashStates,
+            ConcurrentMap<SyncPatchType, SyncHashValue> hashStates,
             boolean registered,
             boolean showSecurityNotifications,
             ConcurrentMap<String, Sticker> recentStickers,
             ConcurrentMap<String, Sticker> favouriteStickers,
             ConcurrentMap<String, QuickReply> quickReplies,
             ConcurrentMap<Integer, Label> labels,
-            Version clientVersion,
-            Version companionVersion,
+            ClientAppVersion clientVersion,
+            ClientAppVersion companionVersion,
             Instant lastAdvCheckTime,
             ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities,
             ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys,
             byte[] advSecretKey,
             ConcurrentMap<String, Long> deviceIdentityRanges,
-            ConcurrentMap<String, VerifiedBusinessName> verifiedBusinessNames
+            ConcurrentMap<String, BusinessVerifiedNameCertificate> verifiedBusinessNames
     ) {
         this.storesHashCodes = new ConcurrentHashMap<>();
         this.jidsHashCodes = new ConcurrentHashMap<>();
@@ -2162,7 +2164,7 @@ public final class ProtobufWhatsAppStore implements WhatsAppStore {
         return Optional.ofNullable(verifiedBusinessNames.get(jid.toUserJid().toString()));
     }
 
-    public void addVerifiedBusinessName(VerifiedBusinessName record) {
+    public void addVerifiedBusinessName(BusinessVerifiedNameCertificate record) {
         Objects.requireNonNull(record, "record cannot be null");
         verifiedBusinessNames.put(record.jid().toUserJid().toString(), record);
     }
