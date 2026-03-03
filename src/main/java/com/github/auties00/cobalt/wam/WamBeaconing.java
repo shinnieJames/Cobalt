@@ -1,16 +1,20 @@
 package com.github.auties00.cobalt.wam;
 
+import com.github.auties00.cobalt.util.FastRandomUtils;
+import com.github.auties00.cobalt.wam.type.WamChannel;
+
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.OptionalInt;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages daily-sampled sequence numbers for WAM event beaconing.
  *
  * <p>At the start of each calendar day (UTC), there is a 1 % chance that
  * beaconing is activated for this session. If activated, each call to
- * {@link #nextSequenceNumber()} returns a monotonically increasing
+ * {@link #nextSequenceNumber(WamChannel)} returns a monotonically increasing
  * sequence number that is written as global field {@code 3433}
  * ({@code beaconSessionId}) before each event.
  *
@@ -30,29 +34,14 @@ final class WamBeaconing {
      */
     private static final double ACTIVATION_PROBABILITY = 0.01;
 
-    /**
-     * The epoch-second value of the start of the day for which the
-     * current activation state was determined. A value of {@code -1}
-     * means no activation check has been performed yet.
-     */
-    private long activationDayEpoch;
-
-    /**
-     * Whether beaconing is active for the current day.
-     */
-    private boolean active;
-
-    /**
-     * The monotonically increasing sequence counter for the current day.
-     */
-    private int sequenceNumber;
+    private final Map<WamChannel, ChannelState> states;
 
     /**
      * Constructs a new {@code WamBeaconing} instance with no active
      * beaconing session.
      */
     WamBeaconing() {
-        this.activationDayEpoch = -1;
+        this.states = new ConcurrentHashMap<>();
     }
 
     /**
@@ -64,21 +53,29 @@ final class WamBeaconing {
      * sequence counter resets to 1 and increments on each subsequent
      * call within the same day.
      *
+     * @param channel the WAM channel to get the sequence number for
      * @return an {@code OptionalInt} containing the sequence number if
      *         beaconing is active, or empty otherwise
      */
-    OptionalInt nextSequenceNumber() {
+    OptionalInt nextSequenceNumber(WamChannel channel) {
+        var state = states.computeIfAbsent(channel, _ -> new ChannelState());
         var currentDayEpoch = Instant.now().truncatedTo(ChronoUnit.DAYS).getEpochSecond();
-        if (currentDayEpoch != activationDayEpoch) {
-            activationDayEpoch = currentDayEpoch;
-            active = ThreadLocalRandom.current().nextDouble() < ACTIVATION_PROBABILITY;
-            sequenceNumber = 0;
+        if (currentDayEpoch != state.activationDayEpoch) {
+            state.activationDayEpoch = currentDayEpoch;
+            state.active = FastRandomUtils.randomDouble() <= ACTIVATION_PROBABILITY;
+            state.sequenceNumber = 0;
         }
 
-        if (!active) {
+        if (!state.active) {
             return OptionalInt.empty();
         }
 
-        return OptionalInt.of(++sequenceNumber);
+        return OptionalInt.of(++state.sequenceNumber);
+    }
+
+    private static final class ChannelState {
+        long activationDayEpoch = -1;
+        boolean active = false;
+        int sequenceNumber = 0;
     }
 }   

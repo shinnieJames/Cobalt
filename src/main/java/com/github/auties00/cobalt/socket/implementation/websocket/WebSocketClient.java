@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.socket.implementation.websocket;
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
 import com.github.auties00.cobalt.socket.implementation.SocketClient;
 import com.github.auties00.cobalt.socket.implementation.SocketClientListener;
-import com.github.auties00.cobalt.socket.implementation.threading.SocketContext;
-import com.github.auties00.cobalt.socket.implementation.websocket.frame.WebSocketFrameEncoder;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketClientContext;
+import com.github.auties00.cobalt.socket.implementation.transport.websocket.frame.WebSocketFrameEncoder;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
@@ -28,11 +28,11 @@ public final class WebSocketClient {
     private static final byte CARRIAGE_RETURN = '\r';
     private static final byte LINE_FEED = '\n';
 
-    private final SocketClient transport;
+    private final SocketClient client;
     private ByteBuffer responseBuffer;
 
     private WebSocketClient(WhatsAppClientProxy proxy) {
-        this.transport = SocketClient.newSocketClient(proxy);
+        this.client = SocketClient.newSocketClient(proxy);
     }
 
     public static WebSocketClient newWebSocketClient(WhatsAppClientProxy proxy) {
@@ -46,7 +46,7 @@ public final class WebSocketClient {
         var host = path.getHost();
         var port = path.getPort();
 
-        transport.connect(new InetSocketAddress(host, port), new SocketClientListener() {
+        client.connect(new InetSocketAddress(host, port), new SocketClientListener() {
             @Override
             public void onDatagram(ByteBuffer buffer) {
                 // TODO
@@ -58,7 +58,7 @@ public final class WebSocketClient {
             }
         });
 
-        var context = transport.socketContext();
+        var context = client.socketContext();
         if (context.sslEngine != null) {
             throw new IOException("Websocket transport requires end-to-end TLS and cannot reuse proxy TLS");
         }
@@ -74,22 +74,22 @@ public final class WebSocketClient {
         sendUpgradeRequest(host, port, path, websocketKey);
         readUpgradeResponse(expectedAccept);
 
-        if (!transport.markReadyWebSocket()) {
+        if (!client.markReadyWebSocket()) {
             throw new IOException("Failed to switch websocket channel to ready state");
         }
 
-        if (responseBuffer != null && responseBuffer.hasRemaining() && !transport.preSeedDatagram(responseBuffer)) {
+        if (responseBuffer != null && responseBuffer.hasRemaining() && !client.preSeedDatagram(responseBuffer)) {
             throw new IOException("Failed to pre-seed leftover bytes after websocket upgrade");
         }
         responseBuffer = null;
 
-        if (!transport.drainSslAppBuffer()) {
+        if (!client.drainSslAppBuffer()) {
             throw new IOException("Failed to drain leftover SSL data after websocket upgrade");
         }
     }
 
     public void sendBinary(ByteBuffer... buffers) {
-        if (!transport.isConnected()) {
+        if (!client.isConnected()) {
             throw new IllegalStateException("Socket is not connected");
         }
 
@@ -103,19 +103,19 @@ public final class WebSocketClient {
             }
 
             var frame = WebSocketFrameEncoder.encodeBinaryFrame(buffer);
-            transport.sendBinary(frame.header(), frame.payload());
+            client.sendBinary(frame.header(), frame.payload());
         }
     }
 
     public void disconnect() throws IOException {
-        transport.disconnect();
+        client.disconnect();
     }
 
     public boolean isConnected() {
-        return transport.isConnected();
+        return client.isConnected();
     }
 
-    private void initTls(SocketContext context, String host, int port) throws IOException {
+    private void initTls(AbstractSocketClientContext context, String host, int port) throws IOException {
         try {
             var sslContext = SSLContext.getDefault();
             var engine = sslContext.createSSLEngine(host, port);
@@ -124,7 +124,7 @@ public final class WebSocketClient {
             params.setEndpointIdentificationAlgorithm(HTTPS_ENDPOINT_IDENTIFICATION_ALGORITHM);
             engine.setSSLParameters(params);
             context.initSsl(engine);
-            transport.startTlsHandshake(TLS_HANDSHAKE_TIMEOUT);
+            client.startTlsHandshake(TLS_HANDSHAKE_TIMEOUT);
         } catch (NoSuchAlgorithmException exception) {
             throw new IOException("Cannot initialize TLS for websocket transport", exception);
         }
@@ -164,7 +164,7 @@ public final class WebSocketClient {
                          host +
                          "\r\n" +
                          "\r\n";
-        transport.sendBinary(ByteBuffer.wrap(request.getBytes(StandardCharsets.US_ASCII)));
+        client.sendBinary(ByteBuffer.wrap(request.getBytes(StandardCharsets.US_ASCII)));
     }
 
     private void readUpgradeResponse(String expectedAccept) throws IOException {
@@ -285,7 +285,7 @@ public final class WebSocketClient {
             responseBuffer.clear();
         }
 
-        var length = transport.readBinary(responseBuffer, false);
+        var length = client.readBinary(responseBuffer, false);
         if (length <= 0) {
             throw new IOException("Unexpected end of stream during websocket upgrade");
         }

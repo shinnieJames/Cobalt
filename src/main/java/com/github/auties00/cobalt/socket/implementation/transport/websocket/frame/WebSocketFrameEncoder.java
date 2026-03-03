@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.implementation.websocket.frame;
+package com.github.auties00.cobalt.socket.implementation.transport.websocket.frame;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;

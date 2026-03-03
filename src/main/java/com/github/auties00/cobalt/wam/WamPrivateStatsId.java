@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.wam;
 
-import java.security.SecureRandom;
+import com.github.auties00.cobalt.util.FastRandomUtils;
+
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -39,20 +39,9 @@ import java.util.Map;
  */
 final class WamPrivateStatsId {
     /**
-     * Number of random hex characters per identifier (8 random bytes
-     * encoded as 16 hex digits).
-     */
-    private static final int HEX_BYTE_COUNT = 8;
-
-    /**
      * Number of seconds in one day.
      */
     private static final long DAY_SECONDS = 86_400L;
-
-    /**
-     * Cryptographically secure random source for identifier generation.
-     */
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     /**
      * Map from hash integer to the current rotation entry. Insertion
@@ -88,7 +77,9 @@ final class WamPrivateStatsId {
         for (var mapEntry : entries.entrySet()) {
             var entry = mapEntry.getValue();
             if (shouldRotate(entry, now)) {
-                mapEntry.setValue(new Entry(entry.key, entry.keyHashInt, entry.rotationDays, randomHex(), now));
+                var value = FastRandomUtils.randomHex(32);
+                var newEntry = new Entry(entry.key, entry.keyHashInt, entry.rotationDays, value, now);
+                mapEntry.setValue(newEntry);
             }
         }
         var result = new LinkedHashMap<Integer, String>();
@@ -109,7 +100,10 @@ final class WamPrivateStatsId {
     }
 
     private void addEntry(String key, int keyHashInt, int rotationDays) {
-        entries.put(keyHashInt, new Entry(key, keyHashInt, rotationDays, randomHex(), Instant.now().getEpochSecond()));
+        var value = FastRandomUtils.randomHex(32);
+        var epoch = Instant.now().getEpochSecond();
+        var entry = new Entry(key, keyHashInt, rotationDays, value, epoch);
+        entries.put(keyHashInt, entry);
     }
 
     private static boolean shouldRotate(Entry entry, long nowEpochSec) {
@@ -119,12 +113,6 @@ final class WamPrivateStatsId {
         var periodSeconds = entry.rotationDays * DAY_SECONDS;
         var currentPeriodStart = (nowEpochSec / periodSeconds) * periodSeconds;
         return entry.creationEpochSec < currentPeriodStart;
-    }
-
-    private static String randomHex() {
-        var bytes = new byte[HEX_BYTE_COUNT];
-        RANDOM.nextBytes(bytes);
-        return HexFormat.of().formatHex(bytes);
     }
 
     /**

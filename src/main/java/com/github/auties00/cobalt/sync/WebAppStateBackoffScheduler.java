@@ -8,11 +8,11 @@ import java.time.Duration;
 import java.util.concurrent.*;
 
 public final class WebAppStateBackoffScheduler implements Closeable {
-    private static final int MAX_RETRIES = 5;
     private static final long BASE_DELAY_MS = 1000;
-    private static final long MAX_DELAY_MS = 60_000;
+    private static final long MAX_DELAY_MS = 3_600_000;
     private static final int MULTIPLIER = 2;
     private static final long JITTER_MS = 1000;
+    private static final long FINITE_FAILURE_EXPIRY_MS = 2 * 24 * 60 * 60 * 1000L;
 
     private final ConcurrentHashMap<SyncPatchType, CompletableFuture<?>> pendingRetries;
 
@@ -20,9 +20,10 @@ public final class WebAppStateBackoffScheduler implements Closeable {
         this.pendingRetries = new ConcurrentHashMap<>();
     }
 
-    public boolean scheduleRetry(SyncPatchType collectionName, int attemptNumber, Runnable retryAction) {
-        // Check if we should retry
-        if (attemptNumber >= MAX_RETRIES) {
+    public boolean scheduleRetry(SyncPatchType collectionName, long firstFailureTimestamp, int attemptNumber, Runnable retryAction) {
+        // Check if failure window has expired
+        var elapsed = System.currentTimeMillis() - firstFailureTimestamp;
+        if (elapsed >= FINITE_FAILURE_EXPIRY_MS) {
             return false;
         }
 

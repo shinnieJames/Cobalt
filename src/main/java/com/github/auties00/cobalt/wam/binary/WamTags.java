@@ -19,8 +19,8 @@ package com.github.auties00.cobalt.wam.binary;
  *
  * <p>The final tag byte written to the buffer is constructed by bitwise-ORing
  * the applicable role/continuation flags with the value-type constant. For
- * example, a 16-bit integer field with more fields following would produce the
- * flags {@code FIELD | MORE | VALUE_INT16}.
+ * example, a 16-bit integer field that is the last in its event would produce
+ * the flags {@code FIELD | LAST | VALUE_INT16}.
  *
  * <p>This class cannot be instantiated as it only contains static constant
  * definitions.
@@ -56,10 +56,13 @@ public final class WamTags {
     public static final int FIELD = 2;
 
     /**
-     * Continuation flag indicating more entries follow in this group.
+     * Termination flag indicating this is the last entry in the current
+     * group. When set on an event marker it means no fields follow;
+     * when set on a field entry it means no more fields follow in
+     * this event.
      * This has the wire value of {@code 0x04} in the tag byte.
      */
-    public static final int MORE = 4;
+    public static final int LAST = 4;
 
     /**
      * Wide-ID flag indicating the field identifier is encoded as a two-byte

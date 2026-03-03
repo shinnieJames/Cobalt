@@ -1,9 +1,11 @@
-package com.github.auties00.cobalt.socket.implementation.transport;
+package com.github.auties00.cobalt.socket.implementation.transport.websocket;
 
-import com.github.auties00.cobalt.socket.implementation.threading.SocketSelector;
 import com.github.auties00.cobalt.socket.implementation.SocketClientListener;
-import com.github.auties00.cobalt.socket.implementation.threading.SocketContext;
-import com.github.auties00.cobalt.socket.implementation.threading.SocketPendingRead;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketClientContext;
+import com.github.auties00.cobalt.socket.implementation.context.SocketPendingRead;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketSelector;
+import com.github.auties00.cobalt.socket.implementation.transport.SocketClientTransport;
+import com.github.auties00.cobalt.socket.implementation.transport.tcp.TCPSocketClientContext;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -13,18 +15,18 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.Objects;
 
-final class SocketClientTCPTransport implements SocketClientTransport{
+public final class WebSocketClientTransport implements SocketClientTransport {
     private static final int DEFAULT_READ_TIMEOUT = 10_000;
     private static final int DEFAULT_CONNECT_TIMEOUT = 30_000;
 
     private SocketChannel channel;
 
-    SocketClientTCPTransport() {
+    public WebSocketClientTransport() {
 
     }
 
     @Override
-    public SocketContext connect(InetSocketAddress endpoint, SocketClientListener listener) throws IOException, InterruptedException {
+    public AbstractSocketClientContext connect(InetSocketAddress endpoint, SocketClientListener listener) throws IOException, InterruptedException {
         Objects.requireNonNull(endpoint, "endpoint must not be null");
         Objects.requireNonNull(listener, "listener must not be null");
 
@@ -36,11 +38,11 @@ final class SocketClientTCPTransport implements SocketClientTransport{
         channel.setOption(StandardSocketOptions.TCP_NODELAY, true);
         channel.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
         channel.configureBlocking(false);
-        var ctx = new SocketContext(listener);
+        var ctx = new TCPSocketClientContext(listener);
         if (channel.connect(endpoint)) {
-            SocketSelector.INSTANCE.register(channel, SelectionKey.OP_READ, ctx);
+            AbstractSocketSelector.INSTANCE.register(channel, SelectionKey.OP_READ, ctx);
         } else {
-            SocketSelector.INSTANCE.register(channel, SelectionKey.OP_CONNECT, ctx);
+            AbstractSocketSelector.INSTANCE.register(channel, SelectionKey.OP_CONNECT, ctx);
             synchronized (ctx.connectionLock) {
                 var deadline = System.currentTimeMillis() + DEFAULT_CONNECT_TIMEOUT;
                 while (!channel.isConnected() && channel.isOpen()) {
@@ -52,7 +54,7 @@ final class SocketClientTCPTransport implements SocketClientTransport{
                 }
             }
             if (!channel.isConnected()) {
-                SocketSelector.INSTANCE.unregister(channel);
+                AbstractSocketSelector.INSTANCE.unregister(channel);
                 throw new IOException("Connection timed out");
             }
         }
@@ -67,7 +69,7 @@ final class SocketClientTCPTransport implements SocketClientTransport{
             throw new IOException("Socket is not connected");
         }
 
-        SocketSelector.INSTANCE.unregister(channel);
+        AbstractSocketSelector.INSTANCE.unregister(channel);
     }
 
     @Override
@@ -76,14 +78,14 @@ final class SocketClientTCPTransport implements SocketClientTransport{
             throw new IllegalStateException("Socket is not connected");
         }
 
-        if (!SocketSelector.INSTANCE.addWrite(channel, buffers)) {
+        if (!AbstractSocketSelector.INSTANCE.addWrite(channel, buffers)) {
             throw new IllegalStateException("Failed to send binary");
         }
     }
 
     @Override
     public boolean isConnected() {
-        return SocketSelector.INSTANCE.isConnected(channel);
+        return AbstractSocketSelector.INSTANCE.isConnected(channel);
     }
 
     @Override
@@ -93,7 +95,7 @@ final class SocketClientTCPTransport implements SocketClientTransport{
         }
 
         var read = new SocketPendingRead(buffer, fully);
-        if(!SocketSelector.INSTANCE.addRead(channel, read)) {
+        if(!AbstractSocketSelector.INSTANCE.addRead(channel, read)) {
             throw new IllegalStateException("Failed to read binary");
         }
 
@@ -115,7 +117,7 @@ final class SocketClientTCPTransport implements SocketClientTransport{
 
         if(read.length == -1) {
             if (isConnected()) {
-                SocketSelector.INSTANCE.unregister(channel);
+                AbstractSocketSelector.INSTANCE.unregister(channel);
                 throw new IOException("Read timed out");
             } else {
                 throw new IOException("Unexpected end of stream");

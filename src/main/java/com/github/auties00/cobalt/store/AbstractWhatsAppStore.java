@@ -1516,7 +1516,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                         current.lastSyncTimestamp(),
                         SyncCollectionState.ERROR_RETRY,
                         current.retryCount() + 1,
-                        System.currentTimeMillis()
+                        current.lastErrorTimestamp() > 0 ? current.lastErrorTimestamp() : System.currentTimeMillis()
                 )
         );
     }

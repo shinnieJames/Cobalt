@@ -82,7 +82,8 @@ public final class WamBuilderGenerator {
                                 .addModifiers(Modifier.PUBLIC)
                                 .returns(builderClassName)
                                 .beginControlFlow("if (this.$NStart != null)", prop.fieldName())
-                                .addStatement("this.$N = this.$NStart", prop.fieldName(), prop.fieldName())
+                                .addStatement("this.$N = $T.now().toEpochMilli() - this.$NStart.toEpochMilli()",
+                                        prop.fieldName(), INSTANT, prop.fieldName())
                                 .addStatement("this.$NStart = null", prop.fieldName())
                                 .endControlFlow()
                                 .addStatement("return this")
@@ -124,7 +125,7 @@ public final class WamBuilderGenerator {
             case BOOLEAN -> ClassName.get(Boolean.class);
             case STRING -> ClassName.get(String.class);
             case FLOAT -> ClassName.get(Double.class);
-            case TIMER -> INSTANT;
+            case TIMER -> ClassName.get(Long.class);
             case ENUM -> {
                 var enumElement = prop.enumElement();
                 if (enumElement == null) {

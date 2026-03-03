@@ -22,8 +22,8 @@ import java.lang.annotation.Target;
  * high-performance, zero-reflection {@code sizeOf()} and
  * {@code encode()} methods that write the event into a WAM buffer
  * using the custom TLV wire protocol. Only non-{@code null} values
- * are written; the last non-{@code null} field omits the continuation
- * (MORE) flag.
+ * are written; the last non-{@code null} field sets the termination
+ * ({@code LAST}) flag.
  *
  * <p>Example usage:
  * <pre>{@code

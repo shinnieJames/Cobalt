@@ -1,9 +1,12 @@
-package com.github.auties00.cobalt.socket.implementation.threading;
+package com.github.auties00.cobalt.socket.implementation.transport.tcp;
 
-import com.github.auties00.cobalt.socket.implementation.websocket.frame.WebSocketFrameConstants;
-import com.github.auties00.cobalt.socket.implementation.websocket.frame.WebSocketDecodedFrame;
-import com.github.auties00.cobalt.socket.implementation.websocket.frame.WebSocketFrameDecoder;
-import com.github.auties00.cobalt.socket.implementation.websocket.frame.WebSocketFrameEncoder;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketClientContext;
+import com.github.auties00.cobalt.socket.implementation.context.SocketPendingRead;
+import com.github.auties00.cobalt.socket.implementation.context.SocketPendingWrites;
+import com.github.auties00.cobalt.socket.implementation.transport.websocket.frame.WebSocketDecodedFrame;
+import com.github.auties00.cobalt.socket.implementation.transport.websocket.frame.WebSocketFrameConstants;
+import com.github.auties00.cobalt.socket.implementation.transport.websocket.frame.WebSocketFrameDecoder;
+import com.github.auties00.cobalt.socket.implementation.transport.websocket.frame.WebSocketFrameEncoder;
 
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
@@ -17,12 +20,12 @@ import java.nio.channels.SocketChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
-public final class SocketSelector implements Runnable {
-    public static final SocketSelector INSTANCE;
+public final class TCPSocketClientSelector implements Runnable {
+    public static final TCPSocketClientSelector INSTANCE;
 
     static {
         try {
-            INSTANCE = new SocketSelector();
+            INSTANCE = new TCPSocketClientSelector();
         } catch (IOException ex) {
             throw new ExceptionInInitializerError(ex);
         }
@@ -38,8 +41,8 @@ public final class SocketSelector implements Runnable {
     private final AtomicBoolean wakeupPending;
     private volatile Thread selectorThread;
 
-    private SocketSelector() throws IOException {
-        this.logger = System.getLogger(SocketSelector.class.getName());
+    private TCPSocketClientSelector() throws IOException {
+        this.logger = System.getLogger(TCPSocketClientSelector.class.getName());
         this.selector = Selector.open();
         this.wakeupPending = new AtomicBoolean();
     }
@@ -51,7 +54,7 @@ public final class SocketSelector implements Runnable {
     }
 
     @SuppressWarnings("MagicConstant")
-    public synchronized void register(SocketChannel channel, int ops, SocketContext context) throws IOException {
+    public synchronized void register(SocketChannel channel, int ops, AbstractSocketClientContext context) throws IOException {
         selector.wakeup();
         channel.register(selector, ops, context);
         if (selectorThread == null || !selectorThread.isAlive()) {
@@ -73,7 +76,7 @@ public final class SocketSelector implements Runnable {
 
         }
 
-        var ctx = (SocketContext) key.attachment();
+        var ctx = (AbstractSocketClientContext) key.attachment();
 
         // Always notify waiting threads so they don't block until timeout
         var pendingRead = ctx.pendingBinaryRead;
@@ -124,7 +127,7 @@ public final class SocketSelector implements Runnable {
             return false;
         }
 
-        return ((SocketContext) key.attachment()).connected.get();
+        return ((AbstractSocketClientContext) key.attachment()).connected.get();
     }
 
     public boolean addRead(SocketChannel channel, SocketPendingRead read) {
@@ -132,7 +135,7 @@ public final class SocketSelector implements Runnable {
         if (key == null || !key.isValid()) {
             return false;
         }
-        var ctx = (SocketContext) key.attachment();
+        var ctx = (AbstractSocketClientContext) key.attachment();
         if (ctx.pendingBinaryRead != null) {
             return false;
         }
@@ -153,15 +156,9 @@ public final class SocketSelector implements Runnable {
             return false;
         }
 
-        var ctx = (SocketContext) key.attachment();
+        var ctx = (AbstractSocketClientContext) key.attachment();
         ctx.startListenerExecutor();
         ctx.tunnelled = true;
-        if(ctx instanceof WebSocketContext webSocketContext && webSocketContext.webSocketFrameDecoder == null) {
-            webSocketContext.webSocketFrameDecoder = new WebSocketFrameDecoder();
-            if (ctx.sslEngine == null && ctx.netInBuffer == null) {
-                ctx.netInBuffer = ByteBuffer.allocateDirect(WEBSOCKET_READ_BUFFER_SIZE);
-            }
-        }
         try {
             key.interestOps(key.interestOps() | SelectionKey.OP_READ);
         } catch (CancelledKeyException _) {
@@ -181,7 +178,7 @@ public final class SocketSelector implements Runnable {
             return true;
         }
 
-        var ctx = (SocketContext) key.attachment();
+        var ctx = (AbstractSocketClientContext) key.attachment();
         var hasWrites = false;
         for (var buffer : buffers) {
             if (buffer != null && buffer.hasRemaining()) {
@@ -212,10 +209,8 @@ public final class SocketSelector implements Runnable {
             return false;
         }
 
-        var ctx = (SocketContext) key.attachment();
-        return ctx instanceof WebSocketContext webSocketContext
-                ? feedWebSocket(webSocketContext, leftover, key)
-                : feedDatagram(ctx, leftover);
+        var ctx = (AbstractSocketClientContext) key.attachment();
+        return feedDatagram(ctx, leftover);
     }
 
     public boolean drainSslAppBuffer(SocketChannel channel) {
@@ -224,7 +219,7 @@ public final class SocketSelector implements Runnable {
             return false;
         }
 
-        var ctx = (SocketContext) key.attachment();
+        var ctx = (AbstractSocketClientContext) key.attachment();
         if (ctx.sslEngine == null || ctx.appInBuffer == null) {
             return true;
         }
@@ -235,14 +230,12 @@ public final class SocketSelector implements Runnable {
             return true;
         }
 
-        var result = ctx instanceof WebSocketContext webSocketContext
-                ? feedWebSocket(webSocketContext, webSocketContext.appInBuffer, key)
-                : feedDatagram(ctx, ctx.appInBuffer);
+        var result = feedDatagram(ctx, ctx.appInBuffer);
         ctx.appInBuffer.compact();
         return result;
     }
 
-    private boolean feedDatagram(SocketContext ctx, ByteBuffer source) {
+    private boolean feedDatagram(AbstractSocketClientContext ctx, ByteBuffer source) {
         while (source.hasRemaining()) {
             var noDatagram = ctx.datagramBuffer == null;
             var target = noDatagram ? ctx.datagramLengthBuffer : ctx.datagramBuffer;
@@ -264,7 +257,7 @@ public final class SocketSelector implements Runnable {
             throw new IOException("Channel not registered");
         }
 
-        var ctx = (SocketContext) key.attachment();
+        var ctx = (AbstractSocketClientContext) key.attachment();
         if (ctx.sslEngine == null) {
             throw new IOException("SSL not initialized on context");
         }
@@ -339,7 +332,7 @@ public final class SocketSelector implements Runnable {
 
     private void handleKey(SelectionKey key) {
         var attachment = key.attachment();
-        if (!(attachment instanceof SocketContext ctx)) {
+        if (!(attachment instanceof AbstractSocketClientContext ctx)) {
             return;
         }
 
@@ -384,7 +377,7 @@ public final class SocketSelector implements Runnable {
         }
     }
 
-    private boolean driveHandshake(SocketChannel channel, SocketContext ctx, SelectionKey key) throws IOException {
+    private boolean driveHandshake(SocketChannel channel, AbstractSocketClientContext ctx, SelectionKey key) throws IOException {
         var engine = ctx.sslEngine;
 
         // Flush residual encrypted data from a previous partial write
@@ -496,7 +489,7 @@ public final class SocketSelector implements Runnable {
         throw new IOException("Unexpected end of stream");
     }
 
-    private boolean processRead(SocketChannel channel, SocketContext ctx, SelectionKey key) throws IOException {
+    private boolean processRead(SocketChannel channel, AbstractSocketClientContext ctx, SelectionKey key) throws IOException {
         if (!ctx.tunnelled) {
             return processPreTunnelRead(channel, ctx, key);
         } else if(ctx instanceof WebSocketContext webSocketContext) {
@@ -510,7 +503,7 @@ public final class SocketSelector implements Runnable {
         }
     }
 
-    private boolean processPreTunnelRead(SocketChannel channel, SocketContext ctx, SelectionKey key) throws IOException {
+    private boolean processPreTunnelRead(SocketChannel channel, AbstractSocketClientContext ctx, SelectionKey key) throws IOException {
         var pendingRead = ctx.pendingBinaryRead;
         if (pendingRead == null) {
             key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
@@ -547,7 +540,7 @@ public final class SocketSelector implements Runnable {
         return true;
     }
 
-    private int sslRead(SocketChannel channel, SocketContext ctx, ByteBuffer target) throws IOException {
+    private int sslRead(SocketChannel channel, AbstractSocketClientContext ctx, ByteBuffer target) throws IOException {
         if (ctx.sslEngine == null) {
             return channel.read(target);
         }
@@ -621,7 +614,7 @@ public final class SocketSelector implements Runnable {
         return 0;
     }
 
-    private boolean processDatagramDirect(SocketChannel channel, SocketContext ctx) throws IOException {
+    private boolean processDatagramDirect(SocketChannel channel, AbstractSocketClientContext ctx) throws IOException {
         while (ctx.connected.get()) {
             var noDatagram = ctx.datagramBuffer == null;
             var target = noDatagram ? ctx.datagramLengthBuffer : ctx.datagramBuffer;
@@ -639,7 +632,7 @@ public final class SocketSelector implements Runnable {
         return false;
     }
 
-    private boolean processDatagramSsl(SocketChannel channel, SocketContext ctx) throws IOException {
+    private boolean processDatagramSsl(SocketChannel channel, AbstractSocketClientContext ctx) throws IOException {
         while (ctx.connected.get()) {
             var bytesRead = channel.read(ctx.netInBuffer);
             if (bytesRead == -1) {
@@ -811,7 +804,7 @@ public final class SocketSelector implements Runnable {
         return true;
     }
 
-    private boolean handleWebSocketControl(SocketContext ctx, SelectionKey key, byte opcode, byte[] payload, int length) {
+    private boolean handleWebSocketControl(AbstractSocketClientContext ctx, SelectionKey key, byte opcode, byte[] payload, int length) {
         return switch (opcode) {
             case WebSocketFrameConstants.OPCODE_PING -> key == null
                     || enqueueWebSocketControlFrame(ctx, key, WebSocketFrameConstants.OPCODE_PONG, payload, length);
@@ -826,7 +819,7 @@ public final class SocketSelector implements Runnable {
         };
     }
 
-    private boolean enqueueWebSocketControlFrame(SocketContext ctx, SelectionKey key, byte opcode, byte[] payload, int length) {
+    private boolean enqueueWebSocketControlFrame(AbstractSocketClientContext ctx, SelectionKey key, byte opcode, byte[] payload, int length) {
         if (!key.isValid()) {
             return false;
         }
@@ -848,7 +841,7 @@ public final class SocketSelector implements Runnable {
         return true;
     }
 
-    private boolean advanceDatagram(SocketContext ctx, boolean noDatagram) {
+    private boolean advanceDatagram(AbstractSocketClientContext ctx, boolean noDatagram) {
         if (noDatagram) {
             ctx.datagramLengthBuffer.flip();
             var length = ((ctx.datagramLengthBuffer.get() & 0xFF) << 16)
@@ -870,7 +863,7 @@ public final class SocketSelector implements Runnable {
         }
     }
 
-    private boolean processWrite(SocketChannel channel, SocketContext ctx) throws IOException {
+    private boolean processWrite(SocketChannel channel, AbstractSocketClientContext ctx) throws IOException {
         if (ctx.sslEngine != null) {
             return processWriteSsl(channel, ctx);
         } else {
@@ -878,7 +871,7 @@ public final class SocketSelector implements Runnable {
         }
     }
 
-    private boolean processWriteDirect(SocketChannel channel, SocketContext ctx) throws IOException {
+    private boolean processWriteDirect(SocketChannel channel, AbstractSocketClientContext ctx) throws IOException {
         while (ctx.connected.get()) {
             var claim = ctx.pendingWrites.claim();
             if (claim.isEmpty()) {
@@ -897,7 +890,7 @@ public final class SocketSelector implements Runnable {
         return false;
     }
 
-    private boolean processWriteSsl(SocketChannel channel, SocketContext ctx) throws IOException {
+    private boolean processWriteSsl(SocketChannel channel, AbstractSocketClientContext ctx) throws IOException {
         // Flush residual encrypted data from a previous partial write
         if (ctx.netOutBuffer.position() > 0) {
             ctx.netOutBuffer.flip();

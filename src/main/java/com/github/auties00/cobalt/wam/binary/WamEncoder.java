@@ -33,8 +33,8 @@ import static com.github.auties00.cobalt.wam.binary.WamTags.*;
  * enabling chained calls:
  * <pre>{@code
  *     int off = 0;
- *     off = WamEncoder.writeInt(2172, EVENT | MORE, -1, buf, off);
- *     off = WamEncoder.writeFloat(1, FIELD | MORE, 42.5, buf, off);
+ *     off = WamEncoder.writeInt(2172, EVENT, -1, buf, off);
+ *     off = WamEncoder.writeFloat(1, FIELD, 42.5, buf, off);
  *     off = WamEncoder.writeString(3, FIELD, "pdf", buf, off);
  * }</pre>
  *
@@ -88,7 +88,7 @@ public final class WamEncoder {
      * Writes a tag (flags byte + field identifier) into the output array.
      *
      * @param fieldId the numeric field or event identifier
-     * @param flags   the pre-computed flags byte (role + value-type + MORE)
+     * @param flags   the pre-computed flags byte (role + value-type + LAST)
      * @param output  the output byte array
      * @param offset  the current offset in the output array
      * @return the new offset after writing
@@ -203,9 +203,7 @@ public final class WamEncoder {
             INT_HANDLE.set(output, offset, (int) value);
             return offset + 4;
         } else {
-            offset = writeTag(fieldId, flags | VALUE_INT64, output, offset);
-            LONG_HANDLE.set(output, offset, value);
-            return offset + 8;
+            return writeFloat(fieldId, flags, (double) value, output, offset);
         }
     }
 

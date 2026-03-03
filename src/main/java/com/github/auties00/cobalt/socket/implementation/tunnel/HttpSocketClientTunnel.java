@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.socket.implementation.tunnel;
 
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
-import com.github.auties00.cobalt.socket.implementation.threading.SocketContext;
-import com.github.auties00.cobalt.socket.implementation.threading.SocketSelector;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketClientContext;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketSelector;
 import com.github.auties00.cobalt.socket.implementation.SocketClientListener;
 import com.github.auties00.cobalt.socket.implementation.transport.SocketClientTransport;
 
@@ -123,10 +123,10 @@ final class HttpSocketClientTunnel extends SocketClientTunnel {
 
             var redirect = authenticate(currentProxy, deadline);
             if (redirect == null) {
-                return ctx;
+                return;
             }
 
-            SocketSelector.INSTANCE.unregister(transport);
+            AbstractSocketSelector.INSTANCE.unregister(transport);
             currentProxy = redirect;
         }
         throw new IOException("HTTP proxy CONNECT exceeded maximum redirects (" + MAX_REDIRECTS + ")");
@@ -143,7 +143,7 @@ final class HttpSocketClientTunnel extends SocketClientTunnel {
      * @param proxyPort the proxy port for the SSL engine
      * @throws IOException if TLS initialization or handshake fails
      */
-    private void initProxyTls(SocketContext ctx, String proxyHost, int proxyPort) throws IOException {
+    private void initProxyTls(AbstractSocketClientContext ctx, String proxyHost, int proxyPort) throws IOException {
         try {
             var sslContext = SSLContext.getDefault();
             var engine = sslContext.createSSLEngine(proxyHost, proxyPort);
@@ -152,7 +152,7 @@ final class HttpSocketClientTunnel extends SocketClientTunnel {
             params.setEndpointIdentificationAlgorithm(HTTP_SCHEME.toUpperCase());
             engine.setSSLParameters(params);
             ctx.initSsl(engine);
-            SocketSelector.INSTANCE.startTlsHandshake(transport, TLS_HANDSHAKE_TIMEOUT);
+            AbstractSocketSelector.INSTANCE.startTlsHandshake(transport, TLS_HANDSHAKE_TIMEOUT);
         } catch (NoSuchAlgorithmException e) {
             throw new IOException("Failed to create SSLContext", e);
         }
@@ -209,17 +209,17 @@ final class HttpSocketClientTunnel extends SocketClientTunnel {
         skipHeaders(deadline);
 
         if (responseBuf != null && responseBuf.hasRemaining()) {
-            if (!SocketSelector.INSTANCE.preSeedDatagram(transport, responseBuf)) {
+            if (!AbstractSocketSelector.INSTANCE.preSeedDatagram(transport, responseBuf)) {
                 throw new IOException("Failed to pre-seed leftover bytes from proxy response");
             }
         }
         responseBuf = null;
 
-        if (!SocketSelector.INSTANCE.markReady(transport)) {
+        if (!AbstractSocketSelector.INSTANCE.markReady(transport)) {
             throw new IOException("Failed to authenticate with proxy: rejected");
         }
 
-        if (isHttps && !SocketSelector.INSTANCE.drainSslAppBuffer(transport)) {
+        if (isHttps && !AbstractSocketSelector.INSTANCE.drainSslAppBuffer(transport)) {
             throw new IOException("Failed to drain leftover SSL data after proxy authentication");
         }
 

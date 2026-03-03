@@ -16,6 +16,6 @@ final class DirectSocketClientTunnel extends SocketClientTunnel {
 
     @Override
     public void connect(InetSocketAddress endpoint, SocketClientListener listener) throws IOException, InterruptedException {
-        return transport.connect(endpoint, listener);
+        transport.connect(endpoint, listener);
     }
 }

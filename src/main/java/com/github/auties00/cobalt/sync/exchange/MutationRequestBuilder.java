@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.sync.exchange;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.EncryptedMutation;
 import com.github.auties00.cobalt.sync.crypto.MutationKeys;
 import com.github.auties00.cobalt.node.Node;
@@ -11,9 +13,13 @@ import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.SyncHashValue;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
+import javax.crypto.Mac;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.SequencedCollection;
 
 public final class MutationRequestBuilder {
@@ -23,14 +29,14 @@ public final class MutationRequestBuilder {
         this.whatsapp = whatsapp;
     }
 
-    public NodeBuilder buildSyncRequest(SyncPatchType patchType, SequencedCollection<SyncPendingMutation> patches) {
+    public NodeBuilder buildSyncRequest(SyncPatchType patchType, SequencedCollection<SyncPendingMutation> patches, Map<ByteBuffer, byte[]> syncActionKeyIds) {
         // Get current hash state for this collection
         var hashState = whatsapp.store()
                 .findWebAppHashStateByName(patchType)
                 .orElseGet(() -> new SyncHashValue(patchType));
 
         // Encrypt mutations if we have any to push
-        var mutationNodes = encryptMutations(patches);
+        var mutationNodes = encryptMutations(patches, syncActionKeyIds);
 
         // Build collection node
         var collectionBuilder = new NodeBuilder()
@@ -75,7 +81,7 @@ public final class MutationRequestBuilder {
     }
 
 
-    private SequencedCollection<Node> encryptMutations(SequencedCollection<SyncPendingMutation> patches) {
+    private SequencedCollection<Node> encryptMutations(SequencedCollection<SyncPendingMutation> patches, Map<ByteBuffer, byte[]> syncActionKeyIds) {
         if(patches.isEmpty()) {
             return List.of();
         }
@@ -98,7 +104,40 @@ public final class MutationRequestBuilder {
             var mutationNodes = new ArrayList<Node>(patches.size());
 
             for (var patch : patches) {
-                var encrypted = EncryptedMutation.of(patch, derivedKeys, latestKeyId);
+                var mutation = patch.mutation();
+                EncryptedMutation encrypted;
+
+                if (mutation.operation() == SyncdOperation.REMOVE) {
+                    // For REMOVE: look up the original SET mutation's key
+                    var indexBytes = mutation.index().getBytes(StandardCharsets.UTF_8);
+                    var indexMac = Mac.getInstance("HmacSHA256");
+                    indexMac.init(derivedKeys.indexKey());
+                    var indexMacResult = indexMac.doFinal(indexBytes);
+                    var indexMacKey = ByteBuffer.wrap(indexMacResult);
+
+                    var originalKeyId = syncActionKeyIds.get(indexMacKey);
+                    if (originalKeyId == null) {
+                        throw new IllegalStateException(
+                                "Cannot find original key for REMOVE operation on index: " + mutation.index()
+                        );
+                    }
+
+                    // Look up the original key data and derive keys
+                    var originalKeyData = whatsapp.store()
+                            .findWebAppStateKeyById(originalKeyId)
+                            .flatMap(AppStateSyncKey::keyData)
+                            .flatMap(AppStateSyncKeyData::keyData)
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Original sync key not found for REMOVE operation"
+                            ));
+
+                    try (var originalDerivedKeys = MutationKeys.ofSyncKey(originalKeyData)) {
+                        encrypted = EncryptedMutation.of(patch, originalDerivedKeys, originalKeyId);
+                    }
+                } else {
+                    // For SET: use the current/latest key
+                    encrypted = EncryptedMutation.of(patch, derivedKeys, latestKeyId);
+                }
 
                 var index = new NodeBuilder()
                         .description("index")

@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientType;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.util.FastRandomUtils;
 import com.github.auties00.cobalt.wam.binary.WamGlobalEncoder;
 import com.github.auties00.cobalt.wam.event.WamEventSpec;
 import com.github.auties00.cobalt.wam.type.WamChannel;
@@ -65,7 +66,7 @@ public final class WamService {
     /**
      * Maximum number of retry attempts for a failed buffer upload.
      */
-    private static final int MAX_RETRIES = 3;
+    private static final int MAX_RETRIES = 2;
 
     /**
      * Base delay in milliseconds for exponential backoff between
@@ -89,7 +90,7 @@ public final class WamService {
      * Device classification value for DESKTOP, matching the JS enum
      * {@code DEVICE_CLASSIFICATION.DESKTOP}.
      */
-    private static final int DEVICE_CLASSIFICATION_DESKTOP = 3;
+    private static final int DEVICE_CLASSIFICATION_DESKTOP = 4;
 
     /**
      * App build type value for RELEASE, matching the JS enum
@@ -98,94 +99,19 @@ public final class WamService {
      * @apiNote WAWebWamEnumAppBuildType.APP_BUILD_TYPE: ALPHA, BETA,
      * RELEASE values.
      */
-    private static final int APP_BUILD_RELEASE = 3;
+    private static final int APP_BUILD_RELEASE = 4;
 
     /**
      * Web client environment value for PROD, matching the JS enum
      * {@code WEBC_ENV_CODE.PROD}.
      */
-    private static final int WEBC_ENV_PROD = 3;
+    private static final int WEBC_ENV_PROD = 0;
 
     /**
-     * Web platform value for WEBCLIENT, matching the JS enum
-     * {@code PLATFORM_TYPE.WEBCLIENT}.
+     * Web platform value for WEB, matching the JS enum
+     * {@code WEBC_WEB_PLATFORM_TYPE.WEB}.
      */
     private static final int PLATFORM_WEBCLIENT = 1;
-
-    /**
-     * Global field id for commit time, written before every event.
-     */
-    private static final int FIELD_COMMIT_TIME = 47;
-
-    /**
-     * Global field id for platform.
-     */
-    private static final int FIELD_PLATFORM = 11;
-
-    /**
-     * Global field id for device name.
-     */
-    private static final int FIELD_DEVICE_NAME = 13;
-
-    /**
-     * Global field id for app version.
-     */
-    private static final int FIELD_APP_VERSION = 17;
-
-    /**
-     * Global field id for stream id.
-     */
-    private static final int FIELD_STREAM_ID = 3543;
-
-    /**
-     * Global field id for device classification.
-     */
-    private static final int FIELD_DEVICE_CLASSIFICATION = 14507;
-
-    /**
-     * Global field id for official client version.
-     */
-    private static final int FIELD_OC_VERSION = 6251;
-
-    /**
-     * Global field id for app build type.
-     */
-    private static final int FIELD_APP_BUILD = 1657;
-
-    /**
-     * Global field id for app is beta release.
-     */
-    private static final int FIELD_APP_IS_BETA = 21;
-
-    /**
-     * Global field id for memory class.
-     */
-    private static final int FIELD_MEM_CLASS = 655;
-
-    /**
-     * Global field id for number of CPUs.
-     */
-    private static final int FIELD_NUM_CPU = 10317;
-
-    /**
-     * Global field id for web client environment.
-     */
-    private static final int FIELD_WEBC_ENV = 633;
-
-    /**
-     * Global field id for web platform.
-     */
-    private static final int FIELD_WEBC_WEB_PLATFORM = 899;
-
-    /**
-     * Global field id for beacon session id.
-     */
-    private static final int FIELD_BEACON = 3433;
-
-    /**
-     * Global field id for ps id.
-     */
-    private static final int FIELD_PS_ID = 6005;
 
     private final WhatsAppClient client;
     private final ConcurrentMap<WamChannel, List<WamPendingEvent>> pending;
@@ -193,7 +119,6 @@ public final class WamService {
     private final WamBeaconing beaconing;
     private final WamPrivateStatsId privateStatsId;
     private final WamSamplingOverride samplingOverride;
-    private final WamGlobalState globalState;
 
     private volatile boolean initialized;
     private ScheduledExecutorService scheduler;
@@ -203,6 +128,11 @@ public final class WamService {
     private String deviceName;
     private int memClass;
     private int numCpu;
+    private String browser;
+    private String browserVersion;
+    private String osVersion;
+    private String deviceVersion;
+    private String webcTabId;
 
     /**
      * Constructs a new {@code WamService} bound to the given client.
@@ -219,7 +149,6 @@ public final class WamService {
         this.beaconing = new WamBeaconing();
         this.privateStatsId = new WamPrivateStatsId();
         this.samplingOverride = new WamSamplingOverride();
-        this.globalState = new WamGlobalState();
     }
 
     /**
@@ -235,10 +164,15 @@ public final class WamService {
         var store = client.store();
         var version = store.clientVersion();
         this.appVersion = version != null ? version.toString() : null;
-        this.platform = store.clientType() == WhatsAppClientType.WEB ? 1L : 2L;
+        this.platform = store.clientType() == WhatsAppClientType.WEB ? 8L : 2L;
         this.deviceName = store.name();
         this.memClass = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
         this.numCpu = Runtime.getRuntime().availableProcessors();
+        this.browser = "Cobalt";
+        this.browserVersion = appVersion;
+        this.osVersion = System.getProperty("os.name", "") + " " + System.getProperty("os.version", "");
+        this.deviceVersion = osVersion;
+        this.webcTabId = UUID.randomUUID().toString();
         this.initialized = true;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
         scheduler.scheduleWithFixedDelay(this::flush, FLUSH_INTERVAL_SECONDS, FLUSH_INTERVAL_SECONDS, TimeUnit.SECONDS);
@@ -261,7 +195,7 @@ public final class WamService {
         Objects.requireNonNull(event, "event cannot be null");
         var weight = effectiveWeight(event);
         if (weight > 1) {
-            if (ThreadLocalRandom.current().nextInt(weight) != 0) {
+            if (FastRandomUtils.randomInt(weight) != 0) {
                 return;
             }
         }
@@ -354,18 +288,23 @@ public final class WamService {
             privateStatsId.rotateAndGet();
         }
 
-        globalState.reset();
+        var beacons = new OptionalInt[events.size()];
+        var weights = new int[events.size()];
+        for (var i = 0; i < events.size(); i++) {
+            beacons[i] = beaconing.nextSequenceNumber(channel);
+            weights[i] = effectiveWeight(events.get(i).event());
+        }
+
         var batchStart = 0;
         var globalsSize = computeGlobalsSize(channel);
         var batchSize = HEADER_SIZE + globalsSize;
 
         for (var i = 0; i < events.size(); i++) {
             var pe = events.get(i);
-            var eventSize = computePerEventGlobalsSize(pe, channel) + pe.event().sizeOf();
+            var eventSize = computePerEventGlobalsSize(pe, channel, beacons[i]) + pe.event().sizeOf(weights[i]);
 
             if (batchStart < i && batchSize + eventSize > MAX_BUFFER_SIZE) {
-                buildAndSend(channel, events, batchStart, i, batchSize);
-                globalState.reset();
+                buildAndSend(channel, events, weights, beacons, batchStart, i, batchSize);
                 batchStart = i;
                 globalsSize = computeGlobalsSize(channel);
                 batchSize = HEADER_SIZE + globalsSize;
@@ -375,7 +314,7 @@ public final class WamService {
         }
 
         if (batchStart < events.size()) {
-            buildAndSend(channel, events, batchStart, events.size(), batchSize);
+            buildAndSend(channel, events, weights, beacons, batchStart, events.size(), batchSize);
         }
     }
 
@@ -384,11 +323,15 @@ public final class WamService {
      *
      * @param channel the transport channel
      * @param events  the full event list
+     * @param weights pre-computed sampling weights parallel to the events
+     *                list, re-fetched at flush time
+     * @param beacons pre-computed beacon sequence numbers parallel to
+     *                the events list
      * @param from    the inclusive start index in the event list
      * @param to      the exclusive end index in the event list
      * @param size    the pre-computed total buffer size
      */
-    private void buildAndSend(WamChannel channel, List<WamPendingEvent> events, int from, int to, int size) {
+    private void buildAndSend(WamChannel channel, List<WamPendingEvent> events, int[] weights, OptionalInt[] beacons, int from, int to, int size) {
         if (size > MAX_UPLOAD_SIZE) {
             LOGGER.warning("Dropping WAM buffer of " + size + " bytes (exceeds upload limit)");
             return;
@@ -400,8 +343,8 @@ public final class WamService {
 
         for (var i = from; i < to; i++) {
             var pe = events.get(i);
-            offset = writePerEventGlobals(pe, channel, buffer, offset);
-            offset = pe.event().encode(buffer, offset);
+            offset = writePerEventGlobals(pe, channel, beacons[i], buffer, offset);
+            offset = pe.event().encode(buffer, offset, weights[i]);
         }
 
         assert offset == size : "Buffer size mismatch: wrote " + offset + " but allocated " + size;
@@ -414,109 +357,99 @@ public final class WamService {
     }
 
     /**
-     * Returns the total byte count of the session globals section,
-     * considering delta encoding (only dirty globals are counted).
+     * Returns the total byte count of the session globals section.
+     *
+     * <p>All session globals are written unconditionally into every
+     * buffer header. The two-phase (size then write) encoding pattern
+     * is incompatible with delta tracking because the size pass would
+     * mark values as "seen" and the write pass would then skip them.
      *
      * @param channel the transport channel
      * @return the globals size in bytes
      */
     private int computeGlobalsSize(WamChannel channel) {
         var size = 0;
-        if (globalState.isDirtyInt(FIELD_PLATFORM, platform)) {
-            size += WamGlobalEncoder.platformSize(platform);
-        }
-        if (deviceName != null && globalState.isDirtyString(FIELD_DEVICE_NAME, deviceName)) {
+        size += WamGlobalEncoder.platformSize(platform);
+        if (deviceName != null) {
             size += WamGlobalEncoder.deviceNameSize(deviceName);
         }
-        if (appVersion != null && globalState.isDirtyString(FIELD_APP_VERSION, appVersion)) {
+        if (appVersion != null) {
             size += WamGlobalEncoder.appVersionSize(appVersion);
         }
-        if (globalState.isDirtyInt(FIELD_STREAM_ID, STREAM_ID)) {
-            size += WamGlobalEncoder.streamIdSize(STREAM_ID);
-        }
-        if (globalState.isDirtyInt(FIELD_DEVICE_CLASSIFICATION, DEVICE_CLASSIFICATION_DESKTOP)) {
-            size += WamGlobalEncoder.deviceClassificationSize(DEVICE_CLASSIFICATION_DESKTOP);
-        }
-        if (globalState.isDirtyInt(FIELD_OC_VERSION, 1)) {
-            size += WamGlobalEncoder.ocVersionSize(1);
-        }
-        if (globalState.isDirtyInt(FIELD_APP_BUILD, APP_BUILD_RELEASE)) {
-            size += WamGlobalEncoder.appBuildSize(APP_BUILD_RELEASE);
-        }
-        if (globalState.isDirtyBool(FIELD_APP_IS_BETA, false)) {
-            size += WamGlobalEncoder.appIsBetaReleaseSize(false);
-        }
-        if (globalState.isDirtyInt(FIELD_MEM_CLASS, memClass)) {
-            size += WamGlobalEncoder.memClassSize(memClass);
-        }
-        if (globalState.isDirtyInt(FIELD_NUM_CPU, numCpu)) {
-            size += WamGlobalEncoder.numCpuSize(numCpu);
+        size += WamGlobalEncoder.streamIdSize(STREAM_ID);
+        size += WamGlobalEncoder.ocVersionSize(1);
+        size += WamGlobalEncoder.appBuildSize(APP_BUILD_RELEASE);
+        size += WamGlobalEncoder.appIsBetaReleaseSize(false);
+        size += WamGlobalEncoder.memClassSize(memClass);
+        if (osVersion != null) {
+            size += WamGlobalEncoder.osVersionSize(osVersion);
         }
         if (channel != WamChannel.PRIVATE) {
-            if (globalState.isDirtyInt(FIELD_WEBC_ENV, WEBC_ENV_PROD)) {
-                size += WamGlobalEncoder.webcEnvSize(WEBC_ENV_PROD);
+            size += WamGlobalEncoder.numCpuSize(numCpu);
+            size += WamGlobalEncoder.deviceClassificationSize(DEVICE_CLASSIFICATION_DESKTOP);
+            size += WamGlobalEncoder.webcEnvSize(WEBC_ENV_PROD);
+            if (browser != null) {
+                size += WamGlobalEncoder.browserSize(browser);
             }
-            if (globalState.isDirtyInt(FIELD_WEBC_WEB_PLATFORM, PLATFORM_WEBCLIENT)) {
-                size += WamGlobalEncoder.webcWebPlatformSize(PLATFORM_WEBCLIENT);
+            if (browserVersion != null) {
+                size += WamGlobalEncoder.browserVersionSize(browserVersion);
             }
+            if (deviceVersion != null) {
+                size += WamGlobalEncoder.deviceVersionSize(deviceVersion);
+            }
+            if (webcTabId != null) {
+                size += WamGlobalEncoder.webcTabIdSize(webcTabId);
+            }
+            size += WamGlobalEncoder.webcRevisionSize(0);
         }
+        size += WamGlobalEncoder.webcWebPlatformSize(PLATFORM_WEBCLIENT);
         return size;
     }
 
     /**
-     * Writes the session globals into the given buffer at the specified
-     * offset. Only globals that changed since the last write are emitted.
+     * Writes all session globals into the given buffer at the specified
+     * offset.
      *
      * @param buffer  the output byte array
      * @param offset  the current offset in the output array
      * @param channel the transport channel
-     * @return the new offset after writing all dirty globals
+     * @return the new offset after writing all globals
      */
     private int writeGlobals(byte[] buffer, int offset, WamChannel channel) {
-        // Delta tracking was already done in computeGlobalsSize, so we
-        // re-check against the same state. Since reset() was called at
-        // the start of flushChannel and computeGlobalsSize marks them
-        // dirty, the first buffer will always write all globals.
-        // Subsequent buffers in the same flush (after rotation) will
-        // also start fresh due to the reset() in flushChannel.
-        if (globalState.isDirtyInt(FIELD_PLATFORM, platform)) {
-            offset = WamGlobalEncoder.writePlatform(platform, buffer, offset);
-        }
-        if (deviceName != null && globalState.isDirtyString(FIELD_DEVICE_NAME, deviceName)) {
+        offset = WamGlobalEncoder.writePlatform(platform, buffer, offset);
+        if (deviceName != null) {
             offset = WamGlobalEncoder.writeDeviceName(deviceName, buffer, offset);
         }
-        if (appVersion != null && globalState.isDirtyString(FIELD_APP_VERSION, appVersion)) {
+        if (appVersion != null) {
             offset = WamGlobalEncoder.writeAppVersion(appVersion, buffer, offset);
         }
-        if (globalState.isDirtyInt(FIELD_STREAM_ID, STREAM_ID)) {
-            offset = WamGlobalEncoder.writeStreamId(STREAM_ID, buffer, offset);
-        }
-        if (globalState.isDirtyInt(FIELD_DEVICE_CLASSIFICATION, DEVICE_CLASSIFICATION_DESKTOP)) {
-            offset = WamGlobalEncoder.writeDeviceClassification(DEVICE_CLASSIFICATION_DESKTOP, buffer, offset);
-        }
-        if (globalState.isDirtyInt(FIELD_OC_VERSION, 1)) {
-            offset = WamGlobalEncoder.writeOcVersion(1, buffer, offset);
-        }
-        if (globalState.isDirtyInt(FIELD_APP_BUILD, APP_BUILD_RELEASE)) {
-            offset = WamGlobalEncoder.writeAppBuild(APP_BUILD_RELEASE, buffer, offset);
-        }
-        if (globalState.isDirtyBool(FIELD_APP_IS_BETA, false)) {
-            offset = WamGlobalEncoder.writeAppIsBetaRelease(false, buffer, offset);
-        }
-        if (globalState.isDirtyInt(FIELD_MEM_CLASS, memClass)) {
-            offset = WamGlobalEncoder.writeMemClass(memClass, buffer, offset);
-        }
-        if (globalState.isDirtyInt(FIELD_NUM_CPU, numCpu)) {
-            offset = WamGlobalEncoder.writeNumCpu(numCpu, buffer, offset);
+        offset = WamGlobalEncoder.writeStreamId(STREAM_ID, buffer, offset);
+        offset = WamGlobalEncoder.writeOcVersion(1, buffer, offset);
+        offset = WamGlobalEncoder.writeAppBuild(APP_BUILD_RELEASE, buffer, offset);
+        offset = WamGlobalEncoder.writeAppIsBetaRelease(false, buffer, offset);
+        offset = WamGlobalEncoder.writeMemClass(memClass, buffer, offset);
+        if (osVersion != null) {
+            offset = WamGlobalEncoder.writeOsVersion(osVersion, buffer, offset);
         }
         if (channel != WamChannel.PRIVATE) {
-            if (globalState.isDirtyInt(FIELD_WEBC_ENV, WEBC_ENV_PROD)) {
-                offset = WamGlobalEncoder.writeWebcEnv(WEBC_ENV_PROD, buffer, offset);
+            offset = WamGlobalEncoder.writeNumCpu(numCpu, buffer, offset);
+            offset = WamGlobalEncoder.writeDeviceClassification(DEVICE_CLASSIFICATION_DESKTOP, buffer, offset);
+            offset = WamGlobalEncoder.writeWebcEnv(WEBC_ENV_PROD, buffer, offset);
+            if (browser != null) {
+                offset = WamGlobalEncoder.writeBrowser(browser, buffer, offset);
             }
-            if (globalState.isDirtyInt(FIELD_WEBC_WEB_PLATFORM, PLATFORM_WEBCLIENT)) {
-                offset = WamGlobalEncoder.writeWebcWebPlatform(PLATFORM_WEBCLIENT, buffer, offset);
+            if (browserVersion != null) {
+                offset = WamGlobalEncoder.writeBrowserVersion(browserVersion, buffer, offset);
             }
+            if (deviceVersion != null) {
+                offset = WamGlobalEncoder.writeDeviceVersion(deviceVersion, buffer, offset);
+            }
+            if (webcTabId != null) {
+                offset = WamGlobalEncoder.writeWebcTabId(webcTabId, buffer, offset);
+            }
+            offset = WamGlobalEncoder.writeWebcRevision(0, buffer, offset);
         }
+        offset = WamGlobalEncoder.writeWebcWebPlatform(PLATFORM_WEBCLIENT, buffer, offset);
         return offset;
     }
 
@@ -526,11 +459,11 @@ public final class WamService {
      *
      * @param pe      the pending event
      * @param channel the transport channel
+     * @param beacon  the pre-computed beacon sequence number
      * @return the per-event globals size in bytes
      */
-    private int computePerEventGlobalsSize(WamPendingEvent pe, WamChannel channel) {
+    private int computePerEventGlobalsSize(WamPendingEvent pe, WamChannel channel, OptionalInt beacon) {
         var size = WamGlobalEncoder.commitTimeSize(pe.commitTimeSeconds());
-        var beacon = beaconing.nextSequenceNumber();
         if (beacon.isPresent()) {
             size += WamGlobalEncoder.beaconSessionIdSize(beacon.getAsInt());
         }
@@ -547,13 +480,13 @@ public final class WamService {
      *
      * @param pe      the pending event
      * @param channel the transport channel
+     * @param beacon  the pre-computed beacon sequence number
      * @param buffer  the output byte array
      * @param offset  the current offset
      * @return the new offset after writing
      */
-    private int writePerEventGlobals(WamPendingEvent pe, WamChannel channel, byte[] buffer, int offset) {
+    private int writePerEventGlobals(WamPendingEvent pe, WamChannel channel, OptionalInt beacon, byte[] buffer, int offset) {
         offset = WamGlobalEncoder.writeCommitTime(pe.commitTimeSeconds(), buffer, offset);
-        var beacon = beaconing.nextSequenceNumber();
         if (beacon.isPresent()) {
             offset = WamGlobalEncoder.writeBeaconSessionId(beacon.getAsInt(), buffer, offset);
         }
@@ -595,7 +528,7 @@ public final class WamService {
      */
     private int effectiveWeight(WamEventSpec event) {
         var override = samplingOverride.get(event.id());
-        return override.isPresent() ? override.getAsInt() : event.releaseWeight();
+        return override.isPresent() ? Math.abs(override.getAsInt()) : event.releaseWeight();
     }
 
     /**
@@ -743,14 +676,17 @@ public final class WamService {
 
     /**
      * Computes the backoff delay for the given retry attempt using
-     * exponential backoff with 10% jitter.
+     * exponential backoff with 10% jitter. Matches the JS implementation
+     * bug where Math.pow(2, attempt) does not multiply by base delay.
      *
      * @param attempt the zero-based retry attempt number
      * @return the delay in milliseconds
      */
     private static long computeBackoffDelay(int attempt) {
-        var delay = Math.min(RETRY_BASE_DELAY_MS * (1L << attempt), RETRY_MAX_DELAY_MS);
-        var jitter = (long) (delay * 0.1 * ThreadLocalRandom.current().nextDouble());
+        var delay = attempt == 0 ? RETRY_BASE_DELAY_MS : (long) Math.pow(2, attempt);
+        if (delay > RETRY_MAX_DELAY_MS) delay = RETRY_MAX_DELAY_MS;
+        if (delay < RETRY_BASE_DELAY_MS) delay = RETRY_BASE_DELAY_MS;
+        var jitter = (long) (delay * 0.1 * FastRandomUtils.randomDouble());
         return delay + jitter;
     }
 

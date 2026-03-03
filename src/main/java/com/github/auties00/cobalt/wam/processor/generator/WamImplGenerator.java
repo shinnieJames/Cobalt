@@ -9,11 +9,11 @@ import com.github.auties00.cobalt.wam.type.WamType;
 import com.palantir.javapoet.*;
 
 import javax.lang.model.element.Modifier;
-import java.time.Instant;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 /**
  * Generates the companion {@code *Impl} class for a {@code @WamEvent}-annotated
@@ -28,9 +28,9 @@ import java.util.OptionalInt;
 public final class WamImplGenerator {
     private static final ClassName WAM_EVENT_ENCODER = ClassName.get(WamEventEncoder.class);
     private static final ClassName WAM_CHANNEL = ClassName.get(WamChannel.class);
-    private static final ClassName INSTANT = ClassName.get(Instant.class);
     private static final ClassName OPTIONAL = ClassName.get(Optional.class);
     private static final ClassName OPTIONAL_INT = ClassName.get(OptionalInt.class);
+    private static final ClassName OPTIONAL_LONG = ClassName.get(OptionalLong.class);
     private static final ClassName OPTIONAL_DOUBLE = ClassName.get(OptionalDouble.class);
 
     private WamImplGenerator() {
@@ -136,6 +136,9 @@ public final class WamImplGenerator {
             case INTEGER -> method.addStatement(
                     "return this.$N != null ? $T.of(this.$N) : $T.empty()",
                     prop.fieldName(), OPTIONAL_INT, prop.fieldName(), OPTIONAL_INT);
+            case TIMER -> method.addStatement(
+                    "return this.$N != null ? $T.of(this.$N) : $T.empty()",
+                    prop.fieldName(), OPTIONAL_LONG, prop.fieldName(), OPTIONAL_LONG);
             case FLOAT -> method.addStatement(
                     "return this.$N != null ? $T.of(this.$N) : $T.empty()",
                     prop.fieldName(), OPTIONAL_DOUBLE, prop.fieldName(), OPTIONAL_DOUBLE);
@@ -149,10 +152,11 @@ public final class WamImplGenerator {
         var method = MethodSpec.methodBuilder("sizeOf")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(int.class);
+                .returns(int.class)
+                .addParameter(int.class, "weight");
 
-        method.addStatement("int size = $T.eventMarkerSize($L, $L)",
-                WAM_EVENT_ENCODER, event.eventId(), event.releaseWeight());
+        method.addStatement("int size = $T.eventMarkerSize($L, weight)",
+                WAM_EVENT_ENCODER, event.eventId());
 
         for (var prop : event.properties()) {
             method.beginControlFlow("if (this.$N != null)", prop.fieldName());
@@ -174,8 +178,12 @@ public final class WamImplGenerator {
                     WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
             case FLOAT -> method.addStatement("size += $T.floatFieldSize($L)",
                     WAM_EVENT_ENCODER, prop.index());
-            case TIMER -> method.addStatement("size += $T.intFieldSize($L, encodeTimer(this.$N))",
-                    WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
+            case TIMER -> {
+                method.beginControlFlow("if (this.$N <= $L)", prop.fieldName(), Integer.MAX_VALUE);
+                method.addStatement("size += $T.intFieldSize($L, this.$N)",
+                        WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
+                method.endControlFlow();
+            }
             case ENUM -> method.addStatement("size += $T.intFieldSize($L, $N(this.$N))",
                     WAM_EVENT_ENCODER, prop.index(), encoderMethodName(prop), prop.fieldName());
         }
@@ -187,11 +195,12 @@ public final class WamImplGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(int.class)
                 .addParameter(byte[].class, "output")
-                .addParameter(int.class, "offset");
+                .addParameter(int.class, "offset")
+                .addParameter(int.class, "weight");
 
         var properties = event.properties();
 
-        // Find last non-null field index for MORE flag computation
+        // Find last non-null field index for LAST flag computation
         method.addStatement("int lastField = -1");
         for (var i = properties.size() - 1; i >= 0; i--) {
             var prop = properties.get(i);
@@ -208,17 +217,16 @@ public final class WamImplGenerator {
 
         // Event marker
         method.addStatement(
-                "offset = $T.writeEventMarker($L, $L, lastField >= 0, output, offset)",
-                WAM_EVENT_ENCODER, event.eventId(), event.releaseWeight()
+                "offset = $T.writeEventMarker($L, weight, lastField >= 0, output, offset)",
+                WAM_EVENT_ENCODER, event.eventId()
         );
 
         // Fields
-        method.addStatement("int fieldOrdinal = 0");
-        for (var prop : properties) {
+        for (var i = 0; i < properties.size(); i++) {
+            var prop = properties.get(i);
             method.beginControlFlow("if (this.$N != null)", prop.fieldName());
-            method.addStatement("boolean hasMore = fieldOrdinal < lastField");
+            method.addStatement("boolean hasMore = $L < lastField", i);
             addWriteForProperty(method, prop);
-            method.addStatement("fieldOrdinal++");
             method.endControlFlow();
         }
 
@@ -240,9 +248,12 @@ public final class WamImplGenerator {
             case FLOAT -> method.addStatement(
                     "offset = $T.writeFloatField($L, this.$N, hasMore, output, offset)",
                     WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
-            case TIMER -> method.addStatement(
-                    "offset = $T.writeIntField($L, encodeTimer(this.$N), hasMore, output, offset)",
-                    WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
+            case TIMER -> {
+                method.beginControlFlow("if (this.$N <= $L)", prop.fieldName(), Integer.MAX_VALUE);
+                method.addStatement("offset = $T.writeIntField($L, this.$N, hasMore, output, offset)",
+                        WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
+                method.endControlFlow();
+            }
             case ENUM -> method.addStatement(
                     "offset = $T.writeIntField($L, $N(this.$N), hasMore, output, offset)",
                     WAM_EVENT_ENCODER, prop.index(), encoderMethodName(prop), prop.fieldName());
@@ -260,12 +271,6 @@ public final class WamImplGenerator {
                 continue;
             }
             implBuilder.addMethod(generateEnumEncoder(prop.enumElement(), methodName));
-        }
-
-        var hasTimer = event.properties().stream()
-                .anyMatch(p -> p.wamType() == WamType.TIMER);
-        if (hasTimer) {
-            implBuilder.addMethod(generateTimerEncoder());
         }
     }
 
@@ -286,25 +291,13 @@ public final class WamImplGenerator {
         return method.build();
     }
 
-    private static MethodSpec generateTimerEncoder() {
-        return MethodSpec.methodBuilder("encodeTimer")
-                .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
-                .returns(long.class)
-                .addParameter(INSTANT, "value")
-                .addStatement("long elapsed = $T.now().toEpochMilli() - value.toEpochMilli()", INSTANT)
-                .addStatement("if (elapsed < 0) elapsed = 0")
-                .addStatement("return elapsed > $T.MAX_VALUE ? $T.MAX_VALUE : elapsed",
-                        TypeName.INT.box(), TypeName.INT.box())
-                .build();
-    }
-
     private static TypeName rawFieldType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
             case INTEGER -> ClassName.get(Integer.class);
             case BOOLEAN -> ClassName.get(Boolean.class);
             case STRING -> ClassName.get(String.class);
             case FLOAT -> ClassName.get(Double.class);
-            case TIMER -> INSTANT;
+            case TIMER -> ClassName.get(Long.class);
             case ENUM -> {
                 var enumElement = prop.enumElement();
                 if (enumElement == null) {
@@ -318,6 +311,7 @@ public final class WamImplGenerator {
     private static TypeName optionalReturnType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
             case INTEGER -> OPTIONAL_INT;
+            case TIMER -> OPTIONAL_LONG;
             case FLOAT -> OPTIONAL_DOUBLE;
             default -> ParameterizedTypeName.get(OPTIONAL, rawFieldType(prop));
         };

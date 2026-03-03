@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.media.MediaVisibility;
 import com.github.auties00.cobalt.model.message.PrivacySystemMessage;
 import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import com.github.auties00.cobalt.model.setting.WallpaperSettings;
 import it.auties.protobuf.annotation.ProtobufEnum;
 import it.auties.protobuf.annotation.ProtobufEnumIndex;
@@ -88,8 +89,8 @@ public non-sealed abstract class Chat implements JidProvider {
     @ProtobufProperty(index = 23, type = ProtobufType.BYTES)
     protected byte[] contactPrimaryIdentityKey;
 
-    @ProtobufProperty(index = 24, type = ProtobufType.UINT32)
-    protected Integer pinned;
+    @ProtobufProperty(index = 24, type = ProtobufType.UINT32, mixins = InstantSecondsMixin.class)
+    protected Instant pinnedTimestamp;
 
     @ProtobufProperty(index = 25, type = ProtobufType.UINT64)
     protected ChatMute mute;
@@ -181,7 +182,7 @@ public non-sealed abstract class Chat implements JidProvider {
     @ProtobufProperty(index = 54, type = ProtobufType.BOOL)
     protected Boolean maibaAiThreadEnabled;
 
-    protected Chat(Jid jid, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Integer pinned, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, Jid accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled) {
+    protected Chat(Jid jid, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Instant pinnedTimestamp, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, Jid accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled) {
         this.jid = Objects.requireNonNull(jid);
         this.newJid = newJid;
         this.oldJid = oldJid;
@@ -204,7 +205,7 @@ public non-sealed abstract class Chat implements JidProvider {
         this.tcToken = tcToken;
         this.tcTokenTimestamp = tcTokenTimestamp;
         this.contactPrimaryIdentityKey = contactPrimaryIdentityKey;
-        this.pinned = pinned;
+        this.pinnedTimestamp = pinnedTimestamp;
         this.mute = mute;
         this.wallpaper = wallpaper;
         this.mediaVisibility = mediaVisibility;
@@ -384,11 +385,11 @@ public non-sealed abstract class Chat implements JidProvider {
         return Optional.ofNullable(contactPrimaryIdentityKey);
     }
 
-    public OptionalInt pinned() {
-        return pinned == null ? OptionalInt.empty() : OptionalInt.of(pinned);
+    public Optional<Instant> pinnedTimestamp() {
+        return Optional.ofNullable(pinnedTimestamp);
     }
 
-    public Optional<ChatMute> muteEndTime() {
+    public Optional<ChatMute> mute() {
         return Optional.ofNullable(mute);
     }
 
@@ -635,8 +636,8 @@ public non-sealed abstract class Chat implements JidProvider {
         return this;
     }
 
-    public Chat setPinned(Integer pinned) {
-        this.pinned = pinned;
+    public Chat setPinnedTimestamp(Instant pinned) {
+        this.pinnedTimestamp = pinned;
         return this;
     }
 

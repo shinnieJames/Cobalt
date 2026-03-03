@@ -63,18 +63,32 @@ public interface WamEventSpec {
 
     /**
      * Returns the number of bytes required to encode this event in the
-     * WAM binary protocol.
+     * WAM binary protocol using the static release weight.
      *
      * <p>The size includes the event marker (event id and negative
      * weight) and all non-{@code null} field entries.
      *
      * @return the encoded size in bytes
      */
-    int sizeOf();
+    default int sizeOf() {
+        return sizeOf(releaseWeight());
+    }
+
+    /**
+     * Returns the number of bytes required to encode this event in the
+     * WAM binary protocol using the given weight.
+     *
+     * <p>The size includes the event marker (event id and negative
+     * weight) and all non-{@code null} field entries.
+     *
+     * @param weight the resolved sampling weight to encode
+     * @return the encoded size in bytes
+     */
+    int sizeOf(int weight);
 
     /**
      * Writes this event into the given output buffer starting at the
-     * specified offset.
+     * specified offset, using the static release weight.
      *
      * <p>The caller must ensure that the output array has at least
      * {@code offset + sizeOf()} bytes available.
@@ -83,5 +97,21 @@ public interface WamEventSpec {
      * @param offset the starting offset within the output array
      * @return the new offset after the last byte written
      */
-    int encode(byte[] output, int offset);
+    default int encode(byte[] output, int offset) {
+        return encode(output, offset, releaseWeight());
+    }
+
+    /**
+     * Writes this event into the given output buffer starting at the
+     * specified offset, using the given weight.
+     *
+     * <p>The caller must ensure that the output array has at least
+     * {@code offset + sizeOf(weight)} bytes available.
+     *
+     * @param output the output byte array
+     * @param offset the starting offset within the output array
+     * @param weight the resolved sampling weight to encode
+     * @return the new offset after the last byte written
+     */
+    int encode(byte[] output, int offset, int weight);
 }

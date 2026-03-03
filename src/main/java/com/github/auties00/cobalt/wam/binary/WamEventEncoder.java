@@ -58,7 +58,7 @@ public final class WamEventEncoder {
      * @return the new offset after writing
      */
     public static int writeEventMarker(int eventId, int weight, boolean hasFields, byte[] output, int offset) {
-        return WamEncoder.writeInt(eventId, EVENT | (hasFields ? MORE : 0), -weight, output, offset);
+        return WamEncoder.writeInt(eventId, EVENT | (hasFields ? 0 : LAST), -weight, output, offset);
     }
 
     /**
@@ -83,7 +83,7 @@ public final class WamEventEncoder {
      * @return the new offset after writing
      */
     public static int writeIntField(int fieldId, long value, boolean hasMore, byte[] output, int offset) {
-        return WamEncoder.writeInt(fieldId, FIELD | (hasMore ? MORE : 0), value, output, offset);
+        return WamEncoder.writeInt(fieldId, FIELD | (hasMore ? 0 : LAST), value, output, offset);
     }
 
     /**
@@ -111,7 +111,7 @@ public final class WamEventEncoder {
      * @return the new offset after writing
      */
     public static int writeBoolField(int fieldId, boolean value, boolean hasMore, byte[] output, int offset) {
-        return WamEncoder.writeInt(fieldId, FIELD | (hasMore ? MORE : 0), value ? 1 : 0, output, offset);
+        return WamEncoder.writeInt(fieldId, FIELD | (hasMore ? 0 : LAST), value ? 1 : 0, output, offset);
     }
 
     /**
@@ -136,7 +136,7 @@ public final class WamEventEncoder {
      * @return the new offset after writing
      */
     public static int writeStringField(int fieldId, String value, boolean hasMore, byte[] output, int offset) {
-        return WamEncoder.writeString(fieldId, FIELD | (hasMore ? MORE : 0), value, output, offset);
+        return WamEncoder.writeString(fieldId, FIELD | (hasMore ? 0 : LAST), value, output, offset);
     }
 
     /**
@@ -161,6 +161,6 @@ public final class WamEventEncoder {
      * @return the new offset after writing
      */
     public static int writeFloatField(int fieldId, double value, boolean hasMore, byte[] output, int offset) {
-        return WamEncoder.writeFloat(fieldId, FIELD | (hasMore ? MORE : 0), value, output, offset);
+        return WamEncoder.writeFloat(fieldId, FIELD | (hasMore ? 0 : LAST), value, output, offset);
     }
 }

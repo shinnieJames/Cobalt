@@ -28,33 +28,43 @@ public sealed interface DecryptedMutation {
             byte[] valueMac,
             SyncActionValue value,
             SyncdOperation operation,
-            Instant timestamp
+            Instant timestamp,
+            byte[] keyId
     ) implements DecryptedMutation {
         private static final int IV_LENGTH = 16;
         private static final int MAC_LENGTH = 32;
-        private static final byte[] VERSION = {0x00, 0x00, 0x00, 0x02};
 
         public static Untrusted of(
                 byte[] encryptedValue,
                 byte[] indexMac,
                 MutationKeys keys,
-                SyncdOperation operation
+                SyncdOperation operation,
+                byte[] keyId
         ) throws GeneralSecurityException {
             if (encryptedValue.length < IV_LENGTH + MAC_LENGTH) {
                 throw new IllegalArgumentException("Encrypted value too short");
             }
 
-            // Extract value MAC
-            var valueMac = Arrays.copyOfRange(encryptedValue, encryptedValue.length - 32, encryptedValue.length);
+            // Extract value MAC (last 32 bytes)
+            var valueMac = Arrays.copyOfRange(encryptedValue, encryptedValue.length - MAC_LENGTH, encryptedValue.length);
 
-            // Verify value MAC
-            var mac = Mac.getInstance("HmacSHA256");
+            // Build associated data: [opByte] || keyIdBytes
+            var associatedData = new byte[1 + keyId.length];
+            associatedData[0] = operation.content();
+            System.arraycopy(keyId, 0, associatedData, 1, keyId.length);
+
+            // Build 8-byte length suffix: last byte = associatedData.length
+            var lengthSuffix = new byte[8];
+            lengthSuffix[7] = (byte) associatedData.length;
+
+            // Verify value MAC using HMAC-SHA-512 truncated to 32 bytes
+            var mac = Mac.getInstance("HmacSHA512");
             mac.init(keys.valueMacKey());
-            mac.update(operation.content());
-            mac.update(VERSION);
-            mac.update(encryptedValue, 0, IV_LENGTH);
-            mac.update(encryptedValue, IV_LENGTH, encryptedValue.length - IV_LENGTH - MAC_LENGTH);
-            var expectedMac = mac.doFinal();
+            mac.update(associatedData);
+            mac.update(encryptedValue, 0, encryptedValue.length - MAC_LENGTH); // IV || ciphertext
+            mac.update(lengthSuffix);
+            var fullMac = mac.doFinal();
+            var expectedMac = Arrays.copyOf(fullMac, MAC_LENGTH);
             if (!MessageDigest.isEqual(valueMac, expectedMac)) {
                 throw new WhatsAppWebAppStateSyncException.ValueMacMismatch();
             }
@@ -74,8 +84,9 @@ public sealed interface DecryptedMutation {
                     .orElseThrow(() -> new IllegalStateException("Missing value from action data"));
             var actionTimestamp = actionValue.timestamp()
                     .orElseGet(Instant::now);
-            mac.init(keys.indexKey());
-            var expectedIndexMac = mac.doFinal(actionIndex);
+            var indexMac2 = Mac.getInstance("HmacSHA256");
+            indexMac2.init(keys.indexKey());
+            var expectedIndexMac = indexMac2.doFinal(actionIndex);
             if (!MessageDigest.isEqual(indexMac, expectedIndexMac)) {
                 throw new WhatsAppWebAppStateSyncException.IndexMacMismatch();
             }
@@ -87,7 +98,8 @@ public sealed interface DecryptedMutation {
                     valueMac,
                     actionValue,
                     operation,
-                    actionTimestamp
+                    actionTimestamp,
+                    keyId
             );
         }
     }

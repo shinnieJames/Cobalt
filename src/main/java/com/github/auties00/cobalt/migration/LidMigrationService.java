@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.migration;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.model.chat.Chat;
+import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.sync.history.HistorySync;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMapping;
@@ -323,24 +324,19 @@ public final class LidMigrationService {
             return;
         }
 
-        var user = mapping.pn();
+        var jid = mapping.pn();
 
         // Get the effective LID (prefer latest over assigned)
-        var effectiveLid = mapping.effectiveLid()
-                .orElse(null);
-        if (effectiveLid == null) {
-            return;
-        }
+        var effectiveLid = mapping.latestLid()
+                .orElse(mapping.assignedLid());
 
         // Store in primary cache
-        primaryPnToLidCache.put(user, effectiveLid);
+        primaryPnToLidCache.put(jid.user(), effectiveLid);
 
         // Update contact if exists
-        mapping.phoneNumber().ifPresent(phoneJid -> {
-            store.findContactByJid(phoneJid).ifPresent(contact -> {
-                contact.setLid(effectiveLid);
-                store.registerLidMapping(phoneJid, effectiveLid);
-            });
+        store.findContactByJid(jid).ifPresent(contact -> {
+            contact.setLid(effectiveLid);
+            store.registerLidMapping(jid, effectiveLid);
         });
     }
 
@@ -455,8 +451,8 @@ public final class LidMigrationService {
 
             // Rule 8b: LID mismatch between local and primary
             // Compare timestamps to determine which is fresher
-            var chatTimestamp = chat.timestampSeconds();
-            if (chatTimestamp >= chatDbMigrationTimestamp && chatDbMigrationTimestamp > 0) {
+            var chatTimestamp = chat.conversationTimestamp();
+            if (chatTimestamp.isPresent() && chatTimestamp.get().compareTo(chatDbMigrationTimestamp) > 0) {
                 // Local data is fresher than primary sync → primary mappings are obsolete
                 throw new WhatsAppLidMigrationException.PrimaryMappingsObsolete();
             }
@@ -494,7 +490,10 @@ public final class LidMigrationService {
         }
 
         // Preserve muted chats - user made a choice about notifications
-        if (chat.mute() != null && chat.mute().isMuted()) {
+        var muted = chat.mute()
+                .map(ChatMute::isMuted)
+                .orElse(false);
+        if (muted) {
             return true;
         }
 

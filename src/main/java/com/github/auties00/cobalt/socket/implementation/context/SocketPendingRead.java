@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.implementation.threading;
+package com.github.auties00.cobalt.socket.implementation.context;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -8,7 +8,7 @@ import java.nio.channels.SocketChannel;
  * phase of a proxied connection.
  *
  * <p> The requesting thread constructs a {@code SocketPendingRead}, posts it
- * to the {@link SocketContext#pendingBinaryRead} field, and blocks on
+ * to the {@link AbstractSocketClientContext#pendingBinaryRead} field, and blocks on
  * {@link #lock}.  The selector thread reads bytes from the channel into
  * {@link #buffer}, updates {@link #length}, and notifies the lock when the
  * request is satisfied.
@@ -27,13 +27,13 @@ import java.nio.channels.SocketChannel;
  *
  * <p> <em>Thread safety:</em> instances are created by the requesting thread
  * and then handed off to the selector thread through a volatile write to
- * {@link SocketContext#pendingBinaryRead}.  After the handoff, only the
+ * {@link AbstractSocketClientContext#pendingBinaryRead}.  After the handoff, only the
  * selector thread mutates {@link #length}.  The requesting thread reads
  * {@link #length} only after being notified through {@link #lock}, which
  * establishes the necessary happens-before edge via the monitor's release
  * and acquire.
  *
- * @see SocketContext#pendingBinaryRead
+ * @see AbstractSocketClientContext#pendingBinaryRead
  */
 public final class SocketPendingRead {
     /**

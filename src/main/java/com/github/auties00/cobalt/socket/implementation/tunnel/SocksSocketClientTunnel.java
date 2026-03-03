@@ -2,7 +2,7 @@ package com.github.auties00.cobalt.socket.implementation.tunnel;
 
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
 import com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator;
-import com.github.auties00.cobalt.socket.implementation.threading.SocketSelector;
+import com.github.auties00.cobalt.socket.implementation.context.AbstractSocketSelector;
 import com.github.auties00.cobalt.socket.implementation.SocketClientListener;
 import com.github.auties00.cobalt.socket.implementation.transport.SocketClientTransport;
 
@@ -136,7 +136,7 @@ final class SocksSocketClientTunnel extends SocketClientTunnel {
         var proxyHost = proxy.host();
         var proxyPort = proxy.port();
 
-        var ctx = transport.connect(new InetSocketAddress(proxyHost, proxyPort), listener);
+        transport.connect(new InetSocketAddress(proxyHost, proxyPort), listener);
 
         switch (proxy) {
             case WhatsAppClientProxy.Socks.V4.Local v4 -> performSocks4Handshake(v4);
@@ -144,11 +144,10 @@ final class SocksSocketClientTunnel extends SocketClientTunnel {
             case WhatsAppClientProxy.Socks.V5.Local v5 -> performSocks5Handshake(v5);
             case WhatsAppClientProxy.Socks.V5.Remote v5h -> performSocks5Handshake(v5h);
         }
-        if (!SocketSelector.INSTANCE.markReady(transport)) {
+
+        if (!AbstractSocketSelector.INSTANCE.markReady(transport)) {
             throw new IOException("Failed to authenticate with proxy: rejected");
         }
-
-        return ctx;
     }
 
     /**

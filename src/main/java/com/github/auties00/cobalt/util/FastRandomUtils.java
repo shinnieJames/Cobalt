@@ -126,4 +126,16 @@ public final class FastRandomUtils {
     public static long randomLong(long min, long max) {
         return RANDOM.nextLong(min, max);
     }
+
+    public static double randomDouble() {
+        return RANDOM.nextDouble();
+    }
+
+    public static double randomDouble(double min, double max) {
+        return RANDOM.nextDouble(min, max);
+    }
+
+    public static double randomDouble(long bound) {
+        return RANDOM.nextDouble(bound);
+    }
 }

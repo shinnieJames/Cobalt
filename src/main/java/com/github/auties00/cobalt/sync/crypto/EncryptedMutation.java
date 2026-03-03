@@ -11,6 +11,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.Arrays;
 
 public record EncryptedMutation(
         byte[] indexMac,
@@ -20,16 +21,13 @@ public record EncryptedMutation(
 ) {
     private static final int IV_LENGTH = 16;
     private static final int MAC_LENGTH = 32;
-    private static final int MAX_PADDING_LENGTH = 64;
-    private static final byte[] VERSION = {0x00, 0x00, 0x00, 0x02};
 
     public static EncryptedMutation of(
             SyncPendingMutation patch,
             MutationKeys keys,
             byte[] keyId
     ) throws GeneralSecurityException {
-        // Create ActionDataSync
-        var padding = FastRandomUtils.randomByteArray(1, MAX_PADDING_LENGTH + 1);
+        // Create ActionDataSync with no padding (WA Web uses MAX_OF_MIN_DATA_LENGTH = 0)
         var mutation = patch.mutation();
         var actionVersion = mutation.value()
                 .version()
@@ -37,7 +35,7 @@ public record EncryptedMutation(
         var actionData = new SyncActionDataBuilder()
                 .index(patch.mutation().index().getBytes(StandardCharsets.UTF_8))
                 .value(mutation.value())
-                .padding(padding)
+                .padding(new byte[0])
                 .version(actionVersion)
                 .build();
 
@@ -47,7 +45,7 @@ public record EncryptedMutation(
         // Encrypt with AES-256-CBC
         var cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         var ciphertextLength = cipher.getOutputSize(plaintext.length);
-        var encryptedValue = new byte[IV_LENGTH + ciphertextLength +  MAC_LENGTH];
+        var encryptedValue = new byte[IV_LENGTH + ciphertextLength + MAC_LENGTH];
         FastRandomUtils.randomByteArray(encryptedValue, 0, IV_LENGTH);
         var ivSpec = new IvParameterSpec(encryptedValue, 0, IV_LENGTH);
         cipher.init(Cipher.ENCRYPT_MODE, keys.valueEncryptionKey(), ivSpec);
@@ -55,22 +53,32 @@ public record EncryptedMutation(
             throw new InternalError("Ciphertext length mismatch");
         }
 
-        // Compute value MAC
-        var mac = Mac.getInstance("HmacSHA256");
-        var operation = mutation.operation().content();
+        // Build associated data: [opByte] || keyIdBytes
+        var opByte = mutation.operation().content();
+        var associatedData = new byte[1 + keyId.length];
+        associatedData[0] = opByte;
+        System.arraycopy(keyId, 0, associatedData, 1, keyId.length);
+
+        // Build 8-byte length suffix: last byte = associatedData.length
+        var lengthSuffix = new byte[8];
+        lengthSuffix[7] = (byte) associatedData.length;
+
+        // Compute value MAC using HMAC-SHA-512 truncated to 32 bytes
+        var mac = Mac.getInstance("HmacSHA512");
         mac.init(keys.valueMacKey());
-        mac.update(operation);
-        mac.update(VERSION);
-        mac.update(encryptedValue, 0, IV_LENGTH);
-        mac.update(encryptedValue, IV_LENGTH, ciphertextLength);
-        mac.doFinal(encryptedValue, IV_LENGTH + ciphertextLength);
+        mac.update(associatedData);
+        mac.update(encryptedValue, 0, IV_LENGTH + ciphertextLength); // IV || ciphertext
+        mac.update(lengthSuffix);
+        var fullMac = mac.doFinal();
+        System.arraycopy(fullMac, 0, encryptedValue, IV_LENGTH + ciphertextLength, MAC_LENGTH);
 
         // Compute index MAC
         var indexBytes = mutation.index().getBytes(StandardCharsets.UTF_8);
-        mac.init(keys.indexKey());
-        var indexMac = mac.doFinal(indexBytes);
+        var indexMac = Mac.getInstance("HmacSHA256");
+        indexMac.init(keys.indexKey());
+        var indexMacResult = indexMac.doFinal(indexBytes);
 
         // Create EncryptedMutation
-        return new EncryptedMutation(indexMac, encryptedValue, keyId, mutation.operation());
+        return new EncryptedMutation(indexMacResult, encryptedValue, keyId, mutation.operation());
     }
 }

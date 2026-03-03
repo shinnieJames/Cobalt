@@ -37,6 +37,7 @@ public sealed abstract class SocketClientTunnel permits DirectSocketClientTunnel
     public boolean isConnected() {
         return transport.isConnected();
     }
+
     public int readBinary(ByteBuffer buffer, boolean fully) throws IOException {
         return transport.readBinary(buffer, fully);
     }

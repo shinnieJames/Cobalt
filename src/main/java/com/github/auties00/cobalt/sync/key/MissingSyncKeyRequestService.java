@@ -37,11 +37,6 @@ public final class MissingSyncKeyRequestService {
 
     /**
      * Requests missing sync keys from companion devices.
-     * <p>
-     * Per WhatsApp Web WAWebKeyManagementSendKeyRequestApi.sendAppStateSyncKeyRequest:
-     * - Gets peer devices (companion devices)
-     * - Creates a protocol message with APP_STATE_SYNC_KEY_REQUEST type
-     * - Sends it to all peer devices
      *
      * @param keyIds the IDs of the missing keys
      */

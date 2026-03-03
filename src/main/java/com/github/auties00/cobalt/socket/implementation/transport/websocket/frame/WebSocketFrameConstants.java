@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.implementation.websocket.frame;
+package com.github.auties00.cobalt.socket.implementation.transport.websocket.frame;
 
 public final class WebSocketFrameConstants {
     public static final byte OPCODE_CONTINUATION = 0x0;
