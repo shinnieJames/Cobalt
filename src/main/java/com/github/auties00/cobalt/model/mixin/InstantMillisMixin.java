@@ -10,7 +10,6 @@ import java.time.Instant;
  * A protobuf mixin that converts between {@link Instant} and a {@code Long} representing
  * milliseconds since the epoch of 1970-01-01T00:00:00Z.
  */
-// TODO: Add date API into protobuf built-ins
 @ProtobufMixin
 public final class InstantMillisMixin {
     /**
