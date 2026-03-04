@@ -55,6 +55,36 @@ public final class WamGlobalEncoder {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
+    // ---- generic null global ----
+
+    /**
+     * Returns the number of bytes required to encode a null global
+     * entry for the given field identifier.
+     *
+     * <p>A null global is written when a previously non-{@code null}
+     * global transitions to {@code null}, matching the
+     * {@code VALUE_NULL} tag entry produced by WhatsApp Web's
+     * {@code writeGlobalAttribute(buffer, id, null)}.
+     *
+     * @param fieldId the numeric field identifier
+     * @return the encoded size in bytes
+     */
+    public static int nullGlobalSize(int fieldId) {
+        return WamEncoder.nullSize(fieldId);
+    }
+
+    /**
+     * Writes a null global entry into the output array.
+     *
+     * @param fieldId the numeric field identifier
+     * @param output  the output byte array
+     * @param offset  the current offset in the output array
+     * @return the new offset after writing
+     */
+    public static int writeNullGlobal(int fieldId, byte[] output, int offset) {
+        return WamEncoder.writeNull(fieldId, GLOBAL, output, offset);
+    }
+
     // ---- platform (11, int) ----
 
     /**
@@ -514,6 +544,31 @@ public final class WamGlobalEncoder {
      */
     public static int writeWebcTabId(String value, byte[] output, int offset) {
         return WamEncoder.writeString(WEBC_TAB_ID, GLOBAL, value, output, offset);
+    }
+
+    // ---- abKey2 (4473, string) ----
+
+    /**
+     * Returns the number of bytes required to encode the AB key 2
+     * global.
+     *
+     * @param value the AB key string, must not be {@code null}
+     * @return the encoded size in bytes
+     */
+    public static int abKey2Size(String value) {
+        return WamEncoder.stringSize(AB_KEY_2, value);
+    }
+
+    /**
+     * Writes the AB key 2 global attribute into the output array.
+     *
+     * @param value  the AB key string, must not be {@code null}
+     * @param output the output byte array
+     * @param offset the current offset in the output array
+     * @return the new offset after writing
+     */
+    public static int writeAbKey2(String value, byte[] output, int offset) {
+        return WamEncoder.writeString(AB_KEY_2, GLOBAL, value, output, offset);
     }
 
     // ---- webcRevision (18491, int) ----

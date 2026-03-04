@@ -99,13 +99,7 @@ public sealed interface LidMigrationResolution
         /**
          * Thread has a duplicate LID thread that will be merged.
          */
-        DUPLICATE_WILL_MERGE,
-
-        /**
-         * No LID mapping found but chat has user data that should be preserved.
-         * This includes archived, muted, pinned chats or chats with messages.
-         */
-        NO_LID_BUT_HAS_DATA
+        DUPLICATE_WILL_MERGE
     }
 
     /**

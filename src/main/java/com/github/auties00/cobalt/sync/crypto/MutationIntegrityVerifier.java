@@ -82,15 +82,16 @@ public final class MutationIntegrityVerifier {
      * Verifies the integrity of a single patch using the computed LT-Hash
      * and the patch's own value MACs.
      *
-     * <p>Per WhatsApp Web behavior, each patch is verified individually:
+     * <p>Per WhatsApp Web behavior, each patch is verified individually
+     * with the patch MAC verified first, then the snapshot MAC:
      * <ol>
-     *   <li>Extract the wire {@code snapshotMac} from the patch protobuf</li>
-     *   <li>If present, compute the expected snapshot MAC from the incremental
-     *       LT-Hash and compare against the wire value</li>
      *   <li>Extract the wire {@code patchMac} from the patch protobuf</li>
      *   <li>If present, compute the expected patch MAC using the <b>wire</b>
      *       snapshot MAC bytes (not the locally computed one) as HMAC input,
      *       along with only this patch's value MACs</li>
+     *   <li>Extract the wire {@code snapshotMac} from the patch protobuf</li>
+     *   <li>If present, compute the expected snapshot MAC from the incremental
+     *       LT-Hash and compare against the wire value</li>
      * </ol>
      *
      * @param collectionName the collection type
@@ -120,21 +121,22 @@ public final class MutationIntegrityVerifier {
                 .orElse(0L);
 
         try (var keys = MutationKeys.ofSyncKey(keyData)) {
-            // Step 1: Verify wire snapshotMac against locally computed LT-Hash
             var wireSnapshotMac = patch.snapshotMac().orElse(null);
-            if (wireSnapshotMac != null) {
-                var expectedSnapshotMac = computeSnapshotMac(keys.snapshotMacKey(), computedLtHash, patchVersion, collectionName);
-                if (!MessageDigest.isEqual(wireSnapshotMac, expectedSnapshotMac)) {
-                    throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, patchVersion);
-                }
-            }
 
-            // Step 2: Verify wire patchMac using wire snapshotMac as input
+            // Step 1: Verify wire patchMac using wire snapshotMac as input (patch MAC first per WA Web)
             var wirePatchMac = patch.patchMac().orElse(null);
             if (wirePatchMac != null) {
                 var expectedPatchMac = computePatchMac(keys.patchMacKey(), wireSnapshotMac, patchValueMacs, patchVersion, collectionName);
                 if (!MessageDigest.isEqual(wirePatchMac, expectedPatchMac)) {
                     throw new WhatsAppWebAppStateSyncException.PatchMacMismatch(collectionName, patchVersion);
+                }
+            }
+
+            // Step 2: Verify wire snapshotMac against locally computed LT-Hash
+            if (wireSnapshotMac != null) {
+                var expectedSnapshotMac = computeSnapshotMac(keys.snapshotMacKey(), computedLtHash, patchVersion, collectionName);
+                if (!MessageDigest.isEqual(wireSnapshotMac, expectedSnapshotMac)) {
+                    throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, patchVersion);
                 }
             }
         }
@@ -151,7 +153,7 @@ public final class MutationIntegrityVerifier {
      * @param type the collection type
      * @return the computed snapshot MAC
      */
-    private byte[] computeSnapshotMac(SecretKeySpec snapshotMacKey, byte[] ltHash, long version, SyncPatchType type) {
+    public static byte[] computeSnapshotMac(SecretKeySpec snapshotMacKey, byte[] ltHash, long version, SyncPatchType type) {
         try {
             var mac = Mac.getInstance("HmacSHA256");
             mac.init(snapshotMacKey);
@@ -190,7 +192,7 @@ public final class MutationIntegrityVerifier {
      * @param type the collection type
      * @return the computed patch MAC
      */
-    private byte[] computePatchMac(SecretKeySpec patchMacKey, byte[] snapshotMac, SequencedCollection<byte[]> valueMacs, long version, SyncPatchType type) {
+    public static byte[] computePatchMac(SecretKeySpec patchMacKey, byte[] snapshotMac, SequencedCollection<byte[]> valueMacs, long version, SyncPatchType type) {
         try {
             var mac = Mac.getInstance("HmacSHA256");
             mac.init(patchMacKey);

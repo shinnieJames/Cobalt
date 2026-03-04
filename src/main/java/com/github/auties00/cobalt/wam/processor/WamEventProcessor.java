@@ -47,7 +47,7 @@ public final class WamEventProcessor extends AbstractProcessor {
                             "Failed to generate WAM sources: " + e.getMessage(),
                             element
                     );
-                } catch (IllegalStateException e) {
+                } catch (IllegalStateException e) { // TODO: Use custom exception
                     processingEnv.getMessager().printMessage(
                             Diagnostic.Kind.ERROR,
                             e.getMessage(),

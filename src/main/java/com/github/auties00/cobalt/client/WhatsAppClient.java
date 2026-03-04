@@ -130,10 +130,10 @@ public final class WhatsAppClient {
         SignalGroupCipher groupCipher = new SignalGroupCipher(store);
         this.abPropsService = new ABPropsService(this);
         this.webAppStateService = new WebAppStateService(this, abPropsService);
-        this.lidMigrationService = new LidMigrationService(this);
+        this.lidMigrationService = new LidMigrationService(this, abPropsService);
         this.deviceService = new DeviceService(this, abPropsService, sessionCipher);
         this.messageService = new MessageService(this, sessionCipher, groupCipher, deviceService, abPropsService);
-        this.wamService = new WamService(this);
+        this.wamService = new WamService(this, abPropsService);
         this.pendingSocketRequests = new ConcurrentHashMap<>();
         this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, messageService, abPropsService, deviceService, wamService);
         this.messagePreviewHandler = messagePreviewHandler;

@@ -22,11 +22,10 @@ import com.github.auties00.cobalt.sync.key.MissingSyncKeyTimeoutScheduler;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 
@@ -37,6 +36,8 @@ import java.util.stream.Collectors;
  * across multiple devices using end-to-end encryption and LT-Hash verification.
  */
 public final class WebAppStateService {
+    private static final Logger LOGGER = Logger.getLogger(WebAppStateService.class.getName());
+
     private final WhatsAppClient whatsapp;
     private final WhatsAppStore store;
     private final MutationRequestBuilder requestBuilder;
@@ -46,20 +47,6 @@ public final class WebAppStateService {
     private final WebAppStateBackoffScheduler retryScheduler;
     private final MissingSyncKeyTimeoutScheduler missingSyncKeyTimeoutScheduler;
     private final MissingSyncKeyRequestService missingSyncKeyRequestService;
-    private final Map<SyncPatchType, Map<ByteBuffer, SyncActionEntry>> currentSyncActions;
-
-    /**
-     * Stores the value MAC and the key ID used to encrypt a mutation,
-     * keyed by the mutation's index MAC in the {@code currentSyncActions} map.
-     *
-     * <p>The key ID is preserved so that REMOVE operations can use the original
-     * SET mutation's key for encryption, matching WhatsApp Web behavior.
-     *
-     * @param valueMac the value MAC of the mutation
-     * @param keyId    the key ID used to encrypt the mutation
-     */
-    private record SyncActionEntry(byte[] valueMac, byte[] keyId) {
-    }
 
     /**
      * Creates a new WebAppStateManager instance.
@@ -77,7 +64,6 @@ public final class WebAppStateService {
         this.retryScheduler = new WebAppStateBackoffScheduler();
         this.missingSyncKeyTimeoutScheduler = new MissingSyncKeyTimeoutScheduler(whatsapp, abPropsService);
         this.missingSyncKeyRequestService = new MissingSyncKeyRequestService(whatsapp);
-        this.currentSyncActions = new ConcurrentHashMap<>();
     }
 
     /**
@@ -174,14 +160,7 @@ public final class WebAppStateService {
                 .findPendingMutations(patchType);
 
         // Build request
-        var syncActionKeyIds = new HashMap<ByteBuffer, byte[]>();
-        var syncActions = currentSyncActions.get(patchType);
-        if (syncActions != null) {
-            for (var entry : syncActions.entrySet()) {
-                syncActionKeyIds.put(entry.getKey(), entry.getValue().keyId());
-            }
-        }
-        var request = requestBuilder.buildSyncRequest(patchType, pending, syncActionKeyIds);
+        var request = requestBuilder.buildSyncRequest(patchType, pending);
 
         // Mark as in-flight
         store.markWebAppStateInFlight(patchType);
@@ -201,7 +180,7 @@ public final class WebAppStateService {
             // Phase A: Process snapshot if present
             if (syncResponse.snapshotReference().isPresent()) {
                 // Reset state map for full state reset
-                currentSyncActions.put(collectionName, new HashMap<>());
+                store.clearSyncActionEntries(collectionName);
 
                 var snapshot = downloadAndDecodeSnapshot(syncResponse.snapshotReference().get());
 
@@ -210,6 +189,9 @@ public final class WebAppStateService {
                 if (!snapshotMutations.isEmpty()) {
                     // Decrypt snapshot mutations
                     var untrusted = decryptMutations(snapshotMutations);
+
+                    // Validate no duplicate indices (log-only for snapshots, per WA Web)
+                    validateNoDuplicateIndices(collectionName, untrusted, false);
 
                     // Compute LT-Hash from EMPTY_HASH for snapshot
                     var newHash = computeNewLTHash(collectionName, MutationLTHash.EMPTY_HASH, untrusted);
@@ -228,7 +210,29 @@ public final class WebAppStateService {
             }
 
             // Phase B: Process each patch individually
-            for (var patch : syncResponse.patches()) {
+            // Issue 4: Sort patches by version ascending
+            var sortedPatches = new ArrayList<>(syncResponse.patches());
+            sortedPatches.sort(Comparator.comparingLong(patch -> patch.version()
+                    .map(version -> version.version().orElse(0L))
+                    .orElse(0L)));
+
+            // Issue 8: Detect missing patch gaps
+            if (!sortedPatches.isEmpty()) {
+                var localVersion = getCurrentVersion(collectionName);
+                var minPatchVersion = sortedPatches.getFirst().version()
+                        .map(version -> version.version().orElse(0L))
+                        .orElse(0L);
+                if (localVersion > 0 && minPatchVersion > localVersion + 1) {
+                    throw new WhatsAppWebAppStateSyncException.MissingPatches(collectionName, localVersion, minPatchVersion);
+                }
+            }
+
+            for (var patch : sortedPatches) {
+                // Issue 9: Handle terminal exit codes
+                if (patch.exitCode().isPresent()) {
+                    throw new WhatsAppWebAppStateSyncException.TerminalPatch(collectionName, patch.exitCode().get());
+                }
+
                 var patchMutations = getMutationsFromPatch(patch);
                 if (patchMutations.isEmpty()) {
                     continue;
@@ -237,13 +241,17 @@ public final class WebAppStateService {
                 // Decrypt only this patch's mutations
                 var untrusted = decryptMutations(patchMutations);
 
+                // Validate no duplicate indices (fatal for patches, per WA Web)
+                validateNoDuplicateIndices(collectionName, untrusted, true);
+
                 // Read current LT-hash from store (updated by previous patch/snapshot)
                 var currentHash = getCurrentLTHash(collectionName);
 
-                // Compute incremental LT-hash using only this patch's mutations
+                // Compute incremental LT-hash using all raw mutations (before deduplication)
+                // Per WA Web: LT-Hash is computed from all wire mutations, dedup is only for model application
                 var newHash = computeNewLTHash(collectionName, currentHash, untrusted);
 
-                // Collect this patch's valueMacs
+                // Collect this patch's valueMacs from the raw (undeduplicated) mutations
                 var patchValueMacs = untrusted.stream()
                         .map(DecryptedMutation.Untrusted::valueMac)
                         .toList();
@@ -257,8 +265,12 @@ public final class WebAppStateService {
                 // Persist state before processing next patch
                 updateCollectionState(collectionName, patchVersion, newHash);
 
-                // Collect trusted mutations
-                for (var entry : untrusted) {
+                // Deduplicate SET/REMOVE for same index (SET wins) and order REMOVE before SET
+                // Per WA Web: dedup only affects model application, not LT-Hash
+                var ordered = deduplicateAndOrder(untrusted);
+
+                // Collect trusted mutations (ordered: REMOVEs first, then SETs)
+                for (var entry : ordered) {
                     allTrusted.add(new DecryptedMutation.Trusted(entry.index(), entry.value(), entry.operation(), entry.timestamp()));
                 }
             }
@@ -281,6 +293,83 @@ public final class WebAppStateService {
             handleSyncError(e, syncResponse.collectionName());
             return List.of();
         }
+    }
+
+    /**
+     * Deduplicates and orders mutations within a single patch.
+     *
+     * <p>Per WhatsApp Web behavior:
+     * <ul>
+     *   <li>If both SET and REMOVE exist for the same index, the REMOVE is dropped (SET wins)</li>
+     *   <li>REMOVE mutations are ordered before SET mutations</li>
+     * </ul>
+     *
+     * @param mutations the decrypted mutations from a single patch
+     * @return the deduplicated and ordered mutations
+     */
+    private SequencedCollection<DecryptedMutation.Untrusted> deduplicateAndOrder(SequencedCollection<DecryptedMutation.Untrusted> mutations) {
+        // Collect SET indices
+        var setIndices = new HashSet<String>();
+        for (var mutation : mutations) {
+            if (mutation.operation() == SyncdOperation.SET) {
+                setIndices.add(mutation.index());
+            }
+        }
+
+        // Partition: REMOVE first (excluding those with a matching SET), then all SETs
+        var removes = new ArrayList<DecryptedMutation.Untrusted>();
+        var sets = new ArrayList<DecryptedMutation.Untrusted>();
+        for (var mutation : mutations) {
+            if (mutation.operation() == SyncdOperation.SET) {
+                sets.add(mutation);
+            } else if (!setIndices.contains(mutation.index())) {
+                removes.add(mutation);
+            }
+        }
+
+        var result = new ArrayList<DecryptedMutation.Untrusted>(removes.size() + sets.size());
+        result.addAll(removes);
+        result.addAll(sets);
+        return result;
+    }
+
+    /**
+     * Validates that no two mutations of the same operation type share the same index.
+     *
+     * <p>Per WhatsApp Web {@code validateNoSameIndexForMultipleMutations}:
+     * <ul>
+     *   <li>For patches ({@code fatal = true}): throws {@link WhatsAppWebAppStateSyncException.DuplicateIndexInPatch}</li>
+     *   <li>For snapshots ({@code fatal = false}): logs a warning but continues</li>
+     * </ul>
+     *
+     * @param collectionName the collection being processed
+     * @param mutations the decrypted mutations to validate
+     * @param fatal whether to throw on duplicate (patches) or just log (snapshots)
+     */
+    private void validateNoDuplicateIndices(
+            SyncPatchType collectionName,
+            SequencedCollection<DecryptedMutation.Untrusted> mutations,
+            boolean fatal
+    ) {
+        var setIndices = new HashSet<String>();
+        var removeIndices = new HashSet<String>();
+        for (var mutation : mutations) {
+            var index = mutation.index();
+            var isDuplicate = mutation.operation() == SyncdOperation.SET
+                    ? !setIndices.add(index)
+                    : !removeIndices.add(index);
+            if (isDuplicate) {
+                if (fatal) {
+                    throw new WhatsAppWebAppStateSyncException.DuplicateIndexInPatch(collectionName);
+                } else {
+                    LOGGER.warning("Duplicate index in snapshot for collection " + collectionName + ": " + index);
+                }
+            }
+        }
+    }
+
+    private long getCurrentVersion(SyncPatchType patchType) {
+        return store.findWebAppState(patchType).version();
     }
 
     private byte[] getCurrentLTHash(SyncPatchType patchType) {
@@ -457,55 +546,78 @@ public final class WebAppStateService {
                 .collect(Collectors.toUnmodifiableMap(DecryptedMutation.Trusted::index, Function.identity()));
 
         var results = new ArrayList<DecryptedMutation.Trusted>(remoteMutations.size());
+        var pendingToDrop = new HashSet<String>();
         for (var remoteMutation : remoteMutations) {
-            // Get the index of the remote mutation
-            var remoteIndex = remoteMutation.index();
-
-            // Check if we have a pending local mutation with the same index
-            var localMutation = pendingByIndex.get(remoteIndex);
-            if(localMutation == null || remoteMutation.timestamp().compareTo(localMutation.timestamp()) >= 0) {
+            var localMutation = pendingByIndex.get(remoteMutation.index());
+            if (localMutation == null) {
+                // No conflict, apply remote
                 results.add(remoteMutation);
-            }else {
-                results.add(localMutation);
+                continue;
+            }
+
+            // Delegate to the handler for conflict resolution
+            var actionName = remoteMutation.value()
+                    .action()
+                    .map(SyncAction::actionName)
+                    .orElse(null);
+            var handler = actionName != null ? handlerRegistry.findHandler(actionName).orElse(null) : null;
+            var resolution = handler != null
+                    ? handler.resolveConflicts(localMutation, remoteMutation)
+                    : ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL;
+
+            switch (resolution) {
+                case APPLY_REMOTE_DROP_LOCAL -> {
+                    results.add(remoteMutation);
+                    pendingToDrop.add(remoteMutation.index());
+                }
+                case SKIP_REMOTE -> {
+                    // Keep local, skip remote
+                }
+                case SKIP_REMOTE_DROP_LOCAL -> pendingToDrop.add(remoteMutation.index());
             }
         }
+
+        // Drop resolved pending mutations
+        if (!pendingToDrop.isEmpty()) {
+            var remaining = whatsapp.store()
+                    .findPendingMutations(collectionName)
+                    .stream()
+                    .filter(pm -> !pendingToDrop.contains(pm.mutation().index()))
+                    .toList();
+            whatsapp.store().clearPendingMutations(collectionName);
+            whatsapp.store().addPendingMutations(collectionName, remaining);
+        }
+
         return Collections.unmodifiableSequencedCollection(results);
     }
 
     private byte[] computeNewLTHash(SyncPatchType patchType, byte[] baseHash, SequencedCollection<DecryptedMutation.Untrusted> mutations) {
         var currentHash = baseHash != null ? baseHash : MutationLTHash.EMPTY_HASH;
-
-        // Get or create the indexMac→SyncActionEntry state map for this collection
-        var stateMap = currentSyncActions.computeIfAbsent(patchType, _ -> new HashMap<>());
-
-        // Separate SET and REMOVE operations, using stored valueMacs for proper LT-Hash
         var toAdd = new ArrayList<byte[]>();
         var toRemove = new ArrayList<byte[]>();
 
         for (var mutation : mutations) {
-            var indexMacKey = ByteBuffer.wrap(mutation.indexMac());
+            var indexMac = mutation.indexMac();
             var valueMac = mutation.valueMac();
 
             if (mutation.operation() == SyncdOperation.SET) {
                 // Check if there's an existing entry (override)
-                var existingEntry = stateMap.get(indexMacKey);
-                if (existingEntry != null) {
-                    // Subtract the old valueMac before adding the new one
-                    toRemove.add(existingEntry.valueMac());
-                }
+                store.findSyncActionEntry(patchType, indexMac)
+                        .ifPresent(existing -> toRemove.add(existing.valueMac()));
                 toAdd.add(valueMac);
-                // Update the state map with the new entry (valueMac + keyId)
-                stateMap.put(indexMacKey, new SyncActionEntry(valueMac, mutation.keyId()));
+                // Persist the new entry
+                store.putSyncActionEntry(patchType, indexMac, new SyncActionEntryBuilder()
+                        .indexMac(indexMac)
+                        .valueMac(valueMac)
+                        .keyId(mutation.keyId())
+                        .build());
             } else {
-                // REMOVE: look up the stored entry for this indexMac
-                var existingEntry = stateMap.remove(indexMacKey);
-                if (existingEntry != null) {
-                    toRemove.add(existingEntry.valueMac());
-                }
+                // REMOVE: look up and remove the stored entry for this indexMac
+                store.removeSyncActionEntry(patchType, indexMac)
+                        .ifPresent(existing -> toRemove.add(existing.valueMac()));
             }
         }
 
-        // Compute new hash
         return MutationLTHash.subtractThenAdd(currentHash, toAdd, toRemove);
     }
 

@@ -1,7 +1,6 @@
 package com.github.auties00.cobalt.wam;
 
 import com.github.auties00.cobalt.util.FastRandomUtils;
-import com.github.auties00.cobalt.wam.type.WamChannel;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -14,18 +13,23 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>At the start of each calendar day (UTC), there is a 1 % chance that
  * beaconing is activated for this session. If activated, each call to
- * {@link #nextSequenceNumber(WamChannel)} returns a monotonically increasing
+ * {@link #nextSequenceNumber(String)} returns a monotonically increasing
  * sequence number that is written as global field {@code 3433}
  * ({@code beaconSessionId}) before each event.
  *
  * <p>If beaconing is not activated for the current day, the method
  * returns an empty {@link OptionalInt} and no beacon global is written.
  *
+ * <p>Beaconing state is tracked independently per buffer key. WhatsApp
+ * Web defines 10 buffer keys: {@code "regular"}, {@code "realtime"},
+ * and 8 private-stats ID key names (e.g. {@code "DefaultPsId"},
+ * {@code "IdTtlDaily"}).
+ *
  * <p>This class is not thread-safe; all calls must be made from the
  * single WAM flush thread.
  *
  * @apiNote WAWebWamBeaconing.maybeGetEventSequenceNumber: determines
- * daily activation at 1 % probability and increments a per-channel
+ * daily activation at 1 % probability and increments a per-buffer-key
  * sequence counter stored in user preferences.
  */
 final class WamBeaconing {
@@ -34,7 +38,7 @@ final class WamBeaconing {
      */
     private static final double ACTIVATION_PROBABILITY = 0.01;
 
-    private final Map<WamChannel, ChannelState> states;
+    private final Map<String, ChannelState> states;
 
     /**
      * Constructs a new {@code WamBeaconing} instance with no active
@@ -53,12 +57,14 @@ final class WamBeaconing {
      * sequence counter resets to 1 and increments on each subsequent
      * call within the same day.
      *
-     * @param channel the WAM channel to get the sequence number for
+     * @param bufferKey the buffer key identifying the beaconing track
+     *                  (e.g. {@code "regular"}, {@code "realtime"}, or
+     *                  a private-stats ID key name)
      * @return an {@code OptionalInt} containing the sequence number if
      *         beaconing is active, or empty otherwise
      */
-    OptionalInt nextSequenceNumber(WamChannel channel) {
-        var state = states.computeIfAbsent(channel, _ -> new ChannelState());
+    OptionalInt nextSequenceNumber(String bufferKey) {
+        var state = states.computeIfAbsent(bufferKey, _ -> new ChannelState());
         var currentDayEpoch = Instant.now().truncatedTo(ChronoUnit.DAYS).getEpochSecond();
         if (currentDayEpoch != state.activationDayEpoch) {
             state.activationDayEpoch = currentDayEpoch;
@@ -78,4 +84,4 @@ final class WamBeaconing {
         boolean active = false;
         int sequenceNumber = 0;
     }
-}   
+}

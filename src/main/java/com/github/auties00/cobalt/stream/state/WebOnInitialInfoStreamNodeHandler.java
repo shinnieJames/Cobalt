@@ -39,7 +39,7 @@ public final class WebOnInitialInfoStreamNodeHandler extends SocketStream.Handle
         abPropsService.sync();
 
         // Handle LID migration
-        var lidMigrationEnabled = abPropsService.getBool(ABProp.LID_STATUS_SEND_ENABLED);
+        var lidMigrationEnabled = abPropsService.getBool(ABProp.LID_ONE_ON_ONE_MIGRATION_ENABLED);
         if (lidMigrationEnabled) {
             lidMigrationService.enableMigration();
         } else {

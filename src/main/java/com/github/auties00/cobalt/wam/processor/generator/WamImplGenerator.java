@@ -201,13 +201,25 @@ public final class WamImplGenerator {
         var properties = event.properties();
 
         // Find last non-null field index for LAST flag computation
+        // Timer fields that exceed Integer.MAX_VALUE are skipped on the wire,
+        // so they must also be excluded from the last-field determination.
         method.addStatement("int lastField = -1");
         for (var i = properties.size() - 1; i >= 0; i--) {
             var prop = properties.get(i);
             if (i == properties.size() - 1) {
-                method.beginControlFlow("if (this.$N != null)", prop.fieldName());
+                if (prop.wamType() == WamType.TIMER) {
+                    method.beginControlFlow("if (this.$N != null && this.$N <= $L)",
+                            prop.fieldName(), prop.fieldName(), Integer.MAX_VALUE);
+                } else {
+                    method.beginControlFlow("if (this.$N != null)", prop.fieldName());
+                }
             } else {
-                method.nextControlFlow("else if (this.$N != null)", prop.fieldName());
+                if (prop.wamType() == WamType.TIMER) {
+                    method.nextControlFlow("else if (this.$N != null && this.$N <= $L)",
+                            prop.fieldName(), prop.fieldName(), Integer.MAX_VALUE);
+                } else {
+                    method.nextControlFlow("else if (this.$N != null)", prop.fieldName());
+                }
             }
             method.addStatement("lastField = $L", i);
         }

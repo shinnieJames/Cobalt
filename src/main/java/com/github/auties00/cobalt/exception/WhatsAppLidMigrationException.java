@@ -20,6 +20,8 @@ package com.github.auties00.cobalt.exception;
  *   <li>{@link SplitThreadMismatch} - Split thread state differs between local and primary device</li>
  *   <li>{@link PrimaryMappingsObsolete} - Primary device's mappings are outdated</li>
  *   <li>{@link FailedToParseMappings} - Migration mapping data could not be parsed</li>
+ *   <li>{@link NoLidAvailable} - A non-deletable chat has no LID mapping</li>
+ *   <li>{@link IncompatibleClient} - The companion client is not compatible with LID migration</li>
  * </ul>
  *
  * <h2>Fatality</h2>
@@ -29,12 +31,16 @@ package com.github.auties00.cobalt.exception;
  * @see SplitThreadMismatch
  * @see PrimaryMappingsObsolete
  * @see FailedToParseMappings
+ * @see NoLidAvailable
+ * @see IncompatibleClient
  */
 public sealed abstract class WhatsAppLidMigrationException
         extends WhatsAppException
         permits WhatsAppLidMigrationException.SplitThreadMismatch,
                 WhatsAppLidMigrationException.PrimaryMappingsObsolete,
-                WhatsAppLidMigrationException.FailedToParseMappings {
+                WhatsAppLidMigrationException.FailedToParseMappings,
+                WhatsAppLidMigrationException.NoLidAvailable,
+                WhatsAppLidMigrationException.IncompatibleClient {
 
     /**
      * Constructs a new LID migration exception with the specified detail message.
@@ -147,6 +153,46 @@ public sealed abstract class WhatsAppLidMigrationException
          */
         public FailedToParseMappings(String message, Throwable reason) {
             super("Failed to parse migration mappings (" + message + ")", reason);
+        }
+    }
+
+    /**
+     * Exception thrown when a non-deletable chat has no LID mapping available.
+     *
+     * <p>During LID migration, every chat that cannot be deleted (because it has
+     * user content, is archived, muted, or locked) must have a LID mapping to
+     * migrate to. This exception occurs when no such mapping exists, which means
+     * the migration cannot proceed safely without data loss.
+     *
+     * <p>This corresponds to WhatsApp Web's
+     * {@code LogoutReason.LidMigrationNoLidAvailable} logout reason, which aborts
+     * the entire migration process.
+     */
+    public static final class NoLidAvailable extends WhatsAppLidMigrationException {
+        /**
+         * Constructs a new no LID available exception.
+         */
+        public NoLidAvailable() {
+            super("Non-deletable chat has no LID mapping available");
+        }
+    }
+
+    /**
+     * Exception thrown when the companion client is not compatible with LID migration.
+     *
+     * <p>The {@code LID_ONE_ON_ONE_MIGRATION_COMPATIBLE} AB prop controls whether
+     * the companion device is allowed to perform the migration. When set to
+     * {@code false}, the migration must not proceed.
+     *
+     * <p>This corresponds to WhatsApp Web's
+     * {@code LogoutReason.LidMigrationCompanionIncompatibleKillswitch} logout reason.
+     */
+    public static final class IncompatibleClient extends WhatsAppLidMigrationException {
+        /**
+         * Constructs a new incompatible client exception.
+         */
+        public IncompatibleClient() {
+            super("Companion client is not compatible with LID migration (killswitch)");
         }
     }
 }

@@ -99,6 +99,22 @@ final class WamPrivateStatsId {
         return entry != null ? entry.value : "none";
     }
 
+    /**
+     * Returns the key name for the given hash integer.
+     *
+     * <p>The key name is used as the beaconing buffer key for
+     * private-channel events, giving each rotation group its own
+     * independent beaconing track.
+     *
+     * @param keyHashInt the rotation group hash integer
+     * @return the key name (e.g. {@code "DefaultPsId"}), or
+     *         {@code "unknown_<hash>"} if the hash integer is unknown
+     */
+    String getKeyNameForHash(int keyHashInt) {
+        var entry = entries.get(keyHashInt);
+        return entry != null ? entry.key : "unknown_" + keyHashInt;
+    }
+
     private void addEntry(String key, int keyHashInt, int rotationDays) {
         var value = FastRandomUtils.randomHex(32);
         var epoch = Instant.now().getEpochSecond();

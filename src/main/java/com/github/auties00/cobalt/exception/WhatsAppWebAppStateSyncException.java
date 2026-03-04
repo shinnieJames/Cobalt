@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.exception;
 
+import com.github.auties00.cobalt.model.error.DisconnectReason;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
 import java.util.HexFormat;
@@ -90,10 +91,16 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
                 WhatsAppWebAppStateSyncException.IndexMacMismatch,
                 WhatsAppWebAppStateSyncException.MissingKey,
                 WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices,
+                WhatsAppWebAppStateSyncException.MissingPatches,
+                WhatsAppWebAppStateSyncException.TerminalPatch,
+                WhatsAppWebAppStateSyncException.Conflict,
+                WhatsAppWebAppStateSyncException.RetryableServerError,
                 WhatsAppWebAppStateSyncException.DecryptionFailed,
                 WhatsAppWebAppStateSyncException.ExternalDownloadFailed,
                 WhatsAppWebAppStateSyncException.ExternalDecodeFailed,
                 WhatsAppWebAppStateSyncException.MacComputationFailed,
+                WhatsAppWebAppStateSyncException.MissingActionTimestamp,
+                WhatsAppWebAppStateSyncException.DuplicateIndexInPatch,
                 WhatsAppWebAppStateSyncException.UnexpectedError {
 
     /**
@@ -636,6 +643,84 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
+     * Exception thrown when a SET mutation's {@code SyncActionValue} has no timestamp.
+     *
+     * <p>Per WhatsApp Web {@code validateAndTypeSetMutations}: every SET mutation
+     * must have a non-{@code null} timestamp in its {@code SyncActionValue}.
+     * A missing timestamp is a fatal error that stops processing of the
+     * affected collection.
+     *
+     * <p>This validation applies only to SET mutations. REMOVE mutations
+     * do not carry a {@code SyncActionValue} and are not subject to this check.
+     */
+    public static final class MissingActionTimestamp extends WhatsAppWebAppStateSyncException {
+        /**
+         * Constructs a new missing action timestamp exception.
+         */
+        public MissingActionTimestamp() {
+            super("Missing action timestamp in sync mutation");
+        }
+
+        /**
+         * Returns whether this exception represents a fatal error.
+         *
+         * @return {@code true} - missing action timestamp is always fatal
+         */
+        @Override
+        public boolean isFatal() {
+            return true;
+        }
+    }
+
+    /**
+     * Exception thrown when a patch contains multiple mutations with the same
+     * index for the same operation type.
+     *
+     * <p>Per WhatsApp Web {@code validateNoSameIndexForMultipleMutations}:
+     * if two SET mutations or two REMOVE mutations in a single patch share
+     * the same index, the patch is malformed and processing is aborted
+     * with a fatal error.
+     *
+     * <p>For snapshots, duplicate indices are logged as a metric but do
+     * not trigger a fatal error.
+     */
+    public static final class DuplicateIndexInPatch extends WhatsAppWebAppStateSyncException {
+        /**
+         * The sync collection that contained the duplicate index.
+         */
+        private final SyncPatchType collectionName;
+
+        /**
+         * Constructs a new duplicate index in patch exception.
+         *
+         * @param collectionName the affected collection; must not be {@code null}
+         */
+        public DuplicateIndexInPatch(SyncPatchType collectionName) {
+            super("Same index for multiple mutations in patch for collection " + collectionName);
+            this.collectionName = collectionName;
+        }
+
+        /**
+         * Returns the affected collection.
+         *
+         * @return the patch type; never {@code null}
+         */
+        public SyncPatchType collectionName() {
+            return collectionName;
+        }
+
+        /**
+         * Returns whether this exception represents a fatal error.
+         *
+         * @return {@code true} - duplicate index in patch is always fatal
+         */
+        @Override
+        public boolean isFatal() {
+            return true;
+        }
+    }
+
+    /**
      * Exception thrown for unexpected or unclassified sync errors.
      * <p>
      * This is a catch-all for errors that don't fit into other categories.
@@ -682,6 +767,186 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         @Override
         public boolean isFatal() {
             return true;
+        }
+    }
+
+    /**
+     * Exception thrown when the server did not send all expected patches.
+     *
+     * <p>This occurs when the minimum version of received patches is greater
+     * than the local version plus one, indicating a gap in the patch sequence.
+     *
+     * <p>This is a fatal error requiring a full resync from snapshot.
+     */
+    public static final class MissingPatches extends WhatsAppWebAppStateSyncException {
+        private final SyncPatchType collectionName;
+        private final long localVersion;
+        private final long minPatchVersion;
+
+        /**
+         * Constructs a new missing patches exception.
+         *
+         * @param collectionName  the affected collection
+         * @param localVersion    the current local version
+         * @param minPatchVersion the minimum version among received patches
+         */
+        public MissingPatches(SyncPatchType collectionName, long localVersion, long minPatchVersion) {
+            super("Missing patches for collection " + collectionName
+                    + ": local version " + localVersion + ", min patch version " + minPatchVersion);
+            this.collectionName = Objects.requireNonNull(collectionName);
+            this.localVersion = localVersion;
+            this.minPatchVersion = minPatchVersion;
+        }
+
+        /**
+         * Returns the affected collection.
+         *
+         * @return the patch type; never null
+         */
+        public SyncPatchType collectionName() {
+            return collectionName;
+        }
+
+        /**
+         * Returns the current local version.
+         *
+         * @return the local version
+         */
+        public long localVersion() {
+            return localVersion;
+        }
+
+        /**
+         * Returns the minimum version among received patches.
+         *
+         * @return the minimum patch version
+         */
+        public long minPatchVersion() {
+            return minPatchVersion;
+        }
+
+        @Override
+        public boolean isFatal() {
+            return true;
+        }
+    }
+
+    /**
+     * Exception thrown when a patch contains a terminal exit code.
+     *
+     * <p>All exit codes are terminal and indicate the server is signaling
+     * that the collection data is unrecoverable. Known codes:
+     * <ul>
+     *   <li>100 — missing data</li>
+     *   <li>101 — deserialization error</li>
+     * </ul>
+     *
+     * <p>This is a fatal error.
+     */
+    public static final class TerminalPatch extends WhatsAppWebAppStateSyncException {
+        private final SyncPatchType collectionName;
+        private final DisconnectReason exitCode;
+
+        /**
+         * Constructs a new terminal patch exception.
+         *
+         * @param collectionName the affected collection
+         * @param exitCode       the exit code from the patch
+         */
+        public TerminalPatch(SyncPatchType collectionName, DisconnectReason exitCode) {
+            super("Terminal patch for collection " + collectionName + " with exit code: " + exitCode);
+            this.collectionName = Objects.requireNonNull(collectionName);
+            this.exitCode = Objects.requireNonNull(exitCode);
+        }
+
+        /**
+         * Returns the affected collection.
+         *
+         * @return the patch type; never null
+         */
+        public SyncPatchType collectionName() {
+            return collectionName;
+        }
+
+        /**
+         * Returns the exit code from the patch.
+         *
+         * @return the exit code; never null
+         */
+        public DisconnectReason exitCode() {
+            return exitCode;
+        }
+
+        @Override
+        public boolean isFatal() {
+            return true;
+        }
+    }
+
+    /**
+     * Exception thrown when the server returns a 409 conflict response.
+     *
+     * <p>This indicates that the server rejected the client's patch because
+     * a newer version exists. The client should re-fetch and retry.
+     */
+    public static final class Conflict extends WhatsAppWebAppStateSyncException {
+        private final boolean hasMorePatches;
+
+        /**
+         * Constructs a new conflict exception.
+         *
+         * @param hasMorePatches whether the server indicated more patches are available
+         */
+        public Conflict(boolean hasMorePatches) {
+            super("Server returned 409 conflict");
+            this.hasMorePatches = hasMorePatches;
+        }
+
+        /**
+         * Returns whether the server indicated more patches are available.
+         *
+         * @return {@code true} if more patches are available
+         */
+        public boolean hasMorePatches() {
+            return hasMorePatches;
+        }
+
+        @Override
+        public boolean isFatal() {
+            return false;
+        }
+    }
+
+    /**
+     * Exception thrown when the server returns a retryable error code.
+     *
+     * <p>This covers error codes other than 409 (conflict) and 400/404 (fatal).
+     */
+    public static final class RetryableServerError extends WhatsAppWebAppStateSyncException {
+        private final String errorCode;
+
+        /**
+         * Constructs a new retryable server error exception.
+         *
+         * @param errorCode the server error code
+         */
+        public RetryableServerError(String errorCode) {
+            super("Server returned retryable error code: " + errorCode);
+            this.errorCode = errorCode;
+        }
+
+        /**
+         * Returns the server error code.
+         *
+         * @return the error code
+         */
+        public String errorCode() {
+            return errorCode;
+        }
+
+        @Override
+        public boolean isFatal() {
+            return false;
         }
     }
 }

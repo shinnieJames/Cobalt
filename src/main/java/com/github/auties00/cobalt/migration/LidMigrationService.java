@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.migration;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.model.chat.Chat;
+import com.github.auties00.cobalt.model.chat.ChatDisappearingMode;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.sync.history.HistorySync;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -10,30 +12,70 @@ import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMapping;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayload;
 import com.github.auties00.cobalt.model.jid.migration.PhoneNumberToLIDMapping;
 import com.github.auties00.cobalt.model.setting.GlobalSettings;
+import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 /**
  * Service responsible for orchestrating LID (Long ID) migration.
- * <p>
- * LID migration is a process where WhatsApp transitions from phone number-based
+ *
+ * <p>LID migration is a process where WhatsApp transitions from phone number-based
  * addressing to LID-based addressing for improved privacy.
  */
 public final class LidMigrationService {
     private static final System.Logger LOGGER = System.getLogger(LidMigrationService.class.getName());
 
     /**
-     * Timeout for waiting for primary mappings (24 hours in milliseconds).
+     * LID origin type value for phone-number-hiding click-to-WhatsApp chats.
+     * Matches WA Web's {@code LidOriginType.PNH_CTWA} ({@code "ctwa"}).
      */
-    private static final long PRIMARY_MAPPINGS_TIMEOUT_MS = 24 * 60 * 60 * 1000L;
+    private static final String LID_ORIGIN_TYPE_PNH_CTWA = "ctwa";
+
+    /**
+     * LID origin type value for general (non-PNH) chats.
+     * Matches WA Web's {@code LidOriginType.GENERAL} ({@code "general"}).
+     */
+    private static final String LID_ORIGIN_TYPE_GENERAL = "general";
+
+    /**
+     * Stub types that are considered safe to ignore during LID migration deletability
+     * checks, matching WA Web's {@code X()} function.
+     *
+     * <p>WA Web's {@code X()} matches exactly two conditions:
+     * <ul>
+     * <li>{@code getIsInitialE2ENotification}: type === "e2e_notification" AND subtype === "encrypt"
+     * <li>{@code getIsDisappearingModeSystemMessage}: type === "notification_template" AND subtype === "disappearing_mode"
+     * </ul>
+     */
+    private static final Set<ChatMessageInfo.StubType> MIGRATION_SAFE_STUB_TYPES = EnumSet.of(
+            // Maps to getIsInitialE2ENotification (e2e_notification + encrypt)
+            ChatMessageInfo.StubType.E2E_ENCRYPTED,
+            ChatMessageInfo.StubType.E2E_ENCRYPTED_NOW,
+            // Maps to getIsDisappearingModeSystemMessage (notification_template + disappearing_mode)
+            ChatMessageInfo.StubType.DISAPPEARING_MODE
+    );
+
+    /**
+     * Stub types that represent call log entries, matching WA Web's
+     * {@code type === MSG_TYPE.CALL_LOG} check in the {@code ee()} function.
+     */
+    private static final Set<ChatMessageInfo.StubType> CALL_LOG_STUB_TYPES = EnumSet.of(
+            ChatMessageInfo.StubType.CALL_MISSED_VOICE,
+            ChatMessageInfo.StubType.CALL_MISSED_VIDEO,
+            ChatMessageInfo.StubType.CALL_MISSED_GROUP_VOICE,
+            ChatMessageInfo.StubType.CALL_MISSED_GROUP_VIDEO,
+            ChatMessageInfo.StubType.SILENCED_UNKNOWN_CALLER_AUDIO,
+            ChatMessageInfo.StubType.SILENCED_UNKNOWN_CALLER_VIDEO
+    );
 
     private final WhatsAppClient whatsapp;
     private final WhatsAppStore store;
+    private final ABPropsService abPropsService;
 
     /**
      * Current migration state.
@@ -41,15 +83,29 @@ public final class LidMigrationService {
     private final AtomicReference<LidMigrationState> state;
 
     /**
-     * Primary device's PN to LID mappings cache.
-     * Maps phone number (as numeric string) to LID JID.
+     * Primary device's PN to assigned LID mappings cache.
+     * Maps phone number (as numeric string) to the LID assigned by the primary
+     * device at migration time.
      */
-    private final ConcurrentHashMap<String, Jid> primaryPnToLidCache;
+    private final ConcurrentHashMap<String, Jid> primaryPnToAssignedLidCache;
 
     /**
-     * Timestamp when mappings were received from primary.
+     * Primary device's PN to latest LID mappings cache.
+     * Maps phone number (as numeric string) to the most recent LID known to
+     * the primary device, which may differ from the assigned LID.
      */
-    private volatile long primaryMappingsTimestamp;
+    private final ConcurrentHashMap<String, Jid> primaryPnToLatestLidCache;
+
+    /**
+     * Cache of original LIDs for locally-created chats, keyed by the chat's
+     * phone number JID user part.
+     *
+     * <p>Matches WA Web's {@code chat.originalLid} field, which is set in
+     * {@code WAWebCreateChat} when a LID mapping is known at chat creation
+     * time. Used as a last-resort fallback in {@code resolveThread()}
+     * when no other LID mapping is available.
+     */
+    private final ConcurrentHashMap<String, Jid> originalLidCache;
 
     /**
      * Chat DB migration timestamp from primary device.
@@ -57,16 +113,25 @@ public final class LidMigrationService {
     private volatile Instant chatDbMigrationTimestamp;
 
     /**
+     * Timestamp when the protocol message was received, used as a fallback
+     * when {@link #chatDbMigrationTimestamp} is {@code null}.
+     */
+    private volatile Instant receiveTimestamp;
+
+    /**
      * Creates a new LID migration service.
      *
-     * @param whatsapp the WhatsApp client instance
+     * @param whatsapp      the WhatsApp client instance
+     * @param abPropsService the AB props service for reading feature flags
      */
-    public LidMigrationService(WhatsAppClient whatsapp) {
+    public LidMigrationService(WhatsAppClient whatsapp, ABPropsService abPropsService) {
         this.whatsapp = whatsapp;
         this.store = whatsapp.store();
+        this.abPropsService = abPropsService;
         this.state = new AtomicReference<>(LidMigrationState.NOT_STARTED);
-        this.primaryPnToLidCache = new ConcurrentHashMap<>();
-        this.primaryMappingsTimestamp = 0;
+        this.primaryPnToAssignedLidCache = new ConcurrentHashMap<>();
+        this.primaryPnToLatestLidCache = new ConcurrentHashMap<>();
+        this.originalLidCache = new ConcurrentHashMap<>();
     }
 
     /**
@@ -91,7 +156,7 @@ public final class LidMigrationService {
 
     /**
      * Called when the AB prop indicates LID migration is disabled.
-     * Transitions from WAITING_PROP to DISABLED
+     * Transitions from WAITING_PROP to DISABLED.
      */
     public void disableMigration() {
         if (state.compareAndSet(LidMigrationState.WAITING_PROP, LidMigrationState.DISABLED)) {
@@ -101,11 +166,11 @@ public final class LidMigrationService {
 
     /**
      * Processes LID migration mappings received from the primary device.
-     * <p>
-     * This method:
+     *
+     * <p>This method:
      * <ol>
      *     <li>Validates the payload</li>
-     *     <li>Populates the primary mapping cache</li>
+     *     <li>Populates the primary mapping caches</li>
      *     <li>Updates contacts with LID information</li>
      *     <li>Transitions to READY state</li>
      * </ol>
@@ -125,10 +190,10 @@ public final class LidMigrationService {
         }
 
         try {
-            // Store migration timestamp
+            // Store migration timestamp and receive timestamp
             this.chatDbMigrationTimestamp = payload.chatDbMigrationTimestamp()
                     .orElse(null);
-            this.primaryMappingsTimestamp = System.currentTimeMillis();
+            this.receiveTimestamp = Instant.now();
 
             // Process mappings
             var mappings = payload.pnToLidMappings();
@@ -141,14 +206,15 @@ public final class LidMigrationService {
 
             LOGGER.log(System.Logger.Level.INFO, "Processing {0} LID mappings from primary", mappings.size());
 
-            // Populate primary cache and update contacts
+            // Populate primary caches and update contacts
             for (var mapping : mappings) {
                 processSingleMapping(mapping);
             }
 
             // Transition to READY state
             state.set(LidMigrationState.READY);
-            LOGGER.log(System.Logger.Level.INFO, "LID migration ready with {0} mappings", primaryPnToLidCache.size());
+            LOGGER.log(System.Logger.Level.INFO, "LID migration ready with {0} assigned mappings, {1} latest mappings",
+                    primaryPnToAssignedLidCache.size(), primaryPnToLatestLidCache.size());
 
             // Check if we should auto-start migration
             if (shouldAutoStartMigration()) {
@@ -162,14 +228,19 @@ public final class LidMigrationService {
 
     /**
      * Processes LID mappings from a HistorySync message.
-     * <p>
-     * This method extracts LID mappings from two sources:
+     *
+     * <p>This method extracts LID mappings from two sources:
      * <ol>
      *     <li>The top-level {@code phoneNumberToLidMappings} field</li>
      *     <li>Individual conversation entries containing {@code pnJid} or {@code lidJid} fields</li>
      * </ol>
-     * <p>
-     * Additionally, if GlobalSettings contains a {@code chatDbLidMigrationTimestamp},
+     *
+     * <p>History sync data is only stored in the general store (via
+     * {@code store.registerLidMapping()} and contact updates), not in the
+     * primary mapping caches. This matches WhatsApp Web's behavior where
+     * history sync mappings do not feed into the migration decision caches.
+     *
+     * <p>Additionally, if GlobalSettings contains a {@code chatDbLidMigrationTimestamp},
      * that timestamp is recorded for use during migration timing decisions.
      *
      * @param historySync the decoded HistorySync protobuf
@@ -206,15 +277,13 @@ public final class LidMigrationService {
                 .flatMap(GlobalSettings::chatDbLidMigrationTimestamp);
         if (chatDbLidMigrationTimestamp.isPresent()) {
             if (chatDbMigrationTimestamp == null || chatDbLidMigrationTimestamp.get().isAfter(chatDbMigrationTimestamp)) {
-                this.chatDbMigrationTimestamp = chatDbMigrationTimestamp;
+                this.chatDbMigrationTimestamp = chatDbLidMigrationTimestamp.get();
                 LOGGER.log(System.Logger.Level.DEBUG,
-                        "Updated chatDbMigrationTimestamp from GlobalSettings: {0}", chatDbMigrationTimestamp);
+                        "Updated chatDbMigrationTimestamp from GlobalSettings: {0}", chatDbLidMigrationTimestamp.get());
             }
         }
 
         if (mappingsProcessed > 0) {
-            // Update the mappings timestamp since we received new mappings
-            this.primaryMappingsTimestamp = System.currentTimeMillis();
             LOGGER.log(System.Logger.Level.INFO,
                     "Processed {0} LID mappings from history sync (type={1})",
                     mappingsProcessed, historySync.syncType());
@@ -224,8 +293,11 @@ public final class LidMigrationService {
     /**
      * Processes a single PhoneNumberToLidMapping from the top-level history sync field.
      *
+     * <p>History sync mappings are stored only in the general store, not in the
+     * primary migration caches.
+     *
      * @param mapping the mapping to process
-     * @return true if a valid mapping was processed
+     * @return {@code true} if a valid mapping was processed
      */
     private boolean processPhoneNumberToLidMapping(PhoneNumberToLIDMapping mapping) {
         if (mapping == null) {
@@ -239,13 +311,7 @@ public final class LidMigrationService {
             return false;
         }
 
-        // Store in primary cache
-        var user = pnJid.user();
-        if (user != null) {
-            primaryPnToLidCache.put(user, lidJid);
-        }
-
-        // Register bidirectional mapping in store
+        // Register bidirectional mapping in store (not in primary cache)
         store.registerLidMapping(pnJid, lidJid);
 
         // Update contact if exists
@@ -256,12 +322,15 @@ public final class LidMigrationService {
 
     /**
      * Extracts LID mapping from a conversation entry.
-     * <p>
-     * For LID chats (jid has lid server): extracts phone number from pnJid field
-     * For PN chats (jid has user server): extracts LID from lidJid field
+     *
+     * <p>For LID chats (jid has lid server): extracts phone number from pnJid field.
+     * For PN chats (jid has user server): extracts LID from lidJid field.
+     *
+     * <p>History sync conversation data is stored only in the general store, not
+     * in the primary migration caches.
      *
      * @param conversation the conversation to process
-     * @return true if a valid mapping was extracted
+     * @return {@code true} if a valid mapping was extracted
      */
     private boolean processConversationLidData(Chat conversation) {
         if (conversation == null) {
@@ -295,13 +364,7 @@ public final class LidMigrationService {
             return false;
         }
 
-        // Store in primary cache
-        var user = phoneJid.user();
-        if (user != null) {
-            primaryPnToLidCache.put(user, lidJid);
-        }
-
-        // Register bidirectional mapping in store
+        // Register bidirectional mapping in store (not in primary cache)
         store.registerLidMapping(phoneJid, lidJid);
 
         // Update contact if exists
@@ -317,7 +380,13 @@ public final class LidMigrationService {
     }
 
     /**
-     * Processes a single LID mapping entry.
+     * Processes a single LID mapping entry from the primary device's protocol message.
+     *
+     * <p>Stores {@code assignedLid} and {@code latestLid} into their respective
+     * caches separately, matching WhatsApp Web's behavior where {@code getLidForPn()}
+     * returns only the assigned LID.
+     *
+     * @param mapping the mapping entry to process
      */
     private void processSingleMapping(LIDMigrationMapping mapping) {
         if (mapping == null) {
@@ -325,18 +394,21 @@ public final class LidMigrationService {
         }
 
         var jid = mapping.pn();
+        var user = jid.user();
 
-        // Get the effective LID (prefer latest over assigned)
-        var effectiveLid = mapping.latestLid()
-                .orElse(mapping.assignedLid());
+        // Store assignedLid in its own cache
+        var assignedLid = mapping.assignedLid();
+        primaryPnToAssignedLidCache.put(user, assignedLid);
 
-        // Store in primary cache
-        primaryPnToLidCache.put(jid.user(), effectiveLid);
+        // Store latestLid in its own cache (if present)
+        mapping.latestLid().ifPresent(latest ->
+                primaryPnToLatestLidCache.put(user, latest)
+        );
 
         // Update contact if exists
         store.findContactByJid(jid).ifPresent(contact -> {
-            contact.setLid(effectiveLid);
-            store.registerLidMapping(jid, effectiveLid);
+            contact.setLid(assignedLid);
+            store.registerLidMapping(jid, assignedLid);
         });
     }
 
@@ -350,10 +422,9 @@ public final class LidMigrationService {
             return;
         }
 
-        // Verify primary mappings haven't expired before starting migration
-        if (!primaryPnToLidCache.isEmpty() && !arePrimaryMappingsValid()) {
-            LOGGER.log(System.Logger.Level.ERROR, "Primary mappings have expired (older than 24 hours)");
-            handleError(new WhatsAppLidMigrationException.PrimaryMappingsObsolete());
+        // Check compatibility AB prop before proceeding
+        if (!abPropsService.getBool(ABProp.LID_ONE_ON_ONE_MIGRATION_COMPATIBLE)) {
+            handleError(new WhatsAppLidMigrationException.IncompatibleClient());
             return;
         }
 
@@ -363,22 +434,27 @@ public final class LidMigrationService {
             var resolutions = new ArrayList<LidMigrationResolution>();
             var chatsToProcess = new ArrayList<>(store.chats());
 
-            // Phase 1: Resolve all threads
+            // Pre-compute set of existing LID thread JIDs for inline split thread detection
+            var existingLidThreads = new HashSet<Jid>();
             for (var chat : chatsToProcess) {
-                var resolution = resolveThread(chat);
+                if (chat.jid().hasLidServer()) {
+                    existingLidThreads.add(chat.jid().toUserJid());
+                }
+            }
+
+            // Phase 1: Resolve all threads (split thread detection is inline)
+            for (var chat : chatsToProcess) {
+                var resolution = resolveThread(chat, existingLidThreads);
                 resolutions.add(resolution);
             }
 
-            // Phase 2: Check for split thread issues
-            checkForSplitThreads(resolutions);
-
-            // Phase 3: Execute migrations
+            // Phase 2: Execute migrations
             executeResolutions(resolutions);
 
-            // Phase 4: Bulk-register all primary mappings in the store
+            // Phase 3: Bulk-register all primary mappings in the store
             learnMappingsInBulk();
 
-            // Phase 5: Mark complete
+            // Phase 4: Mark complete
             state.set(LidMigrationState.COMPLETE);
             LOGGER.log(System.Logger.Level.INFO, "LID migration completed");
 
@@ -392,28 +468,44 @@ public final class LidMigrationService {
     /**
      * Resolves a single chat thread to determine its migration action.
      *
-     * @param chat the chat to resolve
+     * @param chat               the chat to resolve
+     * @param existingLidThreads the set of JIDs of existing LID threads, used for
+     *                           inline split thread detection
      * @return the resolution for this thread
+     * @throws WhatsAppLidMigrationException.PrimaryMappingsObsolete if a LID mismatch
+     *         indicates stale primary mappings
+     * @throws WhatsAppLidMigrationException.NoLidAvailable if a non-deletable chat
+     *         has no LID mapping
+     * @throws WhatsAppLidMigrationException.SplitThreadMismatch if a local LID would
+     *         collide with an existing LID thread
      */
-    private LidMigrationResolution resolveThread(Chat chat) {
+    private LidMigrationResolution resolveThread(Chat chat, Set<Jid> existingLidThreads) {
         var jid = chat.jid();
 
-        // Rule 1: Already LID → KEEP
+        // Rule 1: Already LID -> KEEP
+        // Also handle LidOriginType promotion: PNH_CTWA -> GENERAL when primaryProvidedLatestLid matches
         if (jid.hasLidServer()) {
+            if (LID_ORIGIN_TYPE_PNH_CTWA.equals(chat.lidOriginType().orElse(null))) {
+                var matchesPrimary = primaryPnToLatestLidCache.values().stream()
+                        .anyMatch(latestLid -> latestLid.toUserJid().equals(jid.toUserJid()));
+                if (matchesPrimary) {
+                    chat.setLidOriginType(LID_ORIGIN_TYPE_GENERAL);
+                }
+            }
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.ALREADY_LID);
         }
 
-        // Rule 2: Groups and communities → KEEP (not subject to 1:1 migration)
+        // Rule 2: Groups and communities -> KEEP (not subject to 1:1 migration)
         if (jid.hasGroupOrCommunityServer()) {
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.GROUP_OR_COMMUNITY);
         }
 
-        // Rule 3: Newsletters → KEEP
+        // Rule 3: Newsletters -> KEEP
         if (jid.hasNewsletterServer()) {
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.NEWSLETTER);
         }
 
-        // Rule 4: Broadcast lists → KEEP
+        // Rule 4: Broadcast lists -> KEEP
         if (jid.hasBroadcastServer()) {
             if (jid.isStatusBroadcastAccount()) {
                 return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.STATUS_BROADCAST);
@@ -421,7 +513,7 @@ public final class LidMigrationService {
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.BROADCAST);
         }
 
-        // Rule 5: Bot accounts → KEEP
+        // Rule 5: Bot accounts -> KEEP
         if (jid.hasBotServer()) {
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.BOT);
         }
@@ -432,11 +524,12 @@ public final class LidMigrationService {
             return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.DUPLICATE_WILL_MERGE);
         }
 
-        // Rule 7: Determine local LID (from chat or store) and primary LID (from cache)
+        // Rule 7: Determine local LID (from chat or store) and primary LID (from assigned cache)
         var chatLid = chat.lid().orElse(null);
         var user = jid.user();
-        var primaryLid = (user != null && arePrimaryMappingsValid())
-                ? primaryPnToLidCache.get(user)
+        // Use assignedLid cache (not merged) - matches WA Web's getLidForPn()
+        var primaryLid = user != null
+                ? primaryPnToAssignedLidCache.get(user)
                 : null;
         var localLid = chatLid != null
                 ? chatLid
@@ -444,33 +537,49 @@ public final class LidMigrationService {
 
         // Rule 8: Primary has a LID for this contact
         if (primaryLid != null) {
-            // Rule 8a: No local LID or local matches primary → use primary
+            // Rule 8a: No local LID or local matches primary -> use primary
             if (localLid == null || localLid.toUserJid().equals(primaryLid.toUserJid())) {
                 return new LidMigrationResolution.Migrate(jid, primaryLid);
             }
 
             // Rule 8b: LID mismatch between local and primary
-            // Compare timestamps to determine which is fresher
-            var chatTimestamp = chat.conversationTimestamp();
-            if (chatTimestamp.isPresent() && chatTimestamp.get().compareTo(chatDbMigrationTimestamp) > 0) {
-                // Local data is fresher than primary sync → primary mappings are obsolete
-                throw new WhatsAppLidMigrationException.PrimaryMappingsObsolete();
+            // Gate mismatch check with AB prop
+            if (abPropsService.getBool(ABProp.LID_ONE_ON_ONE_MIGRATION_LOG_OUT_ON_MISMATCH)) {
+                // Compare timestamps to determine which is fresher
+                // Use >= (not >) - local timestamp >= sync timestamp means local is fresher
+                var chatTimestamp = chat.conversationTimestamp();
+                var effectiveSyncTimestamp = getEffectiveSyncTimestamp();
+                if (chatTimestamp.isPresent() && !chatTimestamp.get().isBefore(effectiveSyncTimestamp)) {
+                    // Local data is fresher than or equal to primary sync -> primary mappings are obsolete
+                    throw new WhatsAppLidMigrationException.PrimaryMappingsObsolete();
+                }
             }
 
-            // Primary is fresher → trust primary
+            // Primary is fresher or mismatch logging out is disabled -> trust primary
             return new LidMigrationResolution.Migrate(jid, primaryLid);
         }
 
-        // Rule 9: Primary has no LID, but local does → use local
+        // Rule 9: Primary has no LID, but local does -> use local
+        // Inline split thread check: if the local LID already exists as a separate thread, abort
+        // Matches WA Web's inline check: isThreadExistsWithChatJid ? logout(SplitThreadMismatch) : migrate
         if (localLid != null) {
+            if (existingLidThreads.contains(localLid.toUserJid())) {
+                throw new WhatsAppLidMigrationException.SplitThreadMismatch();
+            }
             return new LidMigrationResolution.Migrate(jid, localLid);
         }
 
+        // Rule 9b: originalLid fallback — check the cache of LIDs set at chat creation time
+        // Matches WA Web's chat.originalLid check in getResolvedThreadAccountLid
+        var cachedOriginalLid = user != null ? originalLidCache.get(user) : null;
+        if (cachedOriginalLid != null) {
+            return new LidMigrationResolution.Migrate(jid, cachedOriginalLid.toUserJid());
+        }
+
         // Rule 10: No LID found - evaluate if chat can be deleted
-        if (shouldPreserveChat(chat)) {
-            LOGGER.log(System.Logger.Level.WARNING,
-                    "No LID mapping for chat {0}, but preserving due to user data", jid);
-            return new LidMigrationResolution.Keep(jid, LidMigrationResolution.KeepReason.NO_LID_BUT_HAS_DATA);
+        if (!canDeleteChat(chat)) {
+            // Non-deletable chat with no LID -> abort migration
+            throw new WhatsAppLidMigrationException.NoLidAvailable();
         }
 
         // Chat is eligible for deletion
@@ -478,86 +587,172 @@ public final class LidMigrationService {
     }
 
     /**
-     * Determines if a chat should be preserved even without a LID mapping.
+     * Returns the effective sync timestamp for migration timing comparisons.
      *
-     * @param chat the chat to evaluate
-     * @return true if the chat should be preserved
+     * <p>Returns {@link #chatDbMigrationTimestamp} if non-{@code null}, otherwise
+     * falls back to {@link #receiveTimestamp}, and finally to {@link Instant#EPOCH}.
+     *
+     * @return the effective sync timestamp, never {@code null}
      */
-    private boolean shouldPreserveChat(Chat chat) {
-        // Preserve archived chats - user explicitly saved this
-        if (chat.archived()) {
-            return true;
+    private Instant getEffectiveSyncTimestamp() {
+        if (chatDbMigrationTimestamp != null) {
+            return chatDbMigrationTimestamp;
         }
-
-        // Preserve muted chats - user made a choice about notifications
-        var muted = chat.mute()
-                .map(ChatMute::isMuted)
-                .orElse(false);
-        if (muted) {
-            return true;
+        if (receiveTimestamp != null) {
+            return receiveTimestamp;
         }
-
-        // Preserve pinned chats
-        if (chat.pinnedTimestamp().isPresent()) {
-            return true;
-        }
-
-        // Preserve chats with messages
-        return !chat.messages().isEmpty();
+        return Instant.EPOCH;
     }
 
     /**
-     * Checks for split thread issues that would cause conflicts after migration.
+     * Determines if a chat can be deleted during LID migration when no LID
+     * mapping is available.
      *
-     * @param resolutions the list of resolutions to check
-     * @throws WhatsAppLidMigrationException.SplitThreadMismatch if a critical split thread issue is detected
+     * <p>This matches WhatsApp Web's deletion logic (function {@code j/K}):
+     * <ol>
+     *     <li>Chats with ephemeral settings are NOT deletable, unless the
+     *         disappearing mode trigger is {@code ACCOUNT_SETTING} and the
+     *         chat contains a disappearing mode system message</li>
+     *     <li>Locked chats are NOT deletable</li>
+     *     <li>Archived chats are NOT deletable</li>
+     *     <li>Muted chats are NOT deletable</li>
+     *     <li>Chats where all messages are safe system stubs are deletable</li>
+     *     <li>Chats where all messages are safe system stubs or call log
+     *         entries (with at least one call log) are deletable</li>
+     *     <li>Otherwise the chat is NOT deletable</li>
+     * </ol>
+     *
+     * @param chat the chat to evaluate
+     * @return {@code true} if the chat can be safely deleted
      */
-    private void checkForSplitThreads(List<LidMigrationResolution> resolutions) {
-        // Collect all existing LID threads that are being kept as ALREADY_LID
-        var existingLidThreads = new HashSet<Jid>();
-        for (var resolution : resolutions) {
-            if (resolution instanceof LidMigrationResolution.Keep(var originalJid, var reason) && reason == LidMigrationResolution.KeepReason.ALREADY_LID) {
-                existingLidThreads.add(originalJid.toUserJid());
-            }
+    private boolean canDeleteChat(Chat chat) {
+        var messages = chat.messages();
+
+        // Ephemeral settings check — NOT deletable unless exempted
+        if (hasEphemeralSettings(chat) && !isEphemeralExempt(chat, messages)) {
+            return false;
         }
 
-        // Build a map of target LIDs from migrations to detect duplicates
-        var targetLidCounts = new HashMap<Jid, List<LidMigrationResolution.Migrate>>();
-        for (var resolution : resolutions) {
-            if (resolution instanceof LidMigrationResolution.Migrate migrate) {
-                targetLidCounts
-                        .computeIfAbsent(migrate.targetLid().toUserJid(), _ -> new ArrayList<>())
-                        .add(migrate);
-            }
+        // Locked chats are NOT deletable
+        if (chat.locked()) {
+            return false;
         }
 
-        for (var entry : targetLidCounts.entrySet()) {
-            var targetLid = entry.getKey();
-            var migrations = entry.getValue();
-
-            // Check 1: Multiple PN threads would migrate to the same LID
-            if (migrations.size() > 1) {
-                var duplicates = migrations.stream()
-                        .map(LidMigrationResolution.Migrate::originalJid)
-                        .map(Jid::toString)
-                        .collect(Collectors.joining(", "));
-
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "Split thread detected: {0} threads would migrate to {1}: [{2}]",
-                        migrations.size(), targetLid, duplicates);
-                throw new WhatsAppLidMigrationException.SplitThreadMismatch();
-            }
-
-            // Check 2: A PN thread would migrate to a LID that already exists as a separate thread
-            if (existingLidThreads.contains(targetLid)) {
-                var pnThread = migrations.getFirst().originalJid();
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "Split thread detected: PN thread {0} would collide with existing LID thread {1}",
-                        pnThread, targetLid);
-                throw new WhatsAppLidMigrationException.SplitThreadMismatch();
-            }
+        // Archived chats are NOT deletable
+        if (chat.archived()) {
+            return false;
         }
+
+        // Muted chats are NOT deletable
+        if (chat.mute().map(ChatMute::isMuted).orElse(false)) {
+            return false;
+        }
+
+        // Message content check: deletable if all messages are safe stubs,
+        // or all messages are safe stubs + call log entries with at least one call log
+        return allMessagesAreSafeStubs(messages) || allMessagesAreSafeStubsOrCallLog(messages);
     }
+
+    /**
+     * Returns whether the chat has ephemeral settings configured.
+     *
+     * <p>Matches WA Web's check: {@code e.ephemeralDuration != null || e.ephemeralSettingTimestamp != null}.
+     *
+     * @param chat the chat to check
+     * @return {@code true} if the chat has ephemeral duration or setting timestamp
+     */
+    private boolean hasEphemeralSettings(Chat chat) {
+        return chat.ephemeralExpiration().isPresent() || chat.ephemeralSettingTimestamp().isPresent();
+    }
+
+    /**
+     * Returns whether the chat is exempt from the ephemeral deletability block.
+     *
+     * <p>Matches WA Web's {@code re()} function: returns {@code true} if the chat's
+     * disappearing mode trigger is {@code ACCOUNT_SETTING} and the message list contains
+     * at least one disappearing mode system message.
+     *
+     * @param chat     the chat to check
+     * @param messages the chat's messages
+     * @return {@code true} if the chat is exempt from the ephemeral block
+     */
+    private boolean isEphemeralExempt(Chat chat, Collection<ChatMessageInfo> messages) {
+        var trigger = chat.disappearingMode()
+                .flatMap(ChatDisappearingMode::trigger)
+                .orElse(null);
+        if (trigger != ChatDisappearingMode.Trigger.ACCOUNT_SETTING) {
+            return false;
+        }
+
+        return messages.stream().anyMatch(msg -> {
+            var stubType = msg.messageStubType().orElse(null);
+            return stubType == ChatMessageInfo.StubType.DISAPPEARING_MODE;
+        });
+    }
+
+    /**
+     * Returns whether all messages in the collection are migration-safe system stubs.
+     *
+     * <p>Matches WA Web's {@code r.every(X)} check, where {@code X()} returns {@code true}
+     * for initial e2e notifications and disappearing mode system messages.
+     *
+     * @param messages the messages to check
+     * @return {@code true} if every message is a safe system stub
+     */
+    private boolean allMessagesAreSafeStubs(Collection<ChatMessageInfo> messages) {
+        return messages.stream().allMatch(this::isMigrationSafeStub);
+    }
+
+    /**
+     * Returns whether all messages are either migration-safe stubs or call log entries,
+     * with at least one call log entry present.
+     *
+     * <p>Matches WA Web's {@code ee(r)} function.
+     *
+     * @param messages the messages to check
+     * @return {@code true} if every message is a safe stub or call log, with at least one call log
+     */
+    private boolean allMessagesAreSafeStubsOrCallLog(Collection<ChatMessageInfo> messages) {
+        var hasCallLog = false;
+        for (var msg : messages) {
+            if (isMigrationSafeStub(msg)) {
+                continue;
+            }
+            if (isCallLogMessage(msg)) {
+                hasCallLog = true;
+                continue;
+            }
+            return false;
+        }
+        return hasCallLog;
+    }
+
+    /**
+     * Returns whether a message is a migration-safe system stub that can be ignored.
+     *
+     * @param msg the message to check
+     * @return {@code true} if the message is a safe stub
+     */
+    private boolean isMigrationSafeStub(ChatMessageInfo msg) {
+        if (!msg.message().isEmpty()) {
+            return false;
+        }
+
+        var stubType = msg.messageStubType().orElse(null);
+        return stubType != null && MIGRATION_SAFE_STUB_TYPES.contains(stubType);
+    }
+
+    /**
+     * Returns whether a message is a call log entry.
+     *
+     * @param msg the message to check
+     * @return {@code true} if the message is a call log entry
+     */
+    private boolean isCallLogMessage(ChatMessageInfo msg) {
+        var stubType = msg.messageStubType().orElse(null);
+        return stubType != null && CALL_LOG_STUB_TYPES.contains(stubType);
+    }
+
 
     /**
      * Executes the resolved migrations.
@@ -607,7 +802,7 @@ public final class LidMigrationService {
             contact.setLid(targetLid);
         });
 
-        LOGGER.log(System.Logger.Level.DEBUG, "Migrated chat {0} → {1}", originalJid, targetLid);
+        LOGGER.log(System.Logger.Level.DEBUG, "Migrated chat {0} -> {1}", originalJid, targetLid);
     }
 
     /**
@@ -636,9 +831,10 @@ public final class LidMigrationService {
             return;
         }
 
-        // Update primary cache
+        // Update primary caches
         if (phoneJid.user() != null) {
-            primaryPnToLidCache.put(phoneJid.user(), newLid);
+            primaryPnToAssignedLidCache.put(phoneJid.user(), newLid);
+            primaryPnToLatestLidCache.put(phoneJid.user(), newLid);
         }
 
         // Update store mappings
@@ -655,29 +851,93 @@ public final class LidMigrationService {
             chat.setPhoneNumberJid(phoneJid);
         });
 
-        LOGGER.log(System.Logger.Level.DEBUG, "LID changed for {0}: {1} → {2}", phoneJid, oldLid, newLid);
+        LOGGER.log(System.Logger.Level.DEBUG, "LID changed for {0}: {1} -> {2}", phoneJid, oldLid, newLid);
     }
 
     /**
-     * Persists all primary mappings to the store's bidirectional mapping tables.
+     * Registers the original LID for a locally-created chat.
+     *
+     * <p>This should be called from the chat creation logic when a LID mapping
+     * is already known at chat creation time and LID migration has not yet
+     * completed. Matches WA Web's {@code WAWebCreateChat} behavior where
+     * {@code originalLid} is set on the chat object.
+     *
+     * @param phoneJid the phone number JID of the chat
+     * @param lid      the LID known at chat creation time
+     */
+    public void registerOriginalLid(Jid phoneJid, Jid lid) {
+        if (phoneJid == null || lid == null || phoneJid.user() == null) {
+            return;
+        }
+
+        originalLidCache.put(phoneJid.user(), lid);
+    }
+
+    /**
+     * Persists primary mappings to the store's bidirectional mapping tables.
+     *
+     * <p>Matches WA Web's {@code learnMappingsInBulk()} which uses two learning
+     * sources with skip logic:
+     * <ol>
+     *     <li>Skips entries where the assigned LID already matches the store's
+     *         current LID for that phone number</li>
+     *     <li>Processes "migration-sync-old" mappings first (assigned LID only,
+     *         when the latest LID already matches local)</li>
+     *     <li>Processes "migration-sync-latest" mappings second (both assigned
+     *         and latest LIDs, when the latest LID differs from local)</li>
+     * </ol>
      */
     private void learnMappingsInBulk() {
-        var registered = 0;
-        for (var entry : primaryPnToLidCache.entrySet()) {
+        var oldMappings = new ArrayList<Map.Entry<Jid, Jid>>();
+        var latestMappings = new ArrayList<Map.Entry<Jid, Jid>>();
+
+        for (var entry : primaryPnToAssignedLidCache.entrySet()) {
             var phoneJid = Jid.of(entry.getKey());
-            var lidJid = entry.getValue();
-            store.registerLidMapping(phoneJid, lidJid);
-            registered++;
+            var assignedLid = entry.getValue();
+
+            // Skip if the assigned LID already matches the store's current mapping
+            var currentLid = store.findLidByPhone(phoneJid).orElse(null);
+            if (assignedLid.toUserJid().equals(currentLid != null ? currentLid.toUserJid() : null)) {
+                continue;
+            }
+
+            // Check if latestLid matches the current local LID to determine categorization
+            var latestLid = primaryPnToLatestLidCache.get(entry.getKey());
+            if (latestLid != null && latestLid.toUserJid().equals(currentLid != null ? currentLid.toUserJid() : null)) {
+                // Latest matches local -> "migration-sync-old": register assigned only
+                oldMappings.add(Map.entry(phoneJid, assignedLid));
+            } else {
+                // Latest differs from local -> "migration-sync-latest": register assigned + latest
+                latestMappings.add(Map.entry(phoneJid, assignedLid));
+                if (latestLid != null) {
+                    latestMappings.add(Map.entry(phoneJid, latestLid));
+                }
+            }
         }
-        LOGGER.log(System.Logger.Level.INFO, "Bulk-registered {0} PN↔LID mappings", registered);
+
+        // Process old mappings first, then latest (ordering matters for conflict resolution)
+        for (var mapping : oldMappings) {
+            store.registerLidMapping(mapping.getKey(), mapping.getValue());
+        }
+        for (var mapping : latestMappings) {
+            store.registerLidMapping(mapping.getKey(), mapping.getValue());
+        }
+
+        LOGGER.log(System.Logger.Level.INFO,
+                "Bulk-registered LID mappings: {0} old, {1} latest",
+                oldMappings.size(), latestMappings.size());
     }
 
     /**
      * Determines if migration should auto-start.
+     *
+     * <p>WhatsApp Web unconditionally triggers migration after READY state,
+     * so this always returns {@code true}.
+     *
+     * @return {@code true}
      */
     private boolean shouldAutoStartMigration() {
-        // For now, auto-start if we have mappings and the timestamp indicates we should migrate
-        return chatDbMigrationTimestamp != null && Instant.now().isAfter(chatDbMigrationTimestamp);
+        return true;
     }
 
     /**
@@ -699,25 +959,12 @@ public final class LidMigrationService {
         if (!currentState.isTerminal()) {
             state.set(LidMigrationState.NOT_STARTED);
         }
-        // Don't clear primary cache on reconnect - it's still valid for 24 hours
-    }
-
-    /**
-     * Returns whether the primary mappings cache is still valid.
-     * The cache expires after 24 hours per the Design Document.
-     *
-     * @return true if mappings are valid and haven't expired
-     */
-    public boolean arePrimaryMappingsValid() {
-        if (primaryMappingsTimestamp == 0) {
-            return false;
-        }
-        return System.currentTimeMillis() - primaryMappingsTimestamp < PRIMARY_MAPPINGS_TIMEOUT_MS;
+        // Don't clear primary caches on reconnect - they persist across sessions
     }
 
     /**
      * Looks up a LID for a phone number JID.
-     * Checks primary cache first (if not expired), then store mappings.
+     * Checks primary assigned cache first, then store mappings.
      *
      * @param phoneJid the phone number JID
      * @return the LID if found
@@ -727,12 +974,10 @@ public final class LidMigrationService {
             return Optional.empty();
         }
 
-        // Check primary cache only if it hasn't expired
-        if (arePrimaryMappingsValid()) {
-            var cached = primaryPnToLidCache.get(phoneJid.user());
-            if (cached != null) {
-                return Optional.of(cached);
-            }
+        // Check primary assigned cache
+        var cached = primaryPnToAssignedLidCache.get(phoneJid.user());
+        if (cached != null) {
+            return Optional.of(cached);
         }
 
         // Check store mappings (these don't expire)
@@ -743,7 +988,7 @@ public final class LidMigrationService {
      * Determines whether to use LID addressing mode for a recipient.
      *
      * @param recipientJid the recipient's JID
-     * @return true if LID addressing should be used
+     * @return {@code true} if LID addressing should be used
      */
     public boolean shouldUseLidAddressing(Jid recipientJid) {
         if (recipientJid == null) {

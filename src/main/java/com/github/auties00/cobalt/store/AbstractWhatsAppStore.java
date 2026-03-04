@@ -288,6 +288,8 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     protected final ConcurrentMap<SyncPatchType, SyncCollectionMetadata> webAppStateCollections;
 
+    protected final ConcurrentMap<SyncPatchType, ConcurrentMap<String, SyncActionEntry>> syncActionEntries;
+
     protected final ConcurrentMap<String, Set<Jid>> pendingMessageRecipients;
 
     protected final Object clientVersionLock;
@@ -444,6 +446,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.companionVersion = companionVersion;
         this.webAppStatePendingMutations = new ConcurrentHashMap<>();
         this.webAppStateCollections = new ConcurrentHashMap<>();
+        this.syncActionEntries = new ConcurrentHashMap<>();
         this.pendingMessageRecipients = new ConcurrentHashMap<>();
         this.chatMetadata = new ConcurrentHashMap<>();
         this.deviceLists = new ConcurrentLinkedHashMap<>();
@@ -524,7 +527,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         if(contactJid == null) {
             return Optional.empty();
         } else {
-            var targetJid = jid.toJid();
+            var targetJid = contactJid.toJid();
             if(targetJid.hasUserServer()) {
                 var jidContact = contacts.remove(targetJid);
                 if(jidContact != null) {
@@ -1316,6 +1319,35 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public void addWebAppHashState(SyncHashValue state) {
         hashStates.put(state.type(), state);
+    }
+
+    @Override
+    public Optional<SyncActionEntry> findSyncActionEntry(SyncPatchType patchType, byte[] indexMac) {
+        var inner = syncActionEntries.get(patchType);
+        if (inner == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(inner.get(HexFormat.of().formatHex(indexMac)));
+    }
+
+    @Override
+    public void putSyncActionEntry(SyncPatchType patchType, byte[] indexMac, SyncActionEntry entry) {
+        syncActionEntries.computeIfAbsent(patchType, _ -> new ConcurrentHashMap<>())
+                .put(HexFormat.of().formatHex(indexMac), entry);
+    }
+
+    @Override
+    public Optional<SyncActionEntry> removeSyncActionEntry(SyncPatchType patchType, byte[] indexMac) {
+        var inner = syncActionEntries.get(patchType);
+        if (inner == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(inner.remove(HexFormat.of().formatHex(indexMac)));
+    }
+
+    @Override
+    public void clearSyncActionEntries(SyncPatchType patchType) {
+        syncActionEntries.remove(patchType);
     }
 
     @Override

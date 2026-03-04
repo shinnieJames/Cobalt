@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -52,6 +53,13 @@ public final class ABPropsService {
      * Null if no props have been synced yet.
      */
     private volatile String currentHash;
+
+    /**
+     * Current AB key from the server, used as the WAM {@code abKey2}
+     * global attribute (field 4473). Null if no props have been synced
+     * yet or the server did not include one.
+     */
+    private volatile String currentAbKey;
 
     /**
      * Future that completes when sync finishes.
@@ -204,6 +212,11 @@ public final class ABPropsService {
             LOGGER.log(System.Logger.Level.DEBUG, "Updated AB props hash: {0}", hash);
         });
 
+        // Update AB key for WAM abKey2 global
+        propsNode.getAttributeAsString("ab_key").ifPresent(key -> {
+            this.currentAbKey = key;
+        });
+
         // Check if this is a delta update
         var isDelta = propsNode.getAttributeAsBool("delta_update", false);
         if (!isDelta) {
@@ -233,6 +246,20 @@ public final class ABPropsService {
 
         LOGGER.log(System.Logger.Level.INFO, "Synced {0} AB props from server (delta={1})", count, isDelta);
         return true;
+    }
+
+    /**
+     * Returns the current AB key from the server.
+     *
+     * <p>This value is written as the WAM {@code abKey2} global
+     * attribute (field 4473) on the {@code "regular"} channel, unless
+     * the {@code wam_disable_abkey_attribute} AB prop is enabled.
+     *
+     * @return an {@code Optional} containing the AB key string, or
+     *         empty if the server did not include one in the response
+     */
+    public Optional<String> abKey() {
+        return Optional.ofNullable(currentAbKey);
     }
 
     /**
@@ -428,6 +455,7 @@ public final class ABPropsService {
     public void clear() {
         props.clear();
         currentHash = null;
+        currentAbKey = null;
         syncFuture.set(new CompletableFuture<>());
         LOGGER.log(System.Logger.Level.DEBUG, "Cleared all AB props and reset sync state");
     }

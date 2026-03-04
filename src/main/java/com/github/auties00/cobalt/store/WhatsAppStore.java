@@ -30,6 +30,7 @@ import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
+import com.github.auties00.cobalt.model.sync.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.SyncCollectionMetadata;
 import com.github.auties00.cobalt.model.sync.SyncHashValue;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
@@ -1144,6 +1145,42 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param state the hash state to add, must not be {@code null}
      */
     void addWebAppHashState(SyncHashValue state);
+
+    /**
+     * Finds a sync action entry by collection and index MAC.
+     *
+     * @param patchType the collection type
+     * @param indexMac  the index MAC identifying the entry
+     * @return an {@code Optional} containing the entry if found
+     */
+    Optional<SyncActionEntry> findSyncActionEntry(SyncPatchType patchType, byte[] indexMac);
+
+    /**
+     * Stores or updates a sync action entry for the specified collection.
+     *
+     * @param patchType the collection type
+     * @param indexMac  the index MAC identifying the entry
+     * @param entry     the entry to store
+     */
+    void putSyncActionEntry(SyncPatchType patchType, byte[] indexMac, SyncActionEntry entry);
+
+    /**
+     * Removes a sync action entry from the specified collection.
+     *
+     * @param patchType the collection type
+     * @param indexMac  the index MAC identifying the entry to remove
+     * @return an {@code Optional} containing the removed entry if it existed
+     */
+    Optional<SyncActionEntry> removeSyncActionEntry(SyncPatchType patchType, byte[] indexMac);
+
+    /**
+     * Clears all sync action entries for the specified collection.
+     *
+     * <p>Used when a full snapshot is received and the state must be rebuilt from scratch.
+     *
+     * @param patchType the collection type
+     */
+    void clearSyncActionEntries(SyncPatchType patchType);
 
     /**
      * Returns all missing sync keys being tracked.

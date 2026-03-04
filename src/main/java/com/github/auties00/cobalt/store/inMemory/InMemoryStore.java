@@ -343,7 +343,7 @@ public final class InMemoryStore extends AbstractWhatsAppStore {
         if(chatJid == null) {
             return Optional.empty();
         } else {
-            var targetJid = jid.toJid();
+            var targetJid = chatJid.toJid();
             if(targetJid.hasUserServer()) {
                 var jidChat = chats.remove(targetJid);
                 if(jidChat != null) {

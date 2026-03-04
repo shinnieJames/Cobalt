@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.wam;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.util.FastRandomUtils;
@@ -114,6 +116,7 @@ public final class WamService {
     private static final int PLATFORM_WEBCLIENT = 1;
 
     private final WhatsAppClient client;
+    private final ABPropsService abPropsService;
     private final ConcurrentMap<WamChannel, List<WamPendingEvent>> pending;
     private final AtomicInteger sequenceNumber;
     private final WamBeaconing beaconing;
@@ -122,6 +125,7 @@ public final class WamService {
 
     private volatile boolean initialized;
     private ScheduledExecutorService scheduler;
+    private Map<Integer, Object> prevSessionGlobals;
 
     private long platform;
     private String appVersion;
@@ -133,6 +137,7 @@ public final class WamService {
     private String osVersion;
     private String deviceVersion;
     private String webcTabId;
+    private String abKey2;
 
     /**
      * Constructs a new {@code WamService} bound to the given client.
@@ -140,10 +145,14 @@ public final class WamService {
      * <p>The service is not active until {@link #initialize()} is called
      * after the client has authenticated.
      *
-     * @param client the WhatsApp client instance, must not be {@code null}
+     * @param client         the WhatsApp client instance, must not be
+     *                       {@code null}
+     * @param abPropsService the AB props service for reading the AB key
+     *                       and feature flags, must not be {@code null}
      */
-    public WamService(WhatsAppClient client) {
+    public WamService(WhatsAppClient client, ABPropsService abPropsService) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
+        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
         this.pending = new ConcurrentHashMap<>();
         this.sequenceNumber = new AtomicInteger(1);
         this.beaconing = new WamBeaconing();
@@ -173,6 +182,9 @@ public final class WamService {
         this.osVersion = System.getProperty("os.name", "") + " " + System.getProperty("os.version", "");
         this.deviceVersion = osVersion;
         this.webcTabId = UUID.randomUUID().toString();
+        this.abKey2 = abPropsService.getBool(ABProp.WAM_DISABLE_ABKEY_ATTRIBUTE)
+                ? null
+                : abPropsService.abKey().orElse("");
         this.initialized = true;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
         scheduler.scheduleWithFixedDelay(this::flush, FLUSH_INTERVAL_SECONDS, FLUSH_INTERVAL_SECONDS, TimeUnit.SECONDS);
@@ -291,7 +303,12 @@ public final class WamService {
         var beacons = new OptionalInt[events.size()];
         var weights = new int[events.size()];
         for (var i = 0; i < events.size(); i++) {
-            beacons[i] = beaconing.nextSequenceNumber(channel);
+            var bufferKey = switch (channel) {
+                case REGULAR -> "regular";
+                case REALTIME -> "realtime";
+                case PRIVATE -> privateStatsId.getKeyNameForHash(events.get(i).event().privateStatsId());
+            };
+            beacons[i] = beaconing.nextSequenceNumber(bufferKey);
             weights[i] = effectiveWeight(events.get(i).event());
         }
 
@@ -369,41 +386,139 @@ public final class WamService {
      */
     private int computeGlobalsSize(WamChannel channel) {
         var size = 0;
+        // 11
         size += WamGlobalEncoder.platformSize(platform);
+        // 13
         if (deviceName != null) {
             size += WamGlobalEncoder.deviceNameSize(deviceName);
         }
-        if (appVersion != null) {
-            size += WamGlobalEncoder.appVersionSize(appVersion);
-        }
-        size += WamGlobalEncoder.streamIdSize(STREAM_ID);
-        size += WamGlobalEncoder.ocVersionSize(1);
-        size += WamGlobalEncoder.appBuildSize(APP_BUILD_RELEASE);
-        size += WamGlobalEncoder.appIsBetaReleaseSize(false);
-        size += WamGlobalEncoder.memClassSize(memClass);
+        // 15
         if (osVersion != null) {
             size += WamGlobalEncoder.osVersionSize(osVersion);
         }
+        // 17
+        if (appVersion != null) {
+            size += WamGlobalEncoder.appVersionSize(appVersion);
+        }
+        // 21
+        size += WamGlobalEncoder.appIsBetaReleaseSize(false);
         if (channel != WamChannel.PRIVATE) {
-            size += WamGlobalEncoder.numCpuSize(numCpu);
-            size += WamGlobalEncoder.deviceClassificationSize(DEVICE_CLASSIFICATION_DESKTOP);
-            size += WamGlobalEncoder.webcEnvSize(WEBC_ENV_PROD);
-            if (browser != null) {
-                size += WamGlobalEncoder.browserSize(browser);
-            }
+            // 295
             if (browserVersion != null) {
                 size += WamGlobalEncoder.browserVersionSize(browserVersion);
             }
-            if (deviceVersion != null) {
-                size += WamGlobalEncoder.deviceVersionSize(deviceVersion);
+            // 633
+            size += WamGlobalEncoder.webcEnvSize(WEBC_ENV_PROD);
+        }
+        // 655
+        size += WamGlobalEncoder.memClassSize(memClass);
+        if (channel != WamChannel.PRIVATE) {
+            // 779
+            if (browser != null) {
+                size += WamGlobalEncoder.browserSize(browser);
             }
+        }
+        // 899
+        size += WamGlobalEncoder.webcWebPlatformSize(PLATFORM_WEBCLIENT);
+        // 1657
+        size += WamGlobalEncoder.appBuildSize(APP_BUILD_RELEASE);
+        // 3543
+        size += WamGlobalEncoder.streamIdSize(STREAM_ID);
+        if (channel != WamChannel.PRIVATE) {
+            // 3727
             if (webcTabId != null) {
                 size += WamGlobalEncoder.webcTabIdSize(webcTabId);
             }
+            // 4473
+            if (abKey2 != null) {
+                size += WamGlobalEncoder.abKey2Size(abKey2);
+            }
+            // 4505
+            if (deviceVersion != null) {
+                size += WamGlobalEncoder.deviceVersionSize(deviceVersion);
+            }
+        }
+        // 6251
+        size += WamGlobalEncoder.ocVersionSize(1);
+        if (channel != WamChannel.PRIVATE) {
+            // 10317
+            size += WamGlobalEncoder.numCpuSize(numCpu);
+            // 14507
+            size += WamGlobalEncoder.deviceClassificationSize(DEVICE_CLASSIFICATION_DESKTOP);
+            // 18491
             size += WamGlobalEncoder.webcRevisionSize(0);
         }
-        size += WamGlobalEncoder.webcWebPlatformSize(PLATFORM_WEBCLIENT);
+        size += computeNullTransitionsSize(channel);
         return size;
+    }
+
+    /**
+     * Builds a map of the current session global values keyed by field
+     * ID. Only nullable globals (strings and the {@code abKey2} field)
+     * are tracked, since non-nullable globals never transition to
+     * {@code null}.
+     *
+     * @param channel the transport channel
+     * @return the current globals snapshot
+     */
+    private Map<Integer, Object> buildCurrentGlobals(WamChannel channel) {
+        var globals = new LinkedHashMap<Integer, Object>();
+        if (deviceName != null) globals.put(13, deviceName);
+        if (osVersion != null) globals.put(15, osVersion);
+        if (appVersion != null) globals.put(17, appVersion);
+        if (channel != WamChannel.PRIVATE) {
+            if (browserVersion != null) globals.put(295, browserVersion);
+            if (browser != null) globals.put(779, browser);
+            if (webcTabId != null) globals.put(3727, webcTabId);
+            if (abKey2 != null) globals.put(4473, abKey2);
+            if (deviceVersion != null) globals.put(4505, deviceVersion);
+        }
+        return globals;
+    }
+
+    /**
+     * Returns the byte count of VALUE_NULL entries for globals that
+     * transitioned from non-{@code null} to {@code null} since the
+     * last flush.
+     *
+     * @param channel the transport channel
+     * @return the null-transition size in bytes
+     */
+    private int computeNullTransitionsSize(WamChannel channel) {
+        if (prevSessionGlobals == null) {
+            return 0;
+        }
+        var current = buildCurrentGlobals(channel);
+        var size = 0;
+        for (var fieldId : prevSessionGlobals.keySet()) {
+            if (!current.containsKey(fieldId)) {
+                size += WamGlobalEncoder.nullGlobalSize(fieldId);
+            }
+        }
+        return size;
+    }
+
+    /**
+     * Writes VALUE_NULL entries for globals that transitioned from
+     * non-{@code null} to {@code null} since the last flush, then
+     * updates the previous-globals snapshot.
+     *
+     * @param channel the transport channel
+     * @param buffer  the output byte array
+     * @param offset  the current offset
+     * @return the new offset after writing
+     */
+    private int writeNullTransitions(WamChannel channel, byte[] buffer, int offset) {
+        var current = buildCurrentGlobals(channel);
+        if (prevSessionGlobals != null) {
+            for (var fieldId : prevSessionGlobals.keySet()) {
+                if (!current.containsKey(fieldId)) {
+                    offset = WamGlobalEncoder.writeNullGlobal(fieldId, buffer, offset);
+                }
+            }
+        }
+        prevSessionGlobals = current;
+        return offset;
     }
 
     /**
@@ -416,40 +531,69 @@ public final class WamService {
      * @return the new offset after writing all globals
      */
     private int writeGlobals(byte[] buffer, int offset, WamChannel channel) {
+        // 11
         offset = WamGlobalEncoder.writePlatform(platform, buffer, offset);
+        // 13
         if (deviceName != null) {
             offset = WamGlobalEncoder.writeDeviceName(deviceName, buffer, offset);
         }
-        if (appVersion != null) {
-            offset = WamGlobalEncoder.writeAppVersion(appVersion, buffer, offset);
-        }
-        offset = WamGlobalEncoder.writeStreamId(STREAM_ID, buffer, offset);
-        offset = WamGlobalEncoder.writeOcVersion(1, buffer, offset);
-        offset = WamGlobalEncoder.writeAppBuild(APP_BUILD_RELEASE, buffer, offset);
-        offset = WamGlobalEncoder.writeAppIsBetaRelease(false, buffer, offset);
-        offset = WamGlobalEncoder.writeMemClass(memClass, buffer, offset);
+        // 15
         if (osVersion != null) {
             offset = WamGlobalEncoder.writeOsVersion(osVersion, buffer, offset);
         }
+        // 17
+        if (appVersion != null) {
+            offset = WamGlobalEncoder.writeAppVersion(appVersion, buffer, offset);
+        }
+        // 21
+        offset = WamGlobalEncoder.writeAppIsBetaRelease(false, buffer, offset);
         if (channel != WamChannel.PRIVATE) {
-            offset = WamGlobalEncoder.writeNumCpu(numCpu, buffer, offset);
-            offset = WamGlobalEncoder.writeDeviceClassification(DEVICE_CLASSIFICATION_DESKTOP, buffer, offset);
-            offset = WamGlobalEncoder.writeWebcEnv(WEBC_ENV_PROD, buffer, offset);
-            if (browser != null) {
-                offset = WamGlobalEncoder.writeBrowser(browser, buffer, offset);
-            }
+            // 295
             if (browserVersion != null) {
                 offset = WamGlobalEncoder.writeBrowserVersion(browserVersion, buffer, offset);
             }
-            if (deviceVersion != null) {
-                offset = WamGlobalEncoder.writeDeviceVersion(deviceVersion, buffer, offset);
+            // 633
+            offset = WamGlobalEncoder.writeWebcEnv(WEBC_ENV_PROD, buffer, offset);
+        }
+        // 655
+        offset = WamGlobalEncoder.writeMemClass(memClass, buffer, offset);
+        if (channel != WamChannel.PRIVATE) {
+            // 779
+            if (browser != null) {
+                offset = WamGlobalEncoder.writeBrowser(browser, buffer, offset);
             }
+        }
+        // 899
+        offset = WamGlobalEncoder.writeWebcWebPlatform(PLATFORM_WEBCLIENT, buffer, offset);
+        // 1657
+        offset = WamGlobalEncoder.writeAppBuild(APP_BUILD_RELEASE, buffer, offset);
+        // 3543
+        offset = WamGlobalEncoder.writeStreamId(STREAM_ID, buffer, offset);
+        if (channel != WamChannel.PRIVATE) {
+            // 3727
             if (webcTabId != null) {
                 offset = WamGlobalEncoder.writeWebcTabId(webcTabId, buffer, offset);
             }
+            // 4473
+            if (abKey2 != null) {
+                offset = WamGlobalEncoder.writeAbKey2(abKey2, buffer, offset);
+            }
+            // 4505
+            if (deviceVersion != null) {
+                offset = WamGlobalEncoder.writeDeviceVersion(deviceVersion, buffer, offset);
+            }
+        }
+        // 6251
+        offset = WamGlobalEncoder.writeOcVersion(1, buffer, offset);
+        if (channel != WamChannel.PRIVATE) {
+            // 10317
+            offset = WamGlobalEncoder.writeNumCpu(numCpu, buffer, offset);
+            // 14507
+            offset = WamGlobalEncoder.writeDeviceClassification(DEVICE_CLASSIFICATION_DESKTOP, buffer, offset);
+            // 18491
             offset = WamGlobalEncoder.writeWebcRevision(0, buffer, offset);
         }
-        offset = WamGlobalEncoder.writeWebcWebPlatform(PLATFORM_WEBCLIENT, buffer, offset);
+        offset = writeNullTransitions(channel, buffer, offset);
         return offset;
     }
 

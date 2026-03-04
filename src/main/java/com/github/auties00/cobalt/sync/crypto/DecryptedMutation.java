@@ -12,6 +12,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -83,7 +85,7 @@ public sealed interface DecryptedMutation {
             var actionValue = actionData.value()
                     .orElseThrow(() -> new IllegalStateException("Missing value from action data"));
             var actionTimestamp = actionValue.timestamp()
-                    .orElseGet(Instant::now);
+                    .orElseThrow(WhatsAppWebAppStateSyncException.MissingActionTimestamp::new);
             var indexMac2 = Mac.getInstance("HmacSHA256");
             indexMac2.init(keys.indexKey());
             var expectedIndexMac = indexMac2.doFinal(actionIndex);

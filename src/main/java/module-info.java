@@ -37,6 +37,5 @@ module com.github.auties00.cobalt {
     requires com.google.i18n.phonenumbers.libphonenumber;
     requires java.xml.crypto;
     requires com.github.auties00.cobalt;
-
     // TODO: Decide exports
 }

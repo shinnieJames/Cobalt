@@ -81,4 +81,13 @@ public record EncryptedMutation(
         // Create EncryptedMutation
         return new EncryptedMutation(indexMacResult, encryptedValue, keyId, mutation.operation());
     }
+
+    /**
+     * Extracts the value MAC from the encrypted value (last 32 bytes).
+     *
+     * @return the 32-byte value MAC
+     */
+    public byte[] valueMac() {
+        return Arrays.copyOfRange(encryptedValue, encryptedValue.length - MAC_LENGTH, encryptedValue.length);
+    }
 }

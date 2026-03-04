@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.model.jid.migration;
 
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidServer;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -85,7 +86,7 @@ public final class LIDMigrationMapping {
      * @return the assigned LID
      */
     public Jid assignedLid() {
-        return Jid.of(assignedLid);
+        return Jid.of(String.valueOf(assignedLid), JidServer.lid());
     }
 
     /**
@@ -96,7 +97,9 @@ public final class LIDMigrationMapping {
      *         an empty {@code Optional} if not set
      */
     public Optional<Jid> latestLid() {
-        return latestLid == null ? Optional.empty() : Optional.of(Jid.of(latestLid));
+        return latestLid == null
+                ? Optional.empty()
+                : Optional.of(Jid.of(String.valueOf(latestLid), JidServer.lid()));
     }
 
     /**
