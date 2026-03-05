@@ -567,6 +567,25 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setCheckPatchMacs(boolean enabled);
 
     /**
+     * Returns whether the primary device supports syncd snapshot recovery.
+     *
+     * <p>Per WhatsApp Web {@code WAPrimaryDeviceSupportsSyncdRecovery}:
+     * this flag is set when the primary device indicates support for
+     * snapshot recovery via peer data operations.
+     *
+     * @return {@code true} if the primary device supports syncd recovery
+     */
+    boolean primaryDeviceSupportsSyncdRecovery();
+
+    /**
+     * Sets whether the primary device supports syncd snapshot recovery.
+     *
+     * @param supported {@code true} if supported
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setPrimaryDeviceSupportsSyncdRecovery(boolean supported);
+
+    /**
      * Returns whether chat data has been synchronized from the server.
      *
      * @return {@code true} if synchronized
@@ -1181,6 +1200,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param patchType the collection type
      */
     void clearSyncActionEntries(SyncPatchType patchType);
+
+    /**
+     * Returns all sync action entries for the specified collection.
+     *
+     * @param patchType the collection type
+     * @return an unmodifiable collection of entries, or an empty collection if none exist
+     */
+    Collection<SyncActionEntry> getSyncActionEntries(SyncPatchType patchType);
 
     /**
      * Returns all missing sync keys being tracked.

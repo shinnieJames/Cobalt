@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -23,6 +24,16 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
     @Override
     public String actionName() {
         return "muteAction";
+    }
+
+    @Override
+    public SyncPatchType collectionName() {
+        return SyncPatchType.REGULAR_LOW;
+    }
+
+    @Override
+    public int version() {
+        return 4;
     }
 
     @Override

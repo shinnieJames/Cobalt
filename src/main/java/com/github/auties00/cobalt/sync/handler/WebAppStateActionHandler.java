@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -14,6 +15,13 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *   <li>Resolving conflicts between local and remote mutations</li>
  *   <li>Handling orphan cases when referenced entities don't exist</li>
  * </ul>
+ *
+ * <p>Per WhatsApp Web, each handler declares:
+ * <ul>
+ *   <li>{@link #actionName()} — the action identifier used for routing</li>
+ *   <li>{@link #collectionName()} — the sync collection this action belongs to</li>
+ *   <li>{@link #version()} — the mutation format version for version gating</li>
+ * </ul>
  */
 public interface WebAppStateActionHandler {
     /**
@@ -22,6 +30,27 @@ public interface WebAppStateActionHandler {
      * @return the action type name
      */
     String actionName();
+
+    /**
+     * Returns the sync collection this handler's action belongs to.
+     *
+     * <p>Per WhatsApp Web, each handler declares which collection its mutations
+     * are stored in (e.g., {@code REGULAR}, {@code CRITICAL_BLOCK}).
+     *
+     * @return the sync patch type / collection name
+     */
+    SyncPatchType collectionName();
+
+    /**
+     * Returns the mutation format version for this handler.
+     *
+     * <p>Per WhatsApp Web, each handler declares a version number used for
+     * version gating. Mutations with a version higher than this value are
+     * skipped to avoid processing with incompatible logic.
+     *
+     * @return the handler's supported mutation version
+     */
+    int version();
 
     /**
      * Applies mutation to local state.

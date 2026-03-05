@@ -23,6 +23,9 @@ public interface OfflineResumeEvent extends WamEventSpec {
     @WamProperty(index = 36, type = WamType.INTEGER)
     OptionalInt attemptNumber();
 
+    @WamProperty(index = 55, type = WamType.INTEGER)
+    OptionalInt chatQueueSize();
+
     @WamProperty(index = 1, type = WamType.INTEGER)
     OptionalInt chatThreadCount();
 
@@ -46,6 +49,9 @@ public interface OfflineResumeEvent extends WamEventSpec {
 
     @WamProperty(index = 45, type = WamType.BOOLEAN)
     Optional<Boolean> disconnected();
+
+    @WamProperty(index = 56, type = WamType.INTEGER)
+    OptionalInt e2eeQueueSize();
 
     @WamProperty(index = 23, type = WamType.INTEGER)
     OptionalInt expectedOfflineCallCount();
@@ -169,4 +175,7 @@ public interface OfflineResumeEvent extends WamEventSpec {
 
     @WamProperty(index = 34, type = WamType.STRING)
     Optional<String> transientOfflineSessionId();
+
+    @WamProperty(index = 57, type = WamType.INTEGER)
+    OptionalInt unorderedQueueSize();
 }

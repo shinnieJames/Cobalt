@@ -18,6 +18,7 @@ import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
 import com.github.auties00.cobalt.model.setting.EphemeralSettingsBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactActionBuilder;
@@ -30,6 +31,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.BitSet;
+import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -277,7 +279,7 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
         switch (protocolMessage.protocolType()) {
             case HISTORY_SYNC_NOTIFICATION -> onHistorySyncNotification(info, protocolMessage);
 
-            case APP_STATE_SYNC_KEY_SHARE -> onAppStateSyncKeyShare(protocolMessage);
+            case APP_STATE_SYNC_KEY_SHARE -> onAppStateSyncKeyShare(info, protocolMessage);
 
             case REVOKE -> onMessageRevoked(info, protocolMessage);
 
@@ -416,12 +418,42 @@ public final class MessageStreamNodeHandler extends SocketStream.Handler {
                 .ifPresent(message -> onMessageDeleted(info, message));
     }
 
-    private void onAppStateSyncKeyShare(ProtocolMessage protocolMessage) {
+    private void onAppStateSyncKeyShare(ChatMessageInfo info, ProtocolMessage protocolMessage) {
         var data = protocolMessage.appStateSyncKeyShare()
                 .orElseThrow(() -> new NoSuchElementException("Missing app state keys"));
-        whatsapp.store()
-                .addWebAppStateKeys(data.keys());
-        whatsapp.pullWebAppState(PatchType.values());
+
+        // Store the received keys
+        whatsapp.store().addWebAppStateKeys(data.keys());
+
+        // Collect the key IDs that were actually shared
+        var sharedKeyIds = new HashSet<String>();
+        for (var key : data.keys()) {
+            key.keyId()
+                    .flatMap(keyId -> keyId.keyId())
+                    .ifPresent(keyIdBytes -> {
+                        whatsapp.store().removeMissingSyncKey(keyIdBytes);
+                        sharedKeyIds.add(HexFormat.of().formatHex(keyIdBytes));
+                    });
+        }
+
+        // Track per-device response: mark sender as responded-without-key
+        // for any missing keys it didn't provide
+        // Per WhatsApp Web: does not trigger fatal immediately when all devices
+        // respond negatively; the timeout scheduler handles the grace period
+        var senderDevice = info.senderJid()
+                .map(Jid::device)
+                .orElse(-1);
+        if (senderDevice >= 0) {
+            for (var missingKey : whatsapp.store().missingSyncKeys()) {
+                var keyHex = HexFormat.of().formatHex(missingKey.keyId());
+                if (!sharedKeyIds.contains(keyHex)) {
+                    missingKey.markDeviceRespondedWithoutKey(senderDevice);
+                }
+            }
+        }
+
+        // Resync all blocked collections
+        whatsapp.pullWebAppState(SyncPatchType.values());
     }
 
     private void onHistorySyncNotification(ChatMessageInfo info, ProtocolMessage protocolMessage) {

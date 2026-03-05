@@ -100,6 +100,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp QPL_SAMPLING_AS_STRING = new ABProp(466, "json:{\"sampling\":[]}");
 
     /**
+     * A/B prop {@code web_abprop_drop_full_history_sync} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_abprop_drop_full_history_sync:[600,"bool"]
+     */
+    public static final ABProp WEB_ABPROP_DROP_FULL_HISTORY_SYNC = new ABProp(600, "false");
+
+    /**
      * A/B prop {@code smb_collections_appeal_flow_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -134,15 +143,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: num_days_before_device_expiry_check:[731,"int"]
      */
     public static final ABProp NUM_DAYS_BEFORE_DEVICE_EXPIRY_CHECK = new ABProp(731, "7");
-
-    /**
-     * A/B prop {@code nfm_rendering_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: nfm_rendering_enabled:[760,"bool"]
-     */
-    public static final ABProp NFM_RENDERING_ENABLED = new ABProp(760, "false");
 
     /**
      * A/B prop {@code web_abprop_business_profile_refresh_linked_account_enabled} of boolean type.
@@ -298,15 +298,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_SHOP_STOREFRONT_MESSAGE = new ABProp(1053, "false");
 
     /**
-     * A/B prop {@code web_send_invisible_msg_to_new_groups} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_send_invisible_msg_to_new_groups:[1099,"bool"]
-     */
-    public static final ABProp WEB_SEND_INVISIBLE_MSG_TO_NEW_GROUPS = new ABProp(1099, "false");
-
-    /**
      * A/B prop {@code web_send_invisible_msg_min_group_size} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -361,6 +352,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp MESSAGE_COUNT_LOGGING_MD_ENABLED = new ABProp(1135, "false");
 
     /**
+     * A/B prop {@code web_init_chat_batch_size} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_init_chat_batch_size:[1171,"int"]
+     */
+    public static final ABProp WEB_INIT_CHAT_BATCH_SIZE = new ABProp(1171, "100");
+
+    /**
      * A/B prop {@code web_init_chat_max_unread_message_count} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -386,6 +386,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: order_management_enabled:[1188,"bool"]
      */
     public static final ABProp ORDER_MANAGEMENT_ENABLED = new ABProp(1188, "false");
+
+    /**
+     * A/B prop {@code log_clock_skew} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: log_clock_skew:[1190,"bool"]
+     */
+    public static final ABProp LOG_CLOCK_SKEW = new ABProp(1190, "false");
 
     /**
      * A/B prop {@code smb_ecommerce_compliance_india_m4_5} of boolean type.
@@ -496,6 +505,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_ABPROP_BUSINESS_PROFILE_REFRESH_LINKED_ACCOUNTS_KILLSWITCH = new ABProp(1351, "false");
 
     /**
+     * A/B prop {@code ddm_reversed_options} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: ddm_reversed_options:[1397,"bool"]
+     */
+    public static final ABProp DDM_REVERSED_OPTIONS = new ABProp(1397, "false");
+
+    /**
      * A/B prop {@code syncd_periodic_sync_days} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -595,13 +613,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SMB_BILLING_PREMIUM_ACCESS_CONFIG = new ABProp(1619, "");
 
     /**
-     * A/B prop {@code web_push_notifications} of boolean type.
+     * A/B prop {@code parent_group_admins_limit} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: web_push_notifications:[1643,"bool"]
+     * @apiNote WAWebABPropsConfigs: parent_group_admins_limit:[1655,"int"]
      */
-    public static final ABProp WEB_PUSH_NOTIFICATIONS = new ABProp(1643, "false");
+    public static final ABProp PARENT_GROUP_ADMINS_LIMIT = new ABProp(1655, "20");
 
     /**
      * A/B prop {@code web_quantity_controls_enabled} of boolean type.
@@ -721,6 +739,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CTWA_DATA_MAX_LENGTH = new ABProp(1841, "768");
 
     /**
+     * A/B prop {@code enable_client_chat_psa} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_client_chat_psa:[1844,"bool"]
+     */
+    public static final ABProp ENABLE_CLIENT_CHAT_PSA = new ABProp(1844, "false");
+
+    /**
      * A/B prop {@code direct_connection_business_numbers} of string type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -766,6 +793,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SHARE_PHONE_NUMBER_ON_CART_SEND_TO_DIRECT_CONNECTION_BIZ_ENABLED = new ABProp(1867, "true");
 
     /**
+     * A/B prop {@code group_join_request_m2_setting} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: group_join_request_m2_setting:[1887,"bool"]
+     */
+    public static final ABProp GROUP_JOIN_REQUEST_M2_SETTING = new ABProp(1887, "false");
+
+    /**
      * A/B prop {@code smb_multi_device_agents_logging_V2_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -773,6 +809,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: smb_multi_device_agents_logging_V2_enabled:[1897,"bool"]
      */
     public static final ABProp SMB_MULTI_DEVICE_AGENTS_LOGGING_V2_ENABLED = new ABProp(1897, "false");
+
+    /**
+     * A/B prop {@code web_ptt_streamer_upload} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_ptt_streamer_upload:[1902,"bool"]
+     */
+    public static final ABProp WEB_PTT_STREAMER_UPLOAD = new ABProp(1902, "false");
 
     /**
      * A/B prop {@code smb_temp_cover_photo_privacy_messaging} of boolean type.
@@ -874,6 +919,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp MMS_VCACHE_AGGREGATION_ENABLED = new ABProp(2134, "false");
 
     /**
+     * A/B prop {@code web_link_preview_sync_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_link_preview_sync_enabled:[2156,"bool"]
+     */
+    public static final ABProp WEB_LINK_PREVIEW_SYNC_ENABLED = new ABProp(2156, "false");
+
+    /**
      * A/B prop {@code smb_md_agent_chat_assignment_system_messages_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -890,6 +944,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: smb_ctwa_billing_enabled:[2158,"bool"]
      */
     public static final ABProp SMB_CTWA_BILLING_ENABLED = new ABProp(2158, "false");
+
+    /**
+     * A/B prop {@code video_stream_buffering_ui_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: video_stream_buffering_ui_enabled:[2167,"bool"]
+     */
+    public static final ABProp VIDEO_STREAM_BUFFERING_UI_ENABLED = new ABProp(2167, "false");
 
     /**
      * A/B prop {@code parent_group_view_enabled_for_smb_on_web} of boolean type.
@@ -937,6 +1000,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp MEX_PHASE3_STATUS_FLAGS = new ABProp(2250, "0");
 
     /**
+     * A/B prop {@code web_max_contacts_to_show_common_groups} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_max_contacts_to_show_common_groups:[2264,"int"]
+     */
+    public static final ABProp WEB_MAX_CONTACTS_TO_SHOW_COMMON_GROUPS = new ABProp(2264, "10");
+
+    /**
+     * A/B prop {@code web_max_found_common_groups_displayed} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_max_found_common_groups_displayed:[2268,"int"]
+     */
+    public static final ABProp WEB_MAX_FOUND_COMMON_GROUPS_DISPLAYED = new ABProp(2268, "15");
+
+    /**
      * A/B prop {@code web_message_custom_aria_label} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -944,6 +1025,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: web_message_custom_aria_label:[2280,"bool"]
      */
     public static final ABProp WEB_MESSAGE_CUSTOM_ARIA_LABEL = new ABProp(2280, "false");
+
+    /**
+     * A/B prop {@code block_from_chat_list} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: block_from_chat_list:[2290,"bool"]
+     */
+    public static final ABProp BLOCK_FROM_CHAT_LIST = new ABProp(2290, "false");
 
     /**
      * A/B prop {@code parent_group_create_privacy} of boolean type.
@@ -973,6 +1063,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp FOUR_REACTIONS_IN_BUBBLE_ENABLED = new ABProp(2378, "false");
 
     /**
+     * A/B prop {@code group_join_request_m2_banner_on_conversation} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: group_join_request_m2_banner_on_conversation:[2449,"bool"]
+     */
+    public static final ABProp GROUP_JOIN_REQUEST_M2_BANNER_ON_CONVERSATION = new ABProp(2449, "false");
+
+    /**
      * A/B prop {@code web_non_blocking_offline_resume_max_message_count} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -982,6 +1081,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_NON_BLOCKING_OFFLINE_RESUME_MAX_MESSAGE_COUNT = new ABProp(2508, "1e3");
 
     /**
+     * A/B prop {@code block_entry_point_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: block_entry_point_logging_enabled:[2522,"bool"]
+     */
+    public static final ABProp BLOCK_ENTRY_POINT_LOGGING_ENABLED = new ABProp(2522, "false");
+
+    /**
+     * A/B prop {@code new_end_call_survey_pop_up_user_interval_s} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: new_end_call_survey_pop_up_user_interval_s:[2553,"int"]
+     */
+    public static final ABProp NEW_END_CALL_SURVEY_POP_UP_USER_INTERVAL_S = new ABProp(2553, "-1");
+
+    /**
      * A/B prop {@code out_of_sync_disappearing_messages_logging} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -989,6 +1106,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: out_of_sync_disappearing_messages_logging:[2561,"bool"]
      */
     public static final ABProp OUT_OF_SYNC_DISAPPEARING_MESSAGES_LOGGING = new ABProp(2561, "false");
+
+    /**
+     * A/B prop {@code link_preview_wait_time} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: link_preview_wait_time:[2566,"int"]
+     */
+    public static final ABProp LINK_PREVIEW_WAIT_TIME = new ABProp(2566, "7");
 
     /**
      * A/B prop {@code smb_biz_profile_custom_url} of boolean type.
@@ -1007,6 +1133,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: media_picker_select_limit:[2614,"int"]
      */
     public static final ABProp MEDIA_PICKER_SELECT_LIMIT = new ABProp(2614, "30");
+
+    /**
+     * A/B prop {@code web_screen_lock_max_retries} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_screen_lock_max_retries:[2622,"int"]
+     */
+    public static final ABProp WEB_SCREEN_LOCK_MAX_RETRIES = new ABProp(2622, "10");
 
     /**
      * A/B prop {@code placeholder_message_key_hash_logging} of boolean type.
@@ -1216,6 +1351,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SMB_MD_AGENT_CHAT_ASSIGNMENT_NOTIFICATIONS_ENABLED = new ABProp(2908, "false");
 
     /**
+     * A/B prop {@code attachment_tray_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: attachment_tray_logging_enabled:[2914,"bool"]
+     */
+    public static final ABProp ATTACHMENT_TRAY_LOGGING_ENABLED = new ABProp(2914, "false");
+
+    /**
      * A/B prop {@code maximum_group_size_for_rcat} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1241,6 +1385,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: message_edit_window_duration_seconds:[2983,"int"]
      */
     public static final ABProp MESSAGE_EDIT_WINDOW_DURATION_SECONDS = new ABProp(2983, "1200");
+
+    /**
+     * A/B prop {@code ugc_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: ugc_enabled:[3011,"bool"]
+     */
+    public static final ABProp UGC_ENABLED = new ABProp(3011, "false");
 
     /**
      * A/B prop {@code web_native_fetch_media_download} of boolean type.
@@ -1288,6 +1441,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_CTWA_WEB_ENTRYPOINT_HOME_HEADER_ENABLED = new ABProp(3058, "false");
 
     /**
+     * A/B prop {@code pnh_pn_for_lid_chat_sync} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: pnh_pn_for_lid_chat_sync:[3062,"bool"]
+     */
+    public static final ABProp PNH_PN_FOR_LID_CHAT_SYNC = new ABProp(3062, "false");
+
+    /**
      * A/B prop {@code original_quality_image_min_edge} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1304,6 +1466,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: send_cag_member_revokes_as_GDM:[3069,"bool"]
      */
     public static final ABProp SEND_CAG_MEMBER_REVOKES_AS_GDM = new ABProp(3069, "true");
+
+    /**
+     * A/B prop {@code share_own_pn_sync} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: share_own_pn_sync:[3070,"bool"]
+     */
+    public static final ABProp SHARE_OWN_PN_SYNC = new ABProp(3070, "false");
+
+    /**
+     * A/B prop {@code external_beta_can_join} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: external_beta_can_join:[3081,"bool"]
+     */
+    public static final ABProp EXTERNAL_BETA_CAN_JOIN = new ABProp(3081, "false");
 
     /**
      * A/B prop {@code wa_ctwa_web_entrypoint_home_header_dropdown_enabled} of boolean type.
@@ -1423,6 +1603,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp GROUP_SUSPEND_V2_ENABLED = new ABProp(3180, "false");
 
     /**
+     * A/B prop {@code enable_chat_psa_auto_play_videos} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_chat_psa_auto_play_videos:[3182,"bool"]
+     */
+    public static final ABProp ENABLE_CHAT_PSA_AUTO_PLAY_VIDEOS = new ABProp(3182, "false");
+
+    /**
      * A/B prop {@code default_video_limit_mb} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1430,6 +1619,33 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: default_video_limit_mb:[3185,"int"]
      */
     public static final ABProp DEFAULT_VIDEO_LIMIT_MB = new ABProp(3185, "16");
+
+    /**
+     * A/B prop {@code web_image_max_hd_edge} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_image_max_hd_edge:[3204,"int"]
+     */
+    public static final ABProp WEB_IMAGE_MAX_HD_EDGE = new ABProp(3204, "2560");
+
+    /**
+     * A/B prop {@code extensions_user_report_store_max_data_exchanges_per_session} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: extensions_user_report_store_max_data_exchanges_per_session:[3211,"int"]
+     */
+    public static final ABProp EXTENSIONS_USER_REPORT_STORE_MAX_DATA_EXCHANGES_PER_SESSION = new ABProp(3211, "10");
+
+    /**
+     * A/B prop {@code extensions_user_report_store_max_data_max_sessions_per_message} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: extensions_user_report_store_max_data_max_sessions_per_message:[3212,"int"]
+     */
+    public static final ABProp EXTENSIONS_USER_REPORT_STORE_MAX_DATA_MAX_SESSIONS_PER_MESSAGE = new ABProp(3212, "3");
 
     /**
      * A/B prop {@code web_e2e_backfill_expire_time} of integer type.
@@ -1475,6 +1691,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_ctwa_web_fetch_linked_accounts_enabled:[3294,"bool"]
      */
     public static final ABProp WA_CTWA_WEB_FETCH_LINKED_ACCOUNTS_ENABLED = new ABProp(3294, "false");
+
+    /**
+     * A/B prop {@code dm_additional_durations} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: dm_additional_durations:[3305,"bool"]
+     */
+    public static final ABProp DM_ADDITIONAL_DURATIONS = new ABProp(3305, "false");
 
     /**
      * A/B prop {@code enable_days_since_receive_logging} of boolean type.
@@ -1612,6 +1837,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp PLACEHOLDER_MESSAGE_RESEND = new ABProp(3579, "false");
 
     /**
+     * A/B prop {@code coupon_copy_button_url} of string type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: coupon_copy_button_url:[3631,"string"]
+     */
+    public static final ABProp COUPON_COPY_BUTTON_URL = new ABProp(3631, "https://www.whatsapp.com/coupon?code=");
+
+    /**
      * A/B prop {@code placeholder_message_resend_maximum_days_limit} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1657,6 +1891,51 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SERVICE_IMPROVEMENT_OPT_OUT_FLAG = new ABProp(3664, "false");
 
     /**
+     * A/B prop {@code high_quality_link_preview_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: high_quality_link_preview_enabled:[3665,"bool"]
+     */
+    public static final ABProp HIGH_QUALITY_LINK_PREVIEW_ENABLED = new ABProp(3665, "false");
+
+    /**
+     * A/B prop {@code gif_min_play_loops} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: gif_min_play_loops:[3682,"int"]
+     */
+    public static final ABProp GIF_MIN_PLAY_LOOPS = new ABProp(3682, "1");
+
+    /**
+     * A/B prop {@code gif_max_play_loops} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: gif_max_play_loops:[3683,"int"]
+     */
+    public static final ABProp GIF_MAX_PLAY_LOOPS = new ABProp(3683, "3");
+
+    /**
+     * A/B prop {@code gif_max_play_duration} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: gif_max_play_duration:[3684,"int"]
+     */
+    public static final ABProp GIF_MAX_PLAY_DURATION = new ABProp(3684, "5");
+
+    /**
+     * A/B prop {@code orders_expansion_receiver_countries_allowed} of string type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: orders_expansion_receiver_countries_allowed:[3690,"string"]
+     */
+    public static final ABProp ORDERS_EXPANSION_RECEIVER_COUNTRIES_ALLOWED = new ABProp(3690, "");
+
+    /**
      * A/B prop {@code report_to_admin_kill_switch} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1664,6 +1943,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: report_to_admin_kill_switch:[3695,"bool"]
      */
     public static final ABProp REPORT_TO_ADMIN_KILL_SWITCH = new ABProp(3695, "false");
+
+    /**
+     * A/B prop {@code report_to_admin_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: report_to_admin_enabled:[3696,"bool"]
+     */
+    public static final ABProp REPORT_TO_ADMIN_ENABLED = new ABProp(3696, "false");
 
     /**
      * A/B prop {@code web_message_processing_cache_size} of integer type.
@@ -1682,6 +1970,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: pinned_messages_m2_pin_max:[3732,"int"]
      */
     public static final ABProp PINNED_MESSAGES_M2_PIN_MAX = new ABProp(3732, "1");
+
+    /**
+     * A/B prop {@code payments_merchant_global_orders_value_props_banner_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: payments_merchant_global_orders_value_props_banner_enabled:[3744,"bool"]
+     */
+    public static final ABProp PAYMENTS_MERCHANT_GLOBAL_ORDERS_VALUE_PROPS_BANNER_ENABLED = new ABProp(3744, "false");
 
     /**
      * A/B prop {@code newsletter_tos_notice_id} of string type.
@@ -1801,6 +2098,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp HD_VIDEO_LABEL_ENABLED = new ABProp(3934, "false");
 
     /**
+     * A/B prop {@code privacy_tips_groups_build} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: privacy_tips_groups_build:[3995,"bool"]
+     */
+    public static final ABProp PRIVACY_TIPS_GROUPS_BUILD = new ABProp(3995, "false");
+
+    /**
+     * A/B prop {@code privacy_tips_profile_build} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: privacy_tips_profile_build:[3998,"bool"]
+     */
+    public static final ABProp PRIVACY_TIPS_PROFILE_BUILD = new ABProp(3998, "false");
+
+    /**
      * A/B prop {@code bonsai_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1817,6 +2132,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: group_mentions_in_subgroups:[4087,"bool"]
      */
     public static final ABProp GROUP_MENTIONS_IN_SUBGROUPS = new ABProp(4087, "false");
+
+    /**
+     * A/B prop {@code ugc_participant_limit} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: ugc_participant_limit:[4118,"int"]
+     */
+    public static final ABProp UGC_PARTICIPANT_LIMIT = new ABProp(4118, "5");
 
     /**
      * A/B prop {@code history_sync_on_demand_with_android_beta} of boolean type.
@@ -1864,6 +2188,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp PAYMENTS_BR_CONTENT_OPTIMIZATION_VARIANT = new ABProp(4248, "0");
 
     /**
+     * A/B prop {@code p2m_external_payments_link_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: p2m_external_payments_link_enabled:[4295,"bool"]
+     */
+    public static final ABProp P2M_EXTERNAL_PAYMENTS_LINK_ENABLED = new ABProp(4295, "false");
+
+    /**
      * A/B prop {@code recommended_channels_background_refresh} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1873,6 +2206,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp RECOMMENDED_CHANNELS_BACKGROUND_REFRESH = new ABProp(4309, "144e5");
 
     /**
+     * A/B prop {@code privacy_tips_killswitch} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: privacy_tips_killswitch:[4314,"bool"]
+     */
+    public static final ABProp PRIVACY_TIPS_KILLSWITCH = new ABProp(4314, "false");
+
+    /**
      * A/B prop {@code channel_pull_message_updates_threshold_seconds} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1880,6 +2222,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: channel_pull_message_updates_threshold_seconds:[4326,"int"]
      */
     public static final ABProp CHANNEL_PULL_MESSAGE_UPDATES_THRESHOLD_SECONDS = new ABProp(4326, "120");
+
+    /**
+     * A/B prop {@code web_otp_copy_code_disabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_otp_copy_code_disabled:[4330,"bool"]
+     */
+    public static final ABProp WEB_OTP_COPY_CODE_DISABLED = new ABProp(4330, "false");
 
     /**
      * A/B prop {@code history_sync_on_demand_failure_limit} of integer type.
@@ -1898,15 +2249,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: history_sync_on_demand_cooldown_sec:[4365,"int"]
      */
     public static final ABProp HISTORY_SYNC_ON_DEMAND_COOLDOWN_SEC = new ABProp(4365, "7200");
-
-    /**
-     * A/B prop {@code history_sync_on_demand_request_send_killswitch} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: history_sync_on_demand_request_send_killswitch:[4366,"bool"]
-     */
-    public static final ABProp HISTORY_SYNC_ON_DEMAND_REQUEST_SEND_KILLSWITCH = new ABProp(4366, "true");
 
     /**
      * A/B prop {@code bonsai_ptt_enabled} of boolean type.
@@ -1936,6 +2278,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp BUSINESS_TOOL_ENHANCED_LOGGING = new ABProp(4427, "false");
 
     /**
+     * A/B prop {@code pinned_messages_sender_short_expiry_durations_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: pinned_messages_sender_short_expiry_durations_enabled:[4432,"bool"]
+     */
+    public static final ABProp PINNED_MESSAGES_SENDER_SHORT_EXPIRY_DURATIONS_ENABLED = new ABProp(4432, "false");
+
+    /**
      * A/B prop {@code pnh_cag_disable_reactions_group_size} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1961,6 +2312,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: web_premium_messages_interactivity_rendering_enabled:[4596,"bool"]
      */
     public static final ABProp WEB_PREMIUM_MESSAGES_INTERACTIVITY_RENDERING_ENABLED = new ABProp(4596, "false");
+
+    /**
+     * A/B prop {@code channel_views_duration_milliseconds} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: channel_views_duration_milliseconds:[4648,"int"]
+     */
+    public static final ABProp CHANNEL_VIEWS_DURATION_MILLISECONDS = new ABProp(4648, "250");
 
     /**
      * A/B prop {@code smb_premium_messages_click_logging_enabled} of boolean type.
@@ -1990,6 +2350,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CAROUSEL_MESSAGE_CLIENT_ENABLED = new ABProp(4668, "false");
 
     /**
+     * A/B prop {@code web_internal_in_app_bug_reporting_enable} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_internal_in_app_bug_reporting_enable:[4681,"bool"]
+     */
+    public static final ABProp WEB_INTERNAL_IN_APP_BUG_REPORTING_ENABLE = new ABProp(4681, "false");
+
+    /**
      * A/B prop {@code channel_view_counts_enabled} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -1997,6 +2366,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: channel_view_counts_enabled:[4721,"int"]
      */
     public static final ABProp CHANNEL_VIEW_COUNTS_ENABLED = new ABProp(4721, "0");
+
+    /**
+     * A/B prop {@code channel_playable_message_views_duration_milliseconds} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: channel_playable_message_views_duration_milliseconds:[4722,"int"]
+     */
+    public static final ABProp CHANNEL_PLAYABLE_MESSAGE_VIEWS_DURATION_MILLISECONDS = new ABProp(4722, "3e3");
 
     /**
      * A/B prop {@code web_sticker_suggestions_enable} of boolean type.
@@ -2042,6 +2420,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: low_cache_hit_rate_media_types:[4836,"string"]
      */
     public static final ABProp LOW_CACHE_HIT_RATE_MEDIA_TYPES = new ABProp(4836, "ptt,audio,document,ppic");
+
+    /**
+     * A/B prop {@code wae_metadata_integrity_timeout_minutes} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wae_metadata_integrity_timeout_minutes:[4849,"int"]
+     */
+    public static final ABProp WAE_METADATA_INTEGRITY_TIMEOUT_MINUTES = new ABProp(4849, "5");
 
     /**
      * A/B prop {@code wabai_message_rendering_enabled} of boolean type.
@@ -2132,6 +2519,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: parent_group_allow_member_suggest_existing_m3_receiver:[5078,"bool"]
      */
     public static final ABProp PARENT_GROUP_ALLOW_MEMBER_SUGGEST_EXISTING_M3_RECEIVER = new ABProp(5078, "false");
+
+    /**
+     * A/B prop {@code web_preload_chat_messages} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_preload_chat_messages:[5079,"bool"]
+     */
+    public static final ABProp WEB_PRELOAD_CHAT_MESSAGES = new ABProp(5079, "false");
 
     /**
      * A/B prop {@code web_noncritical_history_sync_message_processing_break_iteration} of integer type.
@@ -2386,6 +2782,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp RT_RECEIVE_REPORTING_TAG = new ABProp(5718, "true");
 
     /**
+     * A/B prop {@code web_expression_panels_show_less_stickers} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_expression_panels_show_less_stickers:[5726,"bool"]
+     */
+    public static final ABProp WEB_EXPRESSION_PANELS_SHOW_LESS_STICKERS = new ABProp(5726, "false");
+
+    /**
      * A/B prop {@code wabai_consent_cooldown} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -2402,6 +2807,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wabai_consent_required:[5747,"bool"]
      */
     public static final ABProp WABAI_CONSENT_REQUIRED = new ABProp(5747, "false");
+
+    /**
+     * A/B prop {@code inbox_filters_reset_timeout} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: inbox_filters_reset_timeout:[5765,"int"]
+     */
+    public static final ABProp INBOX_FILTERS_RESET_TIMEOUT = new ABProp(5765, "1800");
 
     /**
      * A/B prop {@code order_statuses_revamp_m1_enabled} of boolean type.
@@ -2512,6 +2926,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp FMX_CTWA_KILL_SWITCH = new ABProp(6061, "false");
 
     /**
+     * A/B prop {@code blue_education_v2_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: blue_education_v2_enabled:[6127,"bool"]
+     */
+    public static final ABProp BLUE_EDUCATION_V2_ENABLED = new ABProp(6127, "false");
+
+    /**
      * A/B prop {@code smb_label_improvements_reordering} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -2620,15 +3043,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp BLUE_PROFILE_LOCKED_UI_ENABLED = new ABProp(6337, "false");
 
     /**
-     * A/B prop {@code web_skip_expired_status_error} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_skip_expired_status_error:[6391,"bool"]
-     */
-    public static final ABProp WEB_SKIP_EXPIRED_STATUS_ERROR = new ABProp(6391, "false");
-
-    /**
      * A/B prop {@code channels_multi_admin_max_admin_count} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -2701,6 +3115,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SMBA_PREMIUM_MESSAGES_INSIGHTS_V2_TRACKABLE_LINK_DOMAIN = new ABProp(6626, "w.meta.me");
 
     /**
+     * A/B prop {@code web_pwa_background_sync} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_pwa_background_sync:[6656,"bool"]
+     */
+    public static final ABProp WEB_PWA_BACKGROUND_SYNC = new ABProp(6656, "false");
+
+    /**
      * A/B prop {@code order_details_payment_instructions_sync_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -2710,6 +3133,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED = new ABProp(6670, "false");
 
     /**
+     * A/B prop {@code otp_mask_linked_devices} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: otp_mask_linked_devices:[6673,"bool"]
+     */
+    public static final ABProp OTP_MASK_LINKED_DEVICES = new ABProp(6673, "false");
+
+    /**
      * A/B prop {@code smba_premium_messages_leaving_wa_content} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -2717,6 +3149,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: smba_premium_messages_leaving_wa_content:[6693,"bool"]
      */
     public static final ABProp SMBA_PREMIUM_MESSAGES_LEAVING_WA_CONTENT = new ABProp(6693, "true");
+
+    /**
+     * A/B prop {@code web_pwa_background_sync_min_interval_hours} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_pwa_background_sync_min_interval_hours:[6706,"int"]
+     */
+    public static final ABProp WEB_PWA_BACKGROUND_SYNC_MIN_INTERVAL_HOURS = new ABProp(6706, "24");
 
     /**
      * A/B prop {@code rt_clean_reporting_tag} of integer type.
@@ -2737,13 +3178,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp GIMMICK_PHASE_TWO_DATA_SUFFIX = new ABProp(6785, "");
 
     /**
-     * A/B prop {@code lid_status_send_enabled} of boolean type.
+     * A/B prop {@code enable_new_media_as_document_chat_message_layout} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: lid_status_send_enabled:[6791,"bool"]
+     * @apiNote WAWebABPropsConfigs: enable_new_media_as_document_chat_message_layout:[6786,"bool"]
      */
-    public static final ABProp LID_STATUS_SEND_ENABLED = new ABProp(6791, "false");
+    public static final ABProp ENABLE_NEW_MEDIA_AS_DOCUMENT_CHAT_MESSAGE_LAYOUT = new ABProp(6786, "false");
 
     /**
      * A/B prop {@code web_business_tools_drawer_enabled} of boolean type.
@@ -2753,15 +3194,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: web_business_tools_drawer_enabled:[6803,"bool"]
      */
     public static final ABProp WEB_BUSINESS_TOOLS_DRAWER_ENABLED = new ABProp(6803, "false");
-
-    /**
-     * A/B prop {@code web_recent_sync_handling_loop_restart_v2_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_recent_sync_handling_loop_restart_v2_enabled:[6804,"bool"]
-     */
-    public static final ABProp WEB_RECENT_SYNC_HANDLING_LOOP_RESTART_V2_ENABLED = new ABProp(6804, "false");
 
     /**
      * A/B prop {@code web_smb_label_reordering_m2_two_way} of boolean type.
@@ -2780,6 +3212,33 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: data_privacy_phase_2_enabled:[6843,"bool"]
      */
     public static final ABProp DATA_PRIVACY_PHASE_2_ENABLED = new ABProp(6843, "false");
+
+    /**
+     * A/B prop {@code web_intern_dogfooding_upsell_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_intern_dogfooding_upsell_enabled:[6858,"bool"]
+     */
+    public static final ABProp WEB_INTERN_DOGFOODING_UPSELL_ENABLED = new ABProp(6858, "false");
+
+    /**
+     * A/B prop {@code web_intern_dogfooding_upsell_snooze_duration} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_intern_dogfooding_upsell_snooze_duration:[6859,"int"]
+     */
+    public static final ABProp WEB_INTERN_DOGFOODING_UPSELL_SNOOZE_DURATION = new ABProp(6859, "86400");
+
+    /**
+     * A/B prop {@code web_intern_dogfooding_upsell_content} of string type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_intern_dogfooding_upsell_content:[6860,"string"]
+     */
+    public static final ABProp WEB_INTERN_DOGFOODING_UPSELL_CONTENT = new ABProp(6860, "");
 
     /**
      * A/B prop {@code adv_accept_hosted_devices} of boolean type.
@@ -2971,6 +3430,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CUSTOM_RACING_EMOJI = new ABProp(7463, "false");
 
     /**
+     * A/B prop {@code pinned_messages_m2_image_thumbnail} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: pinned_messages_m2_image_thumbnail:[7467,"bool"]
+     */
+    public static final ABProp PINNED_MESSAGES_M2_IMAGE_THUMBNAIL = new ABProp(7467, "false");
+
+    /**
      * A/B prop {@code username_security_code_generation} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -2987,15 +3455,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: username_security_code_verification:[7469,"bool"]
      */
     public static final ABProp USERNAME_SECURITY_CODE_VERIFICATION = new ABProp(7469, "false");
-
-    /**
-     * A/B prop {@code web_recent_sync_next_chunk_fetch_optimization} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_recent_sync_next_chunk_fetch_optimization:[7494,"bool"]
-     */
-    public static final ABProp WEB_RECENT_SYNC_NEXT_CHUNK_FETCH_OPTIMIZATION = new ABProp(7494, "false");
 
     /**
      * A/B prop {@code events_m3_cover_image_send} of boolean type.
@@ -3041,6 +3500,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: addon_infra_enable_perf_logging:[7567,"bool"]
      */
     public static final ABProp ADDON_INFRA_ENABLE_PERF_LOGGING = new ABProp(7567, "false");
+
+    /**
+     * A/B prop {@code mex_group_set_allow_non_admin_subgroup_creation} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: mex_group_set_allow_non_admin_subgroup_creation:[7609,"bool"]
+     */
+    public static final ABProp MEX_GROUP_SET_ALLOW_NON_ADMIN_SUBGROUP_CREATION = new ABProp(7609, "false");
+
+    /**
+     * A/B prop {@code profile_picture_deeplink_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: profile_picture_deeplink_enabled:[7634,"bool"]
+     */
+    public static final ABProp PROFILE_PICTURE_DEEPLINK_ENABLED = new ABProp(7634, "false");
 
     /**
      * A/B prop {@code inbox_filters_custom_smb_enabled} of boolean type.
@@ -3151,22 +3628,31 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp ENABLE_STICKER_VERIFICATION_FOR_GIMMICK = new ABProp(7886, "true");
 
     /**
-     * A/B prop {@code web_wasm_worker_enabled_www} of boolean type.
+     * A/B prop {@code channels_poll_voters_summary_cache_ttl_ms} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: web_wasm_worker_enabled_www:[7924,"bool"]
+     * @apiNote WAWebABPropsConfigs: channels_poll_voters_summary_cache_ttl_ms:[7919,"int"]
      */
-    public static final ABProp WEB_WASM_WORKER_ENABLED_WWW = new ABProp(7924, "false");
+    public static final ABProp CHANNELS_POLL_VOTERS_SUMMARY_CACHE_TTL_MS = new ABProp(7919, "12e4");
 
     /**
-     * A/B prop {@code status_deeplink_enabled} of boolean type.
+     * A/B prop {@code channels_poll_voters_details_cache_ttl_ms} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: status_deeplink_enabled:[7965,"bool"]
+     * @apiNote WAWebABPropsConfigs: channels_poll_voters_details_cache_ttl_ms:[7920,"int"]
      */
-    public static final ABProp STATUS_DEEPLINK_ENABLED = new ABProp(7965, "false");
+    public static final ABProp CHANNELS_POLL_VOTERS_DETAILS_CACHE_TTL_MS = new ABProp(7920, "3e5");
+
+    /**
+     * A/B prop {@code meta_verified_badge_education_vai_content} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: meta_verified_badge_education_vai_content:[7976,"bool"]
+     */
+    public static final ABProp META_VERIFIED_BADGE_EDUCATION_VAI_CONTENT = new ABProp(7976, "false");
 
     /**
      * A/B prop {@code directory_categories_newsletters_per_category_limit} of integer type.
@@ -3223,6 +3709,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CHANNELS_DIRECTORY_CATEGORIES_CACHE_REFRESH_INTERVAL_MS = new ABProp(8151, "864e5");
 
     /**
+     * A/B prop {@code br_enable_payment_logos_on_bubble} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: br_enable_payment_logos_on_bubble:[8160,"bool"]
+     */
+    public static final ABProp BR_ENABLE_PAYMENT_LOGOS_ON_BUBBLE = new ABProp(8160, "false");
+
+    /**
      * A/B prop {@code ctwa_ad_account_token_storage_kill_switch_web} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3241,6 +3736,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CHANNELS_RECOMMENDED_V3_UI_LIMIT = new ABProp(8167, "5");
 
     /**
+     * A/B prop {@code search_the_web_dialog_redesign} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: search_the_web_dialog_redesign:[8171,"bool"]
+     */
+    public static final ABProp SEARCH_THE_WEB_DIALOG_REDESIGN = new ABProp(8171, "false");
+
+    /**
      * A/B prop {@code web_larger_link_previews} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3248,6 +3752,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: web_larger_link_previews:[8172,"bool"]
      */
     public static final ABProp WEB_LARGER_LINK_PREVIEWS = new ABProp(8172, "false");
+
+    /**
+     * A/B prop {@code enable_lid_call_link} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_lid_call_link:[8180,"bool"]
+     */
+    public static final ABProp ENABLE_LID_CALL_LINK = new ABProp(8180, "false");
 
     /**
      * A/B prop {@code wa_web_business_tools_top_card_enabled} of boolean type.
@@ -3259,15 +3772,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEB_BUSINESS_TOOLS_TOP_CARD_ENABLED = new ABProp(8191, "false");
 
     /**
-     * A/B prop {@code web_recent_sync_chunk_data_handling_worker} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_recent_sync_chunk_data_handling_worker:[8270,"bool"]
-     */
-    public static final ABProp WEB_RECENT_SYNC_CHUNK_DATA_HANDLING_WORKER = new ABProp(8270, "false");
-
-    /**
      * A/B prop {@code smb_meta_verified_context_card} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3275,6 +3779,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: smb_meta_verified_context_card:[8313,"bool"]
      */
     public static final ABProp SMB_META_VERIFIED_CONTEXT_CARD = new ABProp(8313, "false");
+
+    /**
+     * A/B prop {@code report_block_improvements_for_groups_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: report_block_improvements_for_groups_enabled:[8327,"bool"]
+     */
+    public static final ABProp REPORT_BLOCK_IMPROVEMENTS_FOR_GROUPS_ENABLED = new ABProp(8327, "false");
 
     /**
      * A/B prop {@code web_pending_message_cache_enabled} of boolean type.
@@ -3331,6 +3844,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEBC_PAGE_LOAD_EARLY_COMMIT_ENABLED = new ABProp(8458, "false");
 
     /**
+     * A/B prop {@code search_the_web_url_offer} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: search_the_web_url_offer:[8473,"bool"]
+     */
+    public static final ABProp SEARCH_THE_WEB_URL_OFFER = new ABProp(8473, "false");
+
+    /**
      * A/B prop {@code biz_ai_smb_agents_automatic_reply_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3349,6 +3871,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp IMPROVE_SUBGROUP_ACTIVATION_SUBGROUP_POLL_INTERVAL = new ABProp(8542, "43200");
 
     /**
+     * A/B prop {@code web_expression_panels_show_less_stickers_v_2} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_expression_panels_show_less_stickers_v_2:[8545,"bool"]
+     */
+    public static final ABProp WEB_EXPRESSION_PANELS_SHOW_LESS_STICKERS_V_2 = new ABProp(8545, "false");
+
+    /**
      * A/B prop {@code web_communities_general_chat_v_2} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3358,13 +3889,22 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_COMMUNITIES_GENERAL_CHAT_V_2 = new ABProp(8580, "false");
 
     /**
-     * A/B prop {@code web_status_likes_receive_enabled} of boolean type.
+     * A/B prop {@code text_user_journey_logging_wam_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: web_status_likes_receive_enabled:[8611,"bool"]
+     * @apiNote WAWebABPropsConfigs: text_user_journey_logging_wam_enabled:[8627,"bool"]
      */
-    public static final ABProp WEB_STATUS_LIKES_RECEIVE_ENABLED = new ABProp(8611, "false");
+    public static final ABProp TEXT_USER_JOURNEY_LOGGING_WAM_ENABLED = new ABProp(8627, "false");
+
+    /**
+     * A/B prop {@code ptt_user_journey_logging_wam_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: ptt_user_journey_logging_wam_enabled:[8630,"bool"]
+     */
+    public static final ABProp PTT_USER_JOURNEY_LOGGING_WAM_ENABLED = new ABProp(8630, "false");
 
     /**
      * A/B prop {@code ctwa_ad_account_nonce_retries_max_web} of integer type.
@@ -3394,6 +3934,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp COEX_STATUS_REPLY_PRIVACY_DISCLAIMER_ENABLED = new ABProp(8674, "false");
 
     /**
+     * A/B prop {@code status_poster_side_gating_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: status_poster_side_gating_enabled:[8742,"bool"]
+     */
+    public static final ABProp STATUS_POSTER_SIDE_GATING_ENABLED = new ABProp(8742, "false");
+
+    /**
      * A/B prop {@code web_background_sync_v2} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3419,15 +3968,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: smb_catalog_graphql_get_product_list:[8799,"bool"]
      */
     public static final ABProp SMB_CATALOG_GRAPHQL_GET_PRODUCT_LIST = new ABProp(8799, "false");
-
-    /**
-     * A/B prop {@code wa_web_parse_always_show_ad_attribution} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: wa_web_parse_always_show_ad_attribution:[8804,"bool"]
-     */
-    public static final ABProp WA_WEB_PARSE_ALWAYS_SHOW_AD_ATTRIBUTION = new ABProp(8804, "false");
 
     /**
      * A/B prop {@code rt_sender_reporting_token_version} of integer type.
@@ -3511,6 +4051,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp EVENTS_M3_PIN_CUSTOMIZATION_SEND = new ABProp(9063, "false");
 
     /**
+     * A/B prop {@code payments_br_merchant_psp_account_status_sync} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: payments_br_merchant_psp_account_status_sync:[9076,"bool"]
+     */
+    public static final ABProp PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC = new ABProp(9076, "false");
+
+    /**
      * A/B prop {@code lazy_system_message_insertion_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3556,6 +4105,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SMB_CTWA_CHAT_HEADER_LABEL_ENTRY_POINT_ENABLED = new ABProp(9223, "false");
 
     /**
+     * A/B prop {@code verified_badge_in_chats_list_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: verified_badge_in_chats_list_enabled:[9292,"bool"]
+     */
+    public static final ABProp VERIFIED_BADGE_IN_CHATS_LIST_ENABLED = new ABProp(9292, "false");
+
+    /**
      * A/B prop {@code directory_categories_display_newsletters_per_category_limit} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3572,15 +4130,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: optimized_delivery_signal_collection_enabled:[9348,"bool"]
      */
     public static final ABProp OPTIMIZED_DELIVERY_SIGNAL_COLLECTION_ENABLED = new ABProp(9348, "false");
-
-    /**
-     * A/B prop {@code web_sticker_download_m1} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_sticker_download_m1:[9406,"bool"]
-     */
-    public static final ABProp WEB_STICKER_DOWNLOAD_M1 = new ABProp(9406, "false");
 
     /**
      * A/B prop {@code lid_one_on_one_migration_enabled} of boolean type.
@@ -3655,6 +4204,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp BONSAI_FP_UGC_SENDER = new ABProp(9541, "false");
 
     /**
+     * A/B prop {@code search_the_web_image_search} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: search_the_web_image_search:[9547,"bool"]
+     */
+    public static final ABProp SEARCH_THE_WEB_IMAGE_SEARCH = new ABProp(9547, "false");
+
+    /**
+     * A/B prop {@code search_the_web_text_search} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: search_the_web_text_search:[9548,"bool"]
+     */
+    public static final ABProp SEARCH_THE_WEB_TEXT_SEARCH = new ABProp(9548, "false");
+
+    /**
      * A/B prop {@code rt_clean_reporting_token} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3727,15 +4294,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_CATALOG_VIDEO_VIEW_ENABLED = new ABProp(9671, "false");
 
     /**
-     * A/B prop {@code web_catalog_video_view_fallback_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_catalog_video_view_fallback_enabled:[9672,"bool"]
-     */
-    public static final ABProp WEB_CATALOG_VIDEO_VIEW_FALLBACK_ENABLED = new ABProp(9672, "false");
-
-    /**
      * A/B prop {@code ctwa_ad_creation_entry_point_catalog_product_web} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3754,6 +4312,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_CTWA_WEB_HIDE_AD_CONTEXT_IF_SOFT_DISMISSED_IN_PRIMARY = new ABProp(9729, "false");
 
     /**
+     * A/B prop {@code use_per_chat_wallpaper} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: use_per_chat_wallpaper:[9756,"bool"]
+     */
+    public static final ABProp USE_PER_CHAT_WALLPAPER = new ABProp(9756, "false");
+
+    /**
      * A/B prop {@code animated_emoji_final_set_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -3770,15 +4337,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: animated_emoji_set_1_enabled:[9758,"bool"]
      */
     public static final ABProp ANIMATED_EMOJI_SET_1_ENABLED = new ABProp(9758, "false");
-
-    /**
-     * A/B prop {@code web_hd_media_global_setting_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_hd_media_global_setting_enabled:[9778,"bool"]
-     */
-    public static final ABProp WEB_HD_MEDIA_GLOBAL_SETTING_ENABLED = new ABProp(9778, "false");
 
     /**
      * A/B prop {@code channels_producer_insights_hide_deltas} of boolean type.
@@ -3815,6 +4373,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: smb_notes_privacy_string:[9843,"int"]
      */
     public static final ABProp SMB_NOTES_PRIVACY_STRING = new ABProp(9843, "2");
+
+    /**
+     * A/B prop {@code rbi_pre_tick_report} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: rbi_pre_tick_report:[9871,"bool"]
+     */
+    public static final ABProp RBI_PRE_TICK_REPORT = new ABProp(9871, "false");
+
+    /**
+     * A/B prop {@code brigading_privacy_setting_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: brigading_privacy_setting_enabled:[9876,"bool"]
+     */
+    public static final ABProp BRIGADING_PRIVACY_SETTING_ENABLED = new ABProp(9876, "false");
 
     /**
      * A/B prop {@code saga_v1_reengagement_enabled} of boolean type.
@@ -3880,13 +4456,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp ENABLE_WEFR_CLIENT_EXPO_PULSE = new ABProp(10230, "false");
 
     /**
-     * A/B prop {@code web_offline_stage_manager_singleton_enabled} of boolean type.
+     * A/B prop {@code smb_notes_content_max_limit} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: web_offline_stage_manager_singleton_enabled:[10235,"bool"]
+     * @apiNote WAWebABPropsConfigs: smb_notes_content_max_limit:[10272,"int"]
      */
-    public static final ABProp WEB_OFFLINE_STAGE_MANAGER_SINGLETON_ENABLED = new ABProp(10235, "false");
+    public static final ABProp SMB_NOTES_CONTENT_MAX_LIMIT = new ABProp(10272, "5e3");
 
     /**
      * A/B prop {@code optimized_delivery_signal_collection_config} of string type.
@@ -3941,6 +4517,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: poll_result_snapshot_message_receiver_enabled:[10414,"bool"]
      */
     public static final ABProp POLL_RESULT_SNAPSHOT_MESSAGE_RECEIVER_ENABLED = new ABProp(10414, "false");
+
+    /**
+     * A/B prop {@code reaction_user_journey_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: reaction_user_journey_logging_enabled:[10438,"bool"]
+     */
+    public static final ABProp REACTION_USER_JOURNEY_LOGGING_ENABLED = new ABProp(10438, "false");
 
     /**
      * A/B prop {@code privacy_token_sending_on_all_1_on_1_messages} of boolean type.
@@ -4006,15 +4591,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_HISTORY_SYNC_ALLOW_DUPLICATE_IN_BULK_ERROR = new ABProp(10842, "false");
 
     /**
-     * A/B prop {@code british_english_localization_enabled_web} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: british_english_localization_enabled_web:[10865,"bool"]
-     */
-    public static final ABProp BRITISH_ENGLISH_LOCALIZATION_ENABLED_WEB = new ABProp(10865, "false");
-
-    /**
      * A/B prop {@code wabba_receiver_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4069,15 +4645,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp LID_ONE_ON_ONE_MIGRATION_LOG_OUT_ON_MISMATCH = new ABProp(11050, "true");
 
     /**
-     * A/B prop {@code web_biz_ai_chat_assignment_hiding_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_biz_ai_chat_assignment_hiding_enabled:[11084,"bool"]
-     */
-    public static final ABProp WEB_BIZ_AI_CHAT_ASSIGNMENT_HIDING_ENABLED = new ABProp(11084, "true");
-
-    /**
      * A/B prop {@code ai_home_bot_profile_sync_interval_sec} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4121,6 +4688,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: mm_opt_out_enabled:[11241,"bool"]
      */
     public static final ABProp MM_OPT_OUT_ENABLED = new ABProp(11241, "false");
+
+    /**
+     * A/B prop {@code privacy_token_sending_on_group_create} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: privacy_token_sending_on_group_create:[11261,"bool"]
+     */
+    public static final ABProp PRIVACY_TOKEN_SENDING_ON_GROUP_CREATE = new ABProp(11261, "false");
+
+    /**
+     * A/B prop {@code privacy_token_sending_on_group_participant_add} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: privacy_token_sending_on_group_participant_add:[11262,"bool"]
+     */
+    public static final ABProp PRIVACY_TOKEN_SENDING_ON_GROUP_PARTICIPANT_ADD = new ABProp(11262, "false");
 
     /**
      * A/B prop {@code catalog_lid_migration_enabled} of boolean type.
@@ -4186,6 +4771,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_FBID_MIGRATION_RECEIVE_ENABLED = new ABProp(11660, "false");
 
     /**
+     * A/B prop {@code payments_br_p2m_boleto_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: payments_br_p2m_boleto_enabled:[11671,"bool"]
+     */
+    public static final ABProp PAYMENTS_BR_P2M_BOLETO_ENABLED = new ABProp(11671, "false");
+
+    /**
      * A/B prop {@code smb_catalog_graphql_get_public_key} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4211,15 +4805,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: syncd_mutation_and_bundle_logging:[11821,"string"]
      */
     public static final ABProp SYNCD_MUTATION_AND_BUNDLE_LOGGING = new ABProp(11821, "{\"allowlist\": []}");
-
-    /**
-     * A/B prop {@code saga_protobuf_show_sysmsg_web} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: saga_protobuf_show_sysmsg_web:[11832,"bool"]
-     */
-    public static final ABProp SAGA_PROTOBUF_SHOW_SYSMSG_WEB = new ABProp(11832, "false");
 
     /**
      * A/B prop {@code notification_highlight_group_size_threshold} of integer type.
@@ -4258,13 +4843,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp USE_SIGNED_SHIMMED_URL_LINK = new ABProp(11977, "false");
 
     /**
-     * A/B prop {@code revoke_edit_attribute_validation_enabled} of boolean type.
+     * A/B prop {@code enable_group_create_or_add_rate_limiting_error_ux} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: revoke_edit_attribute_validation_enabled:[12055,"bool"]
+     * @apiNote WAWebABPropsConfigs: enable_group_create_or_add_rate_limiting_error_ux:[12020,"bool"]
      */
-    public static final ABProp REVOKE_EDIT_ATTRIBUTE_VALIDATION_ENABLED = new ABProp(12055, "false");
+    public static final ABProp ENABLE_GROUP_CREATE_OR_ADD_RATE_LIMITING_ERROR_UX = new ABProp(12020, "false");
 
     /**
      * A/B prop {@code smb_catalog_graphql_commerce_settings} of boolean type.
@@ -4301,15 +4886,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: poll_result_snapshot_polltype_envelope_enabled:[12258,"bool"]
      */
     public static final ABProp POLL_RESULT_SNAPSHOT_POLLTYPE_ENVELOPE_ENABLED = new ABProp(12258, "false");
-
-    /**
-     * A/B prop {@code web_new_chat_flow_refresh_variant} of integer type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_new_chat_flow_refresh_variant:[12276,"int"]
-     */
-    public static final ABProp WEB_NEW_CHAT_FLOW_REFRESH_VARIANT = new ABProp(12276, "0");
 
     /**
      * A/B prop {@code wam_disable_abkey_attribute} of boolean type.
@@ -4420,15 +4996,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp MEDIA_VIEWER_ACCELERATED_PLAYBACK_ENABLED = new ABProp(12813, "false");
 
     /**
-     * A/B prop {@code web_dexie_hooks_support_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_dexie_hooks_support_enabled:[12831,"bool"]
-     */
-    public static final ABProp WEB_DEXIE_HOOKS_SUPPORT_ENABLED = new ABProp(12831, "false");
-
-    /**
      * A/B prop {@code contact_and_chat_fuzzy_search_distance_threshold} of floating-point type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4456,15 +5023,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CONTACT_AND_CHAT_FUZZY_SEARCH_TIMEOUT_THRESHOLD = new ABProp(12865, "5");
 
     /**
-     * A/B prop {@code web_cache_storage_config_disable_ignore_search} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_cache_storage_config_disable_ignore_search:[12878,"bool"]
-     */
-    public static final ABProp WEB_CACHE_STORAGE_CONFIG_DISABLE_IGNORE_SEARCH = new ABProp(12878, "false");
-
-    /**
      * A/B prop {@code override_adv_account_signature_key_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4472,6 +5030,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: override_adv_account_signature_key_enabled:[12933,"bool"]
      */
     public static final ABProp OVERRIDE_ADV_ACCOUNT_SIGNATURE_KEY_ENABLED = new ABProp(12933, "false");
+
+    /**
+     * A/B prop {@code lid_group_creation_addressing_mode_override} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: lid_group_creation_addressing_mode_override:[12985,"bool"]
+     */
+    public static final ABProp LID_GROUP_CREATION_ADDRESSING_MODE_OVERRIDE = new ABProp(12985, "false");
+
+    /**
+     * A/B prop {@code private_osa_reporting_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: private_osa_reporting_enabled:[12990,"bool"]
+     */
+    public static final ABProp PRIVATE_OSA_REPORTING_ENABLED = new ABProp(12990, "false");
 
     /**
      * A/B prop {@code web_ui_refresh_m1} of boolean type.
@@ -4609,6 +5185,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SMB_PRODUCT_COUNTRY_OF_ORIGIN_M1 = new ABProp(13415, "false");
 
     /**
+     * A/B prop {@code rasterize_text_status_pixel_width} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: rasterize_text_status_pixel_width:[13460,"int"]
+     */
+    public static final ABProp RASTERIZE_TEXT_STATUS_PIXEL_WIDTH = new ABProp(13460, "1080");
+
+    /**
      * A/B prop {@code biz_ai_auto_save_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4726,6 +5311,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp IS_GROUP_CHAT_OPEN_LOGGING_ENABLED = new ABProp(13864, "false");
 
     /**
+     * A/B prop {@code defense_mode_available} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: defense_mode_available:[13874,"int"]
+     */
+    public static final ABProp DEFENSE_MODE_AVAILABLE = new ABProp(13874, "0");
+
+    /**
      * A/B prop {@code ai_forward_flow_surface_meta_ai_as_contact_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4771,6 +5365,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp ENABLE_GROUP_EXIT_EXPERIENCE = new ABProp(13996, "false");
 
     /**
+     * A/B prop {@code updates_quick_promotion_banner_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: updates_quick_promotion_banner_enabled:[13997,"bool"]
+     */
+    public static final ABProp UPDATES_QUICK_PROMOTION_BANNER_ENABLED = new ABProp(13997, "false");
+
+    /**
      * A/B prop {@code mm_user_controls_exception_number_prefixes} of string type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4787,6 +5390,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: snapl_newsletter_logging_media_id_placeholder_string:[14064,"string"]
      */
     public static final ABProp SNAPL_NEWSLETTER_LOGGING_MEDIA_ID_PLACEHOLDER_STRING = new ABProp(14064, "-1");
+
+    /**
+     * A/B prop {@code web_msg_list_virtualization} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_msg_list_virtualization:[14084,"bool"]
+     */
+    public static final ABProp WEB_MSG_LIST_VIRTUALIZATION = new ABProp(14084, "false");
 
     /**
      * A/B prop {@code ai_rich_response_smb_web_structured_response_enabled} of boolean type.
@@ -4814,6 +5426,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: view_replies_infra_enabled:[14199,"bool"]
      */
     public static final ABProp VIEW_REPLIES_INFRA_ENABLED = new ABProp(14199, "false");
+
+    /**
+     * A/B prop {@code private_messaging_uk_osa_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: private_messaging_uk_osa_enabled:[14250,"bool"]
+     */
+    public static final ABProp PRIVATE_MESSAGING_UK_OSA_ENABLED = new ABProp(14250, "false");
 
     /**
      * A/B prop {@code is_part_of_gsc_experiment} of boolean type.
@@ -4879,6 +5500,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp PAYMENT_SUPPORT_LIDS = new ABProp(14333, "116664750354676,128385682505839,46635358933114,26521959944357,200206125658243,179985503506636,187797998674170,228746200088715,117914552262794,10158134550607");
 
     /**
+     * A/B prop {@code gif_provider} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: gif_provider:[14343,"int"]
+     */
+    public static final ABProp GIF_PROVIDER = new ABProp(14343, "1");
+
+    /**
      * A/B prop {@code payment_br_holdout} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -4886,6 +5516,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: payment_br_holdout:[14358,"bool"]
      */
     public static final ABProp PAYMENT_BR_HOLDOUT = new ABProp(14358, "false");
+
+    /**
+     * A/B prop {@code updates_privacy_notice_rollout_date} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: updates_privacy_notice_rollout_date:[14387,"int"]
+     */
+    public static final ABProp UPDATES_PRIVACY_NOTICE_ROLLOUT_DATE = new ABProp(14387, "174231e4");
 
     /**
      * A/B prop {@code render_updated_disclosure} of boolean type.
@@ -4967,6 +5606,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: enable_group_exit_experience_logging:[14589,"bool"]
      */
     public static final ABProp ENABLE_GROUP_EXIT_EXPERIENCE_LOGGING = new ABProp(14589, "false");
+
+    /**
+     * A/B prop {@code search_user_journey_logging_wam_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: search_user_journey_logging_wam_enabled:[14682,"bool"]
+     */
+    public static final ABProp SEARCH_USER_JOURNEY_LOGGING_WAM_ENABLED = new ABProp(14682, "false");
 
     /**
      * A/B prop {@code group_description_length} of integer type.
@@ -5095,6 +5743,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp RT_WEB_DELAY_PROCESSING = new ABProp(15181, "false");
 
     /**
+     * A/B prop {@code enable_community_exit_experience} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_community_exit_experience:[15219,"bool"]
+     */
+    public static final ABProp ENABLE_COMMUNITY_EXIT_EXPERIENCE = new ABProp(15219, "false");
+
+    /**
      * A/B prop {@code wamo_privacy_tos_show_channels_nux_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5129,15 +5786,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: rt_receiver_dual_encrypted_msg_enabled:[15258,"bool"]
      */
     public static final ABProp RT_RECEIVER_DUAL_ENCRYPTED_MSG_ENABLED = new ABProp(15258, "true");
-
-    /**
-     * A/B prop {@code ai_rich_response_smb_web_structured_response_receiver_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: ai_rich_response_smb_web_structured_response_receiver_enabled:[15266,"bool"]
-     */
-    public static final ABProp AI_RICH_RESPONSE_SMB_WEB_STRUCTURED_RESPONSE_RECEIVER_ENABLED = new ABProp(15266, "false");
 
     /**
      * A/B prop {@code ai_rich_response_web_structured_response_receiver_enabled} of boolean type.
@@ -5212,6 +5860,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp GROUP_HISTORY_SEND = new ABProp(15313, "false");
 
     /**
+     * A/B prop {@code search_the_web_design_experiment_v1} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: search_the_web_design_experiment_v1:[15423,"bool"]
+     */
+    public static final ABProp SEARCH_THE_WEB_DESIGN_EXPERIMENT_V1 = new ABProp(15423, "false");
+
+    /**
      * A/B prop {@code enable_web_calling} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5228,6 +5885,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: ctwa_smb_detected_outcome_labels_soak_enabled:[15472,"bool"]
      */
     public static final ABProp CTWA_SMB_DETECTED_OUTCOME_LABELS_SOAK_ENABLED = new ABProp(15472, "false");
+
+    /**
+     * A/B prop {@code enable_upcoming_schedule_call_events_in_calls_tab} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_upcoming_schedule_call_events_in_calls_tab:[15514,"bool"]
+     */
+    public static final ABProp ENABLE_UPCOMING_SCHEDULE_CALL_EVENTS_IN_CALLS_TAB = new ABProp(15514, "false");
 
     /**
      * A/B prop {@code biz_ai_in_thread_unmute_v2} of boolean type.
@@ -5311,6 +5977,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CTWA_3PD_DATA_SHARING_COOLDOWN_MAX_TIMES_SHOWN_FOR_OPTED_OUT = new ABProp(15686, "0");
 
     /**
+     * A/B prop {@code quoted_message_user_journey_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: quoted_message_user_journey_logging_enabled:[15694,"bool"]
+     */
+    public static final ABProp QUOTED_MESSAGE_USER_JOURNEY_LOGGING_ENABLED = new ABProp(15694, "false");
+
+    /**
      * A/B prop {@code wamo_agm_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5329,13 +6004,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp GROUP_HISTORY_NOTICE_RECEIVE = new ABProp(15722, "false");
 
     /**
-     * A/B prop {@code web_fetch_privacy_list_my_contacts_except} of boolean type.
+     * A/B prop {@code create_group_and_add_member_overflow} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: web_fetch_privacy_list_my_contacts_except:[15788,"bool"]
+     * @apiNote WAWebABPropsConfigs: create_group_and_add_member_overflow:[15772,"bool"]
      */
-    public static final ABProp WEB_FETCH_PRIVACY_LIST_MY_CONTACTS_EXCEPT = new ABProp(15788, "false");
+    public static final ABProp CREATE_GROUP_AND_ADD_MEMBER_OVERFLOW = new ABProp(15772, "false");
 
     /**
      * A/B prop {@code lid_one_to_one_migration_event_response_force_pn_jid} of boolean type.
@@ -5374,24 +6049,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp USERNAME_SEARCH = new ABProp(15956, "false");
 
     /**
-     * A/B prop {@code ai_chat_persistent_meta_ai_banner_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: ai_chat_persistent_meta_ai_banner_enabled:[15967,"bool"]
-     */
-    public static final ABProp AI_CHAT_PERSISTENT_META_AI_BANNER_ENABLED = new ABProp(15967, "false");
-
-    /**
-     * A/B prop {@code ai_chat_persistent_meta_ai_banner_logging_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: ai_chat_persistent_meta_ai_banner_logging_enabled:[15968,"bool"]
-     */
-    public static final ABProp AI_CHAT_PERSISTENT_META_AI_BANNER_LOGGING_ENABLED = new ABProp(15968, "false");
-
-    /**
      * A/B prop {@code contact_and_chat_fuzzy_search_similarity_optimization_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5399,6 +6056,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: contact_and_chat_fuzzy_search_similarity_optimization_enabled:[16010,"bool"]
      */
     public static final ABProp CONTACT_AND_CHAT_FUZZY_SEARCH_SIMILARITY_OPTIMIZATION_ENABLED = new ABProp(16010, "false");
+
+    /**
+     * A/B prop {@code forwarded_message_user_journey_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: forwarded_message_user_journey_logging_enabled:[16055,"bool"]
+     */
+    public static final ABProp FORWARDED_MESSAGE_USER_JOURNEY_LOGGING_ENABLED = new ABProp(16055, "false");
 
     /**
      * A/B prop {@code message_edit_to_message_secret_sender_enabled} of boolean type.
@@ -5462,6 +6128,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: privacy_settings_about_lid_migration_enable:[16195,"bool"]
      */
     public static final ABProp PRIVACY_SETTINGS_ABOUT_LID_MIGRATION_ENABLE = new ABProp(16195, "false");
+
+    /**
+     * A/B prop {@code schedule_call_show_join_button_time_interval_mins} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: schedule_call_show_join_button_time_interval_mins:[16253,"int"]
+     */
+    public static final ABProp SCHEDULE_CALL_SHOW_JOIN_BUTTON_TIME_INTERVAL_MINS = new ABProp(16253, "5");
+
+    /**
+     * A/B prop {@code schedule_call_show_upcoming_banner_time_interval_mins} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: schedule_call_show_upcoming_banner_time_interval_mins:[16254,"int"]
+     */
+    public static final ABProp SCHEDULE_CALL_SHOW_UPCOMING_BANNER_TIME_INTERVAL_MINS = new ABProp(16254, "1440");
 
     /**
      * A/B prop {@code privacy_settings_group_add_lid_migration_enable} of boolean type.
@@ -5572,13 +6256,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp MM_SIGNAL_SHARING_VERIFICATION_SYSTEM_LID_ENABLED = new ABProp(16727, "true");
 
     /**
-     * A/B prop {@code wds_web_button} of boolean type.
+     * A/B prop {@code reactions_alignment_for_transparent_messages_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: wds_web_button:[16785,"bool"]
+     * @apiNote WAWebABPropsConfigs: reactions_alignment_for_transparent_messages_enabled:[16792,"bool"]
      */
-    public static final ABProp WDS_WEB_BUTTON = new ABProp(16785, "false");
+    public static final ABProp REACTIONS_ALIGNMENT_FOR_TRANSPARENT_MESSAGES_ENABLED = new ABProp(16792, "false");
 
     /**
      * A/B prop {@code wa_web_console_log_level} of integer type.
@@ -5653,6 +6337,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp HISTORY_SYNC_ON_DEMAND_COMPANION = new ABProp(17198, "false");
 
     /**
+     * A/B prop {@code win_hybrid_typing_indicator_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: win_hybrid_typing_indicator_enabled:[17272,"bool"]
+     */
+    public static final ABProp WIN_HYBRID_TYPING_INDICATOR_ENABLED = new ABProp(17272, "false");
+
+    /**
      * A/B prop {@code ai_ugc_not_an_expert_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5662,22 +6355,13 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_UGC_NOT_AN_EXPERT_ENABLED = new ABProp(17285, "false");
 
     /**
-     * A/B prop {@code wa_web_unexpected_locale_reload_fix_enabled} of boolean type.
+     * A/B prop {@code payment_links_trust_signals_other_metatags_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: wa_web_unexpected_locale_reload_fix_enabled:[17328,"bool"]
+     * @apiNote WAWebABPropsConfigs: payment_links_trust_signals_other_metatags_enabled:[17355,"bool"]
      */
-    public static final ABProp WA_WEB_UNEXPECTED_LOCALE_RELOAD_FIX_ENABLED = new ABProp(17328, "false");
-
-    /**
-     * A/B prop {@code wa_web_resume_timer_fix_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: wa_web_resume_timer_fix_enabled:[17329,"bool"]
-     */
-    public static final ABProp WA_WEB_RESUME_TIMER_FIX_ENABLED = new ABProp(17329, "false");
+    public static final ABProp PAYMENT_LINKS_TRUST_SIGNALS_OTHER_METATAGS_ENABLED = new ABProp(17355, "false");
 
     /**
      * A/B prop {@code ai_rich_response_side_by_side_survey_enabled} of boolean type.
@@ -5725,6 +6409,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_LINKED_CATALOG_CONSUMER_CART_ENABLED = new ABProp(17466, "false");
 
     /**
+     * A/B prop {@code wa_web_hybrid_simple_chat_conversation_context_menu_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_hybrid_simple_chat_conversation_context_menu_enabled:[17479,"bool"]
+     */
+    public static final ABProp WA_WEB_HYBRID_SIMPLE_CHAT_CONVERSATION_CONTEXT_MENU_ENABLED = new ABProp(17479, "false");
+
+    /**
+     * A/B prop {@code web_rating_and_review_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_rating_and_review_enabled:[17540,"bool"]
+     */
+    public static final ABProp WEB_RATING_AND_REVIEW_ENABLED = new ABProp(17540, "false");
+
+    /**
      * A/B prop {@code ctwa_suppress_message_via_ad_spam_web} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5741,6 +6443,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: username_contact_syncd_support_enable:[17614,"bool"]
      */
     public static final ABProp USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE = new ABProp(17614, "false");
+
+    /**
+     * A/B prop {@code wa_web_hybrid_context_menu_reactions_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_hybrid_context_menu_reactions_enabled:[17650,"bool"]
+     */
+    public static final ABProp WA_WEB_HYBRID_CONTEXT_MENU_REACTIONS_ENABLED = new ABProp(17650, "false");
 
     /**
      * A/B prop {@code calls_tab_username_global_search_enabled} of boolean type.
@@ -5788,6 +6499,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_INDIVIDUAL_NEW_CHAT_MSG_CAPPING_LIMIT = new ABProp(17845, "0");
 
     /**
+     * A/B prop {@code smba_business_broadcast_recipient_limit} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: smba_business_broadcast_recipient_limit:[17937,"int"]
+     */
+    public static final ABProp SMBA_BUSINESS_BROADCAST_RECIPIENT_LIMIT = new ABProp(17937, "-1");
+
+    /**
      * A/B prop {@code smoothie_performance_msg_send} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5815,15 +6535,6 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp META_AI_IN_APP_SURVEY_ENABLED = new ABProp(17956, "false");
 
     /**
-     * A/B prop {@code smoothie_performance_command_palette} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: smoothie_performance_command_palette:[18021,"bool"]
-     */
-    public static final ABProp SMOOTHIE_PERFORMANCE_COMMAND_PALETTE = new ABProp(18021, "false");
-
-    /**
      * A/B prop {@code advanced_chat_privacy_content_update_july_25} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5831,6 +6542,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: advanced_chat_privacy_content_update_july_25:[18025,"bool"]
      */
     public static final ABProp ADVANCED_CHAT_PRIVACY_CONTENT_UPDATE_JULY_25 = new ABProp(18025, "false");
+
+    /**
+     * A/B prop {@code coex_calling_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: coex_calling_enabled:[18047,"bool"]
+     */
+    public static final ABProp COEX_CALLING_ENABLED = new ABProp(18047, "false");
+
+    /**
+     * A/B prop {@code hybrid_incremental_zooming_simple_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: hybrid_incremental_zooming_simple_enabled:[18080,"bool"]
+     */
+    public static final ABProp HYBRID_INCREMENTAL_ZOOMING_SIMPLE_ENABLED = new ABProp(18080, "false");
 
     /**
      * A/B prop {@code enable_avatars_on_web_companion} of boolean type.
@@ -5851,6 +6580,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp PUSHNAME_BLOCKLIST_STARTING_WITH_AT = new ABProp(18097, "false");
 
     /**
+     * A/B prop {@code dau_fix_delay_presence_on_focus} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: dau_fix_delay_presence_on_focus:[18189,"bool"]
+     */
+    public static final ABProp DAU_FIX_DELAY_PRESENCE_ON_FOCUS = new ABProp(18189, "false");
+
+    /**
      * A/B prop {@code username_contact_ui_vcard} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5867,15 +6605,6 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: username_global_search_enabled:[18251,"bool"]
      */
     public static final ABProp USERNAME_GLOBAL_SEARCH_ENABLED = new ABProp(18251, "false");
-
-    /**
-     * A/B prop {@code web_quota_exceeded_app_reload_flow_enabled} of boolean type.
-     *
-     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
-     *
-     * @apiNote WAWebABPropsConfigs: web_quota_exceeded_app_reload_flow_enabled:[18269,"bool"]
-     */
-    public static final ABProp WEB_QUOTA_EXCEEDED_APP_RELOAD_FLOW_ENABLED = new ABProp(18269, "false");
 
     /**
      * A/B prop {@code ai_forward_attribution_enabled} of boolean type.
@@ -5896,6 +6625,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp STATUS_POG_ID_ROTATION_WINDOW_DAYS = new ABProp(18297, "-1");
 
     /**
+     * A/B prop {@code wa_hybrid_3_month_history_sync_window} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_hybrid_3_month_history_sync_window:[18307,"bool"]
+     */
+    public static final ABProp WA_HYBRID_3_MONTH_HISTORY_SYNC_WINDOW = new ABProp(18307, "false");
+
+    /**
      * A/B prop {@code history_sync_on_demand_time_boundary_days_desktops} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5903,6 +6641,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: history_sync_on_demand_time_boundary_days_desktops:[18391,"int"]
      */
     public static final ABProp HISTORY_SYNC_ON_DEMAND_TIME_BOUNDARY_DAYS_DESKTOPS = new ABProp(18391, "1095");
+
+    /**
+     * A/B prop {@code group_history_message_count_limit} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: group_history_message_count_limit:[18405,"int"]
+     */
+    public static final ABProp GROUP_HISTORY_MESSAGE_COUNT_LIMIT = new ABProp(18405, "100");
+
+    /**
+     * A/B prop {@code group_history_messages_time_limit_secs} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: group_history_messages_time_limit_secs:[18406,"int"]
+     */
+    public static final ABProp GROUP_HISTORY_MESSAGES_TIME_LIMIT_SECS = new ABProp(18406, "1209600");
 
     /**
      * A/B prop {@code channels_creation_entrypoint_in_directory_enabled} of integer type.
@@ -5914,6 +6670,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CHANNELS_CREATION_ENTRYPOINT_IN_DIRECTORY_ENABLED = new ABProp(18613, "0");
 
     /**
+     * A/B prop {@code rnr_min_days_user_active} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: rnr_min_days_user_active:[18702,"int"]
+     */
+    public static final ABProp RNR_MIN_DAYS_USER_ACTIVE = new ABProp(18702, "2");
+
+    /**
+     * A/B prop {@code rnr_days_cooldown} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: rnr_days_cooldown:[18703,"int"]
+     */
+    public static final ABProp RNR_DAYS_COOLDOWN = new ABProp(18703, "1e5");
+
+    /**
      * A/B prop {@code optimized_delivery_block_and_report_entry_points_allowlist_web} of string type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -5921,6 +6695,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: optimized_delivery_block_and_report_entry_points_allowlist_web:[18736,"string"]
      */
     public static final ABProp OPTIMIZED_DELIVERY_BLOCK_AND_REPORT_ENTRY_POINTS_ALLOWLIST_WEB = new ABProp(18736, "4,10,12,13,14,15,17,18,24,31,32,33,34,35,36,39,40,45");
+
+    /**
+     * A/B prop {@code web_rating_and_review_contextual_prompt_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_rating_and_review_contextual_prompt_enabled:[18737,"bool"]
+     */
+    public static final ABProp WEB_RATING_AND_REVIEW_CONTEXTUAL_PROMPT_ENABLED = new ABProp(18737, "false");
 
     /**
      * A/B prop {@code ai_search_experience_web_enabled} of boolean type.
@@ -6049,6 +6832,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEB_HISTORY_SYNC_DYNAMIC_THROTTLING = new ABProp(19110, "true");
 
     /**
+     * A/B prop {@code public_bug_reporting_sidebar} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: public_bug_reporting_sidebar:[19124,"bool"]
+     */
+    public static final ABProp PUBLIC_BUG_REPORTING_SIDEBAR = new ABProp(19124, "false");
+
+    /**
      * A/B prop {@code public_bug_reporting_settings} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6056,6 +6848,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: public_bug_reporting_settings:[19127,"bool"]
      */
     public static final ABProp PUBLIC_BUG_REPORTING_SETTINGS = new ABProp(19127, "false");
+
+    /**
+     * A/B prop {@code web_notifications_banner_variant} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_notifications_banner_variant:[19168,"int"]
+     */
+    public static final ABProp WEB_NOTIFICATIONS_BANNER_VARIANT = new ABProp(19168, "0");
 
     /**
      * A/B prop {@code payments_br_pix_web_attachment_tray} of boolean type.
@@ -6094,6 +6895,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_ANR_THROTTLE_HISTORY_SYNC_DB_WRITES = new ABProp(19298, "false");
 
     /**
+     * A/B prop {@code web_notifications_banner_new_logic_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_notifications_banner_new_logic_enabled:[19399,"bool"]
+     */
+    public static final ABProp WEB_NOTIFICATIONS_BANNER_NEW_LOGIC_ENABLED = new ABProp(19399, "false");
+
+    /**
      * A/B prop {@code payment_link_trace_id_logging_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6101,6 +6911,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: payment_link_trace_id_logging_enabled:[19440,"bool"]
      */
     public static final ABProp PAYMENT_LINK_TRACE_ID_LOGGING_ENABLED = new ABProp(19440, "false");
+
+    /**
+     * A/B prop {@code desktop_upsell_intro_panel_illustration_variant} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: desktop_upsell_intro_panel_illustration_variant:[19518,"int"]
+     */
+    public static final ABProp DESKTOP_UPSELL_INTRO_PANEL_ILLUSTRATION_VARIANT = new ABProp(19518, "0");
 
     /**
      * A/B prop {@code channels_qpl_improvements_supported_types} of string type.
@@ -6229,6 +7048,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp BIZ_AI_AGENT_THREAD_STATUS_HISTORY_SYNC_ENABLED = new ABProp(20099, "false");
 
     /**
+     * A/B prop {@code web_msg_list_smart_margin_virtualization} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_msg_list_smart_margin_virtualization:[20214,"bool"]
+     */
+    public static final ABProp WEB_MSG_LIST_SMART_MARGIN_VIRTUALIZATION = new ABProp(20214, "false");
+
+    /**
      * A/B prop {@code channels_music_receiver_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6292,6 +7120,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEBTP_USE_THUMBNAIL_RENDERER = new ABProp(20555, "false");
 
     /**
+     * A/B prop {@code web_voip_video_renderer} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_voip_video_renderer:[20573,"int"]
+     */
+    public static final ABProp WEB_VOIP_VIDEO_RENDERER = new ABProp(20573, "0");
+
+    /**
      * A/B prop {@code wa_individual_new_chat_msg_latest_rampup_date} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6308,6 +7145,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_webtp_use_pdf_renderer:[20607,"bool"]
      */
     public static final ABProp WA_WEBTP_USE_PDF_RENDERER = new ABProp(20607, "false");
+
+    /**
+     * A/B prop {@code wa_web_clear_selected_chats_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_clear_selected_chats_enabled:[20626,"bool"]
+     */
+    public static final ABProp WA_WEB_CLEAR_SELECTED_CHATS_ENABLED = new ABProp(20626, "false");
 
     /**
      * A/B prop {@code ai_chat_threads_infra_enabled} of boolean type.
@@ -6355,6 +7201,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp BIZ_AI_TOS_VARIANT = new ABProp(20833, "0");
 
     /**
+     * A/B prop {@code web_voip_video_renderer_threading_mode} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_voip_video_renderer_threading_mode:[20859,"int"]
+     */
+    public static final ABProp WEB_VOIP_VIDEO_RENDERER_THREADING_MODE = new ABProp(20859, "0");
+
+    /**
      * A/B prop {@code hide_auto_quotes_on_web} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6382,6 +7237,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WDS_WEB_CHIP = new ABProp(20970, "false");
 
     /**
+     * A/B prop {@code username_contact_privacy_setting_allow_uncontact_set_enable} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: username_contact_privacy_setting_allow_uncontact_set_enable:[20993,"bool"]
+     */
+    public static final ABProp USERNAME_CONTACT_PRIVACY_SETTING_ALLOW_UNCONTACT_SET_ENABLE = new ABProp(20993, "false");
+
+    /**
      * A/B prop {@code history_sync_on_demand_complete_companion} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6407,6 +7271,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: ai_dynamic_model_branding_enabled:[21086,"bool"]
      */
     public static final ABProp AI_DYNAMIC_MODEL_BRANDING_ENABLED = new ABProp(21086, "false");
+
+    /**
+     * A/B prop {@code chatlist_prevent_autoread} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: chatlist_prevent_autoread:[21156,"bool"]
+     */
+    public static final ABProp CHATLIST_PREVENT_AUTOREAD = new ABProp(21156, "false");
+
+    /**
+     * A/B prop {@code wa_web_msg_bubble_context_menu_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_msg_bubble_context_menu_enabled:[21166,"bool"]
+     */
+    public static final ABProp WA_WEB_MSG_BUBBLE_CONTEXT_MENU_ENABLED = new ABProp(21166, "false");
 
     /**
      * A/B prop {@code paa_support_for_disabled_epehemerality} of boolean type.
@@ -6517,6 +7399,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEB_WAE_QPL_ENABLED = new ABProp(21742, "true");
 
     /**
+     * A/B prop {@code functional_chatlist_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: functional_chatlist_enabled:[21799,"bool"]
+     */
+    public static final ABProp FUNCTIONAL_CHATLIST_ENABLED = new ABProp(21799, "false");
+
+    /**
+     * A/B prop {@code functional_chatlist_panel_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: functional_chatlist_panel_enabled:[21800,"bool"]
+     */
+    public static final ABProp FUNCTIONAL_CHATLIST_PANEL_ENABLED = new ABProp(21800, "false");
+
+    /**
      * A/B prop {@code ctwa_suppress_message_with_external_ad_reply_consumer_db_level_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6533,6 +7433,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_web_enable_granular_notifications:[21909,"bool"]
      */
     public static final ABProp WA_WEB_ENABLE_GRANULAR_NOTIFICATIONS = new ABProp(21909, "false");
+
+    /**
+     * A/B prop {@code wa_web_disable_prefetch_loadables} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_disable_prefetch_loadables:[21917,"bool"]
+     */
+    public static final ABProp WA_WEB_DISABLE_PREFETCH_LOADABLES = new ABProp(21917, "false");
 
     /**
      * A/B prop {@code enable_agm_flow_cta} of boolean type.
@@ -6616,6 +7525,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_GROUP_PARTICIPATION_SEND_ENABLED = new ABProp(22184, "false");
 
     /**
+     * A/B prop {@code web_calling_perf_optimizations_bitmask} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_calling_perf_optimizations_bitmask:[22186,"int"]
+     */
+    public static final ABProp WEB_CALLING_PERF_OPTIMIZATIONS_BITMASK = new ABProp(22186, "1");
+
+    /**
+     * A/B prop {@code channels_invite_link_preview_improvement_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: channels_invite_link_preview_improvement_enabled:[22196,"bool"]
+     */
+    public static final ABProp CHANNELS_INVITE_LINK_PREVIEW_IMPROVEMENT_ENABLED = new ABProp(22196, "false");
+
+    /**
      * A/B prop {@code newsletter_forward_counter_max_send_after_random_time} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6634,6 +7561,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_GROUP_PARTICIPATION_ADD_TEE_ENABLED = new ABProp(22236, "false");
 
     /**
+     * A/B prop {@code br_payments_home_duration_rule_for_pux_banner} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: br_payments_home_duration_rule_for_pux_banner:[22249,"int"]
+     */
+    public static final ABProp BR_PAYMENTS_HOME_DURATION_RULE_FOR_PUX_BANNER = new ABProp(22249, "604800");
+
+    /**
      * A/B prop {@code enable_futureproof_galaxy_flow_message_for_business_numbers} of string type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6650,6 +7586,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: utility_payment_reminder_m1_enabled:[22434,"bool"]
      */
     public static final ABProp UTILITY_PAYMENT_REMINDER_M1_ENABLED = new ABProp(22434, "false");
+
+    /**
+     * A/B prop {@code wa_web_reactions_2} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_reactions_2:[22469,"bool"]
+     */
+    public static final ABProp WA_WEB_REACTIONS_2 = new ABProp(22469, "false");
 
     /**
      * A/B prop {@code media_hub_history_max_days} of integer type.
@@ -6679,6 +7624,24 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEB_SHOW_STATUS_RING_FOR_NO_UNREAD = new ABProp(22567, "false");
 
     /**
+     * A/B prop {@code web_phone_number_global_search} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_phone_number_global_search:[22603,"bool"]
+     */
+    public static final ABProp WEB_PHONE_NUMBER_GLOBAL_SEARCH = new ABProp(22603, "false");
+
+    /**
+     * A/B prop {@code wa_web_create_group_in_filter} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_create_group_in_filter:[22617,"bool"]
+     */
+    public static final ABProp WA_WEB_CREATE_GROUP_IN_FILTER = new ABProp(22617, "false");
+
+    /**
      * A/B prop {@code member_name_tag_web_sender_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6704,6 +7667,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: ai_rich_response_post_citations_enabled:[22672,"bool"]
      */
     public static final ABProp AI_RICH_RESPONSE_POST_CITATIONS_ENABLED = new ABProp(22672, "false");
+
+    /**
+     * A/B prop {@code settings_sync_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: settings_sync_enabled:[22692,"bool"]
+     */
+    public static final ABProp SETTINGS_SYNC_ENABLED = new ABProp(22692, "false");
 
     /**
      * A/B prop {@code ai_rich_response_zeitgeist_carousel_enabled} of boolean type.
@@ -6733,6 +7705,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_IMAGINE_LOADING_INDICATOR_ENABLED = new ABProp(22795, "false");
 
     /**
+     * A/B prop {@code wa_web_share_content_uj} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_share_content_uj:[22813,"bool"]
+     */
+    public static final ABProp WA_WEB_SHARE_CONTENT_UJ = new ABProp(22813, "false");
+
+    /**
      * A/B prop {@code message_keys_async_chunk_size} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6749,6 +7730,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: synced_message_keys_processing_type:[22825,"string"]
      */
     public static final ABProp SYNCED_MESSAGE_KEYS_PROCESSING_TYPE = new ABProp(22825, "control");
+
+    /**
+     * A/B prop {@code wds_web_menu_m1} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wds_web_menu_m1:[22920,"bool"]
+     */
+    public static final ABProp WDS_WEB_MENU_M1 = new ABProp(22920, "false");
+
+    /**
+     * A/B prop {@code wds_web_search_bar} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wds_web_search_bar:[22921,"bool"]
+     */
+    public static final ABProp WDS_WEB_SEARCH_BAR = new ABProp(22921, "false");
 
     /**
      * A/B prop {@code wa_web_favicon_badging_enabled} of boolean type.
@@ -6778,6 +7777,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_ANR_MEDIA_CHUNK_ENC_DELAY_ENABLED = new ABProp(22931, "false");
 
     /**
+     * A/B prop {@code empty_unread_filter_cta_variant} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: empty_unread_filter_cta_variant:[22962,"int"]
+     */
+    public static final ABProp EMPTY_UNREAD_FILTER_CTA_VARIANT = new ABProp(22962, "0");
+
+    /**
      * A/B prop {@code smb_graphql_merchant_info_set_compliance} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -6803,6 +7811,24 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: br_smb_paymentshome_enabled:[23042,"bool"]
      */
     public static final ABProp BR_SMB_PAYMENTSHOME_ENABLED = new ABProp(23042, "false");
+
+    /**
+     * A/B prop {@code web_voip_load_wasm_variant} of string type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_voip_load_wasm_variant:[23045,"string"]
+     */
+    public static final ABProp WEB_VOIP_LOAD_WASM_VARIANT = new ABProp(23045, "prod-nonlab");
+
+    /**
+     * A/B prop {@code wds_web_menu_m2} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wds_web_menu_m2:[23153,"bool"]
+     */
+    public static final ABProp WDS_WEB_MENU_M2 = new ABProp(23153, "false");
 
     /**
      * A/B prop {@code ai_chat_threads_web_enabled} of boolean type.
@@ -6866,6 +7892,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: ai_unified_response_receiver_web_enabled:[23348,"bool"]
      */
     public static final ABProp AI_UNIFIED_RESPONSE_RECEIVER_WEB_ENABLED = new ABProp(23348, "false");
+
+    /**
+     * A/B prop {@code wds_web_menu_reaction_tray_v2} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wds_web_menu_reaction_tray_v2:[23419,"bool"]
+     */
+    public static final ABProp WDS_WEB_MENU_REACTION_TRAY_V2 = new ABProp(23419, "false");
 
     /**
      * A/B prop {@code mex_get_privacy_settings_mode} of integer type.
@@ -6940,6 +7975,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_WEB_ASK_META_AI_ENABLED = new ABProp(23725, "false");
 
     /**
+     * A/B prop {@code web_voip_dynamic_thread_preallocate_count} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_voip_dynamic_thread_preallocate_count:[23789,"int"]
+     */
+    public static final ABProp WEB_VOIP_DYNAMIC_THREAD_PREALLOCATE_COUNT = new ABProp(23789, "0");
+
+    /**
      * A/B prop {@code username_channels_pn_privacy_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7001,6 +8045,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: ai_mode_selector_enabled:[23885,"bool"]
      */
     public static final ABProp AI_MODE_SELECTOR_ENABLED = new ABProp(23885, "false");
+
+    /**
+     * A/B prop {@code pix_onboarding_new_content_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: pix_onboarding_new_content_enabled:[23953,"bool"]
+     */
+    public static final ABProp PIX_ONBOARDING_NEW_CONTENT_ENABLED = new ABProp(23953, "false");
 
     /**
      * A/B prop {@code threads_logging_v2_enabled} of boolean type.
@@ -7075,6 +8128,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WEB_DISPLAY_LID_CONTACTS = new ABProp(24280, "false");
 
     /**
+     * A/B prop {@code web_force_lid_chats_in_history} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_force_lid_chats_in_history:[24343,"bool"]
+     */
+    public static final ABProp WEB_FORCE_LID_CHATS_IN_HISTORY = new ABProp(24343, "false");
+
+    /**
      * A/B prop {@code web_log_capacity_override} of integer type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7082,6 +8144,33 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: web_log_capacity_override:[24363,"int"]
      */
     public static final ABProp WEB_LOG_CAPACITY_OVERRIDE = new ABProp(24363, "0");
+
+    /**
+     * A/B prop {@code web_attach_menu_add_drawing_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_attach_menu_add_drawing_enabled:[24384,"bool"]
+     */
+    public static final ABProp WEB_ATTACH_MENU_ADD_DRAWING_ENABLED = new ABProp(24384, "false");
+
+    /**
+     * A/B prop {@code br_smb_pix_payment_request_variant} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: br_smb_pix_payment_request_variant:[24388,"int"]
+     */
+    public static final ABProp BR_SMB_PIX_PAYMENT_REQUEST_VARIANT = new ABProp(24388, "0");
+
+    /**
+     * A/B prop {@code wa_web_horizontal_link_previews} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_horizontal_link_previews:[24425,"bool"]
+     */
+    public static final ABProp WA_WEB_HORIZONTAL_LINK_PREVIEWS = new ABProp(24425, "false");
 
     /**
      * A/B prop {@code wa_web_enable_follow_up_reply_icon} of boolean type.
@@ -7118,6 +8207,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: is_ai_mode_selector_visible:[24489,"bool"]
      */
     public static final ABProp IS_AI_MODE_SELECTOR_VISIBLE = new ABProp(24489, "false");
+
+    /**
+     * A/B prop {@code wa_web_reduce_forced_layout_chat_open} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_reduce_forced_layout_chat_open:[24526,"bool"]
+     */
+    public static final ABProp WA_WEB_REDUCE_FORCED_LAYOUT_CHAT_OPEN = new ABProp(24526, "false");
 
     /**
      * A/B prop {@code wa_web_global_search_prefix_based} of boolean type.
@@ -7264,6 +8362,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp ENABLE_MENTION_EVERYONE_RECEIVER_WEB = new ABProp(24843, "false");
 
     /**
+     * A/B prop {@code enable_mention_everyone_sender_web} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_mention_everyone_sender_web:[24844,"bool"]
+     */
+    public static final ABProp ENABLE_MENTION_EVERYONE_SENDER_WEB = new ABProp(24844, "false");
+
+    /**
      * A/B prop {@code enhanced_mention_suggestions_non_group_members_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7343,6 +8450,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_web_canonical_ent_web_reg_enabled:[24925,"bool"]
      */
     public static final ABProp WA_WEB_CANONICAL_ENT_WEB_REG_ENABLED = new ABProp(24925, "false");
+
+    /**
+     * A/B prop {@code wa_web_me_tab} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_me_tab:[24944,"bool"]
+     */
+    public static final ABProp WA_WEB_ME_TAB = new ABProp(24944, "false");
 
     /**
      * A/B prop {@code wa_web_self_profile_photo_fix_enabled} of boolean type.
@@ -7435,6 +8551,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp SMB_CORE_BIZ_PROFILE_EDIT_ADDRESS = new ABProp(25118, "false");
 
     /**
+     * A/B prop {@code ai_bot_integration_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: ai_bot_integration_enabled:[25119,"bool"]
+     */
+    public static final ABProp AI_BOT_INTEGRATION_ENABLED = new ABProp(25119, "false");
+
+    /**
      * A/B prop {@code enable_logging_qbm_incoming_message} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7451,6 +8576,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_web_status_viewer_side_poster_identifiers_enabled:[25151,"bool"]
      */
     public static final ABProp WA_WEB_STATUS_VIEWER_SIDE_POSTER_IDENTIFIERS_ENABLED = new ABProp(25151, "false");
+
+    /**
+     * A/B prop {@code enable_web_voip_platform_av_sync} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_web_voip_platform_av_sync:[25177,"bool"]
+     */
+    public static final ABProp ENABLE_WEB_VOIP_PLATFORM_AV_SYNC = new ABProp(25177, "false");
 
     /**
      * A/B prop {@code ctwa_smb_label_chat_header_enabled_web} of boolean type.
@@ -7498,6 +8632,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEB_WAM_FALCO_SHADOW_EVENT_IDS = new ABProp(25309, "");
 
     /**
+     * A/B prop {@code wa_web_search_empty_state_m1} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_search_empty_state_m1:[25310,"bool"]
+     */
+    public static final ABProp WA_WEB_SEARCH_EMPTY_STATE_M1 = new ABProp(25310, "false");
+
+    /**
      * A/B prop {@code wa_web_ur_imagine_video_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7543,13 +8686,22 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp CCI_COMPLIANCE_CTWA_LEARN_MORE_HYPERLINK = new ABProp(25366, "https://faq.whatsapp.com/785493319976156/");
 
     /**
-     * A/B prop {@code after_read_core_receiving_enabled} of boolean type.
+     * A/B prop {@code enable_web_voip_dynamic_fps_throttle} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: after_read_core_receiving_enabled:[25392,"bool"]
+     * @apiNote WAWebABPropsConfigs: enable_web_voip_dynamic_fps_throttle:[25394,"bool"]
      */
-    public static final ABProp AFTER_READ_CORE_RECEIVING_ENABLED = new ABProp(25392, "false");
+    public static final ABProp ENABLE_WEB_VOIP_DYNAMIC_FPS_THROTTLE = new ABProp(25394, "true");
+
+    /**
+     * A/B prop {@code google_maps_api_key_auth} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: google_maps_api_key_auth:[25407,"bool"]
+     */
+    public static final ABProp GOOGLE_MAPS_API_KEY_AUTH = new ABProp(25407, "false");
 
     /**
      * A/B prop {@code wa_web_highlight_me_mention} of boolean type.
@@ -7588,6 +8740,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp WA_WEB_DEFAULT_PROFILE_PICS = new ABProp(25455, "false");
 
     /**
+     * A/B prop {@code biz_vpv_impression_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: biz_vpv_impression_logging_enabled:[25465,"bool"]
+     */
+    public static final ABProp BIZ_VPV_IMPRESSION_LOGGING_ENABLED = new ABProp(25465, "false");
+
+    /**
      * A/B prop {@code wa_web_notify_for} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7595,6 +8756,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_web_notify_for:[25544,"bool"]
      */
     public static final ABProp WA_WEB_NOTIFY_FOR = new ABProp(25544, "false");
+
+    /**
+     * A/B prop {@code wa_web_chat_search_entrypoint} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_chat_search_entrypoint:[25609,"bool"]
+     */
+    public static final ABProp WA_WEB_CHAT_SEARCH_ENTRYPOINT = new ABProp(25609, "false");
 
     /**
      * A/B prop {@code web_media_compute_in_worker_enabled} of boolean type.
@@ -7615,6 +8785,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AFTER_READ_SENDING_ENABLED = new ABProp(25648, "false");
 
     /**
+     * A/B prop {@code after_read_receiver_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: after_read_receiver_enabled:[25649,"bool"]
+     */
+    public static final ABProp AFTER_READ_RECEIVER_ENABLED = new ABProp(25649, "false");
+
+    /**
      * A/B prop {@code wa_web_base_video_comet_video_player_enabled} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7631,6 +8810,15 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_web_group_discard_dialog_contact_threshold:[25682,"int"]
      */
     public static final ABProp WA_WEB_GROUP_DISCARD_DIALOG_CONTACT_THRESHOLD = new ABProp(25682, "-1");
+
+    /**
+     * A/B prop {@code poll_add_option_receiving_enabled} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: poll_add_option_receiving_enabled:[25758,"int"]
+     */
+    public static final ABProp POLL_ADD_OPTION_RECEIVING_ENABLED = new ABProp(25758, "0");
 
     /**
      * A/B prop {@code username_key_upsell_max_numbers} of integer type.
@@ -7651,13 +8839,22 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp USERNAME_KEY_UPSELL_MAX_CHARACTERS = new ABProp(25790, "8");
 
     /**
-     * A/B prop {@code username_key_conditional_upsell} of boolean type.
+     * A/B prop {@code wa_web_lists_full_width_filters} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
      *
-     * @apiNote WAWebABPropsConfigs: username_key_conditional_upsell:[25791,"bool"]
+     * @apiNote WAWebABPropsConfigs: wa_web_lists_full_width_filters:[25805,"bool"]
      */
-    public static final ABProp USERNAME_KEY_CONDITIONAL_UPSELL = new ABProp(25791, "false");
+    public static final ABProp WA_WEB_LISTS_FULL_WIDTH_FILTERS = new ABProp(25805, "false");
+
+    /**
+     * A/B prop {@code wa_web_groups_in_common_multi_contact} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_groups_in_common_multi_contact:[25808,"bool"]
+     */
+    public static final ABProp WA_WEB_GROUPS_IN_COMMON_MULTI_CONTACT = new ABProp(25808, "false");
 
     /**
      * A/B prop {@code wa_web_highlight_me_mention_groupsize_threshold} of integer type.
@@ -7667,6 +8864,33 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: wa_web_highlight_me_mention_groupsize_threshold:[25836,"int"]
      */
     public static final ABProp WA_WEB_HIGHLIGHT_ME_MENTION_GROUPSIZE_THRESHOLD = new ABProp(25836, "130");
+
+    /**
+     * A/B prop {@code web_calling_download_voip} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_calling_download_voip:[25891,"bool"]
+     */
+    public static final ABProp WEB_CALLING_DOWNLOAD_VOIP = new ABProp(25891, "false");
+
+    /**
+     * A/B prop {@code web_calling_init_voip} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: web_calling_init_voip:[25892,"bool"]
+     */
+    public static final ABProp WEB_CALLING_INIT_VOIP = new ABProp(25892, "true");
+
+    /**
+     * A/B prop {@code enable_web_voip_video_resolution_cap} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_web_voip_video_resolution_cap:[25899,"bool"]
+     */
+    public static final ABProp ENABLE_WEB_VOIP_VIDEO_RESOLUTION_CAP = new ABProp(25899, "true");
 
     /**
      * A/B prop {@code web_anr_noop_gc_enabled} of boolean type.
@@ -7696,6 +8920,15 @@ public record ABProp(int code, String defaultValue) {
     public static final ABProp AI_UNIFIED_RESPONSE_RECEIVER_WEB_TIMESTAMP_V2 = new ABProp(25930, "1772082e3");
 
     /**
+     * A/B prop {@code enhanced_mention_limit} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enhanced_mention_limit:[25951,"int"]
+     */
+    public static final ABProp ENHANCED_MENTION_LIMIT = new ABProp(25951, "5");
+
+    /**
      * A/B prop {@code web_reaction_inactive_receipt} of boolean type.
      *
      * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
@@ -7703,6 +8936,69 @@ public record ABProp(int code, String defaultValue) {
      * @apiNote WAWebABPropsConfigs: web_reaction_inactive_receipt:[25954,"bool"]
      */
     public static final ABProp WEB_REACTION_INACTIVE_RECEIPT = new ABProp(25954, "false");
+
+    /**
+     * A/B prop {@code enable_web_voip_proxy_and_sctp_workers} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: enable_web_voip_proxy_and_sctp_workers:[26012,"bool"]
+     */
+    public static final ABProp ENABLE_WEB_VOIP_PROXY_AND_SCTP_WORKERS = new ABProp(26012, "true");
+
+    /**
+     * A/B prop {@code br_pix_key_bubble_content_update} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: br_pix_key_bubble_content_update:[26033,"bool"]
+     */
+    public static final ABProp BR_PIX_KEY_BUBBLE_CONTENT_UPDATE = new ABProp(26033, "false");
+
+    /**
+     * A/B prop {@code wa_web_reactions_motion_v2_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_reactions_motion_v2_enabled:[26102,"bool"]
+     */
+    public static final ABProp WA_WEB_REACTIONS_MOTION_V2_ENABLED = new ABProp(26102, "false");
+
+    /**
+     * A/B prop {@code waweb_crossposting_attributions} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: waweb_crossposting_attributions:[26138,"bool"]
+     */
+    public static final ABProp WAWEB_CROSSPOSTING_ATTRIBUTIONS = new ABProp(26138, "false");
+
+    /**
+     * A/B prop {@code smb_web_customer_management_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: smb_web_customer_management_enabled:[26165,"bool"]
+     */
+    public static final ABProp SMB_WEB_CUSTOMER_MANAGEMENT_ENABLED = new ABProp(26165, "false");
+
+    /**
+     * A/B prop {@code wa_web_wam_falco_logging_enabled} of boolean type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: wa_web_wam_falco_logging_enabled:[26200,"bool"]
+     */
+    public static final ABProp WA_WEB_WAM_FALCO_LOGGING_ENABLED = new ABProp(26200, "false");
+
+    /**
+     * A/B prop {@code username_key_upsell_mode} of integer type.
+     *
+     * <p>This constant was generated automatically by {@code tooling/web-ab-props-extractor}.
+     *
+     * @apiNote WAWebABPropsConfigs: username_key_upsell_mode:[26220,"int"]
+     */
+    public static final ABProp USERNAME_KEY_UPSELL_MODE = new ABProp(26220, "0");
 
     /**
      * Constructs a new {@code ABProp} definition.

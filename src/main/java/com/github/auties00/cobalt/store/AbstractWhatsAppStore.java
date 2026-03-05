@@ -262,6 +262,9 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 71, type = ProtobufType.STRING, mixins = {PathMixin.class, ProtobufLazyMixin.class})
     protected final Path directory;
 
+    @ProtobufProperty(index = 72, type = ProtobufType.BOOL)
+    protected boolean primaryDeviceSupportsSyncdRecovery;
+
     protected final ConcurrentMap<SignalProtocolAddress, Long> identityEncryptionRange;
 
     protected final AtomicLong encryptionSequence;
@@ -916,6 +919,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    public boolean primaryDeviceSupportsSyncdRecovery() {
+        return primaryDeviceSupportsSyncdRecovery;
+    }
+
+    @Override
+    public WhatsAppStore setPrimaryDeviceSupportsSyncdRecovery(boolean supported) {
+        this.primaryDeviceSupportsSyncdRecovery = supported;
+        return this;
+    }
+
+    @Override
     public boolean syncedChats() {
         return syncedChats;
     }
@@ -1348,6 +1362,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public void clearSyncActionEntries(SyncPatchType patchType) {
         syncActionEntries.remove(patchType);
+    }
+
+    @Override
+    public Collection<SyncActionEntry> getSyncActionEntries(SyncPatchType patchType) {
+        var inner = syncActionEntries.get(patchType);
+        if (inner == null) {
+            return List.of();
+        }
+        return Collections.unmodifiableCollection(inner.values());
     }
 
     @Override

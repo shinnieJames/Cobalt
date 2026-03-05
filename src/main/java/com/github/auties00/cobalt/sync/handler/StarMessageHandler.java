@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -13,7 +14,7 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  *
  * <p>This handler processes mutations that star or unstar messages.
  *
- * <p>Index format: ["starAction", "chatJid", "messageId", "fromMe"]
+ * <p>Index format: ["starAction", "chatJid", "messageId", "fromMe", "participant"]
  */
 public final class StarMessageHandler implements WebAppStateActionHandler {
     public static final StarMessageHandler INSTANCE = new StarMessageHandler();
@@ -28,14 +29,29 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
     }
 
     @Override
+    public SyncPatchType collectionName() {
+        return SyncPatchType.REGULAR_HIGH;
+    }
+
+    @Override
+    public int version() {
+        return 5;
+    }
+
+    @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
 
         var action = mutation.value().starAction().orElseThrow(() -> new IllegalArgumentException("Missing starAction"));
 
         var indexArray = JSON.parseArray(mutation.index());
+        if (indexArray.size() < 5) {
+            return false;
+        }
+
         var chatJidString = indexArray.getString(1);
         var messageId = indexArray.getString(2);
-        // var fromMe = indexArray.getBoolean(3);
+        // var fromMe = indexArray.getString(3);
+        // var participant = indexArray.getString(4);
 
         var chatJid = Jid.of(chatJidString);
 

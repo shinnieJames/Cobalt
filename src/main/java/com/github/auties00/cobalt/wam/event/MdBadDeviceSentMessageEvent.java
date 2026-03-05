@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.wam.type.WamType;
 import com.github.auties00.cobalt.wam.type.DeviceType;
 import com.github.auties00.cobalt.wam.type.DsmError;
 import com.github.auties00.cobalt.wam.type.EditType;
+import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.RevokeType;
@@ -19,6 +20,9 @@ public interface MdBadDeviceSentMessageEvent extends WamEventSpec {
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<EditType> editType();
+
+    @WamProperty(index = 9, type = WamType.ENUM)
+    Optional<EncryptionTypeCode> encryptionType();
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> isLid();

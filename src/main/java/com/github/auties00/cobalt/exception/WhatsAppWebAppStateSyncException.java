@@ -984,6 +984,7 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      */
     public static final class RetryableServerError extends WhatsAppWebAppStateSyncException {
         private final String errorCode;
+        private final Long serverBackoffMs;
 
         /**
          * Constructs a new retryable server error exception.
@@ -991,8 +992,19 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
          * @param errorCode the server error code
          */
         public RetryableServerError(String errorCode) {
+            this(errorCode, null);
+        }
+
+        /**
+         * Constructs a new retryable server error exception with a server-suggested backoff.
+         *
+         * @param errorCode       the server error code
+         * @param serverBackoffMs the server-suggested backoff duration in milliseconds, or {@code null}
+         */
+        public RetryableServerError(String errorCode, Long serverBackoffMs) {
             super("Server returned retryable error code: " + errorCode);
             this.errorCode = errorCode;
+            this.serverBackoffMs = serverBackoffMs;
         }
 
         /**
@@ -1002,6 +1014,15 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
          */
         public String errorCode() {
             return errorCode;
+        }
+
+        /**
+         * Returns the server-suggested backoff duration in milliseconds, if any.
+         *
+         * @return the backoff duration, or {@code null} if none was provided
+         */
+        public Long serverBackoffMs() {
+            return serverBackoffMs;
         }
 
         @Override

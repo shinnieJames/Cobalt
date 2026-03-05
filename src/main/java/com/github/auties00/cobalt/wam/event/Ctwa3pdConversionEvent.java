@@ -1,0 +1,42 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.CtwaDirectionFrom;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WamEvent(id = 5138)
+public interface Ctwa3pdConversionEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.STRING)
+    Optional<String> ctwa3pdConversionMetadata();
+
+    @WamProperty(index = 2, type = WamType.STRING)
+    Optional<String> ctwa3pdConversionSubtype();
+
+    @WamProperty(index = 3, type = WamType.STRING)
+    Optional<String> ctwa3pdConversionType();
+
+    @WamProperty(index = 4, type = WamType.INTEGER)
+    OptionalInt ctwa3pdSchemaVersion();
+
+    @WamProperty(index = 5, type = WamType.STRING)
+    Optional<String> ctwa3pdSurfaceType();
+
+    @WamProperty(index = 8, type = WamType.INTEGER)
+    OptionalInt ctwaConversationDepth();
+
+    @WamProperty(index = 9, type = WamType.INTEGER)
+    OptionalInt ctwaConversationRepeat();
+
+    @WamProperty(index = 10, type = WamType.ENUM)
+    Optional<CtwaDirectionFrom> ctwaDirectionFrom();
+
+    @WamProperty(index = 7, type = WamType.STRING)
+    Optional<String> ctwaSignals();
+
+    @WamProperty(index = 6, type = WamType.STRING)
+    Optional<String> ctwaTrackingPayload();
+}

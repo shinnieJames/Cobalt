@@ -350,11 +350,11 @@ public interface DailyEvent extends WamEventSpec {
     @WamProperty(index = 227, type = WamType.STRING)
     Optional<String> preloadsAttributionJson();
 
-    @WamProperty(index = 141, type = WamType.INTEGER)
-    OptionalInt privacySettingsAbout();
+    @WamProperty(index = 141, type = WamType.ENUM)
+    Optional<PrivacySettingsValueType> privacySettingsAbout();
 
-    @WamProperty(index = 142, type = WamType.INTEGER)
-    OptionalInt privacySettingsAboutExceptNum();
+    @WamProperty(index = 142, type = WamType.ENUM)
+    Optional<PrivacySettingsContactsBuckets> privacySettingsAboutExceptNum();
 
     @WamProperty(index = 235, type = WamType.ENUM)
     Optional<PrivacySettingsValueType> privacySettingsCoverPhoto();

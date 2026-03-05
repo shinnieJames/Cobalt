@@ -4,10 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.client.info.WhatsAppMobileClientInfo;
 import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
-import com.github.auties00.cobalt.model.business.BusinessVerifiedNameCertificateBuilder;
-import com.github.auties00.cobalt.model.business.BusinessVerifiedNameCertificateSpec;
-import com.github.auties00.cobalt.model.business.BusinessVerifiedNameDetailsBuilder;
-import com.github.auties00.cobalt.model.business.BusinessVerifiedNameDetailsSpec;
+import com.github.auties00.cobalt.model.business.*;
+import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.util.FastRandomUtils;
@@ -168,7 +166,7 @@ public abstract sealed class WhatsAppMobileClientRegistration implements AutoClo
         throw new WhatsAppRegistrationException("Cannot confirm registration", new String(result));
     }
 
-    private void saveRegistrationStatus(boolean registered) {
+    private void saveRegistrationStatus(boolean registered) throws IOException {
         store.setRegistered(registered);
         if (registered) {
             var phoneNumber = store.phoneNumber()
@@ -257,18 +255,19 @@ public abstract sealed class WhatsAppMobileClientRegistration implements AutoClo
     }
 
     protected String generateBusinessCertificate() {
-        if(!store.device().platform().isBusiness()) {
+        var platform = store.device().platform();
+        if(platform != ClientPlatformType.ANDROID_BUSINESS && platform != ClientPlatformType.IOS_BUSINESS) {
             return null;
         }
 
-        var details = new BusinessVerifiedNameDetailsBuilder()
-                .name("")
-                .issuer("smb:wa")
+        var details = new BusinessVerifiedNameCertificateDetailsBuilder()
+                .verifiedName("")
+                .issuer(BusinessVerifiedNameCertificate.CertificateIssuer.SMALL_BUSINESS)
                 .serial(Math.abs(new SecureRandom().nextLong()))
                 .build();
-        var encodedDetails = BusinessVerifiedNameDetailsSpec.encode(details);
+        var encodedDetails = BusinessVerifiedNameCertificateDetailsSpec.encode(details);
         var certificate = new BusinessVerifiedNameCertificateBuilder()
-                .encodedDetails(encodedDetails)
+                .details(encodedDetails)
                 .signature(Curve25519.sign(store.identityKeyPair().privateKey().toEncodedPoint(), encodedDetails))
                 .build();
         return Base64.getUrlEncoder().encodeToString(BusinessVerifiedNameCertificateSpec.encode(certificate));

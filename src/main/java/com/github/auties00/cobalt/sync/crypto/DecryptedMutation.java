@@ -31,7 +31,8 @@ public sealed interface DecryptedMutation {
             SyncActionValue value,
             SyncdOperation operation,
             Instant timestamp,
-            byte[] keyId
+            byte[] keyId,
+            int actionVersion
     ) implements DecryptedMutation {
         private static final int IV_LENGTH = 16;
         private static final int MAC_LENGTH = 32;
@@ -94,6 +95,7 @@ public sealed interface DecryptedMutation {
             }
 
             // Build mutation
+            var actionVersion = actionData.version().orElse(0);
             return new Untrusted(
                     new String(actionIndex, StandardCharsets.UTF_8),
                     indexMac,
@@ -101,7 +103,8 @@ public sealed interface DecryptedMutation {
                     actionValue,
                     operation,
                     actionTimestamp,
-                    keyId
+                    keyId,
+                    actionVersion
             );
         }
     }
@@ -110,7 +113,8 @@ public sealed interface DecryptedMutation {
             String index,
             SyncActionValue value,
             SyncdOperation operation,
-            Instant timestamp
+            Instant timestamp,
+            int actionVersion
     ) implements DecryptedMutation {
 
     }

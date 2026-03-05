@@ -10,6 +10,7 @@ import com.github.auties00.cobalt.util.FastRandomUtils;
 import com.github.auties00.cobalt.wam.binary.WamGlobalEncoder;
 import com.github.auties00.cobalt.wam.event.WamEventSpec;
 import com.github.auties00.cobalt.wam.type.WamChannel;
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -139,6 +140,9 @@ public final class WamService {
     private String webcTabId;
     private String abKey2;
     private int webcRevision;
+    private String companionAppVersion;
+    private String psCountryCode;
+    private boolean serviceImprovementOptOut;
 
     /**
      * Constructs a new {@code WamService} bound to the given client.
@@ -187,9 +191,37 @@ public final class WamService {
                 ? null
                 : abPropsService.abKey().orElse("");
         this.webcRevision = version != null ? version.tertiary().orElse(0) : 0;
+        this.companionAppVersion = store.companionVersion()
+                .map(Object::toString)
+                .orElse(null);
+        this.psCountryCode = derivePsCountryCode();
+        this.serviceImprovementOptOut = abPropsService.getBool(ABProp.SERVICE_IMPROVEMENT_OPT_OUT_FLAG);
         this.initialized = true;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
         scheduler.scheduleWithFixedDelay(this::flush, FLUSH_INTERVAL_SECONDS, FLUSH_INTERVAL_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Derives the PS country code from the user's phone number using
+     * libphonenumber, matching WhatsApp Web's
+     * {@code WAWebL10NCountryCodes.getCountryShortcodeByPhone}.
+     *
+     * @return the two-letter ISO 3166-1 alpha-2 country code, or
+     *         {@code null} if not derivable
+     */
+    private String derivePsCountryCode() {
+        var phoneNumber = client.store().phoneNumber();
+        if (phoneNumber.isEmpty()) {
+            return null;
+        }
+
+        try {
+            var parsed = PhoneNumberUtil.getInstance().parse("+" + phoneNumber.getAsLong(), null);
+            var regionCode = PhoneNumberUtil.getInstance().getRegionCodeForNumber(parsed);
+            return regionCode != null ? regionCode.toLowerCase(Locale.ROOT) : null;
+        } catch (Exception _) {
+            return null;
+        }
     }
 
     /**
@@ -420,66 +452,84 @@ public final class WamService {
      */
     private int computeGlobalsSize(WamChannel channel) {
         var size = 0;
-        // 11
+        // 11 - platform (regular, private)
         size += WamGlobalEncoder.platformSize(platform);
-        // 13
+        // 13 - deviceName (regular, private)
         if (deviceName != null) {
             size += WamGlobalEncoder.deviceNameSize(deviceName);
         }
-        // 15
+        // 15 - osVersion (regular, private)
         if (osVersion != null) {
             size += WamGlobalEncoder.osVersionSize(osVersion);
         }
-        // 17
+        // 17 - appVersion (regular, private)
         if (appVersion != null) {
             size += WamGlobalEncoder.appVersionSize(appVersion);
         }
-        // 21
+        // 21 - appIsBetaRelease (regular, private)
         size += WamGlobalEncoder.appIsBetaReleaseSize(false);
         if (channel != WamChannel.PRIVATE) {
-            // 295
+            // 23 - networkIsWifi (regular)
+            size += WamGlobalEncoder.networkIsWifiSize(true);
+            // 295 - browserVersion (regular)
             if (browserVersion != null) {
                 size += WamGlobalEncoder.browserVersionSize(browserVersion);
             }
-            // 633
+            // 633 - webcEnv (regular)
             size += WamGlobalEncoder.webcEnvSize(WEBC_ENV_PROD);
         }
-        // 655
+        // 655 - memClass (regular, private)
         size += WamGlobalEncoder.memClassSize(memClass);
         if (channel != WamChannel.PRIVATE) {
-            // 779
+            // 779 - browser (regular)
             if (browser != null) {
                 size += WamGlobalEncoder.browserSize(browser);
             }
         }
-        // 899
+        // 899 - webcWebPlatform (regular, private)
         size += WamGlobalEncoder.webcWebPlatformSize(PLATFORM_WEBCLIENT);
-        // 1657
+        if (channel != WamChannel.PRIVATE) {
+            // 1005 - webcPhoneAppVersion (regular)
+            if (companionAppVersion != null) {
+                size += WamGlobalEncoder.webcPhoneAppVersionSize(companionAppVersion);
+            }
+        }
+        // 1657 - appBuild (regular, private)
         size += WamGlobalEncoder.appBuildSize(APP_BUILD_RELEASE);
-        // 3543
+        // 3543 - streamId (regular, private)
         size += WamGlobalEncoder.streamIdSize(STREAM_ID);
         if (channel != WamChannel.PRIVATE) {
-            // 3727
+            // 3727 - webcTabId (regular)
             if (webcTabId != null) {
                 size += WamGlobalEncoder.webcTabIdSize(webcTabId);
             }
-            // 4473
+            // 4473 - abKey2 (regular)
             if (abKey2 != null) {
                 size += WamGlobalEncoder.abKey2Size(abKey2);
             }
-            // 4505
+            // 4505 - deviceVersion (regular)
             if (deviceVersion != null) {
                 size += WamGlobalEncoder.deviceVersionSize(deviceVersion);
             }
         }
-        // 6251
+        // 6251 - ocVersion (regular, private)
         size += WamGlobalEncoder.ocVersionSize(1);
+        if (channel == WamChannel.PRIVATE) {
+            // 6833 - psCountryCode (private)
+            if (psCountryCode != null) {
+                size += WamGlobalEncoder.psCountryCodeSize(psCountryCode);
+            }
+        }
         if (channel != WamChannel.PRIVATE) {
-            // 10317
+            // 10317 - numCpu (regular)
             size += WamGlobalEncoder.numCpuSize(numCpu);
-            // 14507
+        }
+        // 13293 - serviceImprovementOptOut (regular, private)
+        size += WamGlobalEncoder.serviceImprovementOptOutSize(serviceImprovementOptOut);
+        if (channel != WamChannel.PRIVATE) {
+            // 14507 - deviceClassification (regular)
             size += WamGlobalEncoder.deviceClassificationSize(DEVICE_CLASSIFICATION_DESKTOP);
-            // 18491
+            // 18491 - webcRevision (regular)
             size += WamGlobalEncoder.webcRevisionSize(webcRevision);
         }
         size += computeNullTransitionsSize(channel);
@@ -503,9 +553,13 @@ public final class WamService {
         if (channel != WamChannel.PRIVATE) {
             if (browserVersion != null) globals.put(295, browserVersion);
             if (browser != null) globals.put(779, browser);
+            if (companionAppVersion != null) globals.put(1005, companionAppVersion);
             if (webcTabId != null) globals.put(3727, webcTabId);
             if (abKey2 != null) globals.put(4473, abKey2);
             if (deviceVersion != null) globals.put(4505, deviceVersion);
+        }
+        if (channel == WamChannel.PRIVATE) {
+            if (psCountryCode != null) globals.put(6833, psCountryCode);
         }
         return globals;
     }
@@ -565,66 +619,84 @@ public final class WamService {
      * @return the new offset after writing all globals
      */
     private int writeGlobals(byte[] buffer, int offset, WamChannel channel) {
-        // 11
+        // 11 - platform (regular, private)
         offset = WamGlobalEncoder.writePlatform(platform, buffer, offset);
-        // 13
+        // 13 - deviceName (regular, private)
         if (deviceName != null) {
             offset = WamGlobalEncoder.writeDeviceName(deviceName, buffer, offset);
         }
-        // 15
+        // 15 - osVersion (regular, private)
         if (osVersion != null) {
             offset = WamGlobalEncoder.writeOsVersion(osVersion, buffer, offset);
         }
-        // 17
+        // 17 - appVersion (regular, private)
         if (appVersion != null) {
             offset = WamGlobalEncoder.writeAppVersion(appVersion, buffer, offset);
         }
-        // 21
+        // 21 - appIsBetaRelease (regular, private)
         offset = WamGlobalEncoder.writeAppIsBetaRelease(false, buffer, offset);
         if (channel != WamChannel.PRIVATE) {
-            // 295
+            // 23 - networkIsWifi (regular)
+            offset = WamGlobalEncoder.writeNetworkIsWifi(true, buffer, offset);
+            // 295 - browserVersion (regular)
             if (browserVersion != null) {
                 offset = WamGlobalEncoder.writeBrowserVersion(browserVersion, buffer, offset);
             }
-            // 633
+            // 633 - webcEnv (regular)
             offset = WamGlobalEncoder.writeWebcEnv(WEBC_ENV_PROD, buffer, offset);
         }
-        // 655
+        // 655 - memClass (regular, private)
         offset = WamGlobalEncoder.writeMemClass(memClass, buffer, offset);
         if (channel != WamChannel.PRIVATE) {
-            // 779
+            // 779 - browser (regular)
             if (browser != null) {
                 offset = WamGlobalEncoder.writeBrowser(browser, buffer, offset);
             }
         }
-        // 899
+        // 899 - webcWebPlatform (regular, private)
         offset = WamGlobalEncoder.writeWebcWebPlatform(PLATFORM_WEBCLIENT, buffer, offset);
-        // 1657
+        if (channel != WamChannel.PRIVATE) {
+            // 1005 - webcPhoneAppVersion (regular)
+            if (companionAppVersion != null) {
+                offset = WamGlobalEncoder.writeWebcPhoneAppVersion(companionAppVersion, buffer, offset);
+            }
+        }
+        // 1657 - appBuild (regular, private)
         offset = WamGlobalEncoder.writeAppBuild(APP_BUILD_RELEASE, buffer, offset);
-        // 3543
+        // 3543 - streamId (regular, private)
         offset = WamGlobalEncoder.writeStreamId(STREAM_ID, buffer, offset);
         if (channel != WamChannel.PRIVATE) {
-            // 3727
+            // 3727 - webcTabId (regular)
             if (webcTabId != null) {
                 offset = WamGlobalEncoder.writeWebcTabId(webcTabId, buffer, offset);
             }
-            // 4473
+            // 4473 - abKey2 (regular)
             if (abKey2 != null) {
                 offset = WamGlobalEncoder.writeAbKey2(abKey2, buffer, offset);
             }
-            // 4505
+            // 4505 - deviceVersion (regular)
             if (deviceVersion != null) {
                 offset = WamGlobalEncoder.writeDeviceVersion(deviceVersion, buffer, offset);
             }
         }
-        // 6251
+        // 6251 - ocVersion (regular, private)
         offset = WamGlobalEncoder.writeOcVersion(1, buffer, offset);
+        if (channel == WamChannel.PRIVATE) {
+            // 6833 - psCountryCode (private)
+            if (psCountryCode != null) {
+                offset = WamGlobalEncoder.writePsCountryCode(psCountryCode, buffer, offset);
+            }
+        }
         if (channel != WamChannel.PRIVATE) {
-            // 10317
+            // 10317 - numCpu (regular)
             offset = WamGlobalEncoder.writeNumCpu(numCpu, buffer, offset);
-            // 14507
+        }
+        // 13293 - serviceImprovementOptOut (regular, private)
+        offset = WamGlobalEncoder.writeServiceImprovementOptOut(serviceImprovementOptOut, buffer, offset);
+        if (channel != WamChannel.PRIVATE) {
+            // 14507 - deviceClassification (regular)
             offset = WamGlobalEncoder.writeDeviceClassification(DEVICE_CLASSIFICATION_DESKTOP, buffer, offset);
-            // 18491
+            // 18491 - webcRevision (regular)
             offset = WamGlobalEncoder.writeWebcRevision(webcRevision, buffer, offset);
         }
         offset = writeNullTransitions(channel, buffer, offset);

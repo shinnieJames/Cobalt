@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.sync.exchange;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.media.ExternalBlobReference;
+import com.github.auties00.cobalt.model.media.ExternalBlobReferenceBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
@@ -10,17 +12,21 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.data.*;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.crypto.EncryptedMutation;
 import com.github.auties00.cobalt.sync.crypto.MutationIntegrityVerifier;
 import com.github.auties00.cobalt.sync.crypto.MutationKeys;
 import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
 
 import javax.crypto.Mac;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.SequencedCollection;
+import java.time.Instant;
+import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * Builds outgoing sync request nodes with encrypted mutations.
@@ -30,15 +36,20 @@ import java.util.SequencedCollection;
  * computed snapshotMac and patchMac, key ID, and device metadata.
  */
 public final class MutationRequestBuilder {
+    private static final Logger LOGGER = Logger.getLogger(MutationRequestBuilder.class.getName());
+
     private final WhatsAppClient whatsapp;
+    private final ABPropsService abPropsService;
 
     /**
      * Constructs a new mutation request builder.
      *
-     * @param whatsapp the WhatsApp client instance
+     * @param whatsapp       the WhatsApp client instance
+     * @param abPropsService the AB props service for threshold configuration
      */
-    public MutationRequestBuilder(WhatsAppClient whatsapp) {
+    public MutationRequestBuilder(WhatsAppClient whatsapp, ABPropsService abPropsService) {
         this.whatsapp = whatsapp;
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -58,16 +69,15 @@ public final class MutationRequestBuilder {
         var collectionBuilder = new NodeBuilder()
                 .description("collection")
                 .attribute("name", patchType.toString())
-                .attribute("return_snapshot", hashState.version() == 0);
+                .attribute("version", hashState.version())
+                .attribute("return_snapshot", hashState.version() == 0 ? "true" : "false");
 
-        // Only include version if we've synced before
-        if (hashState.version() > 0) {
-            collectionBuilder.attribute("version", hashState.version());
-        }
+        // Compact: deduplicate by index, keeping the last mutation for each index
+        var compacted = compactPatch(patches);
 
         // Build patch node if we have mutations
-        if (!patches.isEmpty()) {
-            var patchBytes = buildPatchProtobuf(patchType, patches, hashState);
+        if (!compacted.isEmpty()) {
+            var patchBytes = buildPatchProtobuf(patchType, compacted, hashState);
             var patchNode = new NodeBuilder()
                     .description("patch")
                     .content(patchBytes)
@@ -113,6 +123,10 @@ public final class MutationRequestBuilder {
             // Step 1: Encrypt all mutations
             var encryptedMutations = encryptMutations(patchType, patches, derivedKeys, latestKeyId);
 
+            // Step 1b: Key rotation — re-encrypt old-key entries with the latest key
+            var keyRotationMutations = buildKeyRotationMutations(patchType, patches, derivedKeys, latestKeyId);
+            encryptedMutations.addAll(keyRotationMutations);
+
             // Step 2: Compute new LT-Hash from encrypted mutations
             var currentLtHash = hashState.hash() != null ? hashState.hash() : MutationLTHash.EMPTY_HASH;
             var toAdd = new ArrayList<byte[]>(encryptedMutations.size());
@@ -142,7 +156,7 @@ public final class MutationRequestBuilder {
             var patchMac = MutationIntegrityVerifier.computePatchMac(
                     derivedKeys.patchMacKey(), snapshotMac, valueMacs, newVersion, patchType);
 
-            // Step 4: Build SyncdPatch protobuf
+            // Step 4: Build SyncdMutation list
             var syncdMutations = new ArrayList<SyncdMutation>(encryptedMutations.size());
             for (var encrypted : encryptedMutations) {
                 var record = new SyncdRecordBuilder()
@@ -156,12 +170,50 @@ public final class MutationRequestBuilder {
                         .build());
             }
 
+            // Per WA Web: include deviceIndex (companion device ID) and clientDebugData
+            var deviceIndex = whatsapp.store().jid()
+                    .map(jid -> jid.device())
+                    .orElse(0);
+            var debugData = new PatchDebugDataBuilder()
+                    .isSenderPrimary(false)
+                    .senderPlatform(PatchDebugData.Platform.WEB)
+                    .build();
+            var clientDebugData = PatchDebugDataSpec.encode(debugData);
+
+            // Step 5: Check if mutations should be uploaded externally
+            var maxInlineCount = Math.min(2000, Math.max(100, abPropsService.getInt(ABProp.SYNCD_INLINE_MUTATIONS_MAX_COUNT)));
+            var externalRef = (ExternalBlobReference) null;
+            if (syncdMutations.size() > maxInlineCount) {
+                externalRef = uploadExternalMutations(syncdMutations);
+            } else {
+                // Check encoded size against threshold
+                var inlinePatch = new SyncdPatchBuilder()
+                        .version(new SyncdVersionBuilder().version(newVersion).build())
+                        .mutations(syncdMutations)
+                        .snapshotMac(snapshotMac)
+                        .patchMac(patchMac)
+                        .keyId(new KeyIdBuilder().id(latestKeyId).build())
+                        .deviceIndex(deviceIndex)
+                        .clientDebugData(clientDebugData)
+                        .build();
+                var inlineBytes = SyncdPatchSpec.encode(inlinePatch);
+                var maxSizeBytes = Math.min(100, Math.max(10, abPropsService.getInt(ABProp.SYNCD_PATCH_PROTOBUF_MAX_SIZE))) * 1000L;
+                if (inlineBytes.length > maxSizeBytes) {
+                    externalRef = uploadExternalMutations(syncdMutations);
+                } else {
+                    return inlineBytes;
+                }
+            }
+
+            // Build patch with external reference instead of inline mutations
             var syncdPatch = new SyncdPatchBuilder()
                     .version(new SyncdVersionBuilder().version(newVersion).build())
-                    .mutations(syncdMutations)
+                    .externalMutations(externalRef)
                     .snapshotMac(snapshotMac)
                     .patchMac(patchMac)
                     .keyId(new KeyIdBuilder().id(latestKeyId).build())
+                    .deviceIndex(deviceIndex)
+                    .clientDebugData(clientDebugData)
                     .build();
 
             return SyncdPatchSpec.encode(syncdPatch);
@@ -215,5 +267,181 @@ public final class MutationRequestBuilder {
             result.add(encrypted);
         }
         return result;
+    }
+
+    /**
+     * Builds additional SET mutations for key rotation by finding sync action
+     * entries encrypted with old keys and re-encrypting them with the latest key.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdRequestBuilderBuild}: when building
+     * an outgoing patch, entries encrypted with keys older than the current key
+     * are included as additional SET mutations to gradually rotate all entries
+     * to the latest key. The number of additional mutations per patch is limited
+     * by the {@code syncd_additional_mutations_count} AB prop.
+     *
+     * @param patchType   the collection type
+     * @param patches     the core mutations being sent (to exclude from rotation)
+     * @param derivedKeys the derived keys from the latest sync key
+     * @param latestKeyId the latest app state sync key ID
+     * @return the additional encrypted mutations for key rotation
+     * @throws GeneralSecurityException if encryption fails
+     */
+    private List<EncryptedMutation> buildKeyRotationMutations(
+            SyncPatchType patchType,
+            SequencedCollection<SyncPendingMutation> patches,
+            MutationKeys derivedKeys,
+            byte[] latestKeyId
+    ) throws GeneralSecurityException {
+        // Collect indices already in the current batch to avoid duplicates
+        var batchIndices = new HashSet<String>();
+        for (var patch : patches) {
+            batchIndices.add(patch.mutation().index());
+        }
+
+        // Find entries with old keys that are not in the current batch
+        var allEntries = whatsapp.store().getSyncActionEntries(patchType);
+        var maxAdditional = Math.min(50, Math.max(1, abPropsService.getInt(ABProp.SYNCD_ADDITIONAL_MUTATIONS_COUNT)));
+        var result = new ArrayList<EncryptedMutation>();
+
+        for (var entry : allEntries) {
+            if (result.size() >= maxAdditional) {
+                break;
+            }
+
+            // Skip entries already using the latest key
+            if (Arrays.equals(entry.keyId(), latestKeyId)) {
+                continue;
+            }
+
+            // Skip entries without stored plaintext (e.g., from older sessions)
+            if (entry.actionIndex() == null || entry.actionValue() == null) {
+                continue;
+            }
+
+            // Skip entries whose index is already in the current batch
+            if (batchIndices.contains(entry.actionIndex())) {
+                continue;
+            }
+
+            // Re-encrypt with the latest key as a SET mutation
+            var trusted = new DecryptedMutation.Trusted(
+                    entry.actionIndex(),
+                    entry.actionValue(),
+                    SyncdOperation.SET,
+                    Instant.now(),
+                    entry.actionVersion()
+            );
+            var pending = new SyncPendingMutation(trusted, 0);
+            result.add(EncryptedMutation.of(pending, derivedKeys, latestKeyId));
+        }
+
+        return result;
+    }
+
+    /**
+     * Builds a sync request node that batches multiple collections into a
+     * single IQ stanza.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdRequestBuilder}: all dirty collections
+     * are batched into a single IQ with one {@code <sync>} node containing
+     * multiple {@code <collection>} children.
+     *
+     * @param collectionPatches map of collection types to their pending mutations
+     * @return the IQ request node builder
+     */
+    public NodeBuilder buildBatchedSyncRequest(Map<SyncPatchType, SequencedCollection<SyncPendingMutation>> collectionPatches) {
+        var collectionNodes = new ArrayList<com.github.auties00.cobalt.node.Node>();
+        for (var entry : collectionPatches.entrySet()) {
+            var patchType = entry.getKey();
+            var patches = entry.getValue();
+
+            var hashState = whatsapp.store()
+                    .findWebAppHashStateByName(patchType)
+                    .orElseGet(() -> new SyncHashValue(patchType));
+
+            var collectionBuilder = new NodeBuilder()
+                    .description("collection")
+                    .attribute("name", patchType.toString())
+                    .attribute("version", hashState.version())
+                    .attribute("return_snapshot", hashState.version() == 0 ? "true" : "false");
+
+            var compacted = compactPatch(patches);
+            if (!compacted.isEmpty()) {
+                var patchBytes = buildPatchProtobuf(patchType, compacted, hashState);
+                var patchNode = new NodeBuilder()
+                        .description("patch")
+                        .content(patchBytes)
+                        .build();
+                collectionBuilder.content(patchNode);
+            }
+
+            collectionNodes.add(collectionBuilder.build());
+        }
+
+        var syncNode = new NodeBuilder()
+                .description("sync")
+                .content(collectionNodes)
+                .build();
+
+        return new NodeBuilder()
+                .description("iq")
+                .attribute("type", "set")
+                .attribute("xmlns", "w:sync:app:state")
+                .content(syncNode);
+    }
+
+    /**
+     * Uploads a list of mutations as an external blob to the media CDN.
+     *
+     * <p>Per WhatsApp Web behavior, when the number of mutations or the encoded
+     * protobuf size exceeds the configured inline thresholds, mutations are
+     * serialized as a {@code SyncdMutations} protobuf, uploaded to the CDN via
+     * the media connection, and referenced by an {@link ExternalBlobReference}
+     * in the outgoing {@code SyncdPatch}.
+     *
+     * @param mutations the list of mutations to upload externally
+     * @return the populated {@code ExternalBlobReference} with CDN metadata
+     */
+    private ExternalBlobReference uploadExternalMutations(List<SyncdMutation> mutations) {
+        var syncdMutations = new SyncdMutationsBuilder()
+                .mutations(mutations)
+                .build();
+        var encoded = SyncdMutationsSpec.encode(syncdMutations);
+        var externalRef = new ExternalBlobReferenceBuilder().build();
+        try {
+            var uploaded = whatsapp.store()
+                    .awaitMediaConnection()
+                    .upload(externalRef, new ByteArrayInputStream(encoded));
+            if (!uploaded) {
+                throw new IllegalStateException("Failed to upload external mutations to CDN");
+            }
+            return externalRef;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while uploading external mutations", exception);
+        } catch (IllegalStateException exception) {
+            throw exception;
+        } catch (Throwable throwable) {
+            throw new IllegalStateException("Failed to upload external mutations", throwable);
+        }
+    }
+
+    /**
+     * Deduplicates pending mutations by index, keeping only the last mutation
+     * for each index.
+     *
+     * <p>Per WhatsApp Web {@code compactPatch}: when multiple mutations target
+     * the same index (e.g., rapidly toggling a setting), only the final state
+     * is sent to the server.
+     *
+     * @param patches the pending mutations to compact
+     * @return the compacted mutations
+     */
+    private SequencedCollection<SyncPendingMutation> compactPatch(SequencedCollection<SyncPendingMutation> patches) {
+        var byIndex = new LinkedHashMap<String, SyncPendingMutation>();
+        for (var patch : patches) {
+            byIndex.put(patch.mutation().index(), patch);
+        }
+        return List.copyOf(byIndex.values());
     }
 }

@@ -34,6 +34,9 @@ public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
     @WamProperty(index = 16, type = WamType.BOOLEAN)
     Optional<Boolean> isCompanionDevice();
 
+    @WamProperty(index = 22, type = WamType.BOOLEAN)
+    Optional<Boolean> isIabRestore();
+
     @WamProperty(index = 20, type = WamType.BOOLEAN)
     Optional<Boolean> isNetworkAvailable();
 
@@ -66,6 +69,9 @@ public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
 
     @WamProperty(index = 12, type = WamType.ENUM)
     Optional<SignalType> signalType();
+
+    @WamProperty(index = 23, type = WamType.STRING)
+    Optional<String> signalTypeOrigin();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<SpSignalNotSharedReason> spSignalNotSharedReason();

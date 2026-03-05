@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.wam.annotation.WamEvent;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.type.WamType;
 import com.github.auties00.cobalt.wam.type.CallStanzaType;
+import com.github.auties00.cobalt.wam.type.E2eDeviceType;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
@@ -17,6 +18,9 @@ import java.util.OptionalInt;
 public interface OfflineCountTooHighEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<CallStanzaType> callStanzaType();
+
+    @WamProperty(index = 10, type = WamType.ENUM)
+    Optional<E2eDeviceType> e2eSenderType();
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<EncryptionTypeCode> encryptionType();

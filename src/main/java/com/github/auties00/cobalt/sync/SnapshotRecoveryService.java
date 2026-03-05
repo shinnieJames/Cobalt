@@ -11,11 +11,19 @@ import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 
 import java.time.Instant;
+import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecovery;
+import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecoverySpec;
+import it.auties.protobuf.stream.ProtobufInputStream;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Service for handling snapshot recovery when a snapshot MAC validation fails.
@@ -47,6 +55,7 @@ public final class SnapshotRecoveryService {
     private final WhatsAppClient client;
     private final ABPropsService abPropsService;
     private final Map<SyncPatchType, CompletableFuture<PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse>> pendingRecoveries;
+    private final Semaphore recoverySemaphore;
 
     /**
      * Creates a new snapshot recovery service.
@@ -58,25 +67,45 @@ public final class SnapshotRecoveryService {
         this.client = client;
         this.abPropsService = abPropsService;
         this.pendingRecoveries = new ConcurrentHashMap<>();
+        this.recoverySemaphore = new Semaphore(1);
     }
 
     /**
      * Checks whether snapshot recovery should be attempted for the given collection.
      *
      * <p>Per WhatsApp Web {@code WAWebSyncdSnapshotRecoveryGatingUtils.shouldPreformSnapshotRecovery}:
-     * recovery is only attempted when gating conditions are met.
+     * recovery is only attempted when all gating conditions are met:
+     * <ol>
+     *   <li>Primary device supports syncd recovery</li>
+     *   <li>AB prop {@code enable_peer_snapshot_recovery} is enabled</li>
+     *   <li>Collection is not {@code CRITICAL_BLOCK}</li>
+     *   <li>Mutation count does not exceed
+     *       {@code snapshot_recovery_max_mutations_count_allowed}</li>
+     * </ol>
      *
      * @param collectionName the collection that failed snapshot MAC validation
+     * @param mutationCount  the number of mutations in the snapshot
      * @return {@code true} if recovery should be attempted
      */
-    public boolean shouldAttemptRecovery(SyncPatchType collectionName) {
+    public boolean shouldAttemptRecovery(SyncPatchType collectionName, int mutationCount) {
+        // Primary device must support syncd recovery
+        if (!client.store().primaryDeviceSupportsSyncdRecovery()) {
+            return false;
+        }
+
+        // Check AB prop gating
+        if (!abPropsService.getBool(ABProp.ENABLE_PEER_SNAPSHOT_RECOVERY)) {
+            return false;
+        }
+
         // CriticalBlock is never recoverable via peer recovery
         if (collectionName == SyncPatchType.CRITICAL_BLOCK) {
             return false;
         }
 
-        // Check AB prop gating
-        return abPropsService.getBool(ABProp.ENABLE_PEER_SNAPSHOT_RECOVERY);
+        // Check mutation count against AB prop threshold
+        var maxMutations = abPropsService.getInt(ABProp.SNAPSHOT_RECOVERY_MAX_MUTATIONS_COUNT_ALLOWED);
+        return mutationCount <= maxMutations;
     }
 
     /**
@@ -85,21 +114,35 @@ public final class SnapshotRecoveryService {
      * <p>Sends a {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY} peer data
      * operation request and waits for the response with a timeout.
      *
+     * <p>Per WhatsApp Web behavior, recovery requests are serialized globally
+     * to prevent multiple concurrent recoveries across different collections.
+     *
      * @param collectionName the collection to recover
      * @return the recovery response, or {@code null} if recovery failed or timed out
      */
     public PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse requestRecovery(SyncPatchType collectionName) {
-        // Cancel any existing recovery for this collection
-        var existingFuture = pendingRecoveries.remove(collectionName);
-        if (existingFuture != null) {
-            existingFuture.cancel(false);
+        try {
+            // Serialize recovery requests across all collections
+            if (!recoverySemaphore.tryAcquire(RECOVERY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                LOGGER.warning("Snapshot recovery timed out waiting for concurrent recovery to complete");
+                return null;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
         }
 
-        // Create a future for the response
-        var responseFuture = new CompletableFuture<PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse>();
-        pendingRecoveries.put(collectionName, responseFuture);
-
         try {
+            // Cancel any existing recovery for this collection
+            var existingFuture = pendingRecoveries.remove(collectionName);
+            if (existingFuture != null) {
+                existingFuture.cancel(false);
+            }
+
+            // Create a future for the response
+            var responseFuture = new CompletableFuture<PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse>();
+            pendingRecoveries.put(collectionName, responseFuture);
+
             // Build and send the recovery request
             sendRecoveryRequest(collectionName);
 
@@ -110,6 +153,7 @@ public final class SnapshotRecoveryService {
             return null;
         } finally {
             pendingRecoveries.remove(collectionName);
+            recoverySemaphore.release();
         }
     }
 
@@ -132,6 +176,33 @@ public final class SnapshotRecoveryService {
             future.complete(response);
         } else {
             LOGGER.fine("Received snapshot recovery response for " + collectionName + " but no pending request found");
+        }
+    }
+
+    /**
+     * Decodes the snapshot recovery from a recovery response, transparently
+     * handling gzip-compressed responses by streaming through a
+     * {@link GZIPInputStream}.
+     *
+     * <p>Per WhatsApp Web behavior, the {@code collectionSnapshot} bytes
+     * encode a {@link SyncdSnapshotRecovery} protobuf containing plaintext
+     * mutation records, the primary device's LT-Hash, and the version.
+     *
+     * @param response the recovery response
+     * @return the decoded snapshot recovery
+     * @throws IOException if decompression or decoding fails
+     */
+    public SyncdSnapshotRecovery decodeRecoverySnapshot(
+            PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse response
+    ) throws IOException {
+        var snapshotBytes = response.collectionSnapshot()
+                .orElseThrow(() -> new IOException("Recovery response has no snapshot data"));
+        if (response.isCompressed()) {
+            try (var protobufStream = ProtobufInputStream.fromStream(new GZIPInputStream(new ByteArrayInputStream(snapshotBytes)))) {
+                return SyncdSnapshotRecoverySpec.decode(protobufStream);
+            }
+        } else {
+            return SyncdSnapshotRecoverySpec.decode(snapshotBytes);
         }
     }
 

@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -19,6 +20,16 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
     @Override
     public String actionName() {
         return "primaryVersionAction";
+    }
+
+    @Override
+    public SyncPatchType collectionName() {
+        return SyncPatchType.REGULAR_LOW;
+    }
+
+    @Override
+    public int version() {
+        return 7;
     }
 
     @Override

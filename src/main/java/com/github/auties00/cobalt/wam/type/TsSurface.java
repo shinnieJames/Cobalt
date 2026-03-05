@@ -213,5 +213,6 @@ public enum TsSurface {
     @WamEnumConstant(207) META_AI_MODE_SELECTION_BOTTOM_SHEET,
     @WamEnumConstant(208) CHANNEL_NOTIFICATIONS_SETTINGS,
     @WamEnumConstant(209) META_AI_CHAT_WITH_HISTORY,
-    @WamEnumConstant(210) MEDIA_HUB
+    @WamEnumConstant(210) MEDIA_HUB,
+    @WamEnumConstant(211) META_AI_THREAD_LIST_VIEW
 }

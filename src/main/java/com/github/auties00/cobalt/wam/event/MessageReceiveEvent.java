@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
 import com.github.auties00.cobalt.wam.type.BotType;
 import com.github.auties00.cobalt.wam.type.ChatOriginsType;
 import com.github.auties00.cobalt.wam.type.DisappearingChatInitiatorType;
+import com.github.auties00.cobalt.wam.type.E2eDeviceType;
 import com.github.auties00.cobalt.wam.type.EditType;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.EphemeralityInitiatorType;
@@ -52,6 +53,9 @@ public interface MessageReceiveEvent extends WamEventSpec {
 
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<DisappearingChatInitiatorType> disappearingChatInitiator();
+
+    @WamProperty(index = 57, type = WamType.ENUM)
+    Optional<E2eDeviceType> e2eSenderType();
 
     @WamProperty(index = 25, type = WamType.ENUM)
     Optional<EditType> editType();

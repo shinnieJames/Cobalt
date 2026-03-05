@@ -1,0 +1,35 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.KicErrorCodeType;
+import com.github.auties00.cobalt.wam.type.KicRequestTypeType;
+import com.github.auties00.cobalt.wam.type.ResponseType;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WamEvent(id = 3488)
+public interface KeepInChatPerfEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.INTEGER)
+    OptionalInt chatEphemeralityDuration();
+
+    @WamProperty(index = 2, type = WamType.ENUM)
+    Optional<KicErrorCodeType> kicErrorCode();
+
+    @WamProperty(index = 3, type = WamType.INTEGER)
+    OptionalInt kicMessageEphemeralityDuration();
+
+    @WamProperty(index = 4, type = WamType.ENUM)
+    Optional<KicRequestTypeType> kicRequestType();
+
+    @WamProperty(index = 5, type = WamType.INTEGER)
+    OptionalInt requestSendTime();
+
+    @WamProperty(index = 6, type = WamType.ENUM)
+    Optional<ResponseType> response();
+
+    @WamProperty(index = 7, type = WamType.STRING)
+    Optional<String> threadId();
+}

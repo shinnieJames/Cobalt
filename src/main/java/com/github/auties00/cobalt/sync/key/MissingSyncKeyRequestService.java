@@ -45,6 +45,17 @@ public final class MissingSyncKeyRequestService {
             return;
         }
 
+        // Filter out keys that were already requested (e.g., before restart)
+        // Per WhatsApp Web WAWebKeyManagementSendKeyRequestApi: avoid
+        // re-sending requests for keys that are already being tracked
+        var newKeyIds = keyIds.stream()
+                .filter(id -> store.findMissingSyncKey(id).isEmpty())
+                .toList();
+        if (newKeyIds.isEmpty()) {
+            LOGGER.log(System.Logger.Level.DEBUG, "All requested keys already have pending requests, skipping");
+            return;
+        }
+
         // Get companion devices to request keys from
         var companionDevices = getCompanionDevices();
         if (companionDevices.isEmpty()) {
@@ -53,7 +64,7 @@ public final class MissingSyncKeyRequestService {
         }
 
         // Create the key request
-        var keyIdList = keyIds.stream()
+        var keyIdList = newKeyIds.stream()
                 .map(id -> new AppStateSyncKeyIdBuilder()
                         .keyId(id)
                         .build())
@@ -78,23 +89,20 @@ public final class MissingSyncKeyRequestService {
                 .collect(Collectors.toSet());
 
         // Log the request
-        var keyIdHexes = keyIds.stream()
+        var keyIdHexes = newKeyIds.stream()
                 .map(id -> HexFormat.of().formatHex(id))
                 .toList();
         LOGGER.log(System.Logger.Level.INFO, "Requesting missing sync keys {0} from companion devices {1}",
                 keyIdHexes, deviceIds);
 
         // Add missing key entries to track responses
-        for (var keyId : keyIds) {
-            var existingKey = store.findMissingSyncKey(keyId);
-            if (existingKey.isEmpty()) {
-                var missingKey = new MissingDeviceSyncKeyBuilder()
-                        .keyId(keyId)
-                        .timestamp(Instant.now())
-                        .askedDevices(deviceIds)
-                        .build();
-                store.addMissingSyncKey(missingKey);
-            }
+        for (var keyId : newKeyIds) {
+            var missingKey = new MissingDeviceSyncKeyBuilder()
+                    .keyId(keyId)
+                    .timestamp(Instant.now())
+                    .askedDevices(deviceIds)
+                    .build();
+            store.addMissingSyncKey(missingKey);
         }
 
         // Send to each companion device

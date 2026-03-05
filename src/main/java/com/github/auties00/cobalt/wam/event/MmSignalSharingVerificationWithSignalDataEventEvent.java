@@ -63,6 +63,9 @@ public interface MmSignalSharingVerificationWithSignalDataEventEvent extends Wam
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<SignalType> signalType();
 
+    @WamProperty(index = 18, type = WamType.STRING)
+    Optional<String> signalTypeOrigin();
+
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<SpSignalNotSharedReason> spSignalNotSharedReason();
 }

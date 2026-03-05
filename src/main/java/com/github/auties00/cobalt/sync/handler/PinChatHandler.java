@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.sync.handler;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.time.Instant;
@@ -24,6 +25,16 @@ public final class PinChatHandler implements WebAppStateActionHandler {
     @Override
     public String actionName() {
         return "pinAction";
+    }
+
+    @Override
+    public SyncPatchType collectionName() {
+        return SyncPatchType.REGULAR_LOW;
+    }
+
+    @Override
+    public int version() {
+        return 5;
     }
 
     @Override

@@ -1398,9 +1398,12 @@ public final class DeviceService {
             for (var missingKey : missingSyncKeys) {
                 missingKey.retainDevices(currentDeviceIds);
 
+                // Per WhatsApp Web: when all devices have responded without the key,
+                // don't trigger fatal immediately. The timeout scheduler handles the
+                // 5-second grace period to allow for late-arriving responses.
                 if (missingKey.isMissingOnAllDevices()) {
-                    store.removeMissingSyncKey(missingKey.keyId());
-                    client.handleFailure(new WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices(missingKey.keyId()));
+                    LOGGER.log(System.Logger.Level.WARNING,
+                            "All devices responded without missing sync key, waiting for grace period");
                 }
             }
         });

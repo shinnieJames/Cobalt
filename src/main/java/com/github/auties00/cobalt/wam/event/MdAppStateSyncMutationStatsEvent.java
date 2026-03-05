@@ -7,12 +7,11 @@ import com.github.auties00.cobalt.wam.type.WamType;
 import com.github.auties00.cobalt.wam.type.MutationCountBucket;
 
 import java.util.Optional;
-import java.util.OptionalInt;
 
 @WamEvent(id = 3180, channel = WamChannel.PRIVATE, releaseWeight = 100, privateStatsId = 0)
 public interface MdAppStateSyncMutationStatsEvent extends WamEventSpec {
-    @WamProperty(index = 1, type = WamType.INTEGER)
-    OptionalInt applied();
+    @WamProperty(index = 1, type = WamType.ENUM)
+    Optional<MutationCountBucket> applied();
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<MutationCountBucket> failed();

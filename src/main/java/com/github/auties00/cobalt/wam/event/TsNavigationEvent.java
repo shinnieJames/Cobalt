@@ -15,6 +15,9 @@ import java.util.OptionalInt;
 
 @WamEvent(id = 4334)
 public interface TsNavigationEvent extends WamEventSpec {
+    @WamProperty(index = 39, type = WamType.STRING)
+    Optional<String> aiSessionId();
+
     @WamProperty(index = 38, type = WamType.INTEGER)
     OptionalInt canonicalEntLastValidationTsMs();
 

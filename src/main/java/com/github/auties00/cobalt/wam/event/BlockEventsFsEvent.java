@@ -1,0 +1,31 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.BlockEntryPoint;
+import com.github.auties00.cobalt.wam.type.BlockEventActionType;
+import com.github.auties00.cobalt.wam.type.CallResultType;
+
+import java.util.Optional;
+
+@WamEvent(id = 4288)
+public interface BlockEventsFsEvent extends WamEventSpec {
+    @WamProperty(index = 1, type = WamType.ENUM)
+    Optional<BlockEntryPoint> blockEntryPoint();
+
+    @WamProperty(index = 2, type = WamType.ENUM)
+    Optional<BlockEventActionType> blockEventActionType();
+
+    @WamProperty(index = 3, type = WamType.BOOLEAN)
+    Optional<Boolean> blockEventIsSuspicious();
+
+    @WamProperty(index = 4, type = WamType.BOOLEAN)
+    Optional<Boolean> blockEventIsUnsub();
+
+    @WamProperty(index = 5, type = WamType.BOOLEAN)
+    Optional<Boolean> pastCall();
+
+    @WamProperty(index = 6, type = WamType.ENUM)
+    Optional<CallResultType> pastCallResult();
+}

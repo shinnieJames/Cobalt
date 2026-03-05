@@ -47,6 +47,8 @@ public final class WebAppStateService {
     private final WebAppStateBackoffScheduler retryScheduler;
     private final MissingSyncKeyTimeoutScheduler missingSyncKeyTimeoutScheduler;
     private final MissingSyncKeyRequestService missingSyncKeyRequestService;
+    private final SnapshotRecoveryService snapshotRecoveryService;
+    private final Map<SyncPatchType, List<DecryptedMutation.Trusted>> orphanMutations;
 
     /**
      * Creates a new WebAppStateManager instance.
@@ -57,13 +59,15 @@ public final class WebAppStateService {
     public WebAppStateService(WhatsAppClient whatsapp, ABPropsService abPropsService) {
         this.whatsapp = whatsapp;
         this.store = whatsapp.store();
-        this.requestBuilder = new MutationRequestBuilder(whatsapp);
+        this.requestBuilder = new MutationRequestBuilder(whatsapp, abPropsService);
         this.responseParser = new MutationResponseParser();
         this.handlerRegistry = new WebAppStateHandlerRegistry();
         this.integrityVerifier = new MutationIntegrityVerifier(store);
         this.retryScheduler = new WebAppStateBackoffScheduler();
-        this.missingSyncKeyTimeoutScheduler = new MissingSyncKeyTimeoutScheduler(whatsapp, abPropsService);
         this.missingSyncKeyRequestService = new MissingSyncKeyRequestService(whatsapp);
+        this.missingSyncKeyTimeoutScheduler = new MissingSyncKeyTimeoutScheduler(whatsapp, abPropsService, missingSyncKeyRequestService);
+        this.snapshotRecoveryService = new SnapshotRecoveryService(whatsapp, abPropsService);
+        this.orphanMutations = new HashMap<>();
     }
 
     /**
@@ -120,6 +124,39 @@ public final class WebAppStateService {
         }
     }
 
+    /**
+     * Resumes interrupted sync operations after an application restart.
+     *
+     * <p>Per WhatsApp Web behavior, the sync state machine must handle
+     * restart recovery for collections that were mid-sync when the process
+     * was interrupted:
+     * <ul>
+     *   <li>{@code IN_FLIGHT} — the request was lost; transition back to
+     *       {@code DIRTY} so the next sync round re-sends it
+     *   <li>{@code PENDING} — more data was available; mark as {@code DIRTY}
+     *       to resume fetching
+     *   <li>{@code BLOCKED} — still waiting for missing keys; re-schedule
+     *       the timeout check
+     *   <li>{@code ERROR_RETRY} — a retryable error occurred; mark as
+     *       {@code DIRTY} to retry
+     * </ul>
+     */
+    public void resumeAfterRestart() {
+        for (var patchType : SyncPatchType.values()) {
+            var metadata = store.findWebAppState(patchType);
+            switch (metadata.state()) {
+                case IN_FLIGHT, PENDING, ERROR_RETRY -> store.markWebAppStateDirty(patchType);
+                case BLOCKED -> {
+                    missingSyncKeyTimeoutScheduler.scheduleTimeoutCheck();
+                    missingSyncKeyTimeoutScheduler.startPeriodicReRequestJob();
+                }
+                default -> {
+                    // UP_TO_DATE, DIRTY, ERROR_FATAL: no action needed
+                }
+            }
+        }
+    }
+
     private static final int MAX_CONFLICT_RETRIES = 5;
     private static final int MAX_CONFLICT_RETRIES_HAS_MORE = 500;
 
@@ -138,6 +175,13 @@ public final class WebAppStateService {
                 // Reset conflict counter on success
                 conflictRetries = 0;
             } catch (WhatsAppWebAppStateSyncException.Conflict conflict) {
+                // Per WA Web: conflict without pending mutations is treated as success
+                var hasPending = !whatsapp.store().findPendingMutations(patchType).isEmpty();
+                if (!hasPending) {
+                    store.markWebAppStateUpToDate(patchType);
+                    break;
+                }
+
                 var limit = conflict.hasMorePatches() ? MAX_CONFLICT_RETRIES_HAS_MORE : MAX_CONFLICT_RETRIES;
                 if (++conflictRetries >= limit) {
                     handleSyncError(conflict, patchType);
@@ -178,6 +222,7 @@ public final class WebAppStateService {
             var allTrusted = new ArrayList<DecryptedMutation.Trusted>();
 
             // Phase A: Process snapshot if present
+            var recoveredFromSnapshot = false;
             if (syncResponse.snapshotReference().isPresent()) {
                 // Reset state map for full state reset
                 store.clearSyncActionEntries(collectionName);
@@ -196,25 +241,54 @@ public final class WebAppStateService {
                     // Compute LT-Hash from EMPTY_HASH for snapshot
                     var newHash = computeNewLTHash(collectionName, MutationLTHash.EMPTY_HASH, untrusted);
 
-                    // Verify snapshot MAC
-                    integrityVerifier.verifySnapshotMac(collectionName, syncResponse.version(), snapshot, newHash);
+                    // Verify snapshot MAC, attempting recovery on failure
+                    try {
+                        integrityVerifier.verifySnapshotMac(collectionName, syncResponse.version(), snapshot, newHash);
 
-                    // Persist state before processing patches
-                    updateCollectionState(collectionName, syncResponse.version(), newHash);
+                        // MAC valid: persist state and collect trusted mutations
+                        updateCollectionState(collectionName, syncResponse.version(), newHash);
+                        for (var entry : untrusted) {
+                            allTrusted.add(new DecryptedMutation.Trusted(entry.index(), entry.value(), entry.operation(), entry.timestamp(), entry.actionVersion()));
+                        }
+                    } catch (WhatsAppWebAppStateSyncException e) {
+                        // Per WA Web: attempt recovery from primary device on MAC failure
+                        if (!snapshotRecoveryService.shouldAttemptRecovery(collectionName, snapshotMutations.size())) {
+                            throw e;
+                        }
 
-                    // Collect trusted mutations
-                    for (var entry : untrusted) {
-                        allTrusted.add(new DecryptedMutation.Trusted(entry.index(), entry.value(), entry.operation(), entry.timestamp()));
+                        var recoveryResponse = snapshotRecoveryService.requestRecovery(collectionName);
+                        if (recoveryResponse == null) {
+                            throw e;
+                        }
+
+                        var recoveredSnapshot = snapshotRecoveryService.decodeRecoverySnapshot(recoveryResponse);
+
+                        // Clear sync action entries computed from corrupted data
+                        store.clearSyncActionEntries(collectionName);
+
+                        // Process recovered data in-place
+                        allTrusted.addAll(processRecoveredSnapshot(collectionName, recoveredSnapshot));
+                        recoveredFromSnapshot = true;
                     }
                 }
             }
 
             // Phase B: Process each patch individually
+            // Per WA Web: skip patches when snapshot was recovered from primary
+            if (recoveredFromSnapshot) {
+                store.markWebAppStateUpToDate(collectionName);
+                return Collections.unmodifiableList(allTrusted);
+            }
+
             // Issue 4: Sort patches by version ascending
             var sortedPatches = new ArrayList<>(syncResponse.patches());
             sortedPatches.sort(Comparator.comparingLong(patch -> patch.version()
                     .map(version -> version.version().orElse(0L))
                     .orElse(0L)));
+
+            // Per WA Web validateNoDuplicatePatchVersionInCollection:
+            // Ensure no two patches share the same version
+            validateNoDuplicatePatchVersions(collectionName, sortedPatches);
 
             // Issue 8: Detect missing patch gaps
             if (!sortedPatches.isEmpty()) {
@@ -271,7 +345,7 @@ public final class WebAppStateService {
 
                 // Collect trusted mutations (ordered: REMOVEs first, then SETs)
                 for (var entry : ordered) {
-                    allTrusted.add(new DecryptedMutation.Trusted(entry.index(), entry.value(), entry.operation(), entry.timestamp()));
+                    allTrusted.add(new DecryptedMutation.Trusted(entry.index(), entry.value(), entry.operation(), entry.timestamp(), entry.actionVersion()));
                 }
             }
 
@@ -368,6 +442,29 @@ public final class WebAppStateService {
         }
     }
 
+    /**
+     * Validates that no two patches in the response share the same version.
+     *
+     * <p>Per WhatsApp Web {@code validateNoDuplicatePatchVersionInCollection}:
+     * duplicate patch versions within the same collection response indicate
+     * server corruption and trigger a fatal sync error.
+     *
+     * @param collectionName the collection being processed
+     * @param patches        the patches to validate
+     */
+    private void validateNoDuplicatePatchVersions(SyncPatchType collectionName, List<SyncdPatch> patches) {
+        var seenVersions = new HashSet<Long>();
+        for (var patch : patches) {
+            var version = patch.version()
+                    .flatMap(v -> v.version())
+                    .orElse(0L);
+            if (!seenVersions.add(version)) {
+                throw new WhatsAppWebAppStateSyncException.UnexpectedError(
+                        "Duplicate patch version " + version + " in collection " + collectionName, null);
+            }
+        }
+    }
+
     private long getCurrentVersion(SyncPatchType patchType) {
         return store.findWebAppState(patchType).version();
     }
@@ -403,21 +500,113 @@ public final class WebAppStateService {
         return Collections.unmodifiableList(result);
     }
 
-    private SequencedCollection<SyncdMutation> getMutationsFromPatch(SyncdPatch patch) {
-        var result = new ArrayList<SyncdMutation>();
-        if (patch.mutations() != null) {
-            result.addAll(patch.mutations());
-        }
+    /**
+     * Processes a recovered snapshot from the primary device, converting plaintext
+     * records into trusted mutations and populating the sync action entry store.
+     *
+     * <p>Per WhatsApp Web {@code convertSyncdSnapshotRecoveryResponseToSnapshot}:
+     * the recovery data contains already-decrypted {@code SyncActionData} records.
+     * For each record, the companion re-derives the index MAC using the referenced
+     * sync key, then uses the primary's value MAC and LT-Hash directly.
+     *
+     * @param collectionName    the collection being recovered
+     * @param recoveredSnapshot the decoded recovery snapshot from the primary device
+     * @return the trusted mutations extracted from the recovery data
+     */
+    private SequencedCollection<DecryptedMutation.Trusted> processRecoveredSnapshot(
+            SyncPatchType collectionName,
+            SyncdSnapshotRecovery recoveredSnapshot
+    ) {
+        var records = recoveredSnapshot.mutationRecords();
+        var trusted = new ArrayList<DecryptedMutation.Trusted>(records.size());
 
-        if (patch.externalMutations().isPresent()) {
-            var downloadedData = downloadExternalMutation(patch.externalMutations().get());
-            var externalMutations = decodeExternalMutation(downloadedData);
-            if (externalMutations.mutations() != null) {
-                result.addAll(externalMutations.mutations());
+        for (var record : records) {
+            var actionData = record.value()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
+                            "Recovery record missing SyncActionData", null));
+            var keyId = record.keyId()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
+                            "Recovery record missing key ID", null));
+            var valueMac = record.mac()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
+                            "Recovery record missing value MAC", null));
+            var indexBytes = actionData.index()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
+                            "Recovery record missing index", null));
+            var actionValue = actionData.value()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
+                            "Recovery record missing action value", null));
+            var actionVersion = actionData.version().orElse(0);
+            var timestamp = actionValue.timestamp()
+                    .orElseThrow(WhatsAppWebAppStateSyncException.MissingActionTimestamp::new);
+
+            // Re-derive indexMac using the sync key's index key
+            var syncKeyData = whatsapp.store()
+                    .findWebAppStateKeyById(keyId)
+                    .flatMap(AppStateSyncKey::keyData)
+                    .flatMap(AppStateSyncKeyData::keyData)
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId));
+
+            try (var keys = MutationKeys.ofSyncKey(syncKeyData)) {
+                var indexMac = javax.crypto.Mac.getInstance("HmacSHA256");
+                indexMac.init(keys.indexKey());
+                var indexMacResult = indexMac.doFinal(indexBytes);
+
+                // Populate sync action entry store for future LT-Hash computations
+                var indexString = new String(indexBytes, java.nio.charset.StandardCharsets.UTF_8);
+                store.putSyncActionEntry(collectionName, indexMacResult, new SyncActionEntryBuilder()
+                        .indexMac(indexMacResult)
+                        .valueMac(valueMac)
+                        .keyId(keyId)
+                        .actionIndex(indexString)
+                        .actionValue(actionValue)
+                        .actionVersion(actionVersion)
+                        .build());
+
+                trusted.add(new DecryptedMutation.Trusted(
+                        indexString,
+                        actionValue,
+                        SyncdOperation.SET,
+                        timestamp,
+                        actionVersion
+                ));
+            } catch (java.security.GeneralSecurityException e) {
+                throw new WhatsAppWebAppStateSyncException.DecryptionFailed(e);
             }
         }
 
-        return Collections.unmodifiableList(result);
+        // Use recovery's LT-Hash and version directly
+        var recoveryVersion = recoveredSnapshot.version()
+                .flatMap(v -> v.version())
+                .orElse(0L);
+        var recoveryLtHash = recoveredSnapshot.collectionLthash()
+                .orElse(MutationLTHash.EMPTY_HASH);
+        updateCollectionState(collectionName, recoveryVersion, recoveryLtHash);
+
+        return trusted;
+    }
+
+    private SequencedCollection<SyncdMutation> getMutationsFromPatch(SyncdPatch patch) {
+        var hasInline = patch.mutations() != null && !patch.mutations().isEmpty();
+        var hasExternal = patch.externalMutations().isPresent();
+
+        // A patch must not contain both inline and external mutations
+        if (hasInline && hasExternal) {
+            throw new WhatsAppWebAppStateSyncException.UnexpectedError(
+                    "Patch contains both inline and external mutations", null);
+        }
+
+        if (hasExternal) {
+            var downloadedData = downloadExternalMutation(patch.externalMutations().get());
+            var externalMutations = decodeExternalMutation(downloadedData);
+            return externalMutations.mutations() != null
+                    ? Collections.unmodifiableList(externalMutations.mutations())
+                    : List.of();
+        }
+
+        return hasInline
+                ? Collections.unmodifiableList(patch.mutations())
+                : List.of();
     }
 
     private InputStream downloadExternalMutation(ExternalBlobReference externalRef) {
@@ -442,55 +631,42 @@ public final class WebAppStateService {
         var decrypted = new ArrayList<DecryptedMutation.Untrusted>(mutations.size());
 
         for (var mutation : mutations) {
-            var record = mutation.record();
-            if (record.isEmpty()) {
-                continue;
-            }
+            var record = mutation.record()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing record in mutation", null));
 
-            var operation = mutation.operation();
-            if(operation.isEmpty()) {
-                continue;
-            }
+            var operation = mutation.operation()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing operation in mutation", null));
 
-            var recordValueBlob = record.get()
-                    .value()
-                    .flatMap(SyncdValue::blob);
-            if(recordValueBlob.isEmpty()) {
-                continue;
-            }
+            var recordValueBlob = record.value()
+                    .flatMap(SyncdValue::blob)
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing value blob in mutation record", null));
 
-            var recordIndexBlob = record.get()
-                    .index()
-                    .flatMap(SyncdIndex::blob);
-            if(recordIndexBlob.isEmpty()) {
-                continue;
-            }
+            var recordIndexBlob = record.index()
+                    .flatMap(SyncdIndex::blob)
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing index blob in mutation record", null));
 
-            var keyId = record.get()
-                    .keyId()
-                    .flatMap(KeyId::id);
-            if (keyId.isEmpty()) {
-                continue;
-            }
+            var keyId = record.keyId()
+                    .flatMap(KeyId::id)
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing key ID in mutation record", null));
 
             // Get encryption key
             var syncKey = whatsapp.store()
-                    .findWebAppStateKeyById(keyId.get())
+                    .findWebAppStateKeyById(keyId)
                     .flatMap(AppStateSyncKey::keyData)
                     .flatMap(AppStateSyncKeyData::keyData)
-                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId.get()));
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId));
 
             // Derive keys and decrypt
             try (var keys = MutationKeys.ofSyncKey(syncKey)) {
                 var decryptedMutation = DecryptedMutation.Untrusted.of(
-                        recordValueBlob.get(),
-                        recordIndexBlob.get(),
+                        recordValueBlob,
+                        recordIndexBlob,
                         keys,
-                        operation.get(),
-                        keyId.get()
+                        operation,
+                        keyId
                 );
                 decrypted.add(decryptedMutation);
-            }catch (Exception e) {
+            } catch (Exception e) {
                 throw new WhatsAppWebAppStateSyncException.DecryptionFailed(e);
             }
         }
@@ -524,15 +700,73 @@ public final class WebAppStateService {
                 continue;
             }
 
+            var maxVersion = handler.get().version();
             var mutations = entry.getValue();
             for (var mutation : mutations) {
+                // Per WA Web: skip mutations with version higher than handler supports
+                if (mutation.actionVersion() > maxVersion) {
+                    continue;
+                }
+
                 try {
-                    handler.get().applyMutation(whatsapp, mutation);
+                    var applied = handler.get().applyMutation(whatsapp, mutation);
+                    if (!applied) {
+                        // Mutation references an entity that doesn't exist yet (orphan)
+                        orphanMutations.computeIfAbsent(collectionName, _ -> new ArrayList<>())
+                                .add(mutation);
+                    }
                 } catch (WhatsAppWebAppStateSyncException exception) {
                     whatsapp.handleFailure(exception);
                 } catch (Throwable throwable) {
                     whatsapp.handleFailure(new WhatsAppWebAppStateSyncException.UnexpectedError(throwable));
                 }
+            }
+        }
+
+        // Step 4: Retry orphan mutations that may now succeed
+        retryOrphanMutations(collectionName);
+    }
+
+    /**
+     * Retries orphan mutations that previously failed because their referenced
+     * entity did not exist yet.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan}: after each sync round,
+     * orphaned mutations are retried since the sync may have brought in the
+     * missing entities. Mutations that still fail remain in the orphan list
+     * for subsequent retries.
+     *
+     * @param collectionName the collection type whose orphans to retry
+     */
+    private void retryOrphanMutations(SyncPatchType collectionName) {
+        var orphans = orphanMutations.remove(collectionName);
+        if (orphans == null || orphans.isEmpty()) {
+            return;
+        }
+
+        for (var mutation : orphans) {
+            var actionName = mutation.value()
+                    .action()
+                    .map(SyncAction::actionName)
+                    .orElse(null);
+            if (actionName == null) {
+                continue;
+            }
+
+            var handler = handlerRegistry.findHandler(actionName);
+            if (handler.isEmpty()) {
+                continue;
+            }
+
+            try {
+                var applied = handler.get().applyMutation(whatsapp, mutation);
+                if (!applied) {
+                    // Still orphaned, re-add for next retry
+                    orphanMutations.computeIfAbsent(collectionName, _ -> new ArrayList<>())
+                            .add(mutation);
+                }
+            } catch (Throwable throwable) {
+                LOGGER.warning("Failed to retry orphan mutation: " + throwable.getMessage());
             }
         }
     }
@@ -610,6 +844,9 @@ public final class WebAppStateService {
                         .indexMac(indexMac)
                         .valueMac(valueMac)
                         .keyId(mutation.keyId())
+                        .actionIndex(mutation.index())
+                        .actionValue(mutation.value())
+                        .actionVersion(mutation.actionVersion())
                         .build());
             } else {
                 // REMOVE: look up and remove the stored entry for this indexMac

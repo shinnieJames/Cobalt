@@ -1,0 +1,34 @@
+package com.github.auties00.cobalt.wam.event;
+
+import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
+import com.github.auties00.cobalt.wam.type.WamType;
+import com.github.auties00.cobalt.wam.type.MdBootstrapHistoryPayloadType;
+import com.github.auties00.cobalt.wam.type.MdBootstrapPayloadType;
+
+import java.util.Optional;
+import java.util.OptionalInt;
+
+@WamEvent(id = 2998)
+public interface MdBootstrapHistoryDataReceivedEvent extends WamEventSpec {
+    @WamProperty(index = 6, type = WamType.INTEGER)
+    OptionalInt historySyncChunkOrder();
+
+    @WamProperty(index = 7, type = WamType.STRING)
+    Optional<String> historySyncRetryRequestId();
+
+    @WamProperty(index = 5, type = WamType.INTEGER)
+    OptionalInt historySyncStageProgress();
+
+    @WamProperty(index = 3, type = WamType.ENUM)
+    Optional<MdBootstrapHistoryPayloadType> mdBootstrapHistoryPayloadType();
+
+    @WamProperty(index = 2, type = WamType.ENUM)
+    Optional<MdBootstrapPayloadType> mdBootstrapPayloadType();
+
+    @WamProperty(index = 1, type = WamType.STRING)
+    Optional<String> mdSessionId();
+
+    @WamProperty(index = 4, type = WamType.INTEGER)
+    OptionalInt mdTimestamp();
+}
