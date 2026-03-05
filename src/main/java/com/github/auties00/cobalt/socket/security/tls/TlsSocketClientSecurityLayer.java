@@ -48,6 +48,12 @@ public final class TlsSocketClientSecurityLayer implements SocketClientTunnelSec
     private TlsLayerContext tlsLayerContext;
 
     /**
+     * The peer address captured during {@link #connect(InetSocketAddress,
+     * SocketClientLayerListener)} for hostname verification.
+     */
+    private InetSocketAddress peerAddress;
+
+    /**
      * Creates a TLS security layer wrapping the given inner layer.
      *
      * @param innerLayer the layer below TLS
@@ -80,8 +86,11 @@ public final class TlsSocketClientSecurityLayer implements SocketClientTunnelSec
 
         try {
             var sslContext = SSLContext.getDefault();
-            var engine = sslContext.createSSLEngine();
+            var engine = sslContext.createSSLEngine(peerAddress.getHostString(), peerAddress.getPort());
             engine.setUseClientMode(true);
+            var params = engine.getSSLParameters();
+            params.setEndpointIdentificationAlgorithm("HTTPS");
+            engine.setSSLParameters(params);
             tlsLayerContext.initSsl(engine);
             context.createLayerContext(TlsSocketClientSecurityLayer.class, tlsLayerContext);
             SocketClientSelector.INSTANCE.startTlsHandshake(channel, 30_000);
@@ -92,6 +101,7 @@ public final class TlsSocketClientSecurityLayer implements SocketClientTunnelSec
 
     @Override
     public void connect(InetSocketAddress address, SocketClientLayerListener listener) throws IOException {
+        this.peerAddress = address;
         innerLayer.connect(address, listener);
     }
 

@@ -17,5 +17,6 @@ public enum FmxEventType {
     @WamEnumConstant(9) HIGHLIGHT_GROUP_NAME,
     @WamEnumConstant(10) FMX_CARD_TRUST_SIGNALS_FB_IG_VIEWED,
     @WamEnumConstant(11) STOP_MARKETING_MSG_OFFERS,
-    @WamEnumConstant(12) MESSAGE_PREFERENCES
+    @WamEnumConstant(12) MESSAGE_PREFERENCES,
+    @WamEnumConstant(13) FMX_CARD_FIRST_VIEW_IN_CHAT_OPEN
 }

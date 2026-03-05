@@ -15,6 +15,12 @@ import java.util.OptionalInt;
 
 @WamEvent(id = 3748)
 public interface NotificationDeliveryEvent extends WamEventSpec {
+    @WamProperty(index = 14, type = WamType.INTEGER)
+    OptionalInt channelMilestoneValue();
+
+    @WamProperty(index = 15, type = WamType.STRING)
+    Optional<String> cid();
+
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> clientMessageId();
 
@@ -38,6 +44,9 @@ public interface NotificationDeliveryEvent extends WamEventSpec {
 
     @WamProperty(index = 9, type = WamType.ENUM)
     Optional<PeripheralDeviceType> peripheralDeviceOrigin();
+
+    @WamProperty(index = 16, type = WamType.STRING)
+    Optional<String> postId();
 
     @WamProperty(index = 10, type = WamType.TIMER)
     Optional<Instant> pushToNotifT();

@@ -39,9 +39,10 @@ import static com.github.auties00.cobalt.wam.binary.WamTags.*;
  * }</pre>
  *
  * <p>Multi-byte writes (int16, int32, int64, float64, and string length
- * prefixes) use {@link VarHandle} with big-endian byte order to perform
- * single-instruction stores where the platform supports it, avoiding
- * per-byte shifting.
+ * prefixes) use {@link VarHandle} with little-endian byte order to match
+ * the WhatsApp Web {@code Binary} constructor's {@code littleEndian=true}
+ * parameter, performing single-instruction stores where the platform
+ * supports it and avoiding per-byte shifting.
  *
  * <p>This class is thread-safe as all methods are static and operate on
  * provided parameters without shared mutable state.
@@ -52,13 +53,13 @@ import static com.github.auties00.cobalt.wam.binary.WamTags.*;
  */
 public final class WamEncoder {
     private static final VarHandle SHORT_HANDLE =
-            MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.BIG_ENDIAN);
+            MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
 
     private static final VarHandle INT_HANDLE =
-            MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
+            MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.LITTLE_ENDIAN);
 
     private static final VarHandle LONG_HANDLE =
-            MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.BIG_ENDIAN);
+            MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
 
     /**
      * Private constructor to prevent instantiation of this utility class.
@@ -212,7 +213,7 @@ public final class WamEncoder {
      * with the given field identifier.
      *
      * <p>Floats are always encoded as 8-byte IEEE 754 double-precision
-     * values in big-endian byte order.
+     * values in little-endian byte order.
      *
      * @param fieldId the numeric field identifier
      * @return the number of bytes required (tag + 8)

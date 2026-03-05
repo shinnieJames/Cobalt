@@ -67,6 +67,12 @@ public interface QbmIncomingMessageEvent extends WamEventSpec {
     @WamProperty(index = 43, type = WamType.BOOLEAN)
     Optional<Boolean> fmxCardShown();
 
+    @WamProperty(index = 58, type = WamType.STRING)
+    Optional<String> gapRules();
+
+    @WamProperty(index = 59, type = WamType.INTEGER)
+    OptionalInt geEvaluationTimestamp();
+
     @WamProperty(index = 14, type = WamType.STRING)
     Optional<String> hsmTagStr();
 

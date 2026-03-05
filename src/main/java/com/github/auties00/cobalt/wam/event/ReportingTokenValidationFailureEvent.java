@@ -25,6 +25,9 @@ public interface ReportingTokenValidationFailureEvent extends WamEventSpec {
     @WamProperty(index = 6, type = WamType.BOOLEAN)
     Optional<Boolean> isMessageRetry();
 
+    @WamProperty(index = 13, type = WamType.BOOLEAN)
+    Optional<Boolean> isPartOfGroupHistory();
+
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> isSecretEncryptedMsg();
 

@@ -211,5 +211,7 @@ public enum TsSurface {
     @WamEnumConstant(205) EXTERNAL_BROWSER,
     @WamEnumConstant(206) META_AI_CHAT_COMPOSER,
     @WamEnumConstant(207) META_AI_MODE_SELECTION_BOTTOM_SHEET,
-    @WamEnumConstant(208) CHANNEL_NOTIFICATIONS_SETTINGS
+    @WamEnumConstant(208) CHANNEL_NOTIFICATIONS_SETTINGS,
+    @WamEnumConstant(209) META_AI_CHAT_WITH_HISTORY,
+    @WamEnumConstant(210) MEDIA_HUB
 }

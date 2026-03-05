@@ -75,6 +75,7 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
     private static final int GCM_TAG_BYTE_SIZE = 16;
     private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
     private static final int MAX_MESSAGE_LENGTH = 0xFFFFFF;
+    private static final int MAX_HANDSHAKE_MESSAGE_LENGTH = 0xFFFF;
 
     /**
      * The inner layer that provides raw I/O.
@@ -104,12 +105,12 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
     /**
      * The AES-GCM cipher used for encrypting outbound messages.
      */
-    private Cipher writeCipher;
+    private volatile Cipher writeCipher;
 
     /**
      * The AES write key derived from the Noise handshake.
      */
-    private SecretKeySpec writeKey;
+    private volatile SecretKeySpec writeKey;
 
     /**
      * The write nonce counter, incremented for each outbound message.
@@ -119,17 +120,34 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
     /**
      * The AES-GCM cipher used for decrypting inbound messages.
      */
-    private Cipher readCipher;
+    private volatile Cipher readCipher;
 
     /**
      * The AES read key derived from the Noise handshake.
      */
-    private SecretKeySpec readKey;
+    private volatile SecretKeySpec readKey;
 
     /**
      * The read nonce counter, incremented for each inbound datagram.
      */
     private long readCounter;
+
+    /**
+     * Reusable length prefix buffer for outbound messages.
+     *
+     * <p>Safe to reuse because {@link #sendBinary(ByteBuffer...)} is
+     * {@code synchronized}.
+     */
+    private final ByteBuffer reusableLengthPrefix = ByteBuffer.allocate(INT24_BYTE_SIZE);
+
+    /**
+     * Reusable buffer for the GCM authentication tag produced by
+     * {@code doFinal()}.  Lazily sized after the first cipher init.
+     *
+     * <p>Safe to reuse because {@link #sendBinary(ByteBuffer...)} is
+     * {@code synchronized}.
+     */
+    private ByteBuffer reusableFinalChunk;
 
     /**
      * Creates a WhatsApp security layer wrapping the given inner layer.
@@ -291,25 +309,24 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
 
     /**
      * Sends a handshake message with an optional prologue prefix and a
-     * 3-byte int24 length header.
+     * 3-byte int24 length header using scatter-gather I/O to avoid
+     * copying into a single buffer.
      *
      * @param prologue     the prologue to prepend, or {@code null} for none
      * @param messageBytes the serialized handshake message
      */
     private void sendHandshakeMessage(byte[] prologue, byte[] messageBytes) throws IOException {
-        var prologueLength = prologue != null ? prologue.length : 0;
-        var totalLength = prologueLength + INT24_BYTE_SIZE + messageBytes.length;
-        var buffer = ByteBuffer.allocate(totalLength);
-        if (prologue != null) {
-            buffer.put(prologue);
-        }
+        var lengthPrefix = ByteBuffer.allocate(INT24_BYTE_SIZE);
         var len = messageBytes.length;
-        buffer.put((byte) ((len >> 16) & 0xFF));
-        buffer.put((byte) ((len >> 8) & 0xFF));
-        buffer.put((byte) (len & 0xFF));
-        buffer.put(messageBytes);
-        buffer.flip();
-        innerLayer.sendBinary(buffer);
+        lengthPrefix.put((byte) ((len >> 16) & 0xFF));
+        lengthPrefix.put((byte) ((len >> 8) & 0xFF));
+        lengthPrefix.put((byte) (len & 0xFF));
+        lengthPrefix.flip();
+        if (prologue != null) {
+            innerLayer.sendBinary(ByteBuffer.wrap(prologue), lengthPrefix, ByteBuffer.wrap(messageBytes));
+        } else {
+            innerLayer.sendBinary(lengthPrefix, ByteBuffer.wrap(messageBytes));
+        }
     }
 
     /**
@@ -335,6 +352,9 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
                 | (lengthBuf.get() & 0xFF);
         if (length <= 0) {
             throw new IOException("Invalid handshake message length: " + length);
+        }
+        if (length > MAX_HANDSHAKE_MESSAGE_LENGTH) {
+            throw new IOException("Handshake message too large: " + length + " bytes (max " + MAX_HANDSHAKE_MESSAGE_LENGTH + ")");
         }
 
         var payloadBuf = ByteBuffer.allocate(length);
@@ -428,7 +448,12 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
             }
 
             var output = new ByteBuffer[payloadCount + 2];
-            output[0] = createLengthPrefix(ciphertextLength);
+            reusableLengthPrefix.clear();
+            reusableLengthPrefix.put((byte) ((ciphertextLength >> 16) & 0xFF));
+            reusableLengthPrefix.put((byte) ((ciphertextLength >> 8) & 0xFF));
+            reusableLengthPrefix.put((byte) (ciphertextLength & 0xFF));
+            reusableLengthPrefix.flip();
+            output[0] = reusableLengthPrefix;
             var outputIndex = 1;
             var producedCipherBytes = 0;
 
@@ -442,10 +467,14 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
                 output[outputIndex++] = encryptedSegment;
             }
 
-            var finalChunk = ByteBuffer.allocate(writeCipher.getOutputSize(0));
-            var finalProduced = writeCipher.doFinal(EMPTY_BUFFER, finalChunk);
-            finalChunk.flip();
-            output[outputIndex] = finalChunk;
+            var finalSize = writeCipher.getOutputSize(0);
+            if (reusableFinalChunk == null || reusableFinalChunk.capacity() < finalSize) {
+                reusableFinalChunk = ByteBuffer.allocate(finalSize);
+            }
+            reusableFinalChunk.clear();
+            var finalProduced = writeCipher.doFinal(EMPTY_BUFFER, reusableFinalChunk);
+            reusableFinalChunk.flip();
+            output[outputIndex] = reusableFinalChunk;
 
             if (producedCipherBytes + finalProduced != ciphertextLength) {
                 throw new IOException(
@@ -457,15 +486,6 @@ public final class WhatsAppSocketClientSecurityLayer implements SocketClientTran
         } catch (ShortBufferException | IllegalBlockSizeException | BadPaddingException e) {
             throw new IOException("Cannot encrypt plaintext", e);
         }
-    }
-
-    private static ByteBuffer createLengthPrefix(int length) {
-        var prefix = ByteBuffer.allocate(INT24_BYTE_SIZE);
-        prefix.put((byte) ((length >> 16) & 0xFF));
-        prefix.put((byte) ((length >> 8) & 0xFF));
-        prefix.put((byte) (length & 0xFF));
-        prefix.flip();
-        return prefix;
     }
 
     private ByteBuffer encryptSegmentInPlace(ByteBuffer source) throws ShortBufferException, IOException {

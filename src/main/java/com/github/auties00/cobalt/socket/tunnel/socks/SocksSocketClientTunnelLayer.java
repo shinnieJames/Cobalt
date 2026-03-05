@@ -25,6 +25,12 @@ import java.nio.charset.StandardCharsets;
  * <p>This layer only performs the SOCKS handshake.  It does <b>not</b>
  * call {@code markReady()} — that is the responsibility of the caller
  * (typically a tunnel security layer or the layer stack assembly code).
+ *
+ * @apiNote This layer directly depends on
+ * {@link WhatsAppClientProxy.Socks} for proxy configuration.  This
+ * coupling is intentional for this project.  If the socket stack is
+ * extracted as a standalone library, a generic proxy configuration
+ * interface should be introduced to replace the direct dependency.
  */
 public final class SocksSocketClientTunnelLayer implements SocketClientTunnelLayer {
     private static final byte SOCKS_VERSION_4 = 0x04;

@@ -52,7 +52,7 @@ public final class TcpSocketClientTransportLayer implements SocketClientTranspor
         if (!channel.isConnected()) {
             throw new IOException("Connection failed");
         }
-        transportContext.connected.set(true);
+        transportContext.setConnected(true);
     }
 
     @Override
@@ -66,8 +66,10 @@ public final class TcpSocketClientTransportLayer implements SocketClientTranspor
     }
 
     @Override
-    public void sendBinary(ByteBuffer... buffers) {
-        SocketClientSelector.INSTANCE.addWrite(channel, buffers);
+    public void sendBinary(ByteBuffer... buffers) throws IOException {
+        if (!SocketClientSelector.INSTANCE.addWrite(channel, buffers)) {
+            throw new IOException("Failed to enqueue write: channel not registered or closed");
+        }
     }
 
     @Override
@@ -77,7 +79,7 @@ public final class TcpSocketClientTransportLayer implements SocketClientTranspor
             throw new IOException("Failed to post read request");
         }
         synchronized (read.lock) {
-            while (shouldWaitForRead(read, fully, transportContext.connected.get())) {
+            while (shouldWaitForRead(read, fully, transportContext.isConnected())) {
                 try {
                     read.lock.wait(30_000);
                 } catch (InterruptedException e) {

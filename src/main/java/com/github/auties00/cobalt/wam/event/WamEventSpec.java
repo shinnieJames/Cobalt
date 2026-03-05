@@ -62,6 +62,20 @@ public interface WamEventSpec {
     int privateStatsId();
 
     /**
+     * Marks this event as committed and returns whether this is the
+     * first commit.
+     *
+     * <p>If this method returns {@code false}, the event has already
+     * been committed and the caller should discard the duplicate. This
+     * matches the redundant-commit guard in WhatsApp Web's
+     * {@code WAWebWam.commit()}.
+     *
+     * @return {@code true} if this is the first commit, {@code false}
+     *         if already committed
+     */
+    boolean markCommitted();
+
+    /**
      * Returns the number of bytes required to encode this event in the
      * WAM binary protocol using the static release weight.
      *

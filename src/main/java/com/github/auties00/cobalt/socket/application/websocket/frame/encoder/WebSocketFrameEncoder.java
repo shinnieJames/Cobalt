@@ -3,7 +3,6 @@ package com.github.auties00.cobalt.socket.application.websocket.frame.encoder;
 import com.github.auties00.cobalt.socket.application.websocket.frame.WebSocketFrameConstants;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -48,8 +47,9 @@ public final class WebSocketFrameEncoder {
             return new ByteBuffer[0];
         }
 
-        var segments = new ArrayList<ByteBuffer>(payloads.length);
+        // First pass: count non-null non-empty segments and total length
         var sawPayloadArgument = false;
+        var segmentCount = 0;
         var payloadLength = 0;
         for (var payload : payloads) {
             if (payload == null) {
@@ -59,9 +59,8 @@ public final class WebSocketFrameEncoder {
             if (!payload.hasRemaining()) {
                 continue;
             }
-            var view = payload.duplicate();
-            payloadLength = Math.addExact(payloadLength, view.remaining());
-            segments.add(view);
+            payloadLength = Math.addExact(payloadLength, payload.remaining());
+            segmentCount++;
         }
 
         if (payloadLength == 0) {
@@ -87,14 +86,19 @@ public final class WebSocketFrameEncoder {
         header.putInt(maskKey);
         header.flip();
 
-        var result = new ByteBuffer[segments.size() + 1];
+        // Second pass: build result array directly
+        var result = new ByteBuffer[segmentCount + 1];
         result[0] = header;
 
         var maskOffset = 0;
-        for (var i = 0; i < segments.size(); i++) {
-            var segment = segments.get(i);
-            result[i + 1] = maskPayloadSegment(segment, maskKey, maskOffset);
-            maskOffset += segment.remaining();
+        var resultIndex = 1;
+        for (var payload : payloads) {
+            if (payload == null || !payload.hasRemaining()) {
+                continue;
+            }
+            var view = payload.duplicate();
+            result[resultIndex++] = maskPayloadSegment(view, maskKey, maskOffset);
+            maskOffset += view.remaining();
         }
 
         return result;

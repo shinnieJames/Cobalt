@@ -24,6 +24,9 @@ public interface SmbUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<EntryPoint> entryPoint();
 
+    @WamProperty(index = 18, type = WamType.STRING)
+    Optional<String> entryPointDetails();
+
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> extraAttributes();
 

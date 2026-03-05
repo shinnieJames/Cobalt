@@ -375,7 +375,7 @@ public final class WamGlobalEncoder {
      * Returns the number of bytes required to encode the device
      * classification global.
      *
-     * @param value the device classification enum value (e.g. {@code 3}
+     * @param value the device classification enum value (e.g. {@code 4}
      *              for DESKTOP)
      * @return the encoded size in bytes
      */

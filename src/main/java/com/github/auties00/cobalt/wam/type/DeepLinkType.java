@@ -223,5 +223,8 @@ public enum DeepLinkType {
     @WamEnumConstant(216) DEEP_LINK_SUBSCRIPTION,
     @WamEnumConstant(217) DEEP_LINK_SETTINGS_RINGTONES,
     @WamEnumConstant(218) DEEP_LINK_PAYMENT_UPI_PAY,
-    @WamEnumConstant(219) DEEP_LINK_MAN
+    @WamEnumConstant(219) DEEP_LINK_MAN,
+    @WamEnumConstant(220) DEEP_LINK_PHONE_STATE_PERMISSION,
+    @WamEnumConstant(221) DEEP_LINK_STICKER_STORE,
+    @WamEnumConstant(222) DEEP_LINK_AI_IN_GROUPS
 }

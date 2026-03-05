@@ -101,6 +101,7 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
                 WhatsAppWebAppStateSyncException.MacComputationFailed,
                 WhatsAppWebAppStateSyncException.MissingActionTimestamp,
                 WhatsAppWebAppStateSyncException.DuplicateIndexInPatch,
+                WhatsAppWebAppStateSyncException.DuplicatePatchVersion,
                 WhatsAppWebAppStateSyncException.UnexpectedError {
 
     /**
@@ -713,6 +714,65 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
          * Returns whether this exception represents a fatal error.
          *
          * @return {@code true} - duplicate index in patch is always fatal
+         */
+        @Override
+        public boolean isFatal() {
+            return true;
+        }
+    }
+
+    /**
+     * Exception thrown when two patches in a collection share the same version number.
+     *
+     * <p>Per WhatsApp Web {@code validateNoDuplicatePatchVersionInCollection}:
+     * if two patches in the same sync response have the same version, the
+     * response is malformed and processing is aborted with a fatal error.
+     */
+    public static final class DuplicatePatchVersion extends WhatsAppWebAppStateSyncException {
+        /**
+         * The sync collection that contained the duplicate patch version.
+         */
+        private final SyncPatchType collectionName;
+
+        /**
+         * The duplicated version number.
+         */
+        private final long version;
+
+        /**
+         * Constructs a new duplicate patch version exception.
+         *
+         * @param collectionName the affected collection; must not be {@code null}
+         * @param version        the duplicated version number
+         */
+        public DuplicatePatchVersion(SyncPatchType collectionName, long version) {
+            super("Duplicate patch version " + version + " in collection " + collectionName);
+            this.collectionName = Objects.requireNonNull(collectionName);
+            this.version = version;
+        }
+
+        /**
+         * Returns the affected collection.
+         *
+         * @return the patch type; never {@code null}
+         */
+        public SyncPatchType collectionName() {
+            return collectionName;
+        }
+
+        /**
+         * Returns the duplicated version number.
+         *
+         * @return the version
+         */
+        public long version() {
+            return version;
+        }
+
+        /**
+         * Returns whether this exception represents a fatal error.
+         *
+         * @return {@code true} - duplicate patch version is always fatal
          */
         @Override
         public boolean isFatal() {

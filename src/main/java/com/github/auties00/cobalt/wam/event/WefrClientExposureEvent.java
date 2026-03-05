@@ -19,6 +19,9 @@ public interface WefrClientExposureEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> exposureKey();
 
+    @WamProperty(index = 9, type = WamType.BOOLEAN)
+    Optional<Boolean> fromMetaconfig();
+
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> guestId();
 

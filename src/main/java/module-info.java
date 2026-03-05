@@ -36,6 +36,5 @@ module com.github.auties00.cobalt {
     requires net.dongliu.apkparser;
     requires com.google.i18n.phonenumbers.libphonenumber;
     requires java.xml.crypto;
-    requires com.github.auties00.cobalt;
     // TODO: Decide exports
 }

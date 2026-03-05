@@ -98,6 +98,12 @@ public interface ThreadInteractionDataBizEvent extends WamEventSpec {
     @WamProperty(index = 37, type = WamType.INTEGER)
     OptionalInt locationsSent();
 
+    @WamProperty(index = 49, type = WamType.STRING)
+    Optional<String> matchedMessagesMarkedAsReadWithDeltaTime();
+
+    @WamProperty(index = 50, type = WamType.STRING)
+    Optional<String> matchedMessagesReadWithDeltaTime();
+
     @WamProperty(index = 48, type = WamType.INTEGER)
     OptionalInt notMvImpressions();
 

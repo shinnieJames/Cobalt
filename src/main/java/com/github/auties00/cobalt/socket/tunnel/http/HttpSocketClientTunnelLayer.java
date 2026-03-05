@@ -31,6 +31,12 @@ import java.util.Map;
  * {@link com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator.Http
  * authenticator}.  Redirects (3xx) to alternate proxy servers within the
  * same scheme are followed up to {@value #MAX_REDIRECTS} times.
+ *
+ * @apiNote This layer directly depends on
+ * {@link WhatsAppClientProxy.Http} for proxy configuration.  This
+ * coupling is intentional for this project.  If the socket stack is
+ * extracted as a standalone library, a generic proxy configuration
+ * interface should be introduced to replace the direct dependency.
  */
 public final class HttpSocketClientTunnelLayer implements SocketClientTunnelLayer {
     private static final int HTTP_VERSION_MAJOR = 1;

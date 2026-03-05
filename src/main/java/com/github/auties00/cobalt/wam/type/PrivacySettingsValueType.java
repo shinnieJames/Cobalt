@@ -11,5 +11,6 @@ public enum PrivacySettingsValueType {
     @WamEnumConstant(4) MY_CONTACTS_EXCEPT,
     @WamEnumConstant(5) EVERYONE,
     @WamEnumConstant(6) KNOWN,
-    @WamEnumConstant(7) CLOSE_FRIENDS
+    @WamEnumConstant(7) CLOSE_FRIENDS,
+    @WamEnumConstant(8) CUSTOM_LIST
 }

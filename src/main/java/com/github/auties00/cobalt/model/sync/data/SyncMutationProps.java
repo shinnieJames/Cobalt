@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.sync.data;
 
+import it.auties.protobuf.annotation.ProtobufEnum;
+import it.auties.protobuf.annotation.ProtobufEnumIndex;
+
 @ProtobufEnum(name = "MutationProps")
 public enum SyncMutationProps {
     STAR_ACTION(2),

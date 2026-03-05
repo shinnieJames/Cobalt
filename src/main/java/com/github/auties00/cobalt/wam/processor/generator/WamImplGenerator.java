@@ -50,10 +50,12 @@ public final class WamImplGenerator {
                 .addModifiers(Modifier.FINAL)
                 .addSuperinterface(event.className());
 
+        addCommittedField(implBuilder);
         addMetadataAccessors(implBuilder, event);
         addFields(implBuilder, event);
         addConstructor(implBuilder, event);
         addGetterOverrides(implBuilder, event);
+        addMarkCommitted(implBuilder);
         addSizeOf(implBuilder, event);
         addEncode(implBuilder, event);
         addEnumEncoders(implBuilder, event);
@@ -100,6 +102,23 @@ public final class WamImplGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(int.class)
                 .addStatement("return $L", event.privateStatsId())
+                .build());
+    }
+
+    private static void addCommittedField(TypeSpec.Builder implBuilder) {
+        implBuilder.addField(FieldSpec.builder(boolean.class, "committed", Modifier.PRIVATE, Modifier.VOLATILE).build());
+    }
+
+    private static void addMarkCommitted(TypeSpec.Builder implBuilder) {
+        implBuilder.addMethod(MethodSpec.methodBuilder("markCommitted")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(boolean.class)
+                .beginControlFlow("if (this.committed)")
+                .addStatement("return false")
+                .endControlFlow()
+                .addStatement("this.committed = true")
+                .addStatement("return true")
                 .build());
     }
 

@@ -96,26 +96,26 @@ public final class WamTags {
     public static final int VALUE_INT8 = 0x30;
 
     /**
-     * Value-type selector for a signed 16-bit integer in big-endian order.
+     * Value-type selector for a signed 16-bit integer in little-endian order.
      * Two payload bytes follow the tag.
      */
     public static final int VALUE_INT16 = 0x40;
 
     /**
-     * Value-type selector for a signed 32-bit integer in big-endian order.
+     * Value-type selector for a signed 32-bit integer in little-endian order.
      * Four payload bytes follow the tag.
      */
     public static final int VALUE_INT32 = 0x50;
 
     /**
-     * Value-type selector for a signed 64-bit integer in big-endian order.
+     * Value-type selector for a signed 64-bit integer in little-endian order.
      * Eight payload bytes follow the tag.
      */
     public static final int VALUE_INT64 = 0x60;
 
     /**
      * Value-type selector for an IEEE 754 double-precision float in
-     * big-endian order.
+     * little-endian order.
      * Eight payload bytes follow the tag.
      */
     public static final int VALUE_FLOAT64 = 0x70;
@@ -128,14 +128,14 @@ public final class WamTags {
 
     /**
      * Value-type selector for a UTF-8 string with a uint16 length prefix
-     * in big-endian order.
+     * in little-endian order.
      * Two length bytes plus the UTF-8 payload follow the tag.
      */
     public static final int VALUE_STR16 = 0x90;
 
     /**
      * Value-type selector for a UTF-8 string with a uint32 length prefix
-     * in big-endian order.
+     * in little-endian order.
      * Four length bytes plus the UTF-8 payload follow the tag.
      */
     public static final int VALUE_STR32 = 0xA0;

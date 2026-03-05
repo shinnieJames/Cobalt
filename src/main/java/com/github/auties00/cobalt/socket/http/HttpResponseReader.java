@@ -286,7 +286,7 @@ public final class HttpResponseReader {
             if (length < 0) {
                 throw new IOException(eofMessage);
             }
-            Thread.onSpinWait();
+            throw new IOException("Unexpected zero-length read from transport layer");
         }
     }
 

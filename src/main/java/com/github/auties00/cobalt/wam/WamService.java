@@ -38,11 +38,11 @@ public final class WamService {
     private static final Logger LOGGER = Logger.getLogger(WamService.class.getName());
 
     private static final VarHandle SHORT_HANDLE =
-            MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.BIG_ENDIAN);
+            MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
 
     /**
      * Size of the WAM buffer header in bytes:
-     * {@code "WAM"(3) + version(1) + streamId(1) + seqNum(2 BE) + channel(1)}.
+     * {@code "WAM"(3) + version(1) + streamId(1) + seqNum(2 LE) + channel(1)}.
      */
     private static final int HEADER_SIZE = 8;
 
@@ -138,6 +138,7 @@ public final class WamService {
     private String deviceVersion;
     private String webcTabId;
     private String abKey2;
+    private int webcRevision;
 
     /**
      * Constructs a new {@code WamService} bound to the given client.
@@ -185,6 +186,7 @@ public final class WamService {
         this.abKey2 = abPropsService.getBool(ABProp.WAM_DISABLE_ABKEY_ATTRIBUTE)
                 ? null
                 : abPropsService.abKey().orElse("");
+        this.webcRevision = version != null ? version.tertiary().orElse(0) : 0;
         this.initialized = true;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
         scheduler.scheduleWithFixedDelay(this::flush, FLUSH_INTERVAL_SECONDS, FLUSH_INTERVAL_SECONDS, TimeUnit.SECONDS);
@@ -205,6 +207,11 @@ public final class WamService {
      */
     public void commit(WamEventSpec event) {
         Objects.requireNonNull(event, "event cannot be null");
+        if (!event.markCommitted()) {
+            LOGGER.warning("WAM redundant commit: " + event.getClass().getSimpleName());
+            return;
+        }
+
         var weight = effectiveWeight(event);
         if (weight > 1) {
             if (FastRandomUtils.randomInt(weight) != 0) {
@@ -222,7 +229,7 @@ public final class WamService {
         });
 
         if (event.channel() == WamChannel.REALTIME) {
-            Thread.ofVirtual().start(this::flush);
+            Thread.ofVirtual().start(() -> flushChannel(WamChannel.REALTIME));
         }
     }
 
@@ -298,16 +305,43 @@ public final class WamService {
 
         if (channel == WamChannel.PRIVATE) {
             privateStatsId.rotateAndGet();
+            flushPrivateByPsIdGroup(events);
+        } else {
+            var bufferKey = channel == WamChannel.REGULAR ? "regular" : "realtime";
+            flushEventList(channel, events, bufferKey);
         }
+    }
 
+    /**
+     * Groups private events by their PS ID hash and flushes each group
+     * as a separate buffer, matching the per-PS-ID-group buffer
+     * separation in WhatsApp Web's {@code _executePendingForContext}.
+     *
+     * @param events the drained private events
+     */
+    private void flushPrivateByPsIdGroup(List<WamPendingEvent> events) {
+        var groups = new LinkedHashMap<Integer, List<WamPendingEvent>>();
+        for (var pe : events) {
+            groups.computeIfAbsent(pe.event().privateStatsId(), _ -> new ArrayList<>()).add(pe);
+        }
+        for (var entry : groups.entrySet()) {
+            var bufferKey = privateStatsId.getKeyNameForHash(entry.getKey());
+            flushEventList(WamChannel.PRIVATE, entry.getValue(), bufferKey);
+        }
+    }
+
+    /**
+     * Flushes a list of events for the given channel, building one or
+     * more buffers capped at {@link #MAX_BUFFER_SIZE}.
+     *
+     * @param channel   the transport channel
+     * @param events    the events to flush
+     * @param bufferKey the beaconing buffer key
+     */
+    private void flushEventList(WamChannel channel, List<WamPendingEvent> events, String bufferKey) {
         var beacons = new OptionalInt[events.size()];
         var weights = new int[events.size()];
         for (var i = 0; i < events.size(); i++) {
-            var bufferKey = switch (channel) {
-                case REGULAR -> "regular";
-                case REALTIME -> "realtime";
-                case PRIVATE -> privateStatsId.getKeyNameForHash(events.get(i).event().privateStatsId());
-            };
             beacons[i] = beaconing.nextSequenceNumber(bufferKey);
             weights[i] = effectiveWeight(events.get(i).event());
         }
@@ -446,7 +480,7 @@ public final class WamService {
             // 14507
             size += WamGlobalEncoder.deviceClassificationSize(DEVICE_CLASSIFICATION_DESKTOP);
             // 18491
-            size += WamGlobalEncoder.webcRevisionSize(0);
+            size += WamGlobalEncoder.webcRevisionSize(webcRevision);
         }
         size += computeNullTransitionsSize(channel);
         return size;
@@ -591,7 +625,7 @@ public final class WamService {
             // 14507
             offset = WamGlobalEncoder.writeDeviceClassification(DEVICE_CLASSIFICATION_DESKTOP, buffer, offset);
             // 18491
-            offset = WamGlobalEncoder.writeWebcRevision(0, buffer, offset);
+            offset = WamGlobalEncoder.writeWebcRevision(webcRevision, buffer, offset);
         }
         offset = writeNullTransitions(channel, buffer, offset);
         return offset;

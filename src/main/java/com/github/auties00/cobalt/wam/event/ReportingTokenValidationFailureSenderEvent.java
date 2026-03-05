@@ -28,6 +28,9 @@ public interface ReportingTokenValidationFailureSenderEvent extends WamEventSpec
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<EditType> editType();
 
+    @WamProperty(index = 16, type = WamType.STRING)
+    Optional<String> groupHistoryBundleMessageId();
+
     @WamProperty(index = 5, type = WamType.BOOLEAN)
     Optional<Boolean> isLid();
 

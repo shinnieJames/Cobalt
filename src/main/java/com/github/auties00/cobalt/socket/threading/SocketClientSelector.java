@@ -113,7 +113,7 @@ public final class SocketClientSelector implements Runnable {
         }
 
         // Use connected CAS to guard single notification
-        if (!transportCtx.connected.compareAndSet(true, false)) {
+        if (!transportCtx.compareAndSetConnected(true, false)) {
             wakeup();
             return;
         }
@@ -143,7 +143,7 @@ public final class SocketClientSelector implements Runnable {
             return false;
         }
 
-        return ((SocketClientContext) key.attachment()).transportContext().connected.get();
+        return ((SocketClientContext) key.attachment()).transportContext().isConnected();
     }
 
     /**
@@ -202,7 +202,9 @@ public final class SocketClientSelector implements Runnable {
         var hasWrites = false;
         for (var buffer : buffers) {
             if (buffer != null && buffer.hasRemaining()) {
-                pendingWrites.offer(buffer);
+                if (!pendingWrites.offer(buffer)) {
+                    return false;
+                }
                 hasWrites = true;
             }
         }
@@ -220,7 +222,14 @@ public final class SocketClientSelector implements Runnable {
     }
 
     /**
-     * Marks the connection as tunnelled (proxy handshake complete).
+     * Marks the connection as tunnelled (proxy handshake complete) and
+     * transitions it to asynchronous data flow.
+     *
+     * <p>This is a protocol-layer API entry point, typically invoked by a
+     * security or application layer after its handshake completes (e.g.
+     * Noise XX or WebSocket upgrade).  It lives on the selector because
+     * it manipulates interest ops and layer context state that are
+     * otherwise internal to the selector thread.
      *
      * <p>Starts the listener executor, sets the tunnel context to
      * tunnelled mode, and enables read interest.
@@ -258,7 +267,14 @@ public final class SocketClientSelector implements Runnable {
     }
 
     /**
-     * Initiates a TLS handshake and blocks until it completes.
+     * Initiates a TLS handshake and blocks the calling virtual thread
+     * until it completes.
+     *
+     * <p>This is a protocol-layer API entry point invoked by
+     * {@link TlsSocketClientSecurityLayer#startHandshake()}.  It lives
+     * on the selector because TLS handshake progress requires toggling
+     * read/write interest ops and coordinating with the selector loop's
+     * {@code processHandshake()} path.
      *
      * @param channel the channel
      * @param timeout the handshake timeout in milliseconds
@@ -288,7 +304,7 @@ public final class SocketClientSelector implements Runnable {
 
         synchronized (tls.handshakeLock()) {
             var deadline = System.currentTimeMillis() + timeout;
-            while (!tls.isHandshakeComplete() && ctx.transportContext().connected.get()) {
+            while (!tls.isHandshakeComplete() && ctx.transportContext().isConnected()) {
                 var remaining = deadline - System.currentTimeMillis();
                 if (remaining <= 0) {
                     throw new IOException("TLS handshake timed out");
@@ -374,6 +390,14 @@ public final class SocketClientSelector implements Runnable {
 
     /**
      * Finalizes state after a synchronous protocol handshake/upgrade.
+     *
+     * <p>This is a protocol-layer API entry point invoked by
+     * application layers (e.g. WebSocket upgrade) after their
+     * synchronous handshake completes.  It lives on the selector
+     * because it combines {@link #markReady(SocketChannel)},
+     * {@link #preSeedDatagram(SocketChannel, ByteBuffer)}, and
+     * {@link #drainSslAppBuffer(SocketChannel)} — all of which
+     * manipulate selector-internal interest ops and layer contexts.
      *
      * <p>This transitions the connection to asynchronous post-handshake
      * mode by:
@@ -556,7 +580,7 @@ public final class SocketClientSelector implements Runnable {
     }
 
     private boolean processWriteDirect(SocketChannel channel, SocketClientTransportLayerContext transportCtx) throws IOException {
-        while (transportCtx.connected.get()) {
+        while (transportCtx.isConnected()) {
             var claim = transportCtx.pendingWrites.claim();
             if (claim.isEmpty()) {
                 return true;
@@ -564,7 +588,13 @@ public final class SocketClientSelector implements Runnable {
 
             channel.write(claim.array(), claim.offset(), claim.count());
 
-            var consumed = countConsumed(claim);
+            var consumed = 0;
+            for (var i = claim.offset(); i < claim.offset() + claim.count(); i++) {
+                if (claim.array()[i].hasRemaining()) {
+                    break;
+                }
+                consumed++;
+            }
             transportCtx.pendingWrites.release(consumed);
 
             if (consumed < claim.count()) {
@@ -575,18 +605,31 @@ public final class SocketClientSelector implements Runnable {
     }
 
     private boolean processWriteSsl(SocketChannel channel, SocketClientTransportLayerContext transportCtx, TlsLayerContext tlsCtx) throws IOException {
-        while (transportCtx.connected.get()) {
+        while (transportCtx.isConnected()) {
             var claim = transportCtx.pendingWrites.claim();
             if (claim.isEmpty()) {
                 return true;
             }
 
             if (!tlsCtx.wrapAndWrite(channel, claim.array(), claim.offset(), claim.count())) {
-                transportCtx.pendingWrites.release(countConsumed(claim));
+                var consumed = 0;
+                for (var i = claim.offset(); i < claim.offset() + claim.count(); i++) {
+                    if (claim.array()[i].hasRemaining()) {
+                        break;
+                    }
+                    consumed++;
+                }
+                transportCtx.pendingWrites.release(consumed);
                 return false;
             }
 
-            var consumed = countConsumed(claim);
+            var consumed = 0;
+            for (var i = claim.offset(); i < claim.offset() + claim.count(); i++) {
+                if (claim.array()[i].hasRemaining()) {
+                    break;
+                }
+                consumed++;
+            }
             transportCtx.pendingWrites.release(consumed);
 
             if (consumed < claim.count()) {
@@ -594,17 +637,6 @@ public final class SocketClientSelector implements Runnable {
             }
         }
         return false;
-    }
-
-    private static int countConsumed(SocketClientTransportLayerContext.PendingWrites.Claim claim) {
-        var consumed = 0;
-        for (var i = claim.offset(); i < claim.offset() + claim.count(); i++) {
-            if (claim.array()[i].hasRemaining()) {
-                break;
-            }
-            consumed++;
-        }
-        return consumed;
     }
 
     static int updateWriteInterestOps(int currentOps, boolean hasPendingWrites) {

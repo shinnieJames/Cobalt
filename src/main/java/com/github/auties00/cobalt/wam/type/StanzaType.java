@@ -9,5 +9,6 @@ public enum StanzaType {
     @WamEnumConstant(2) RECEIPT,
     @WamEnumConstant(3) CALL,
     @WamEnumConstant(4) NOTIFICATION,
-    @WamEnumConstant(5) APPDATA
+    @WamEnumConstant(5) APPDATA,
+    @WamEnumConstant(6) STATUS
 }

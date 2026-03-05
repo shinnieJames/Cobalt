@@ -4,7 +4,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Transport-level per-connection state.
@@ -25,6 +25,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class SocketClientTransportLayerContext {
     private static final int WRITES_CHUNK_CAPACITY = 64;
+    private static final VarHandle CONNECTED;
+
+    static {
+        try {
+            var lookup = MethodHandles.lookup();
+            CONNECTED = lookup.findVarHandle(SocketClientTransportLayerContext.class, "connected", boolean.class);
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
 
     /**
      * Whether the underlying channel is connected and registered with the
@@ -32,9 +42,10 @@ public final class SocketClientTransportLayerContext {
      *
      * <p>Set to {@code true} by the connecting thread after the handshake
      * completes; set to {@code false} by the selector thread on disconnect
-     * or I/O failure.
+     * or I/O failure.  Accessed via the {@link #CONNECTED} VarHandle.
      */
-    public final AtomicBoolean connected;
+    @SuppressWarnings("unused")
+    private volatile boolean connected;
 
     /**
      * Monitor used to block the connecting thread until the selector
@@ -60,9 +71,39 @@ public final class SocketClientTransportLayerContext {
      * Creates a transport layer context for a new connection.
      */
     public SocketClientTransportLayerContext() {
-        this.connected = new AtomicBoolean(false);
         this.connectionLock = new Object();
         this.pendingWrites = new PendingWrites(WRITES_CHUNK_CAPACITY);
+    }
+
+    /**
+     * Returns whether the connection is currently active.
+     *
+     * @return {@code true} if connected
+     */
+    public boolean isConnected() {
+        return (boolean) CONNECTED.getVolatile(this);
+    }
+
+    /**
+     * Sets the connection state.
+     *
+     * @param value {@code true} to mark as connected, {@code false} to
+     *              mark as disconnected
+     */
+    public void setConnected(boolean value) {
+        CONNECTED.setVolatile(this, value);
+    }
+
+    /**
+     * Atomically sets the connection state if it currently has the expected
+     * value.
+     *
+     * @param expected the expected current value
+     * @param newValue the new value
+     * @return {@code true} if the compare-and-set succeeded
+     */
+    public boolean compareAndSetConnected(boolean expected, boolean newValue) {
+        return CONNECTED.compareAndSet(this, expected, newValue);
     }
 
     /**
@@ -199,6 +240,8 @@ public final class SocketClientTransportLayerContext {
         }
 
         private final int chunkCapacity;
+        private final int maxPending;
+        private final AtomicInteger pendingCount;
 
         @SuppressWarnings({"unused", "FieldMayBeFinal"})
         private volatile Chunk producerChunk;
@@ -207,17 +250,34 @@ public final class SocketClientTransportLayerContext {
         private int consumerOffset;
 
         /**
-         * Creates a queue with the specified chunk capacity.
+         * Creates a queue with the specified chunk capacity and a default
+         * backpressure limit of {@code chunkCapacity * 32}.
          *
          * @param chunkCapacity the number of elements per chunk, must be a
          *                      power of two
          * @throws IllegalArgumentException if chunkCapacity is not a power of two
          */
         public PendingWrites(int chunkCapacity) {
+            this(chunkCapacity, chunkCapacity * 32);
+        }
+
+        /**
+         * Creates a queue with the specified chunk capacity and backpressure
+         * limit.
+         *
+         * @param chunkCapacity the number of elements per chunk, must be a
+         *                      power of two
+         * @param maxPending    the maximum number of pending buffers before
+         *                      {@link #offer(ByteBuffer)} returns {@code false}
+         * @throws IllegalArgumentException if chunkCapacity is not a power of two
+         */
+        public PendingWrites(int chunkCapacity, int maxPending) {
             if (Integer.bitCount(chunkCapacity) != 1) {
                 throw new IllegalArgumentException("Chunk capacity must be a power of 2");
             }
             this.chunkCapacity = chunkCapacity;
+            this.maxPending = maxPending;
+            this.pendingCount = new AtomicInteger();
             var initial = new Chunk(chunkCapacity);
             this.producerChunk = initial;
             this.consumerChunk = initial;
@@ -226,16 +286,34 @@ public final class SocketClientTransportLayerContext {
         /**
          * Inserts the specified buffer at the tail of this queue.
          *
+         * <p>If the number of pending (not yet released) buffers would
+         * exceed the configured maximum, the buffer is rejected and this
+         * method returns {@code false}.
+         *
          * @param buffer the buffer to insert
+         * @return {@code true} if the buffer was enqueued, {@code false} if
+         *         the queue is at capacity
          */
-        public void offer(ByteBuffer buffer) {
+        public boolean offer(ByteBuffer buffer) {
+            var current = pendingCount.get();
+            while (true) {
+                if (current >= maxPending) {
+                    return false;
+                }
+                var witness = pendingCount.compareAndExchange(current, current + 1);
+                if (witness == current) {
+                    break;
+                }
+                current = witness;
+            }
+
             while (true) {
                 var chunk = producerChunk;
                 var idx = (int) CHUNK_INDEX.getAndAdd(chunk, 1);
 
                 if (idx < chunkCapacity) {
                     ELEMENT.setRelease(chunk.data, idx, buffer);
-                    return;
+                    return true;
                 }
 
                 if (chunk.next == null) {
@@ -298,6 +376,7 @@ public final class SocketClientTransportLayerContext {
                 consumerChunk.data[i] = null;
             }
             consumerOffset += consumed;
+            pendingCount.addAndGet(-consumed);
 
             if (consumerOffset == chunkCapacity && consumerChunk.next != null) {
                 consumerChunk = consumerChunk.next;
