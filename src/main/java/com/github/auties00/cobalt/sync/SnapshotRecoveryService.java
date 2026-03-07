@@ -5,18 +5,20 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
-import com.github.auties00.cobalt.model.message.system.peer.*;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessageSyncDCollectionFatalRecoveryRequestBuilder;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestResponseMessage;
+import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestType;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.props.ABProp;
-import com.github.auties00.cobalt.props.ABPropsService;
-
-import java.time.Instant;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecovery;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecoverySpec;
+import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -200,6 +202,8 @@ public final class SnapshotRecoveryService {
         if (response.isCompressed()) {
             try (var protobufStream = ProtobufInputStream.fromStream(new GZIPInputStream(new ByteArrayInputStream(snapshotBytes)))) {
                 return SyncdSnapshotRecoverySpec.decode(protobufStream);
+            } catch (Exception e) {
+                throw new IOException(e);
             }
         } else {
             return SyncdSnapshotRecoverySpec.decode(snapshotBytes);

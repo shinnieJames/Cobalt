@@ -59,6 +59,34 @@ public final class SyncActionEntry {
     int actionVersion;
 
     /**
+     * The processing state of this sync action mutation.
+     *
+     * <p>Per WhatsApp Web, every mutation is tracked with a state such as
+     * {@code SUCCESS}, {@code ORPHAN}, or {@code UNSUPPORTED} to enable
+     * proper auditing and re-processing.
+     */
+    @ProtobufProperty(index = 7, type = ProtobufType.INT32)
+    SyncActionState actionState;
+
+    /**
+     * The identifier of the entity this action targets.
+     *
+     * <p>For example, a chat JID for chat actions, or a message ID for
+     * message actions. Used for event-driven orphan retry.
+     */
+    @ProtobufProperty(index = 8, type = ProtobufType.STRING)
+    String modelId;
+
+    /**
+     * The type of entity this action targets.
+     *
+     * <p>For example, {@code "chat"}, {@code "message"}, or {@code "contact"}.
+     * Used in combination with {@code modelId} for targeted orphan retry.
+     */
+    @ProtobufProperty(index = 9, type = ProtobufType.STRING)
+    String modelType;
+
+    /**
      * Constructs a new {@code SyncActionEntry} with the given field values.
      *
      * @param indexMac      the HMAC of the mutation index
@@ -67,14 +95,20 @@ public final class SyncActionEntry {
      * @param actionIndex   the plaintext index string
      * @param actionValue   the decoded action value
      * @param actionVersion the action version number
+     * @param actionState   the processing state of this mutation
+     * @param modelId       the entity identifier this action targets
+     * @param modelType     the entity type this action targets
      */
-    SyncActionEntry(byte[] indexMac, byte[] valueMac, byte[] keyId, String actionIndex, SyncActionValue actionValue, int actionVersion) {
+    SyncActionEntry(byte[] indexMac, byte[] valueMac, byte[] keyId, String actionIndex, SyncActionValue actionValue, int actionVersion, SyncActionState actionState, String modelId, String modelType) {
         this.indexMac = indexMac;
         this.valueMac = valueMac;
         this.keyId = keyId;
         this.actionIndex = actionIndex;
         this.actionValue = actionValue;
         this.actionVersion = actionVersion;
+        this.actionState = actionState;
+        this.modelId = modelId;
+        this.modelType = modelType;
     }
 
     /**
@@ -183,5 +217,59 @@ public final class SyncActionEntry {
      */
     public void setActionVersion(int actionVersion) {
         this.actionVersion = actionVersion;
+    }
+
+    /**
+     * Returns the processing state of this sync action mutation.
+     *
+     * @return the action state, or {@code null} if not set
+     */
+    public SyncActionState actionState() {
+        return actionState;
+    }
+
+    /**
+     * Sets the processing state of this sync action mutation.
+     *
+     * @param actionState the action state
+     */
+    public void setActionState(SyncActionState actionState) {
+        this.actionState = actionState;
+    }
+
+    /**
+     * Returns the identifier of the entity this action targets.
+     *
+     * @return the model ID, or {@code null} if not set
+     */
+    public String modelId() {
+        return modelId;
+    }
+
+    /**
+     * Sets the identifier of the entity this action targets.
+     *
+     * @param modelId the model ID
+     */
+    public void setModelId(String modelId) {
+        this.modelId = modelId;
+    }
+
+    /**
+     * Returns the type of entity this action targets.
+     *
+     * @return the model type, or {@code null} if not set
+     */
+    public String modelType() {
+        return modelType;
+    }
+
+    /**
+     * Sets the type of entity this action targets.
+     *
+     * @param modelType the model type
+     */
+    public void setModelType(String modelType) {
+        this.modelType = modelType;
     }
 }

@@ -6,6 +6,9 @@ import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisabl
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Handles disable link previews setting actions.
  *
@@ -43,7 +46,7 @@ public final class DisableLinkPreviewsHandler implements WebAppStateActionHandle
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof PrivacySettingDisableLinkPreviewsAction action)) {
@@ -52,5 +55,42 @@ public final class DisableLinkPreviewsHandler implements WebAppStateActionHandle
 
         client.store().setDisableLinkPreviews(action.isPreviewsDisabled());
         return true;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Per WhatsApp Web {@code WAWebDisableLinkPreviewsSync.applyMutations}: iterates
+     * all mutations, accumulating the last valid {@code isPreviewsDisabled} value from
+     * SET operations (non-SET and malformed mutations are skipped). After iteration,
+     * persists the accumulated value once.
+     */
+    @Override
+    public List<Boolean> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
+        if (mutations.isEmpty()) {
+            return List.of();
+        }
+
+        Boolean lastValid = null;
+        var results = new ArrayList<Boolean>(mutations.size());
+        for (var mutation : mutations) {
+            if (mutation.operation() != SyncdOperation.SET) {
+                results.add(true);
+                continue;
+            }
+
+            if (mutation.value().action().orElse(null) instanceof PrivacySettingDisableLinkPreviewsAction action) {
+                lastValid = action.isPreviewsDisabled();
+                results.add(true);
+            } else {
+                results.add(true);
+            }
+        }
+
+        if (lastValid != null) {
+            client.store().setDisableLinkPreviews(lastValid);
+        }
+
+        return results;
     }
 }

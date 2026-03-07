@@ -57,8 +57,43 @@ public final class NodeTags {
     public static final byte DICTIONARY_3 = (byte) 239;
 
     /**
-     * Tag indicating an advertisement JID.
-     * Used for special WhatsApp advertisement-related identifiers.
+     * AD_JID domain type for the standard WhatsApp user domain ({@code s.whatsapp.net}).
+     */
+    public static final int DOMAIN_WHATSAPP = 0;
+
+    /**
+     * AD_JID domain type for the Linked Identity domain ({@code lid}).
+     */
+    public static final int DOMAIN_LID = 1;
+
+    /**
+     * AD_JID domain type for the business-hosted domain ({@code hosted}).
+     */
+    public static final int DOMAIN_HOSTED = 128;
+
+    /**
+     * AD_JID domain type for the business-hosted LID domain ({@code hosted.lid}).
+     */
+    public static final int DOMAIN_HOSTED_LID = 129;
+
+    /**
+     * Tag indicating a cross-platform interoperability JID.
+     * Used for JIDs from external platforms communicating via interoperability protocols.
+     * Wire format: tag(245) + user(string) + device(uint16) + integrator(uint16) + domain(string).
+     */
+    public static final byte JID_INTEROP = (byte) 245;
+
+    /**
+     * Tag indicating a Facebook Messenger JID.
+     * Used for Messenger users participating in cross-platform conversations.
+     * Wire format: tag(246) + user(string) + device(uint16) + domain(string).
+     */
+    public static final byte JID_FB = (byte) 246;
+
+    /**
+     * Tag indicating an advertisement JID with domain type.
+     * Used for multi-device WhatsApp accounts with domain type encoding.
+     * Wire format: tag(247) + domainType(uint8) + device(uint8) + user(string).
      */
     public static final byte AD_JID = (byte) 247;
 

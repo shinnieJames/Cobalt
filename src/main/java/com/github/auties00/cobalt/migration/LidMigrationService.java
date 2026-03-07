@@ -16,9 +16,13 @@ import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
+import com.github.auties00.cobalt.util.SchedulerUtils;
+
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -29,6 +33,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class LidMigrationService {
     private static final System.Logger LOGGER = System.getLogger(LidMigrationService.class.getName());
+
+    private static final long MAPPING_TIMEOUT_SECONDS = 300;
 
     /**
      * LID origin type value for phone-number-hiding click-to-WhatsApp chats.
@@ -118,6 +124,8 @@ public final class LidMigrationService {
      */
     private volatile Instant receiveTimestamp;
 
+    private volatile CompletableFuture<Void> mappingTimeoutFuture;
+
     /**
      * Creates a new LID migration service.
      *
@@ -151,6 +159,16 @@ public final class LidMigrationService {
     public void enableMigration() {
         if (state.compareAndSet(LidMigrationState.WAITING_PROP, LidMigrationState.WAITING_MAPPINGS)) {
             LOGGER.log(System.Logger.Level.INFO, "LID migration enabled, waiting for mappings from primary");
+            mappingTimeoutFuture = SchedulerUtils.scheduleDelayed(
+                    Duration.ofSeconds(MAPPING_TIMEOUT_SECONDS),
+                    () -> {
+                        if (state.get() == LidMigrationState.WAITING_MAPPINGS) {
+                            LOGGER.log(System.Logger.Level.WARNING,
+                                    "LID migration timed out after {0}s waiting for mappings", MAPPING_TIMEOUT_SECONDS);
+                            handleError(new WhatsAppLidMigrationException.FailedToParseMappings(
+                                    "Timed out waiting for peer migration mappings"));
+                        }
+                    });
         }
     }
 
@@ -190,6 +208,13 @@ public final class LidMigrationService {
         }
 
         try {
+            // Cancel mapping timeout since we received mappings
+            var timeout = mappingTimeoutFuture;
+            if (timeout != null) {
+                timeout.cancel(false);
+                mappingTimeoutFuture = null;
+            }
+
             // Store migration timestamp and receive timestamp
             this.chatDbMigrationTimestamp = payload.chatDbMigrationTimestamp()
                     .orElse(null);
@@ -198,9 +223,8 @@ public final class LidMigrationService {
             // Process mappings
             var mappings = payload.pnToLidMappings();
             if (mappings == null || mappings.isEmpty()) {
-                LOGGER.log(System.Logger.Level.WARNING, "Received empty LID mappings from primary");
-                // Empty mappings might be valid (no contacts to migrate)
-                state.set(LidMigrationState.READY);
+                handleError(new WhatsAppLidMigrationException.FailedToParseMappings(
+                        "Peer migration mappings malformed: empty or null"));
                 return;
             }
 
@@ -428,7 +452,9 @@ public final class LidMigrationService {
             return;
         }
 
-        LOGGER.log(System.Logger.Level.INFO, "Starting LID migration execution");
+        LOGGER.log(System.Logger.Level.INFO, "Starting LID migration execution, waiting for offline delivery");
+        store.waitForOfflineDeliveryEnd();
+        LOGGER.log(System.Logger.Level.INFO, "Offline delivery complete, proceeding with migration");
 
         try {
             var resolutions = new ArrayList<LidMigrationResolution>();
@@ -954,6 +980,11 @@ public final class LidMigrationService {
      * Called when the client disconnects and reconnects.
      */
     public void reset() {
+        var timeout = mappingTimeoutFuture;
+        if (timeout != null) {
+            timeout.cancel(false);
+            mappingTimeoutFuture = null;
+        }
         var currentState = state.get();
         // Only reset if not in a terminal state
         if (!currentState.isTerminal()) {

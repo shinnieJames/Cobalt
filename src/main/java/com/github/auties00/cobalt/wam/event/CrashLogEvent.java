@@ -81,4 +81,7 @@ public interface CrashLogEvent extends WamEventSpec {
 
     @WamProperty(index = 25, type = WamType.STRING)
     Optional<String> unifiedSessionId();
+
+    @WamProperty(index = 35, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
 }

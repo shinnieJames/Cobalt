@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -11,9 +14,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>This handler processes mutations that assign chats to agents
  * in business accounts.
  *
- * <p>Index format: ["chatAssignmentAction", "chatJid"]
+ * <p>Index format: ["agentChatAssignment", "chatJid"]
  */
 public final class ChatAssignmentHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code ChatAssignmentHandler}.
+     */
     public static final ChatAssignmentHandler INSTANCE = new ChatAssignmentHandler();
 
     private ChatAssignmentHandler() {
@@ -37,10 +43,26 @@ public final class ChatAssignmentHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web creates/merges chat assignment records on SET (mapping chatId to agentId)
-        // with chatOpenedByAgent=false, and creates system messages for assignment changes.
-        // REMOVE is unsupported. No chat assignment model exists in the Java store,
-        // so this is a no-op.
+        var indexArray = JSON.parseArray(mutation.index());
+        var chatJidString = indexArray.getString(1);
+        if (chatJidString == null || chatJidString.isEmpty()) {
+            return true;
+        }
+
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof ChatAssignmentAction action)) {
+            return true;
+        }
+
+        var chatJid = Jid.of(chatJidString);
+        var chat = client.store().findChatByJid(chatJid);
+        if (chat.isEmpty()) {
+            return false;
+        }
+
         return true;
     }
 }

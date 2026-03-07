@@ -152,7 +152,7 @@ public record Jid(String user, JidServer server, int device, int agent) implemen
      */
     public Jid {
         Objects.requireNonNull(server, "server cannot be null");
-        checkUnsignedByte(device);
+        checkUnsignedShort(device);
         checkUnsignedByte(agent);
     }
 
@@ -561,6 +561,24 @@ public record Jid(String user, JidServer server, int device, int agent) implemen
      * @param i the value to check
      * @throws WhatsAppMalformedJidException if the value is not in the range 0 to 255
      */
+    /**
+     * Validates that the given integer falls within the unsigned short range.
+     *
+     * @param i the value to check
+     * @throws WhatsAppMalformedJidException if the value is not in the range 0 to 65535
+     */
+    private static void checkUnsignedShort(int i) {
+        if (i < 0 || i > 65535) {
+            throw new WhatsAppMalformedJidException(i + " is not an unsigned short");
+        }
+    }
+
+    /**
+     * Validates that the given integer falls within the unsigned byte range.
+     *
+     * @param i the value to check
+     * @throws WhatsAppMalformedJidException if the value is not in the range 0 to 255
+     */
     private static void checkUnsignedByte(int i) {
         if (i < 0 || i > 255) {
             throw new WhatsAppMalformedJidException(i + " is not an unsigned byte");
@@ -961,6 +979,35 @@ public record Jid(String user, JidServer server, int device, int agent) implemen
             return Jid.of(user(), JidServer.lid());
         }
         return withoutData();
+    }
+
+    /**
+     * Returns whether this JID and the specified JID refer to the same account,
+     * even if they use different addressing-mode domains.
+     *
+     * <p>This matches hosted-domain and non-hosted-domain pairs that represent
+     * the same underlying account:
+     * <ul>
+     * <li>{@code hosted} ↔ {@code s.whatsapp.net} (or {@code c.us})
+     * <li>{@code hosted.lid} ↔ {@code lid}
+     * </ul>
+     *
+     * <p>The comparison is performed by normalizing both JIDs via
+     * {@link #toUserJid()} (which strips device/agent data and remaps hosted
+     * domains) and then checking equality.
+     *
+     * @param other the other JID to compare against
+     * @return {@code true} if both JIDs resolve to the same user JID after
+     *         hosted-domain normalization
+     *
+     * @apiNote WAWebWidFactory.isSameAccountAndAddressingMode: recognizes
+     * {@code hosted↔c.us} and {@code hosted.lid↔lid} as same-account pairs.
+     */
+    public boolean isSameAccount(Jid other) {
+        if (other == null) {
+            return false;
+        }
+        return this.toUserJid().equals(other.toUserJid());
     }
 
     /**

@@ -99,6 +99,8 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
             // WAWebSendUserMsgJob.maybeRefreshLid: trigger contact list sync
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Server requested LID refresh for {0}", chatJid);
+            store.removeDeviceList(chatJid);
+            deviceService.getDeviceLists(List.of(chatJid), "message", null, false);
         }
 
         ack.phash().ifPresent(serverPhash ->

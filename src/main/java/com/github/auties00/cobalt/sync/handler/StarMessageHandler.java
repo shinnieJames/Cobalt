@@ -44,6 +44,10 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
+        // Web only supports SET for star mutations (REMOVE returns Unsupported)
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
 
         if (!(mutation.value().action().orElse(null) instanceof StarAction action)) {
             return false;
@@ -65,11 +69,6 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
                 .findMessageById(chatJid, messageId);
         if (message.isEmpty()) {
             return false;
-        }
-
-        // Web only supports SET for star mutations (REMOVE returns Unsupported)
-        if (mutation.operation() != SyncdOperation.SET) {
-            return true;
         }
 
         starMessage(message.get(), action.starred());

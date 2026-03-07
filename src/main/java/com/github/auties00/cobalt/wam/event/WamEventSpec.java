@@ -62,6 +62,22 @@ public interface WamEventSpec {
     int privateStatsId();
 
     /**
+     * Validates this event before commit, checking that required fields
+     * are non-{@code null} and any custom conditions are satisfied.
+     *
+     * <p>The default implementation always returns {@code true}. Generated
+     * implementations may override this method with codegen-defined
+     * validators that check required field presence and custom conditions,
+     * matching WhatsApp Web's {@code runPreCommitValidation()}.
+     *
+     * @return {@code true} if the event is valid and should be committed,
+     *         {@code false} if validation failed
+     */
+    default boolean validate() {
+        return true;
+    }
+
+    /**
      * Marks this event as committed and returns whether this is the
      * first commit.
      *

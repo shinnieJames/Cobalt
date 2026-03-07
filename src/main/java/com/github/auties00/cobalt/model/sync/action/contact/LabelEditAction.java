@@ -176,7 +176,8 @@ public final class LabelEditAction implements SyncAction<LabelEditActionArgs> {
         COMMUNITY(6),
         SERVER_ASSIGNED(7),
         DRAFTED(8),
-        AI_HANDOFF(9);
+        AI_HANDOFF(9),
+        CHANNELS(10);
 
         ListType(@ProtobufEnumIndex int index) {
             this.index = index;

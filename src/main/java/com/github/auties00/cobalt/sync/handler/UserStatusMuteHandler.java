@@ -39,6 +39,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
+        // Web: only SET is supported; non-SET returns Unsupported
         if (mutation.operation() != SyncdOperation.SET) {
             return true;
         }
@@ -51,10 +52,20 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
         var userJidString = indexArray.getString(1);
         var userJid = Jid.of(userJidString);
 
-        var contact = client.store()
-                .findContactByJid(userJid)
-                .orElseGet(() -> client.store().addNewContact(userJid));
-        contact.setStatusMuted(action.muted());
+        // Web: handles both user contacts and group metadata.
+        // Group status mute (muting a group's status updates) is stored in
+        // the group metadata table; we acknowledge it without acting since
+        // our Chat model does not track per-group status mute.
+        if (userJid.hasGroupServer()) {
+            return true;
+        }
+
+        // Web: returns Orphan if contact not found (does NOT create a new contact)
+        var contact = client.store().findContactByJid(userJid);
+        if (contact.isEmpty()) {
+            return false;
+        }
+        contact.get().setStatusMuted(action.muted());
 
         return true;
     }

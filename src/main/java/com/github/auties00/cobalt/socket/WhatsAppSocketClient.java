@@ -792,7 +792,7 @@ public final class WhatsAppSocketClient {
      * @throws IOException if serialization or sending fails
      */
     public void sendNode(Node node) throws IOException {
-        var encoded = new byte[65536];
+        var encoded = new byte[NodeEncoder.sizeOf(node)];
         var length = NodeEncoder.encode(node, encoded, 0, encoded.length);
         sendBinary(ByteBuffer.wrap(encoded, 0, length));
     }
@@ -810,7 +810,7 @@ public final class WhatsAppSocketClient {
                     return;
                 }
 
-                try(var decoder = new NodeDecoder(plaintext)) {
+                try(var decoder = NodeDecoder.of(plaintext)) {
                     while (decoder.hasData()) {
                         var node = decoder.decode();
                         listener.onNode(node);

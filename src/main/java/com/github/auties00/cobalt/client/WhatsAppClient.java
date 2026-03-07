@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.*;
 import com.github.auties00.cobalt.message.MessageService;
+import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.bot.profile.*;
 import com.github.auties00.cobalt.model.business.*;
@@ -50,8 +51,9 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
 import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.stream.SocketRequest;
+import com.github.auties00.cobalt.socket.WhatsAppSocketStanza;
 import com.github.auties00.cobalt.stream.SocketStream;
+import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.util.FastRandomUtils;
 import com.github.auties00.cobalt.util.RandomIdUtils;
@@ -111,13 +113,14 @@ public final class WhatsAppClient {
     private final LidMigrationService lidMigrationService;
     private final DeviceService deviceService;
     private final ABPropsService abPropsService;
+    private final InactiveGroupLidMigrationService inactiveGroupLidMigrationService;
 
     private final MessageService messageService;
     private final WamService wamService;
 
     private WhatsAppSocketClient socketClient;
     private final SocketStream socketStream;
-    private final ConcurrentMap<String, SocketRequest> pendingSocketRequests;
+    private final ConcurrentMap<String, WhatsAppSocketStanza> pendingSocketRequests;
     private Thread shutdownHook;
 
     WhatsAppClient(WhatsAppStore store, WhatsAppClientVerificationHandler.Web webVerificationHandler, WhatsAppClientMessagePreviewHandler messagePreviewHandler, WhatsAppClientErrorHandler errorHandler) {
@@ -129,13 +132,15 @@ public final class WhatsAppClient {
         SignalSessionCipher sessionCipher = new SignalSessionCipher(store);
         SignalGroupCipher groupCipher = new SignalGroupCipher(store);
         this.abPropsService = new ABPropsService(this);
-        this.webAppStateService = new WebAppStateService(this, abPropsService);
+        var snapshotRecoveryService = new SnapshotRecoveryService(this, abPropsService);
+        this.webAppStateService = new WebAppStateService(this, abPropsService, snapshotRecoveryService);
         this.lidMigrationService = new LidMigrationService(this, abPropsService);
+        this.inactiveGroupLidMigrationService = new InactiveGroupLidMigrationService(this, abPropsService);
         this.deviceService = new DeviceService(this, abPropsService, sessionCipher);
         this.messageService = new MessageService(this, sessionCipher, groupCipher, deviceService, abPropsService);
         this.wamService = new WamService(this, abPropsService);
         this.pendingSocketRequests = new ConcurrentHashMap<>();
-        this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, messageService, abPropsService, deviceService, wamService);
+        this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService);
         this.messagePreviewHandler = messagePreviewHandler;
     }
 
@@ -316,7 +321,7 @@ public final class WhatsAppClient {
             Thread.startVirtualThread(() -> listener.onNodeSent(this, outgoing));
         }
 
-        var request = new SocketRequest(outgoing, filter);
+        var request = new WhatsAppSocketStanza(outgoing, filter);
         pendingSocketRequests.put(outgoingId, request);
         return request.waitForResponse();
     }
@@ -4684,6 +4689,27 @@ public final class WhatsAppClient {
 
     public void pullWebAppState(SyncPatchType... patches) {
         webAppStateService.pullPatches(patches);
+    }
+
+    /**
+     * Schedules the all-devices-responded check for missing sync key timeout.
+     *
+     * <p>Called when a companion device responds to a key share request without
+     * providing the requested key, to trigger the grace period before fatal.
+     */
+    public void scheduleAllDevicesRespondedCheck() {
+        webAppStateService.scheduleAllDevicesRespondedCheck();
+    }
+
+    /**
+     * Retries orphan mutations across all collections.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan}: called after events that
+     * may have introduced new entities (history sync, contact sync) so that
+     * previously orphaned mutations can be resolved.
+     */
+    public void retryOrphanMutations() {
+        webAppStateService.retryAllOrphanMutations();
     }
 
     private void updateBusinessCertificate(String newName) {

@@ -31,14 +31,14 @@ public final class MutationResponseParser {
         // Check for IQ-level error (separate from collection-level errors)
         var iqType = responseNode.getAttributeAsString("type");
         if (iqType.isPresent() && iqType.get().equals("error")) {
-            var errorCode = responseNode.getChild("error")
-                    .flatMap(e -> e.getAttributeAsString("code"))
-                    .map(Integer::parseInt)
-                    .orElse(0);
-            var errorText = responseNode.getChild("error")
-                    .flatMap(e -> e.getAttributeAsString("text"))
-                    .orElse("unknown");
-            handleIqLevelError(errorCode, errorText);
+            var iqErrorNode = responseNode.getChild("error").orElse(null);
+            var errorCode = iqErrorNode != null
+                    ? iqErrorNode.getAttributeAsString("code").map(Integer::parseInt).orElse(0)
+                    : 0;
+            var errorText = iqErrorNode != null
+                    ? iqErrorNode.getAttributeAsString("text").orElse("unknown")
+                    : "unknown";
+            handleIqLevelError(errorCode, errorText, iqErrorNode);
         }
 
         // Navigate to sync node
@@ -91,14 +91,14 @@ public final class MutationResponseParser {
         // Check for IQ-level error
         var iqType = responseNode.getAttributeAsString("type");
         if (iqType.isPresent() && iqType.get().equals("error")) {
-            var errorCode = responseNode.getChild("error")
-                    .flatMap(e -> e.getAttributeAsString("code"))
-                    .map(Integer::parseInt)
-                    .orElse(0);
-            var errorText = responseNode.getChild("error")
-                    .flatMap(e -> e.getAttributeAsString("text"))
-                    .orElse("unknown");
-            handleIqLevelError(errorCode, errorText);
+            var iqErrorNode = responseNode.getChild("error").orElse(null);
+            var errorCode = iqErrorNode != null
+                    ? iqErrorNode.getAttributeAsString("code").map(Integer::parseInt).orElse(0)
+                    : 0;
+            var errorText = iqErrorNode != null
+                    ? iqErrorNode.getAttributeAsString("text").orElse("unknown")
+                    : "unknown";
+            handleIqLevelError(errorCode, errorText, iqErrorNode);
         }
 
         var syncNode = responseNode.getChild("sync")
@@ -149,8 +149,9 @@ public final class MutationResponseParser {
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError for 400/404/other errors
      */
     private void handleErrorResponse(Node collectionNode) {
-        var errorCode = collectionNode.getChild("error")
-                .flatMap(errorNode -> errorNode.getAttributeAsString("code"))
+        var errorNode = collectionNode.getChild("error");
+        var errorCode = errorNode
+                .flatMap(e -> e.getAttributeAsString("code"))
                 .orElse("unknown");
 
         switch (errorCode) {
@@ -160,7 +161,13 @@ public final class MutationResponseParser {
             case "400", "404", "405", "406" -> throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "Server returned fatal error code: " + errorCode, null
             );
-            default -> throw new WhatsAppWebAppStateSyncException.RetryableServerError(errorCode);
+            default -> {
+                // Per WA Web: extract server backoff from error response
+                var serverBackoffMs = errorNode
+                        .map(e -> e.getAttributeAsLong("retry-after", null))
+                        .orElse(null);
+                throw new WhatsAppWebAppStateSyncException.RetryableServerError(errorCode, serverBackoffMs);
+            }
         }
     }
 
@@ -176,12 +183,18 @@ public final class MutationResponseParser {
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError for fatal error codes
      * @throws WhatsAppWebAppStateSyncException.RetryableServerError for retryable error codes
      */
-    private void handleIqLevelError(int errorCode, String errorText) {
+    private void handleIqLevelError(int errorCode, String errorText, Node errorNode) {
         switch (errorCode) {
             case 400, 404, 405, 406 -> throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "IQ-level fatal error " + errorCode + ": " + errorText, null);
-            default -> throw new WhatsAppWebAppStateSyncException.RetryableServerError(
-                    String.valueOf(errorCode));
+            default -> {
+                // Per WA Web: extract server backoff from IQ error response
+                var serverBackoffMs = errorNode != null
+                        ? errorNode.getAttributeAsLong("retry-after", null)
+                        : null;
+                throw new WhatsAppWebAppStateSyncException.RetryableServerError(
+                        String.valueOf(errorCode), serverBackoffMs);
+            }
         }
     }
 

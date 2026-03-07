@@ -8,7 +8,9 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles recent emoji weights actions.
  *
- * <p>This handler processes mutations that track frequently used emojis and their weights.
+ * <p>This handler processes mutations that track frequently used emojis and their
+ * weights. No dedicated WA Web sync handler module exists for this action type;
+ * the web client stores emoji weights directly in its IndexedDB collection.
  */
 public final class RecentEmojiWeightsHandler implements WebAppStateActionHandler {
 
@@ -34,9 +36,6 @@ public final class RecentEmojiWeightsHandler implements WebAppStateActionHandler
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web: no dedicated sync handler module for RecentEmojiWeights.
-        // The web stores emoji weights directly in its RecentEmojiCollection (IndexedDB).
-        // No equivalent store methods in the Java data model.
         return true;
     }
 }

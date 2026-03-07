@@ -41,6 +41,8 @@ import com.github.auties00.libsignal.key.SignalPreKeyPair;
 import com.github.auties00.libsignal.key.SignalSignedKeyPair;
 import com.github.auties00.libsignal.state.SignalSessionRecord;
 import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 import it.auties.protobuf.stream.ProtobufInputStream;
 import it.auties.protobuf.stream.ProtobufOutputStream;
 
@@ -63,9 +65,11 @@ import static java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor;
 public final class InMemoryStore extends AbstractWhatsAppStore {
     private static final String CHAT_PREFIX = "chat_";
     private static final String NEWSLETTER_PREFIX = "newsletter_";
-    
+
+    @ProtobufProperty(index = 82, type = ProtobufType.MAP, mapKeyType =  ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     private final ConcurrentHashMap<Jid, InMemoryChat> chats;
 
+    @ProtobufProperty(index = 83, type = ProtobufType.MAP, mapKeyType =  ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     private final ConcurrentHashMap<Jid, InMemoryNewsletter> newsletters;
 
     private final ConcurrentHashMap<String, ChatMessageInfo> status;
@@ -76,8 +80,8 @@ public final class InMemoryStore extends AbstractWhatsAppStore {
 
     private volatile Thread attributionThread;
 
-    InMemoryStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, JidDevice device, ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, String about, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, String businessWebsite, String businessEmail, BusinessCategory businessCategory, ConcurrentHashMap<Jid, Contact> contacts, ConcurrentHashMap<String, CallOffer> calls, ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeys, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys, LinkedHashMap<String, AppStateSyncKey> appStateKeys, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions, ConcurrentMap<SyncPatchType, SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickers, ConcurrentMap<String, Sticker> favouriteStickers, ConcurrentMap<String, QuickReply> quickReplies, ConcurrentMap<Integer, Label> labels, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, ConcurrentMap<Jid, BusinessVerifiedNameCertificate> verifiedBusinessNames, Path directory, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, com.github.auties00.cobalt.model.setting.ChatLockSettings chatLockSettings, List<Jid> favoriteChats, List<String> primaryFeatures) {
-        super(uuid, phoneNumber, clientType, initializationTimeStamp, device, releaseChannel, online, locale, name, verifiedName, profilePicture, about, jid, lid, businessAddress, businessLongitude, businessLatitude, businessDescription, businessWebsite, businessEmail, businessCategory, contacts, calls, privacySettings, unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer, webHistoryPolicy, automaticPresenceUpdates, automaticMessageReceipts, checkPatchMacs, syncedChats, syncedContacts, syncedNewsletters, syncedStatus, syncedWebAppState, syncedBusinessCertificate, registrationId, noiseKeyPair, identityKeyPair, signedDeviceIdentity, signedKeyPair, preKeys, fdid, deviceId, advertisingId, identityId, backupToken, senderKeys, appStateKeys, sessions, hashStates, registered, showSecurityNotifications, recentStickers, favouriteStickers, quickReplies, labels, clientVersion, companionVersion, lastAdvCheckTime, remoteIdentities, missingSyncKeys, advSecretKey, verifiedBusinessNames, directory, disableLinkPreviews, relayAllCalls, externalWebBeta, chatLockSettings, favoriteChats, primaryFeatures);
+    InMemoryStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, JidDevice device, ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, String about, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, String businessWebsite, String businessEmail, BusinessCategory businessCategory, ConcurrentHashMap<Jid, Contact> contacts, ConcurrentHashMap<String, CallOffer> calls, ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeys, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys, LinkedHashMap<String, AppStateSyncKey> appStateKeys, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions, ConcurrentMap<SyncPatchType, SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickers, ConcurrentMap<String, Sticker> favouriteStickers, ConcurrentMap<String, QuickReply> quickReplies, ConcurrentMap<String, Label> labels, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, ConcurrentMap<Jid, BusinessVerifiedNameCertificate> verifiedBusinessNames, Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, com.github.auties00.cobalt.model.setting.ChatLockSettings chatLockSettings, List<Jid> favoriteChats, List<String> primaryFeatures, ConcurrentMap<Jid, com.github.auties00.cobalt.model.chat.ChatMute> mentionEveryoneMuteExpirations) {
+        super(uuid, phoneNumber, clientType, initializationTimeStamp, device, releaseChannel, online, locale, name, verifiedName, profilePicture, about, jid, lid, businessAddress, businessLongitude, businessLatitude, businessDescription, businessWebsite, businessEmail, businessCategory, contacts, calls, privacySettings, unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer, webHistoryPolicy, automaticPresenceUpdates, automaticMessageReceipts, checkPatchMacs, syncedChats, syncedContacts, syncedNewsletters, syncedStatus, syncedWebAppState, syncedBusinessCertificate, registrationId, noiseKeyPair, identityKeyPair, signedDeviceIdentity, signedKeyPair, preKeys, fdid, deviceId, advertisingId, identityId, backupToken, senderKeys, appStateKeys, sessions, hashStates, registered, showSecurityNotifications, recentStickers, favouriteStickers, quickReplies, labels, clientVersion, companionVersion, lastAdvCheckTime, remoteIdentities, missingSyncKeys, advSecretKey, verifiedBusinessNames, directory, primaryDeviceSupportsSyncdRecovery, disableLinkPreviews, relayAllCalls, externalWebBeta, chatLockSettings, favoriteChats, primaryFeatures, mentionEveryoneMuteExpirations);
         this.chats = new ConcurrentHashMap<>();
         this.newsletters = new ConcurrentHashMap<>();
         this.status = new ConcurrentHashMap<>();
@@ -273,7 +277,16 @@ public final class InMemoryStore extends AbstractWhatsAppStore {
                     if(lidChat != null) {
                         yield Optional.of(lidChat);
                     } else {
-                        yield findPhoneByLid(targetJid)
+                        // Multi-hop: oldLid → PN → chat, or oldLid → PN → currentLid → chat
+                        var phone = findPhoneByLid(targetJid);
+                        if(phone.isEmpty()) {
+                            yield Optional.empty();
+                        }
+                        var phoneChat = chats.get(phone.get());
+                        if(phoneChat != null) {
+                            yield Optional.of(phoneChat);
+                        }
+                        yield findLidByPhone(phone.get())
                                 .map(chats::get);
                     }
                 } else {
@@ -420,12 +433,8 @@ public final class InMemoryStore extends AbstractWhatsAppStore {
             return Optional.empty();
         }
 
-        var parent = chats.get(parentJid.get());
-        if(parent == null) {
-            return Optional.empty();
-        }
-
-        return parent.getMessageById(id.get());
+        return findChatByJid(parentJid.get())
+                .flatMap(chat -> chat.getMessageById(id.get()));
     }
 
     @Override

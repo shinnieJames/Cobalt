@@ -49,18 +49,22 @@ public final class RemoveRecentStickerHandler implements WebAppStateActionHandle
             return false;
         }
 
-        if (!(mutation.value().action().orElse(null) instanceof RemoveRecentStickerAction action)) {
+        // Web: returns Orphan if sticker is not in the collection
+        var sticker = client.store().findRecentSticker(stickerHash);
+        if (sticker.isEmpty()) {
             return false;
         }
 
-        // Web: look up the sticker and only remove if lastStickerSentTs is null
-        // or the sticker's timestamp <= lastStickerSentTs
-        var sticker = client.store().findRecentSticker(stickerHash);
-        if (sticker.isEmpty()) {
-            return true;
+        // Web: reads removeRecentStickerAction?.lastStickerSentTs
+        // If action is missing, lastStickerSentTs is null and sticker is still removed
+        var action = mutation.value().action().orElse(null) instanceof RemoveRecentStickerAction a ? a : null;
+        var lastStickerSentTs = action != null
+                ? action.lastStickerSentTs().map(java.time.Instant::getEpochSecond).orElse(null)
+                : null;
+        var stickerTimestamp = sticker.get().timestamp().orElse(0L);
+        if (lastStickerSentTs == null || stickerTimestamp <= lastStickerSentTs) {
+            client.store().removeRecentSticker(stickerHash);
         }
-
-        client.store().removeRecentSticker(stickerHash);
 
         return true;
     }

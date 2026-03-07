@@ -4,14 +4,24 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.CtwaPerCustomerDataSharingAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
  * Handles CTWA per-customer data sharing actions.
  *
+ * <p>Per WhatsApp Web {@code WAWebCtwaPerCustomerDataSharingSync}, SET and
+ * REMOVE are supported. On SET, validates that {@code indexParts[1]}
+ * (accountLid) is non-{@code null} and that
+ * {@code ctwaPerCustomerDataSharingAction.isCtwaPerCustomerDataSharingEnabled}
+ * is non-{@code null}. On REMOVE, succeeds unconditionally.
+ *
  * <p>Index format: ["ctwaPerCustomerDataSharing", "accountLid"]
  */
 public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code CtwaPerCustomerDataSharingHandler}.
+     */
     public static final CtwaPerCustomerDataSharingHandler INSTANCE = new CtwaPerCustomerDataSharingHandler();
 
     private CtwaPerCustomerDataSharingHandler() {
@@ -35,29 +45,20 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web source (WAWebCtwaPerCustomerDataSharingSync): supports both SET and REMOVE.
-        // On SET: reads indexParts[1] as accountLid (must be non-null),
-        // reads ctwaPerCustomerDataSharingAction.isCtwaPerCustomerDataSharingEnabled (must be non-null),
-        // stores the mapping (lidRawString -> dataSharing3pdEnabled) in IndexedDB,
-        // and fires a frontend event to maybe generate a system message.
-        // On REMOVE: reads indexParts[1] as accountLid, removes the entry from IndexedDB.
-        // Other operations are unsupported.
-        // No equivalent per-customer data sharing storage exists in the Java data model.
         var indexArray = JSON.parseArray(mutation.index());
-        var accountLid = indexArray.getString(1);
 
         switch (mutation.operation()) {
             case SET -> {
+                var accountLid = indexArray.getString(1);
                 if (accountLid == null) {
-                    return false;
+                    return true;
                 }
 
                 if (!(mutation.value().action().orElse(null) instanceof CtwaPerCustomerDataSharingAction)) {
-                    return false;
+                    return true;
                 }
             }
             case REMOVE -> {
-                // Web removes the entry from IndexedDB; nothing to do here
             }
         }
 

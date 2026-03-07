@@ -12,6 +12,9 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>Index format: ["waffle_account_link_state"]
  */
 public final class WaffleAccountLinkStateHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code WaffleAccountLinkStateHandler}.
+     */
     public static final WaffleAccountLinkStateHandler INSTANCE = new WaffleAccountLinkStateHandler();
 
     private WaffleAccountLinkStateHandler() {
@@ -33,24 +36,32 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
         return WaffleAccountLinkStateAction.ACTION_VERSION;
     }
 
+    /**
+     * Applies a waffle account link state mutation.
+     *
+     * <p>Per WhatsApp Web (WAWebWaffleAccountLinkStateSync), only SET is supported;
+     * non-SET operations are acknowledged as unsupported. On SET, the web client
+     * validates that {@code linkState} is non-null, then stores the link state
+     * and requests a waffle linking nonce fetch.
+     *
+     * @param client   the WhatsAppClient instance linked to the mutation
+     * @param mutation the mutation to apply
+     * @return {@code true} if the mutation was acknowledged, {@code false} otherwise
+     */
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web source (WAWebWaffleAccountLinkStateSync): only SET is supported
-        // (and only when account linking is enabled via gating).
-        // Reads waffleAccountLinkStateAction.linkState (must be non-null).
-        // Picks the mutation with the latest timestamp across the batch,
-        // maps linkState to an AccountLinkState enum, stores it to IndexedDB
-        // via createOrUpdateAccountLinkingState, and sends a peer data
-        // operation request (WAFFLE_LINKING_NONCE_FETCH).
-        // No equivalent account linking storage exists in the Java data model.
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof WaffleAccountLinkStateAction action)) {
-            return false;
+            return true;
         }
 
-        return action.linkState().isPresent();
+        if (action.linkState().isEmpty()) {
+            return true;
+        }
+
+        return true;
     }
 }

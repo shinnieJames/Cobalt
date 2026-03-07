@@ -8,11 +8,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles subscription actions.
  *
- * <p>This handler processes mutations that manage newsletter/channel subscriptions.
- *
- * <p>Index format: ["subscriptionAction", "subscriptionId"]
+ * <p>Index format: ["subscription"]
  */
 public final class SubscriptionHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code SubscriptionHandler}.
+     */
     public static final SubscriptionHandler INSTANCE = new SubscriptionHandler();
 
     private SubscriptionHandler() {
@@ -36,8 +37,6 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // No dedicated web module for subscription sync.
-        // No subscription model exists in the Java store, so this is a no-op.
         return true;
     }
 }

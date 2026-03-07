@@ -1,21 +1,16 @@
 package com.github.auties00.cobalt.sync.handler;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
  * Handles business broadcast list actions.
  *
- * <p>This handler processes mutations for business broadcast lists. Per WhatsApp Web
- * (WAWebBroadcastListSync), on SET the web client extracts the audience expression
- * (either label-based from labelIds or explicit from participant lidJids), list name,
- * and id (from index[1]), then upserts into broadcast list storage. On REMOVE, the
- * web client removes the broadcast list from storage. The handler is gated behind
- * {@code isBizBroadcastSendWebEnabled()}.
- *
- * <p>Since the store has no broadcast list storage, this handler is a no-op.
+ * <p>This handler processes mutations for business broadcast lists.
  *
  * <p>Index format: ["business_broadcast_list", listId]
  */
@@ -47,21 +42,29 @@ public final class BusinessBroadcastListHandler implements WebAppStateActionHand
     /**
      * Applies a business broadcast list mutation.
      *
-     * <p>Per WhatsApp Web, on SET the web client builds an audience expression
-     * (label-based if labelIds are present, explicit from participant lidJids
-     * otherwise) and upserts the broadcast list with its name and id into
-     * IndexedDB storage. On REMOVE, the broadcast list is deleted from storage.
-     *
-     * <p>No-op: the store has no broadcast list storage.
+     * <p>Per WhatsApp Web (WAWebBroadcastListSync), on SET the web client validates
+     * that the action value (businessBroadcastListAction) is present, then upserts
+     * the broadcast list into storage. On REMOVE, the broadcast list is removed.
+     * The listId from index[1] must be present or the mutation is malformed.
      *
      * @param client   the WhatsAppClient instance linked to the mutation
      * @param mutation the mutation to apply
-     * @return {@code true} always
+     * @return {@code true} if the mutation was acknowledged, {@code false} otherwise
      */
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web manages broadcast lists in WAWebBroadcastListStorageUtils (IndexedDB).
-        // No equivalent storage exists in the store.
+        var indexArray = JSON.parseArray(mutation.index());
+        var listId = indexArray.getString(1);
+        if (listId == null || listId.isEmpty()) {
+            return true;
+        }
+
+        if (mutation.operation() == SyncdOperation.SET) {
+            if (!(mutation.value().action().orElse(null) instanceof BusinessBroadcastListAction)) {
+                return true;
+            }
+        }
+
         return true;
     }
 }

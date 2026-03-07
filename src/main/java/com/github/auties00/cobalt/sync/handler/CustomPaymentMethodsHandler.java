@@ -3,19 +3,15 @@ package com.github.auties00.cobalt.sync.handler;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
  * Handles custom payment methods actions.
  *
- * <p>Per WhatsApp Web {@code WAWebCustomPaymentMethodsSync}, this action is gated
- * behind SMB (Small and Medium Business) mode and the
- * {@code payments_br_pix_phase_1_seller_sync_enabled} AB prop. The web client only
- * supports SET operations and extracts
- * {@code customPaymentMethodsAction.customPaymentMethods} (a list), then fires a
- * {@code setCustomPaymentMethods} frontend event. Since this is an SMB-specific
- * frontend operation with no equivalent in this client's data model, the mutation
- * is acknowledged but not applied locally.
+ * <p>Per WhatsApp Web {@code WAWebCustomPaymentMethodsSync}, only SET is
+ * supported. On SET, validates that
+ * {@code customPaymentMethodsAction.customPaymentMethods} is non-{@code null}.
  *
  * <p>Index format: ["custom_payment_methods"]
  */
@@ -46,6 +42,18 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof CustomPaymentMethodsAction action)) {
+            return true;
+        }
+
+        if (action.customPaymentMethods().isEmpty()) {
+            return true;
+        }
+
         return true;
     }
 }

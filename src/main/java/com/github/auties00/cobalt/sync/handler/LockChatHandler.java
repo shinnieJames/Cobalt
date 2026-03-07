@@ -62,6 +62,10 @@ public final class LockChatHandler implements WebAppStateActionHandler {
         }
 
         chat.get().setLocked(action.locked());
+        if (action.locked()) {
+            chat.get().setArchived(false);
+            chat.get().setPinnedTimestamp(null);
+        }
 
         return true;
     }

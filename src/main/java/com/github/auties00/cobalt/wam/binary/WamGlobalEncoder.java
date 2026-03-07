@@ -1349,4 +1349,55 @@ public final class WamGlobalEncoder {
     public static int writeIsInCohort(boolean value, byte[] output, int offset) {
         return WamEncoder.writeInt(IS_IN_COHORT, GLOBAL, value ? 1 : 0, output, offset);
     }
+
+    // ---- dynamic dispatch for dirty-tracking ----
+
+    /**
+     * Returns the number of bytes required to encode a global attribute
+     * whose type is determined at runtime from the value's class.
+     *
+     * <p>Supported value types are {@link Long}, {@link Integer},
+     * {@link String}, and {@link Boolean}. {@link Double} values that
+     * are {@link Double#isNaN(double) NaN} are skipped (size 0).
+     *
+     * @param fieldId the numeric field identifier
+     * @param value   the global value (must not be {@code null})
+     * @return the encoded size in bytes, or {@code 0} if the value
+     *         should be skipped
+     */
+    public static int dynamicGlobalSize(int fieldId, Object value) {
+        return switch (value) {
+            case Double d -> Double.isNaN(d) ? 0 : WamEncoder.floatSize(fieldId);
+            case Number n -> WamEncoder.intSize(fieldId, n.longValue());
+            case String s -> WamEncoder.stringSize(fieldId, s);
+            case Boolean b -> WamEncoder.intSize(fieldId, b ? 1 : 0);
+            default -> throw new IllegalArgumentException(
+                    "Unsupported global value type: " + value.getClass());
+        };
+    }
+
+    /**
+     * Writes a global attribute whose type is determined at runtime from
+     * the value's class into the output array.
+     *
+     * <p>Supported value types are {@link Long}, {@link Integer},
+     * {@link String}, and {@link Boolean}. {@link Double} values that
+     * are {@link Double#isNaN(double) NaN} are silently skipped.
+     *
+     * @param fieldId the numeric field identifier
+     * @param value   the global value (must not be {@code null})
+     * @param output  the output byte array
+     * @param offset  the current offset in the output array
+     * @return the new offset after writing
+     */
+    public static int writeDynamicGlobal(int fieldId, Object value, byte[] output, int offset) {
+        return switch (value) {
+            case Double d -> Double.isNaN(d) ? offset : WamEncoder.writeFloat(fieldId, GLOBAL, d, output, offset);
+            case Number n -> WamEncoder.writeInt(fieldId, GLOBAL, n.longValue(), output, offset);
+            case String s -> WamEncoder.writeString(fieldId, GLOBAL, s, output, offset);
+            case Boolean b -> WamEncoder.writeInt(fieldId, GLOBAL, b ? 1 : 0, output, offset);
+            default -> throw new IllegalArgumentException(
+                    "Unsupported global value type: " + value.getClass());
+        };
+    }
 }

@@ -279,4 +279,7 @@ public interface MessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 65, type = WamType.STRING)
     Optional<String> userToDeviceSizeBucket();
+
+    @WamProperty(index = 83, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
 }

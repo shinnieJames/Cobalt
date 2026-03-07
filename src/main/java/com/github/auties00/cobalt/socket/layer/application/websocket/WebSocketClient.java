@@ -31,6 +31,15 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p>After the upgrade completes, the connection transitions to
  * asynchronous data flow: the selector delivers decoded WebSocket data
  * frame payloads through the layer context chain to the listener.
+ *
+ * <p><strong>Performance notes:</strong> The upgrade handshake header
+ * validation in {@link #consumeAndValidateHeaders} uses a two-tier
+ * approach.  When the entire header line fits in the 8 KiB read buffer
+ * (the common case for a 101 response), header names are matched with
+ * bulk {@link HttpResponseReader#regionMatchesIgnoreCase} and values
+ * are validated by direct buffer peeking — no per-byte method calls at
+ * all.  The slow path (line spans buffers) is split into a separate
+ * method so the JIT always inlines the fast path.
  */
 public final class WebSocketClient {
     private static final byte[] WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11".getBytes(StandardCharsets.US_ASCII);
@@ -41,11 +50,21 @@ public final class WebSocketClient {
     private static final int MAX_RESPONSE_HEADER_SIZE = 65_536;
     private static final int MAX_STATUS_LINE_SPACES = 64;
     private static final int EXPECTED_STATUS_CODE = 101;
+
+    // Header names — lowercase for case-insensitive matching
     private static final byte[] HEADER_UPGRADE = "upgrade".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] HEADER_CONNECTION = "connection".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] HEADER_ACCEPT = "sec-websocket-accept".getBytes(StandardCharsets.US_ASCII);
+
+    // Expected values — lowercase for case-insensitive matching
     private static final byte[] VALUE_WEBSOCKET = "websocket".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] VALUE_UPGRADE = "upgrade".getBytes(StandardCharsets.US_ASCII);
+
+    // Bit flags for header validation state
+    private static final int FLAG_UPGRADE = 1;
+    private static final int FLAG_CONNECTION = 2;
+    private static final int FLAG_ACCEPT = 4;
+    private static final int FLAG_END = 8;
 
     /**
      * Pre-encoded HTTP request line prefix: {@code "GET "}.
@@ -210,7 +229,7 @@ public final class WebSocketClient {
         }
 
         consumeAndValidateHeaders(deadline, expectedAccept);
-        var leftover = responseReader.remainingBytes();
+        var leftover = responseReader.buffered();
         responseReader.reset();
         transportLayer.finishConnect(leftover);
     }
@@ -269,9 +288,9 @@ public final class WebSocketClient {
         var portBytes = port != 443 ? Integer.toString(port).getBytes(StandardCharsets.US_ASCII) : null;
 
         var size = REQ_LINE_PREFIX.length + pathBytes.length + REQ_HOST_HEADER.length
-                + hostBytes.length + (portBytes != null ? 1 + portBytes.length : 0)
-                + REQ_STATIC_BLOCK.length + websocketKey.length
-                + REQ_ORIGIN.length + hostBytes.length + REQ_END.length;
+                   + hostBytes.length + (portBytes != null ? 1 + portBytes.length : 0)
+                   + REQ_STATIC_BLOCK.length + websocketKey.length
+                   + REQ_ORIGIN.length + hostBytes.length + REQ_END.length;
 
         var request = new byte[size];
         var pos = 0;
@@ -313,7 +332,26 @@ public final class WebSocketClient {
 
     /**
      * Consumes the HTTP response headers and validates the mandatory
-     * WebSocket upgrade headers inline.
+     * WebSocket upgrade headers.
+     *
+     * <p>Two execution tiers:
+     * <ol>
+     *   <li><b>Fast path</b> (entire line in buffer — the common case
+     *       for a 101 response with an 8 KiB read buffer): header names
+     *       are matched with
+     *       {@link HttpResponseReader#regionMatchesIgnoreCase}, values
+     *       are validated with direct buffer peeking via
+     *       {@link HttpResponseReader#peekBuffered}, and non-matching
+     *       lines are skipped with a single
+     *       {@link HttpResponseReader#skipBuffered} — zero per-byte
+     *       method calls.</li>
+     *   <li><b>Slow path</b> (line spans buffers — essentially never
+     *       for typical upgrade responses): split into
+     *       {@link #consumeHeaderLineSlow} so the JIT always inlines
+     *       the fast path.  Uses per-byte reads with vectorised
+     *       {@link HttpResponseReader#skipToEndOfLine} for
+     *       non-matching lines.</li>
+     * </ol>
      *
      * @param deadline            the handshake deadline
      * @param expectedAcceptBytes the expected {@code Sec-WebSocket-Accept}
@@ -323,87 +361,252 @@ public final class WebSocketClient {
      */
     private void consumeAndValidateHeaders(long deadline, byte[] expectedAcceptBytes) throws IOException {
         responseReader.startHeaderSection();
-        var hasUpgrade = false;
-        var hasConnectionUpgrade = false;
-        var acceptValid = false;
-
         responseReader.skipToEndOfLine(deadline);
 
+        var flags = 0;
+
         while (transportLayer.isConnected()) {
-            var b = responseReader.nextHeaderByte(deadline);
-            if (b == CARRIAGE_RETURN) {
-                b = responseReader.nextHeaderByte(deadline);
-            }
-            if (b == LINE_FEED) {
-                break;
+            if (responseReader.bufferedRemaining() == 0) {
+                responseReader.refillBuffered(deadline);
             }
 
-            var lower = (byte) (b | 0x20);
-            byte[] candidate;
-            if (lower == 'u') {
-                candidate = HEADER_UPGRADE;
-            } else if (lower == 'c') {
-                candidate = HEADER_CONNECTION;
-            } else if (lower == 's') {
-                candidate = HEADER_ACCEPT;
+            var dist = responseReader.distanceToLineFeed();
+
+            if (dist >= 0) {
+
+                // Empty line — end of headers
+                if (dist == 0 || (dist == 1 && responseReader.peekBuffered(0) == CARRIAGE_RETURN)) {
+                    responseReader.accountHeaderBytes(dist + 1);
+                    responseReader.skipBuffered(dist + 1);
+                    break;
+                }
+
+                var contentLen = responseReader.peekBuffered(dist - 1) == CARRIAGE_RETURN
+                        ? dist - 1
+                        : dist;
+
+                if ((flags & FLAG_UPGRADE) == 0
+                    && contentLen > HEADER_UPGRADE.length
+                    && responseReader.regionMatchesIgnoreCase(0, HEADER_UPGRADE, HEADER_UPGRADE.length)
+                    && responseReader.peekBuffered(HEADER_UPGRADE.length) == ':') {
+                    if (matchBufferedValueIgnoreCase(HEADER_UPGRADE.length + 1, contentLen, VALUE_WEBSOCKET)) {
+                        flags |= FLAG_UPGRADE;
+                    }
+                } else if ((flags & FLAG_CONNECTION) == 0
+                           && contentLen > HEADER_CONNECTION.length
+                           && responseReader.regionMatchesIgnoreCase(0, HEADER_CONNECTION, HEADER_CONNECTION.length)
+                           && responseReader.peekBuffered(HEADER_CONNECTION.length) == ':') {
+                    if (bufferedConnectionContainsUpgrade(HEADER_CONNECTION.length + 1, contentLen)) {
+                        flags |= FLAG_CONNECTION;
+                    }
+                } else if ((flags & FLAG_ACCEPT) == 0
+                           && contentLen > HEADER_ACCEPT.length
+                           && responseReader.regionMatchesIgnoreCase(0, HEADER_ACCEPT, HEADER_ACCEPT.length)
+                           && responseReader.peekBuffered(HEADER_ACCEPT.length) == ':') {
+                    if (matchBufferedValueExact(HEADER_ACCEPT.length + 1, contentLen, expectedAcceptBytes)) {
+                        flags |= FLAG_ACCEPT;
+                    }
+                }
+
+                responseReader.accountHeaderBytes(dist + 1);
+                responseReader.skipBuffered(dist + 1);
             } else {
-                responseReader.skipToEndOfLine(deadline);
-                continue;
-            }
-
-            var matched = true;
-            for (var i = 1; i < candidate.length; i++) {
-                b = responseReader.nextHeaderByte(deadline);
-                if ((b | 0x20) != candidate[i]) {
-                    matched = false;
+                flags = consumeHeaderLineSlow(deadline, flags, expectedAcceptBytes);
+                if ((flags & FLAG_END) != 0) {
                     break;
                 }
             }
-
-            if (!matched) {
-                responseReader.skipToEndOfLine(deadline);
-                continue;
-            }
-
-            b = responseReader.nextHeaderByte(deadline);
-            if (b != ':') {
-                responseReader.skipToEndOfLine(deadline);
-                continue;
-            }
-
-            do {
-                b = responseReader.nextHeaderByte(deadline);
-            } while (b == SPACE);
-
-            if (candidate == HEADER_UPGRADE) {
-                hasUpgrade = matchValueExactIgnoreCase(b, VALUE_WEBSOCKET, deadline);
-            } else if (candidate == HEADER_CONNECTION) {
-                hasConnectionUpgrade = matchConnectionValue(b, deadline);
-            } else {
-                acceptValid = matchValueExact(b, expectedAcceptBytes, deadline);
-            }
         }
 
-        if (!hasUpgrade || !hasConnectionUpgrade) {
+        if ((flags & FLAG_UPGRADE) == 0 || (flags & FLAG_CONNECTION) == 0) {
             throw new IOException("WebSocket upgrade response is missing mandatory headers");
         }
 
-        if (!acceptValid) {
+        if ((flags & FLAG_ACCEPT) == 0) {
             throw new IOException("WebSocket upgrade failed: invalid Sec-WebSocket-Accept");
         }
     }
 
     /**
-     * Matches a header value exactly (case-insensitive) against the given
-     * expected bytes, then verifies the line ends properly.
+     * Checks whether the buffered header value at the given offset
+     * matches {@code expected} exactly, case-insensitive, with only
+     * optional whitespace (OWS) surrounding the value.
      *
-     * @param firstByte the first non-space byte of the value
-     * @param expected  the expected value in lowercase ASCII
-     * @param deadline  the handshake deadline
-     * @return {@code true} if the value matches exactly
-     * @throws IOException if a read fails or the deadline is exceeded
+     * @param startOffset offset of the first byte after the colon
+     * @param contentLen  the content length of the line (excluding CRLF)
+     * @param expected    the expected value in lowercase ASCII
+     * @return {@code true} if the value matches
      */
-    private boolean matchValueExactIgnoreCase(byte firstByte, byte[] expected, long deadline) throws IOException {
+    private boolean matchBufferedValueIgnoreCase(int startOffset, int contentLen, byte[] expected) {
+        var off = startOffset;
+        while (off < contentLen && responseReader.peekBuffered(off) == SPACE) {
+            off++;
+        }
+        if (contentLen - off < expected.length) {
+            return false;
+        }
+        if (!responseReader.regionMatchesIgnoreCase(off, expected, expected.length)) {
+            return false;
+        }
+        off += expected.length;
+        while (off < contentLen && responseReader.peekBuffered(off) == SPACE) {
+            off++;
+        }
+        return off == contentLen;
+    }
+
+    /**
+     * Checks whether the buffered header value at the given offset
+     * matches {@code expected} exactly, case-sensitive, with only
+     * optional whitespace (OWS) surrounding the value.
+     *
+     * @param startOffset offset of the first byte after the colon
+     * @param contentLen  the content length of the line (excluding CRLF)
+     * @param expected    the expected value as ASCII bytes
+     * @return {@code true} if the value matches
+     */
+    private boolean matchBufferedValueExact(int startOffset, int contentLen, byte[] expected) {
+        var off = startOffset;
+        while (off < contentLen && responseReader.peekBuffered(off) == SPACE) {
+            off++;
+        }
+        if (contentLen - off < expected.length) {
+            return false;
+        }
+        if (!responseReader.regionMatches(off, expected, expected.length)) {
+            return false;
+        }
+        off += expected.length;
+        while (off < contentLen && responseReader.peekBuffered(off) == SPACE) {
+            off++;
+        }
+        return off == contentLen;
+    }
+
+    /**
+     * Scans the buffered {@code Connection} header value for the
+     * {@code "upgrade"} token in a comma-separated list.
+     *
+     * @param startOffset offset of the first byte after the colon
+     * @param contentLen  the content length of the line (excluding CRLF)
+     * @return {@code true} if the {@code "upgrade"} token is present
+     */
+    private boolean bufferedConnectionContainsUpgrade(int startOffset, int contentLen) {
+        var off = startOffset;
+        while (off < contentLen) {
+            // Skip OWS before token
+            while (off < contentLen && responseReader.peekBuffered(off) == SPACE) {
+                off++;
+            }
+
+            // Try to match "upgrade" case-insensitively
+            if (off + VALUE_UPGRADE.length <= contentLen
+                && responseReader.regionMatchesIgnoreCase(off, VALUE_UPGRADE, VALUE_UPGRADE.length)) {
+                var end = off + VALUE_UPGRADE.length;
+                // Skip trailing OWS
+                while (end < contentLen && responseReader.peekBuffered(end) == SPACE) {
+                    end++;
+                }
+                // Must be at end of value or at comma separator
+                if (end == contentLen || responseReader.peekBuffered(end) == ',') {
+                    return true;
+                }
+            }
+
+            // Skip to next comma
+            while (off < contentLen && responseReader.peekBuffered(off) != ',') {
+                off++;
+            }
+            if (off < contentLen) {
+                off++; // skip the comma
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Processes one header line using per-byte reads when the line spans
+     * buffer boundaries.
+     *
+     * <p>Separated from the fast path so that the JIT always inlines
+     * {@link #consumeAndValidateHeaders}.  Non-matching headers are
+     * skipped with the vectorised
+     * {@link HttpResponseReader#skipToEndOfLine}.
+     *
+     * @param deadline            the handshake deadline
+     * @param flags               the current validation state bitmask
+     * @param expectedAcceptBytes the expected accept value
+     * @return the updated validation state; includes {@link #FLAG_END}
+     *         if the empty header terminator was reached
+     * @throws IOException on timeout, EOF, or size overflow
+     */
+    private int consumeHeaderLineSlow(long deadline, int flags, byte[] expectedAcceptBytes) throws IOException {
+        var b = responseReader.nextHeaderByte(deadline);
+        if (b == CARRIAGE_RETURN) {
+            b = responseReader.nextHeaderByte(deadline);
+        }
+        if (b == LINE_FEED) {
+            return flags | FLAG_END;
+        }
+
+        var lower = (byte) (b | 0x20);
+        byte[] candidate;
+        int flag;
+        if (lower == 'u' && (flags & FLAG_UPGRADE) == 0) {
+            candidate = HEADER_UPGRADE;
+            flag = FLAG_UPGRADE;
+        } else if (lower == 'c' && (flags & FLAG_CONNECTION) == 0) {
+            candidate = HEADER_CONNECTION;
+            flag = FLAG_CONNECTION;
+        } else if (lower == 's' && (flags & FLAG_ACCEPT) == 0) {
+            candidate = HEADER_ACCEPT;
+            flag = FLAG_ACCEPT;
+        } else {
+            responseReader.skipToEndOfLine(deadline);
+            return flags;
+        }
+
+        // Match rest of header name
+        for (var i = 1; i < candidate.length; i++) {
+            b = responseReader.nextHeaderByte(deadline);
+            if ((b | 0x20) != candidate[i]) {
+                if (b != LINE_FEED) {
+                    responseReader.skipToEndOfLine(deadline);
+                }
+                return flags;
+            }
+        }
+
+        b = responseReader.nextHeaderByte(deadline);
+        if (b != ':') {
+            if (b != LINE_FEED) {
+                responseReader.skipToEndOfLine(deadline);
+            }
+            return flags;
+        }
+
+        // Skip OWS
+        do {
+            b = responseReader.nextHeaderByte(deadline);
+        } while (b == SPACE);
+
+        // Validate value
+        boolean matched;
+        if (candidate == HEADER_UPGRADE) {
+            matched = matchValueExactIgnoreCaseSlow(b, VALUE_WEBSOCKET, deadline);
+        } else if (candidate == HEADER_CONNECTION) {
+            matched = matchConnectionValueSlow(b, deadline);
+        } else {
+            matched = matchValueExactSlow(b, expectedAcceptBytes, deadline);
+        }
+
+        return matched ? flags | flag : flags;
+    }
+
+    /**
+     * Per-byte case-insensitive value match with line-end verification.
+     */
+    private boolean matchValueExactIgnoreCaseSlow(byte firstByte, byte[] expected, long deadline) throws IOException {
         if ((firstByte | 0x20) != expected[0]) {
             responseReader.skipToEndOfLine(deadline);
             return false;
@@ -426,21 +629,13 @@ public final class WebSocketClient {
     }
 
     /**
-     * Matches a header value exactly (case-sensitive) against the given
-     * expected bytes, then verifies the line ends properly.
-     *
-     * @param firstByte the first non-space byte of the value
-     * @param expected  the expected value as ASCII bytes
-     * @param deadline  the handshake deadline
-     * @return {@code true} if the value matches exactly
-     * @throws IOException if a read fails or the deadline is exceeded
+     * Per-byte case-sensitive value match with line-end verification.
      */
-    private boolean matchValueExact(byte firstByte, byte[] expected, long deadline) throws IOException {
+    private boolean matchValueExactSlow(byte firstByte, byte[] expected, long deadline) throws IOException {
         if (firstByte != expected[0]) {
             responseReader.skipToEndOfLine(deadline);
             return false;
         }
-
         for (var i = 1; i < expected.length; i++) {
             var b = responseReader.nextHeaderByte(deadline);
             if (b != expected[i]) {
@@ -448,12 +643,10 @@ public final class WebSocketClient {
                 return false;
             }
         }
-
-        byte b;
-        do {
+        var b = responseReader.nextHeaderByte(deadline);
+        while (b == SPACE) {
             b = responseReader.nextHeaderByte(deadline);
-        } while (b == SPACE);
-
+        }
         if (b == CARRIAGE_RETURN) {
             b = responseReader.nextHeaderByte(deadline);
         }
@@ -461,21 +654,18 @@ public final class WebSocketClient {
     }
 
     /**
-     * Checks whether the {@code Connection} header value contains the
-     * {@code "upgrade"} token in a comma-separated list.
-     *
-     * @param firstByte the first non-space byte of the value
-     * @param deadline  the handshake deadline
-     * @return {@code true} if the {@code "upgrade"} token is present
-     * @throws IOException if a read fails or the deadline is exceeded
+     * Per-byte scan of a comma-separated {@code Connection} value for
+     * the {@code "upgrade"} token.
      */
-    private boolean matchConnectionValue(byte firstByte, long deadline) throws IOException {
+    private boolean matchConnectionValueSlow(byte firstByte, long deadline) throws IOException {
         var b = firstByte;
         while (true) {
+            // Skip OWS before token
             while (b == SPACE) {
                 b = responseReader.nextHeaderByte(deadline);
             }
 
+            // Try to match "upgrade"
             var matchIndex = 0;
             if ((b | 0x20) == VALUE_UPGRADE[0]) {
                 matchIndex = 1;
@@ -489,6 +679,7 @@ public final class WebSocketClient {
             }
 
             if (matchIndex == VALUE_UPGRADE.length) {
+                // Skip trailing OWS
                 do {
                     b = responseReader.nextHeaderByte(deadline);
                 } while (b == SPACE);
@@ -501,6 +692,7 @@ public final class WebSocketClient {
                 }
             }
 
+            // Skip to next comma or end of line
             while (b != ',' && b != LINE_FEED) {
                 if (b == CARRIAGE_RETURN) {
                     b = responseReader.nextHeaderByte(deadline);

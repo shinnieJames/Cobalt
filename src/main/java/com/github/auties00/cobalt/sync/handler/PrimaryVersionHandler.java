@@ -2,7 +2,6 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.PrimaryVersionAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -45,9 +44,9 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
         // Web source (WAWebPrimaryVersionSync): only SET is supported.
         // Validates indexParts[1] is "current" or "session_start".
         // Validates primaryVersionAction.version is present.
-        // Web does not actually persist the version; we store it as companion version.
+        // Web does not actually persist the version; it only validates and returns Success.
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof PrimaryVersionAction action)) {
@@ -60,10 +59,6 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
             return false;
         }
 
-        action.version()
-                .map(ClientAppVersion::of)
-                .ifPresent(client.store()::setCompanionVersion);
-
-        return true;
+        return action.version().isPresent();
     }
 }

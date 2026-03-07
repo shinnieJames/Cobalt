@@ -1,9 +1,13 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.sync.ConflictResolution;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Interface for handling specific action types in app state sync.
@@ -62,6 +66,32 @@ public interface WebAppStateActionHandler {
     boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation);
 
     /**
+     * Applies a batch of mutations to local state.
+     *
+     * <p>Per WhatsApp Web, each handler receives the full batch of mutations
+     * for its action type via {@code applyMutations(mutations, options)}.
+     * Some handlers (e.g., favorites, primary feature, archive setting) apply
+     * only the mutation with the latest timestamp rather than processing each
+     * mutation sequentially.
+     *
+     * <p>The default implementation processes mutations one by one via
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
+     * Handlers that need batch-level deduplication should override this method.
+     *
+     * @param client    the WhatsAppClient instance linked to the mutations
+     * @param mutations the batch of mutations to apply (already version-gated)
+     * @return a list of results parallel to the input, where {@code true}
+     *         means applied/acknowledged and {@code false} means orphan
+     */
+    default List<Boolean> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
+        var results = new ArrayList<Boolean>(mutations.size());
+        for (var mutation : mutations) {
+            results.add(applyMutation(client, mutation));
+        }
+        return results;
+    }
+
+    /**
      * Resolves a conflict between a local pending mutation and an incoming
      * remote mutation with the same index.
      *
@@ -71,13 +101,14 @@ public interface WebAppStateActionHandler {
      *
      * @param localMutation  the local pending mutation
      * @param remoteMutation the incoming remote mutation
-     * @return the resolution state indicating which mutation to keep
+     * @return the conflict resolution indicating which mutation to keep and
+     *         optionally a merged mutation
      */
-    default ConflictResolutionState resolveConflicts(DecryptedMutation.Trusted localMutation, DecryptedMutation.Trusted remoteMutation) {
+    default ConflictResolution resolveConflicts(DecryptedMutation.Trusted localMutation, DecryptedMutation.Trusted remoteMutation) {
         if (remoteMutation.timestamp().compareTo(localMutation.timestamp()) >= 0) {
-            return ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL;
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         } else {
-            return ConflictResolutionState.SKIP_REMOTE;
+            return ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
         }
     }
 }

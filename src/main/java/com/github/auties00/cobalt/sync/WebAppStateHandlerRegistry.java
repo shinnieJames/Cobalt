@@ -32,6 +32,7 @@ public final class WebAppStateHandlerRegistry {
         // Contact actions
         registerHandler(ContactActionHandler.INSTANCE);
         registerHandler(LidContactHandler.INSTANCE);
+        registerHandler(OutContactHandler.INSTANCE);
         registerHandler(PnForLidChatHandler.INSTANCE);
         registerHandler(ShareOwnPnHandler.INSTANCE);
 
@@ -50,6 +51,7 @@ public final class WebAppStateHandlerRegistry {
         registerHandler(MarketingMessageBroadcastHandler.INSTANCE);
         registerHandler(BusinessBroadcastListHandler.INSTANCE);
         registerHandler(BusinessBroadcastCampaignHandler.INSTANCE);
+        registerHandler(BusinessBroadcastInsightsHandler.INSTANCE);
         registerHandler(MerchantPaymentPartnerHandler.INSTANCE);
         registerHandler(NoteEditHandler.INSTANCE);
 
@@ -94,6 +96,7 @@ public final class WebAppStateHandlerRegistry {
         registerHandler(ChatLockSettingsHandler.INSTANCE);
         registerHandler(ExternalWebBetaHandler.INSTANCE);
         registerHandler(SettingsSyncHandler.INSTANCE);
+        registerHandler(NctSaltSyncHandler.INSTANCE);
         registerHandler(CallLogHandler.INSTANCE);
     }
 

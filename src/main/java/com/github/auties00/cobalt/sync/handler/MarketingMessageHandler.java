@@ -1,20 +1,16 @@
 package com.github.auties00.cobalt.sync.handler;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.MarketingMessageAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
  * Handles marketing message actions.
  *
  * <p>This handler processes mutations related to premium/marketing message templates.
- * Per WhatsApp Web (WAWebPremiumMessageSync), on SET the web client extracts the
- * marketing message data (id, name, type, isDeleted, message, mediaId) and bulk-creates
- * or merges entries into the PremiumMessageTable and PremiumMessageCollection.
- * Non-SET operations are unsupported.
- *
- * <p>Since the store has no premium/marketing message storage, this handler is a no-op.
  *
  * <p>Index format: ["marketingMessage", messageId]
  */
@@ -46,20 +42,36 @@ public final class MarketingMessageHandler implements WebAppStateActionHandler {
     /**
      * Applies a marketing message mutation.
      *
-     * <p>Per WhatsApp Web, on SET the web client stores the marketing message
-     * (id from index[1], name, type, isDeleted, message, mediaId) into IndexedDB
-     * and the PremiumMessageCollection. Only SET is supported; REMOVE is unsupported.
-     *
-     * <p>No-op: the store has no premium/marketing message storage.
+     * <p>Per WhatsApp Web (WAWebPremiumMessageSync), on SET the web client validates
+     * that the action value (marketingMessageAction) is present and that {@code type}
+     * is non-null, then stores the marketing message into the PremiumMessageCollection.
+     * Non-SET operations are unsupported (acknowledged). The messageId from index[1]
+     * must be present or the mutation is malformed.
      *
      * @param client   the WhatsAppClient instance linked to the mutation
      * @param mutation the mutation to apply
-     * @return {@code true} always
+     * @return {@code true} if the mutation was acknowledged, {@code false} otherwise
      */
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web stores marketing messages in PremiumMessageTable/PremiumMessageCollection (IndexedDB).
-        // No equivalent storage exists in the store.
+        var indexArray = JSON.parseArray(mutation.index());
+        var messageId = indexArray.getString(1);
+        if (messageId == null || messageId.isEmpty()) {
+            return true;
+        }
+
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof MarketingMessageAction action)) {
+            return true;
+        }
+
+        if (action.type().isEmpty()) {
+            return true;
+        }
+
         return true;
     }
 }

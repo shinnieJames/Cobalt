@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.model.chat.ChatMetadata;
+import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactBuilder;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
@@ -22,6 +23,7 @@ import com.github.auties00.cobalt.model.jid.JidDevice;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
 import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
@@ -236,8 +238,8 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 62, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<String, QuickReply> quickReplies;
 
-    @ProtobufProperty(index = 63, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
-    protected final ConcurrentMap<Integer, Label> labels;
+    @ProtobufProperty(index = 63, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
+    protected final ConcurrentMap<String, Label> labels;
 
     @ProtobufProperty(index = 64, type = ProtobufType.MESSAGE)
     protected volatile ClientAppVersion clientVersion;
@@ -284,6 +286,12 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 78, type = ProtobufType.STRING)
     protected List<String> primaryFeatures;
 
+    @ProtobufProperty(index = 79, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.UINT64)
+    protected final ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations;
+
+    @ProtobufProperty(index = 80, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
+    protected final ConcurrentMap<SyncPatchType, SequencedCollection<OrphanMutationEntry>> orphanMutationEntries;
+
     protected final ConcurrentMap<SignalProtocolAddress, Long> identityEncryptionRange;
 
     protected final AtomicLong encryptionSequence;
@@ -295,6 +303,8 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     protected final ConcurrentHashMap<Jid, Jid> lidToPhoneMappings;
 
     protected final ConcurrentHashMap<Jid, Jid> phoneToLidMappings;
+
+    protected final ConcurrentHashMap<Jid, Instant> lidMappingTimestamps;
 
     protected volatile MediaConnection mediaConnection;
 
@@ -388,7 +398,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
             ConcurrentMap<String, Sticker> recentStickers,
             ConcurrentMap<String, Sticker> favouriteStickers,
             ConcurrentMap<String, QuickReply> quickReplies,
-            ConcurrentMap<Integer, Label> labels,
+            ConcurrentMap<String, Label> labels,
             ClientAppVersion clientVersion,
             ClientAppVersion companionVersion,
             Instant lastAdvCheckTime,
@@ -397,12 +407,14 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
             byte[] advSecretKey,
             ConcurrentMap<Jid, BusinessVerifiedNameCertificate> verifiedBusinessNames,
             Path directory,
+            boolean primaryDeviceSupportsSyncdRecovery,
             boolean disableLinkPreviews,
             boolean relayAllCalls,
             boolean externalWebBeta,
             ChatLockSettings chatLockSettings,
             List<Jid> favoriteChats,
-            List<String> primaryFeatures
+            List<String> primaryFeatures,
+            ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations
     ) {
         this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
         this.phoneNumber = phoneNumber;
@@ -447,6 +459,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.listeners = ConcurrentHashMap.newKeySet();
         this.lidToPhoneMappings = new ConcurrentHashMap<>();
         this.phoneToLidMappings = new ConcurrentHashMap<>();
+        this.lidMappingTimestamps = new ConcurrentHashMap<>();
         for (var contact : contacts.values()) {
             contact.lid()
                     .ifPresent(entry -> registerLidMapping(contact.jid(), entry));
@@ -488,12 +501,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.advSecretKey = advSecretKey;
         this.verifiedBusinessNames = requireNonNullElseGet(verifiedBusinessNames, ConcurrentHashMap::new);
         this.directory = directory;
+        this.primaryDeviceSupportsSyncdRecovery = primaryDeviceSupportsSyncdRecovery;
         this.disableLinkPreviews = disableLinkPreviews;
         this.relayAllCalls = relayAllCalls;
         this.externalWebBeta = externalWebBeta;
         this.chatLockSettings = chatLockSettings;
         this.favoriteChats = requireNonNullElseGet(favoriteChats, ArrayList::new);
         this.primaryFeatures = requireNonNullElseGet(primaryFeatures, ArrayList::new);
+        this.mentionEveryoneMuteExpirations = requireNonNullElseGet(mentionEveryoneMuteExpirations, ConcurrentHashMap::new);
+        this.orphanMutationEntries = new ConcurrentHashMap<>();
         this.identityEncryptionRange = new ConcurrentHashMap<>();
         this.encryptionSequence = new AtomicLong();
         this.logger = System.getLogger(this.getClass().getName());
@@ -587,11 +603,23 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     @Override
     public void registerLidMapping(Jid phoneJid, Jid lidJid) {
+        registerLidMapping(phoneJid, lidJid, null);
+    }
+
+    @Override
+    public void registerLidMapping(Jid phoneJid, Jid lidJid, Instant timestamp) {
         if (phoneJid == null || lidJid == null) {
             return;
         }
         var normalizedPhone = phoneJid.withoutData();
         var normalizedLid = lidJid.withoutData();
+        if (timestamp != null) {
+            var existing = lidMappingTimestamps.get(normalizedLid);
+            if (existing != null && timestamp.isBefore(existing)) {
+                return;
+            }
+            lidMappingTimestamps.put(normalizedLid, timestamp);
+        }
         lidToPhoneMappings.put(normalizedLid, normalizedPhone);
         phoneToLidMappings.put(normalizedPhone, normalizedLid);
     }
@@ -1357,6 +1385,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    public void expireAppStateKeys(Instant threshold) {
+        appStateKeys.entrySet().removeIf(entry -> {
+            var timestamp = entry.getValue()
+                    .keyData()
+                    .flatMap(AppStateSyncKeyData::timestamp)
+                    .orElse(null);
+            return timestamp != null && !timestamp.isAfter(threshold);
+        });
+    }
+
+    @Override
     public Optional<SyncHashValue> findWebAppHashStateByName(SyncPatchType patchType) {
         return Optional.ofNullable(hashStates.get(patchType));
     }
@@ -1471,6 +1510,26 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public void clearPendingMutations(SyncPatchType collectionName) {
         webAppStatePendingMutations.remove(collectionName);
+    }
+
+    @Override
+    public void addOrphanMutation(SyncPatchType collectionName, OrphanMutationEntry mutation) {
+        orphanMutationEntries.computeIfAbsent(collectionName, _ -> new ArrayList<>())
+                .add(mutation);
+    }
+
+    @Override
+    public List<OrphanMutationEntry> findOrphanMutations(SyncPatchType collectionName) {
+        var entries = orphanMutationEntries.get(collectionName);
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
+        }
+        return List.copyOf(entries);
+    }
+
+    @Override
+    public void removeOrphanMutations(SyncPatchType collectionName) {
+        orphanMutationEntries.remove(collectionName);
     }
 
     @Override
@@ -1623,6 +1682,21 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    public void markWebAppStateMacMismatch(SyncPatchType collectionName) {
+        webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
+                new SyncCollectionMetadata(
+                        current.name(),
+                        current.version(),
+                        current.ltHash(),
+                        current.lastSyncTimestamp(),
+                        SyncCollectionState.MAC_MISMATCH,
+                        current.retryCount(),
+                        System.currentTimeMillis()
+                )
+        );
+    }
+
+    @Override
     public SyncCollectionMetadata findWebAppState(SyncPatchType collectionName) {
         return webAppStateCollections.computeIfAbsent(collectionName, key ->
                 new SyncCollectionMetadata(
@@ -1717,12 +1791,12 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public Optional<Label> removeLabel(int labelId) {
+    public Optional<Label> removeLabel(String labelId) {
         return Optional.ofNullable(labels.remove(labelId));
     }
 
     @Override
-    public Optional<Label> findLabel(int labelId) {
+    public Optional<Label> findLabel(String labelId) {
         return Optional.ofNullable(labels.get(labelId));
     }
 
@@ -2041,6 +2115,19 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    public Optional<ChatMute> mentionEveryoneMuteExpiration(Jid chatJid) {
+        Objects.requireNonNull(chatJid, "chatJid cannot be null");
+        return Optional.ofNullable(mentionEveryoneMuteExpirations.get(chatJid));
+    }
+
+    @Override
+    public void setMentionEveryoneMuteExpiration(Jid chatJid, ChatMute mute) {
+        Objects.requireNonNull(chatJid, "chatJid cannot be null");
+        Objects.requireNonNull(mute, "mute cannot be null");
+        mentionEveryoneMuteExpirations.put(chatJid, mute);
+    }
+
+    @Override
     public boolean equals(Object o) {
         return o == this || o instanceof AbstractWhatsAppStore that
                             && initializationTimeStamp == that.initializationTimeStamp
@@ -2135,7 +2222,8 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && externalWebBeta == that.externalWebBeta
                             && Objects.equals(chatLockSettings, that.chatLockSettings)
                             && Objects.equals(favoriteChats, that.favoriteChats)
-                            && Objects.equals(primaryFeatures, that.primaryFeatures);
+                            && Objects.equals(primaryFeatures, that.primaryFeatures)
+                            && Objects.equals(mentionEveryoneMuteExpirations, that.mentionEveryoneMuteExpirations);
     }
 
     @Override
@@ -2157,7 +2245,8 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                 mediaConnection, mediaConnectionLock, offlineResumeState, offlineDeliveryLatch, usersNeedingSenderKeyRotation,
                 webAppStatePendingMutations, webAppStateCollections, pendingMessageRecipients, clientVersionLock, chatMetadata,
                 deviceLists, unconfirmedIdentityChanges, coexHostedVerificationCache, pendingDeviceSyncs, groupSenderKeyDistribution,
-                disableLinkPreviews, relayAllCalls, externalWebBeta, chatLockSettings, favoriteChats, primaryFeatures);
+                disableLinkPreviews, relayAllCalls, externalWebBeta, chatLockSettings, favoriteChats, primaryFeatures,
+                mentionEveryoneMuteExpirations);
     }
 
     @Override

@@ -40,13 +40,13 @@ public final class QuickReplyHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!(mutation.value().action().orElse(null) instanceof QuickReplyAction action)) {
-            return false;
-        }
-
-        // Web only supports SET; REMOVE is unsupported
+        // Web: operation check comes before action check
         if (mutation.operation() != SyncdOperation.SET) {
             return true;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof QuickReplyAction action)) {
+            return false;
         }
 
         var indexArray = JSON.parseArray(mutation.index());

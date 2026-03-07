@@ -111,6 +111,9 @@ final class WamPrivateStatsId {
      *         {@code "unknown_<hash>"} if the hash integer is unknown
      */
     String getKeyNameForHash(int keyHashInt) {
+        if (keyHashInt == 0) {
+            return "none";
+        }
         var entry = entries.get(keyHashInt);
         return entry != null ? entry.key : "unknown_" + keyHashInt;
     }

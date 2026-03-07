@@ -10,6 +10,7 @@ import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMetadata;
+import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
@@ -31,6 +32,7 @@ import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
+import com.github.auties00.cobalt.model.sync.OrphanMutationEntry;
 import com.github.auties00.cobalt.model.sync.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.SyncCollectionMetadata;
 import com.github.auties00.cobalt.model.sync.SyncHashValue;
@@ -827,6 +829,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void registerLidMapping(Jid phoneJid, Jid lidJid);
 
     /**
+     * Registers a bidirectional LID mapping for a contact with a timestamp guard.
+     *
+     * <p>If the provided {@code timestamp} is non-null and an existing mapping for the
+     * same LID was registered with a more recent timestamp, the mapping is not updated.
+     * A {@code null} timestamp unconditionally overwrites (equivalent to
+     * {@link #registerLidMapping(Jid, Jid)}).
+     *
+     * @param phoneJid  the phone number JID
+     * @param lidJid    the LID JID
+     * @param timestamp the mapping creation timestamp, or {@code null} to always accept
+     */
+    void registerLidMapping(Jid phoneJid, Jid lidJid, Instant timestamp);
+
+    /**
      * Finds the phone number JID for a given LID.
      *
      * @param lidJid the LID to look up
@@ -1112,7 +1128,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param labelId the label ID
      * @return an {@code Optional} containing the label if found
      */
-    Optional<Label> findLabel(int labelId);
+    Optional<Label> findLabel(String labelId);
 
     /**
      * Adds a label to the store.
@@ -1127,7 +1143,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param labelId the label ID
      * @return an {@code Optional} containing the removed label if it existed
      */
-    Optional<Label> removeLabel(int labelId);
+    Optional<Label> removeLabel(String labelId);
 
     /**
      * Returns all app state sync keys.
@@ -1150,6 +1166,18 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param keys the collection of keys to add, must not be {@code null}
      */
     void addWebAppStateKeys(Collection<AppStateSyncKey> keys);
+
+    /**
+     * Removes all app state sync keys whose timestamp is at or before the given instant.
+     *
+     * <p>Per WhatsApp Web {@code SyncKeyStore.expire}: marks keys as expired
+     * by removing them from the store. This is called when receiving sentinel
+     * mutations signaling key expiration.
+     *
+     * @param threshold the cutoff instant; keys with timestamps at or before
+     *                  this value are removed
+     */
+    void expireAppStateKeys(Instant threshold);
 
     /**
      * Finds a hash state by patch type.
@@ -1306,6 +1334,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void markWebAppStateErrorFatal(SyncPatchType collectionName);
 
     /**
+     * Marks a web app state collection in MAC mismatch state.
+     *
+     * <p>Per WhatsApp Web: when a patch snapshot MAC doesn't match the locally
+     * computed value, the collection enters this degraded state rather than
+     * failing fatally. Processing continues but integrity may be compromised.
+     *
+     * @param collectionName the collection name
+     */
+    void markWebAppStateMacMismatch(SyncPatchType collectionName);
+
+    /**
      * Adds pending mutations to the queue for the specified collection.
      *
      * @param collectionName the collection name
@@ -1334,6 +1373,32 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param collectionName the collection name
      */
     void clearPendingMutations(SyncPatchType collectionName);
+
+    /**
+     * Adds an orphan mutation for the specified collection.
+     *
+     * <p>Orphan mutations reference entities that do not yet exist locally.
+     * They are persisted and retried when the referenced entities arrive.
+     *
+     * @param collectionName the collection name
+     * @param mutation       the orphan mutation entry
+     */
+    void addOrphanMutation(SyncPatchType collectionName, OrphanMutationEntry mutation);
+
+    /**
+     * Returns all orphan mutations for the specified collection.
+     *
+     * @param collectionName the collection name
+     * @return the list of orphan mutation entries, never {@code null}
+     */
+    List<OrphanMutationEntry> findOrphanMutations(SyncPatchType collectionName);
+
+    /**
+     * Removes all orphan mutations for the specified collection.
+     *
+     * @param collectionName the collection name
+     */
+    void removeOrphanMutations(SyncPatchType collectionName);
 
     /**
      * Marks a participant as having received the sender key for a group.
@@ -1833,4 +1898,24 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @return this store instance for method chaining
      */
     WhatsAppStore setPrimaryFeatures(List<String> primaryFeatures);
+
+    /**
+     * Returns the mention-everyone mute expiration for a chat.
+     *
+     * <p>Per WhatsApp Web, this is the {@code mentionAllMuteExpiration}
+     * field stored separately from the regular mute state. It controls
+     * whether mention-everyone notifications are suppressed for a chat.
+     *
+     * @param chatJid the chat JID to look up
+     * @return an {@code Optional} containing the mute state if set
+     */
+    Optional<ChatMute> mentionEveryoneMuteExpiration(Jid chatJid);
+
+    /**
+     * Sets the mention-everyone mute expiration for a chat.
+     *
+     * @param chatJid the chat JID
+     * @param mute    the mute state to set
+     */
+    void setMentionEveryoneMuteExpiration(Jid chatJid, ChatMute mute);
 }

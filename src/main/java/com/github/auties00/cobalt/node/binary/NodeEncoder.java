@@ -2,12 +2,15 @@ package com.github.auties00.cobalt.node.binary;
 
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.SequencedCollection;
 import java.util.SequencedMap;
 
@@ -44,6 +47,42 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
  * @see NodeTags
  */
 public final class NodeEncoder {
+    /**
+     * VarHandle for writing 16-bit values in big-endian byte order to byte arrays.
+     */
+    private static final VarHandle SHORT_HANDLE = MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * VarHandle for writing 32-bit values in big-endian byte order to byte arrays.
+     */
+    private static final VarHandle INT_HANDLE = MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * Lookup table for nibble encoding: maps ASCII characters to their 4-bit nibble values.
+     * Valid characters are {@code [0-9.-]}, all others map to {@code -1}.
+     */
+    private static final byte[] NIBBLE_ENCODE = new byte[128];
+
+    /**
+     * Lookup table for hex encoding: maps ASCII characters to their 4-bit nibble values.
+     * Valid characters are {@code [0-9A-F]}, all others map to {@code -1}.
+     */
+    private static final byte[] HEX_ENCODE = new byte[128];
+
+    static {
+        Arrays.fill(NIBBLE_ENCODE, (byte) -1);
+        Arrays.fill(HEX_ENCODE, (byte) -1);
+        for (var i = 0; i <= 9; i++) {
+            NIBBLE_ENCODE['0' + i] = (byte) i;
+            HEX_ENCODE['0' + i] = (byte) i;
+        }
+        NIBBLE_ENCODE['-'] = 10;
+        NIBBLE_ENCODE['.'] = 11;
+        for (var i = 0; i < 6; i++) {
+            HEX_ENCODE['A' + i] = (byte) (10 + i);
+        }
+    }
+
     /**
      * Maximum value for unsigned byte (2^8).
      */
@@ -123,6 +162,8 @@ public final class NodeEncoder {
      *   <li>Empty strings use 2 bytes (BINARY_8 + LIST_EMPTY)</li>
      *   <li>Strings in SINGLE_BYTE_TOKENS dictionary use 1 byte</li>
      *   <li>Strings in DICTIONARY_0-3 use 2 bytes (dictionary tag + index)</li>
+     *   <li>Short strings matching {@code [0-9.-]+} use nibble encoding (tag + metadata + packed data)</li>
+     *   <li>Short strings matching {@code [0-9A-F]+} use hex encoding (tag + metadata + packed data)</li>
      *   <li>Other strings are UTF-8 encoded with a length prefix</li>
      * </ol>
      *
@@ -159,8 +200,15 @@ public final class NodeEncoder {
             return 2;
         }
 
-        var length = calculateUtf8Length(input);
-        return calculateLength(length);
+        var utf8Length = calculateUtf8Length(input);
+        if (utf8Length < 128) {
+            var packedType = getPackedType(input);
+            if (packedType != -1) {
+                return 2 + (input.length() + 1) / 2;
+            }
+        }
+
+        return calculateLength(utf8Length);
     }
 
     /**
@@ -250,19 +298,28 @@ public final class NodeEncoder {
     /**
      * Calculates the number of bytes required to encode a WhatsApp JID.
      * <p>
-     * JIDs can be encoded in two ways:
+     * JIDs can be encoded in four ways:
      * <ul>
-     *   <li>AD_JID format: for JIDs with agent or device information (3 bytes + user string)</li>
-     *   <li>JID_PAIR format: standard format with user and server (2 bytes + user string + 1 or server string)</li>
+     *   <li>JID_FB format: for Messenger JIDs (1 + user string + 2 device + domain string)</li>
+     *   <li>JID_INTEROP format: for interop JIDs (1 + user string + 2 device + 2 integrator)</li>
+     *   <li>AD_JID format: for device JIDs (1 + 1 domainType + 1 device + user string)</li>
+     *   <li>JID_PAIR format: standard format (1 + user string or 1 + server string)</li>
      * </ul>
      *
      * @param jid the JID to encode
      * @return the number of bytes required
      */
     private static int jidLength(Jid jid){
-        if (jid.hasAgent() || jid.hasDevice()) {
+        if (jid.hasMessengerServer()) {
+            return 1 + stringLength(jid.user()) + 2 + stringLength(jid.server().address());
+        } else if (jid.hasInteropServer()) {
+            var user = jid.user();
+            var dashIndex = user.indexOf('-');
+            var actualUser = dashIndex >= 0 ? user.substring(dashIndex + 1) : user;
+            return 1 + stringLength(actualUser) + 2 + 2;
+        } else if (jid.hasDevice()) {
             return 3 + stringLength(jid.user());
-        }else {
+        } else {
             return 1 + (jid.hasUser() ? stringLength(jid.user()) : 1) + stringLength(jid.server().address());
         }
     }
@@ -392,9 +449,8 @@ public final class NodeEncoder {
      */
     private static int writeList16(int size, byte[] output, int offset) {
         output[offset++] = LIST_16;
-        output[offset++] = (byte) (size >> 8);
-        output[offset++] = (byte) size;
-        return offset;
+        SHORT_HANDLE.set(output, offset, (short) size);
+        return offset + 2;
     }
 
     /**
@@ -455,16 +511,21 @@ public final class NodeEncoder {
             return offset;
         }
 
-        var length = calculateUtf8Length(input);
-        offset = writeBinary(length, output, offset);
-        var encoder = StandardCharsets.UTF_8.newEncoder();
-        var inputBuffer = CharBuffer.wrap(input);
-        var outputBuffer = ByteBuffer.wrap(output, offset, output.length - offset);
-        var result = encoder.encode(inputBuffer, outputBuffer, true);
-        if(result.isError()) {
-            throw new RuntimeException("Cannot encode value: " + result);
+        var utf8Length = calculateUtf8Length(input);
+        if (utf8Length < 128) {
+            var packedType = getPackedType(input);
+            if (packedType != -1) {
+                return writePacked(input, packedType, output, offset);
+            }
         }
-        return offset + length;
+
+        offset = writeBinary(utf8Length, output, offset);
+        var encoded = input.getBytes(StandardCharsets.UTF_8);
+        if(encoded.length != utf8Length) {
+            throw new InternalError("Utf8 length mismatch");
+        }
+        System.arraycopy(encoded, 0, output, offset, utf8Length);
+        return offset + utf8Length;
     }
 
     /**
@@ -525,10 +586,71 @@ public final class NodeEncoder {
      */
     private static int writeBinary32(int input, byte[] output, int offset) {
         output[offset++] = BINARY_32;
-        output[offset++] = (byte) (input >> 24);
-        output[offset++] = (byte) (input >> 16);
-        output[offset++] = (byte) (input >> 8);
-        output[offset++] = (byte) input;
+        INT_HANDLE.set(output, offset, input);
+        return offset + 4;
+    }
+
+    /**
+     * Determines whether a string can be packed using nibble or hex encoding.
+     * <p>
+     * Nibble encoding supports characters {@code [0-9.-]} and hex encoding supports
+     * characters {@code [0-9A-F]}. Nibble encoding is preferred when applicable.
+     *
+     * @param input the string to check
+     * @return {@link NodeTags#NIBBLE_8} if nibble-encodable, {@link NodeTags#HEX_8} if
+     *         hex-encodable, or {@code -1} if neither
+     */
+    private static byte getPackedType(String input) {
+        var nibble = true;
+        var hex = true;
+        for (var i = 0; i < input.length(); i++) {
+            var ch = input.charAt(i);
+            if (ch >= 128 || NIBBLE_ENCODE[ch] < 0) {
+                nibble = false;
+            }
+            if (ch >= 128 || HEX_ENCODE[ch] < 0) {
+                hex = false;
+            }
+            if (!nibble && !hex) {
+                return -1;
+            }
+        }
+        if (nibble) {
+            return NIBBLE_8;
+        } else {
+            return HEX_8;
+        }
+    }
+
+    /**
+     * Writes a string using nibble or hex packed encoding.
+     * <p>
+     * Each character is encoded as a 4-bit nibble, with two characters packed per byte.
+     * For odd-length strings, the last byte contains the final character in the high
+     * nibble and {@code 0xF} as padding in the low nibble.
+     *
+     * @param input  the string to encode
+     * @param tag    the encoding tag ({@link NodeTags#NIBBLE_8} or {@link NodeTags#HEX_8})
+     * @param output the output byte array
+     * @param offset the current offset in the output array
+     * @return the new offset after writing
+     */
+    private static int writePacked(String input, byte tag, byte[] output, int offset) {
+        var table = tag == NIBBLE_8 ? NIBBLE_ENCODE : HEX_ENCODE;
+        var len = input.length();
+        output[offset++] = tag;
+        var byteCount = (len + 1) / 2;
+        if ((len & 1) == 1) {
+            byteCount |= 128;
+        }
+        output[offset++] = (byte) byteCount;
+        var i = 0;
+        for (; i + 1 < len; i += 2) {
+            output[offset++] = (byte) ((table[input.charAt(i)] << 4) | table[input.charAt(i + 1)]);
+        }
+        if (i < len) {
+            output[offset++] = (byte) ((table[input.charAt(i)] << 4) | 0x0F);
+        }
         return offset;
     }
 
@@ -616,9 +738,11 @@ public final class NodeEncoder {
     /**
      * Writes a WhatsApp JID.
      * <p>
-     * Two encoding formats:
+     * Four encoding formats:
      * <ul>
-     *   <li>AD_JID: for JIDs with agent/device (tag + agent + device + user)</li>
+     *   <li>JID_FB: for Messenger JIDs (tag + user + device(u16) + domain)</li>
+     *   <li>JID_INTEROP: for interop JIDs (tag + user + device(u16) + integrator(u16))</li>
+     *   <li>AD_JID: for device JIDs (tag + domainType + device + user)</li>
      *   <li>JID_PAIR: standard format (tag + user/empty + server)</li>
      * </ul>
      *
@@ -628,12 +752,36 @@ public final class NodeEncoder {
      * @return the new offset after writing
      */
     private static int writeJid(Jid jid, byte[] output, int offset){
-        if (jid.hasAgent() || jid.hasDevice()) {
+        if (jid.hasMessengerServer()) {
+            output[offset++] = JID_FB;
+            offset = writeString(jid.user(), output, offset);
+            SHORT_HANDLE.set(output, offset, (short) jid.device());
+            offset += 2;
+            return writeString(jid.server().address(), output, offset);
+        } else if (jid.hasInteropServer()) {
+            output[offset++] = JID_INTEROP;
+            var user = jid.user();
+            var dashIndex = user.indexOf('-');
+            var integrator = 0;
+            var actualUser = user;
+            if (dashIndex >= 0) {
+                for (var i = 0; i < dashIndex; i++) {
+                    integrator = integrator * 10 + (user.charAt(i) - '0');
+                }
+                actualUser = user.substring(dashIndex + 1);
+            }
+            offset = writeString(actualUser, output, offset);
+            SHORT_HANDLE.set(output, offset, (short) jid.device());
+            offset += 2;
+            SHORT_HANDLE.set(output, offset, (short) integrator);
+            offset += 2;
+            return offset;
+        } else if (jid.hasDevice()) {
             output[offset++] = AD_JID;
-            output[offset++] = (byte) jid.agent();
+            output[offset++] = (byte) getDomainForServer(jid.server());
             output[offset++] = (byte) jid.device();
             return writeString(jid.user(), output, offset);
-        }else {
+        } else {
             output[offset++] = JID_PAIR;
             if(jid.hasUser()) {
                 offset = writeString(jid.user(), output, offset);
@@ -642,5 +790,20 @@ public final class NodeEncoder {
             }
             return writeString(jid.server().address(), output, offset);
         }
+    }
+
+    /**
+     * Returns the binary domain type encoding for the given server.
+     *
+     * @param server the JID server to map
+     * @return the domain type value
+     */
+    private static int getDomainForServer(JidServer server) {
+        return switch (server.type()) {
+            case LID -> DOMAIN_LID;
+            case HOSTED -> DOMAIN_HOSTED;
+            case HOSTED_LID -> DOMAIN_HOSTED_LID;
+            default -> DOMAIN_WHATSAPP;
+        };
     }
 }

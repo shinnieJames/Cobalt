@@ -156,10 +156,13 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 }
 
                 // WAWebSendGroupMsgJob.filterIncorrectlyAddressedDevices:
-                // for CAG groups, filter devices by addressing mode
-                if (isCag) {
-                    skDistribDevices.removeIf(d -> isLidAddressingMode != d.hasLidServer());
-                    skExistingDevices.removeIf(d -> isLidAddressingMode != d.hasLidServer());
+                // filter devices by addressing mode for LID groups
+                if (isLidAddressingMode) {
+                    skDistribDevices.removeIf(d -> !d.hasLidServer());
+                    skExistingDevices.removeIf(d -> !d.hasLidServer());
+                } else if (isCag) {
+                    skDistribDevices.removeIf(Jid::hasLidServer);
+                    skExistingDevices.removeIf(Jid::hasLidServer);
                 }
 
                 // WAWebSendGroupSkmsgJob: rotate sender key if needed
@@ -267,10 +270,12 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                     var errorCode = ack.error().orElse(-1);
                     switch (errorCode) {
                         case NackReason.STALE_GROUP_ADDRESSING_MODE -> {
-                            // WAWebSendGroupSkmsgJob: error 421 → query group, mark FAILED, reject
+                            // WAWebSendGroupSkmsgJob: error 421 → query group, migrate, mark FAILED
                             LOGGER.log(System.Logger.Level.WARNING,
-                                    "encryptAndSendSenderKeyMsg: ack with error code 421 for {0}",
+                                    "encryptAndSendSenderKeyMsg: ack with error code 421 for {0}, refreshing metadata",
                                     groupJid);
+                            // Flip addressing mode so next retry uses the correct one
+                            migrateAddressingMode(groupJid, !isLidAddressingMode);
                             throw new WhatsAppMessageException.Send.Unknown(
                                     "Stale group addressing mode for " + groupJid, null);
                         }
@@ -293,7 +298,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                     LOGGER.log(System.Logger.Level.DEBUG,
                             "encryptAndSendSenderKeyMsg: phash mismatch for {0}, server: {1}",
                             messageInfo.key().id(), serverPhash);
-                    resendAsGroupDirect(groupJid, messageInfo, allDevices);
+                    resendAsGroupDirect(groupJid, messageInfo, allDevices, addressingMode);
                 }
 
                 // WAWebSendGroupSkmsgJob: handle addressing mode mismatch
@@ -396,7 +401,8 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     private void resendAsGroupDirect(
             Jid groupJid,
             ChatMessageInfo messageInfo,
-            Collection<Jid> originalDevices
+            Collection<Jid> originalDevices,
+            String addressingMode
     ) {
         // WAWebResendGroupMsg: re-query group, get refreshed fanout
         var refreshedFanout = deviceService.getGroupFanout(groupJid);
@@ -450,7 +456,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 resolveStanzaType(container),
                 payloads,
                 resolveEditAttribute(container),
-                null,
+                addressingMode,
                 null,
                 resolveMediaType(container),
                 resolveDecryptFail(container),

@@ -2,9 +2,7 @@ package com.github.auties00.cobalt.wam.binary;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 
 import static com.github.auties00.cobalt.wam.binary.WamTags.*;
@@ -283,27 +281,22 @@ public final class WamEncoder {
      * @return the new offset after writing
      */
     public static int writeString(int fieldId, int flags, String value, byte[] output, int offset) {
-        var utf8len = utf8Length(value);
-        if (utf8len < 256) {
+        var encoded = value.getBytes(StandardCharsets.UTF_8);
+        var encodedLength = encoded.length;
+        if (encodedLength < 256) {
             offset = writeTag(fieldId, flags | VALUE_STR8, output, offset);
-            output[offset++] = (byte) utf8len;
-        } else if (utf8len < 65536) {
+            output[offset++] = (byte) encodedLength;
+        } else if (encodedLength < 65536) {
             offset = writeTag(fieldId, flags | VALUE_STR16, output, offset);
-            SHORT_HANDLE.set(output, offset, (short) utf8len);
+            SHORT_HANDLE.set(output, offset, (short) encodedLength);
             offset += 2;
         } else {
             offset = writeTag(fieldId, flags | VALUE_STR32, output, offset);
-            INT_HANDLE.set(output, offset, utf8len);
+            INT_HANDLE.set(output, offset, encodedLength);
             offset += 4;
         }
-        var encoder = StandardCharsets.UTF_8.newEncoder();
-        var inputBuffer = CharBuffer.wrap(value);
-        var outputBuffer = ByteBuffer.wrap(output, offset, output.length - offset);
-        var result = encoder.encode(inputBuffer, outputBuffer, true);
-        if (result.isError()) {
-            throw new RuntimeException("Cannot encode UTF-8 string: " + result);
-        }
-        return offset + utf8len;
+        System.arraycopy(encoded, 0, output, offset, encodedLength);
+        return offset + encodedLength;
     }
 
     /**

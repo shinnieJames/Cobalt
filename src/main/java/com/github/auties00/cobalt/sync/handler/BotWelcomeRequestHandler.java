@@ -1,21 +1,17 @@
 package com.github.auties00.cobalt.sync.handler;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
  * Handles bot welcome request actions.
  *
- * <p>Per WhatsApp Web {@code WAWebBotWelcomeRequestSync}, this action only supports
- * SET operations (REMOVE is unsupported). The web client extracts
- * {@code botWelcomeRequestAction.isSent} (boolean), resolves a chat from index[1],
- * and updates the chat's {@code hasRequestedWelcomeMsg} field in IndexedDB. Since
- * this client's chat model does not track the welcome message request state, the
- * mutation is acknowledged but not applied locally.
- *
- * <p>Index format: ["bot_welcome_request", chatJid]
+ * <p>Index format: ["bot_welcome_request", "chatJid"]
  */
 public final class BotWelcomeRequestHandler implements WebAppStateActionHandler {
     /**
@@ -44,6 +40,30 @@ public final class BotWelcomeRequestHandler implements WebAppStateActionHandler 
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
+        if (mutation.operation() == SyncdOperation.REMOVE) {
+            return true;
+        }
+
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
+
+        var indexArray = JSON.parseArray(mutation.index());
+        var chatJidString = indexArray.getString(1);
+        if (chatJidString == null || chatJidString.isEmpty()) {
+            return true;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof BotWelcomeRequestAction)) {
+            return true;
+        }
+
+        var chatJid = Jid.of(chatJidString);
+        var chat = client.store().findChatByJid(chatJid);
+        if (chat.isEmpty()) {
+            return false;
+        }
+
         return true;
     }
 }

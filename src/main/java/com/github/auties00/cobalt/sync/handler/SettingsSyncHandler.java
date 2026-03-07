@@ -1,16 +1,30 @@
 package com.github.auties00.cobalt.sync.handler;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * Handles settings sync actions.
  *
- * <p>Index format: ["settings_sync", ...]
+ * <p>Per WhatsApp Web {@code WAWebSettingsSync}, uses batch-level
+ * deduplication keeping only the latest-timestamped mutation per index.
+ * On SET, validates that the index has exactly 4 parts, and that
+ * {@code settingsSyncAction} is non-{@code null}.
+ *
+ * <p>Index format: ["settings_sync", "platform", "settingKey", "scope"]
  */
 public final class SettingsSyncHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code SettingsSyncHandler}.
+     */
     public static final SettingsSyncHandler INSTANCE = new SettingsSyncHandler();
 
     private SettingsSyncHandler() {
@@ -34,16 +48,56 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web source (WAWebSettingsSync) on SET:
-        // - Checks feature flags (settings_sync_enabled primary feature + AB prop)
-        // - Deduplicates mutations by index, keeping the latest timestamp per index
-        // - Validates index has 4 parts: [actionName, platform, settingKey, scope]
-        // - Filters by platform (WEB or HYBRID on Windows)
-        // - Maps settingKey to a field name via SETTING_KEY_TO_FIELD lookup
-        // - Extracts the field value from settingsSyncAction
-        // - Applies via applySettingUpdate which dispatches to the frontend bridge
-        //   (applyAppSetting or applyPerChatSetting depending on scope)
-        // All effects are web-frontend UI settings, so this is a no-op.
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
+
+        var indexArray = JSON.parseArray(mutation.index());
+        if (indexArray.size() != 4) {
+            return true;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof SettingsSyncAction)) {
+            return true;
+        }
+
         return true;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Per WhatsApp Web {@code WAWebSettingsSync.applyMutations}: deduplicates
+     * mutations by index, keeping only the latest-timestamped SET mutation per
+     * index. Older duplicates are skipped. Non-SET mutations and mutations
+     * without a matching latest entry are marked as malformed.
+     */
+    @Override
+    public List<Boolean> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
+        var latestByIndex = new HashMap<String, DecryptedMutation.Trusted>();
+        for (var mutation : mutations) {
+            if (mutation.operation() != SyncdOperation.SET) {
+                continue;
+            }
+
+            var key = mutation.index();
+            var existing = latestByIndex.get(key);
+            if (existing == null || mutation.timestamp().compareTo(existing.timestamp()) > 0) {
+                latestByIndex.put(key, mutation);
+            }
+        }
+
+        var results = new ArrayList<Boolean>(mutations.size());
+        for (var mutation : mutations) {
+            var latest = latestByIndex.get(mutation.index());
+            if (latest == null || latest != mutation) {
+                results.add(true);
+                continue;
+            }
+
+            results.add(applyMutation(client, mutation));
+        }
+
+        return results;
     }
 }

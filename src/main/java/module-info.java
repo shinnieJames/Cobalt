@@ -1,4 +1,7 @@
 module com.github.auties00.cobalt {
+    // Vector API
+    requires jdk.incubator.vector;
+
     // Http client
     requires java.net.http;
 
@@ -35,7 +38,6 @@ module com.github.auties00.cobalt {
     // Mobile api
     requires net.dongliu.apkparser;
     requires com.google.i18n.phonenumbers.libphonenumber;
-    requires java.xml.crypto;
-    requires jdk.incubator.vector;
+
     // TODO: Decide exports
 }

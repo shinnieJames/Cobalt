@@ -9,9 +9,17 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles VoIP relay all calls setting actions.
  *
- * <p>Index format: ["setting_relayAllCalls", ...]
+ * <p>This handler processes mutations that control whether all VoIP calls
+ * should be relayed through WhatsApp servers. On SET, reads the
+ * {@code isEnabled} flag and updates the store. Other operations are
+ * acknowledged as unsupported.
+ *
+ * <p>Index format: ["setting_relayAllCalls"]
  */
 public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code VoipRelayAllCallsHandler}.
+     */
     public static final VoipRelayAllCallsHandler INSTANCE = new VoipRelayAllCallsHandler();
 
     private VoipRelayAllCallsHandler() {
@@ -36,11 +44,11 @@ public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof PrivacySettingRelayAllCalls action)) {
-            return false;
+            return true;
         }
 
         client.store().setRelayAllCalls(action.isEnabled());

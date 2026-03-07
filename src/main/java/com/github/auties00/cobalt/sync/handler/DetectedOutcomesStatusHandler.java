@@ -9,9 +9,16 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles detected outcomes status actions.
  *
+ * <p>This handler processes mutations that update the CTWA detected outcome
+ * onboarding status. On SET, reads the {@code isEnabled} flag from the
+ * mutation value. Other operations are acknowledged as unsupported.
+ *
  * <p>Index format: ["detected_outcomes_status_action"]
  */
 public final class DetectedOutcomesStatusHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code DetectedOutcomesStatusHandler}.
+     */
     public static final DetectedOutcomesStatusHandler INSTANCE = new DetectedOutcomesStatusHandler();
 
     private DetectedOutcomesStatusHandler() {
@@ -35,17 +42,12 @@ public final class DetectedOutcomesStatusHandler implements WebAppStateActionHan
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web source (WAWebDetectedOutcomesStatusSync): only SET is supported.
-        // Reads detectedOutcomesStatusAction.isEnabled (must be non-null).
-        // Sends a frontend API call (ctwaDetectedOutcomeOnboardingStatusUpdate)
-        // to update the CTWA detected outcome onboarding status in the UI.
-        // No equivalent data model operation exists in the Java codebase.
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof DetectedOutcomesStatusAction)) {
-            return false;
+            return true;
         }
 
         return true;

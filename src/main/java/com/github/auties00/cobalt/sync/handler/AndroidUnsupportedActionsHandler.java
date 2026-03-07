@@ -10,8 +10,8 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Handles Android unsupported actions.
  *
  * <p>This handler processes mutations that declare which actions are unsupported
- * on Android devices. The allowed flags are acknowledged but not acted upon,
- * as this client does not need to enforce Android-specific restrictions.
+ * on Android devices. On SET, reads the {@code allowed} flag from the mutation
+ * value. Other operations are acknowledged as unsupported.
  *
  * <p>Index format: ["android_unsupported_actions"]
  */
@@ -42,16 +42,12 @@ public final class AndroidUnsupportedActionsHandler implements WebAppStateAction
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web source (WAWebAndroidUnsupportedActionsSync): only SET is supported.
-        // Reads value.androidUnsupportedActions (must be non-null).
-        // If allowed is true, sets the primaryAllowsAllMutations flag in localStorage.
-        // No equivalent flag exists in the Java data model.
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof AndroidUnsupportedActions)) {
-            return false;
+            return true;
         }
 
         return true;

@@ -52,9 +52,10 @@ public final class MutationIntegrityVerifier {
             return null;
         }
 
+        // Per WA Web: missing snapshot MAC is a fatal validation error, not a skip
         var mac = snapshot.mac();
         if(mac.isEmpty()) {
-            return null;
+            throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, version);
         }
 
         var keyId = snapshot.keyId()
@@ -99,9 +100,24 @@ public final class MutationIntegrityVerifier {
      * @param computedLtHash the incrementally computed LT-Hash after applying this patch
      * @param patchValueMacs the value MACs from only this patch's mutations, in order
      */
-    public void verifyPatchIntegrity(SyncPatchType collectionName, SyncdPatch patch, byte[] computedLtHash, SequencedCollection<byte[]> patchValueMacs) {
+    /**
+     * Verifies the integrity of a single patch by checking both the patch MAC
+     * and the snapshot MAC.
+     *
+     * <p>Per WhatsApp Web, patch MAC mismatch is fatal, but snapshot MAC mismatch
+     * is non-fatal — the collection is marked as mac-mismatch and processing continues.
+     *
+     * @param collectionName the collection type for MAC computation
+     * @param patch          the wire patch with its MAC fields
+     * @param computedLtHash the locally computed LT-Hash after applying this patch's mutations
+     * @param patchValueMacs the value MACs from only this patch's mutations, in order
+     * @return {@code true} if the snapshot MAC matched (or was not present),
+     *         {@code false} if the snapshot MAC mismatched (collection should be marked mac-mismatch)
+     * @throws WhatsAppWebAppStateSyncException.PatchMacMismatch if the wire patch MAC does not match
+     */
+    public boolean verifyPatchIntegrity(SyncPatchType collectionName, SyncdPatch patch, byte[] computedLtHash, SequencedCollection<byte[]> patchValueMacs) {
         if (!store.checkPatchMacs()) {
-            return;
+            return true;
         }
 
         var keyId = patch.keyId()
@@ -133,13 +149,15 @@ public final class MutationIntegrityVerifier {
             }
 
             // Step 2: Verify wire snapshotMac against locally computed LT-Hash
+            // Per WA Web: mismatch here is non-fatal — mark collection as mac-mismatch and continue
             if (wireSnapshotMac != null) {
                 var expectedSnapshotMac = computeSnapshotMac(keys.snapshotMacKey(), computedLtHash, patchVersion, collectionName);
                 if (!MessageDigest.isEqual(wireSnapshotMac, expectedSnapshotMac)) {
-                    throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, patchVersion);
+                    return false;
                 }
             }
         }
+        return true;
     }
 
     /**

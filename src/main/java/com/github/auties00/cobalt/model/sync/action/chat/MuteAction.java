@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.chat;
 
-import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
@@ -46,13 +46,13 @@ public final class MuteAction implements SyncAction<MuteActionArgs> {
     @ProtobufProperty(index = 1, type = ProtobufType.BOOL)
     Boolean muted;
 
-    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
+    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant muteEndTimestamp;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BOOL)
     Boolean autoMuted;
 
-    @ProtobufProperty(index = 4, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
+    @ProtobufProperty(index = 4, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant muteEveryoneMentionEndTimestamp;
 
 

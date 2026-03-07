@@ -1,19 +1,20 @@
-package com.github.auties00.cobalt.stream;
+package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.node.Node;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.function.Function;
 
-public final class SocketRequest {
+public final class WhatsAppSocketStanza {
     private static final Duration TIMEOUT = Duration.ofSeconds(60);
 
     private final Node body;
     private final Function<Node, Boolean> filter;
     private volatile Node response;
 
-    public SocketRequest(Node body, Function<Node, Boolean> filter) {
+    public WhatsAppSocketStanza(Node body, Function<Node, Boolean> filter) {
         this.body = body;
         this.filter = filter;
     }
@@ -32,16 +33,23 @@ public final class SocketRequest {
     }
 
     public Node waitForResponse() {
+        return waitForResponse(TIMEOUT);
+    }
+
+    public Node waitForResponse(Duration timeout) {
         if (response == null) {
             synchronized (this) {
                 if (response == null) {
-                    try {
-                        wait(TIMEOUT.toMillis());
-                        if (response == null) {
+                    var end = Instant.now().plus(timeout);
+                    while (Instant.now().isBefore(end)) {
+                        try {
+                            wait(TIMEOUT.toMillis());
+                        } catch (InterruptedException exception) {
+                            Thread.currentThread().interrupt();
                             throw new WhatsAppStreamException.NodeTimeout(body);
                         }
-                    } catch (InterruptedException exception) {
-                        Thread.currentThread().interrupt();
+                    }
+                    if (response == null) {
                         throw new WhatsAppStreamException.NodeTimeout(body);
                     }
                 }

@@ -94,8 +94,10 @@ public sealed interface DecryptedMutation {
                 throw new WhatsAppWebAppStateSyncException.IndexMacMismatch();
             }
 
-            // Build mutation
-            var actionVersion = actionData.version().orElse(0);
+            // Per WA Web: missing version is a fatal error, not a default-to-0 case
+            var actionVersion = actionData.version()
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.TerminalPatch(
+                            null, 100));
             return new Untrusted(
                     new String(actionIndex, StandardCharsets.UTF_8),
                     indexMac,

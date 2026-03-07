@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -62,6 +63,14 @@ public final class ABPropsService {
     private volatile String currentAbKey;
 
     /**
+     * WAM event sampling weight overrides parsed from the AB props
+     * response. Each entry maps an event code to a sampling weight.
+     * Populated during {@link #process(Node)} from {@code SamplingConfig}
+     * entries in the response.
+     */
+    private final Map<Integer, Integer> samplingConfigs;
+
+    /**
      * Future that completes when sync finishes.
      * Stored in AtomicReference to allow resetting by creating a new future.
      */
@@ -91,6 +100,7 @@ public final class ABPropsService {
     public ABPropsService(WhatsAppClient client, Duration syncTimeout) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
         this.props = new ConcurrentHashMap<>();
+        this.samplingConfigs = new ConcurrentHashMap<>();
         this.syncFuture = new AtomicReference<>(new CompletableFuture<>());
         this.syncTimeout = syncTimeout;
     }
@@ -245,6 +255,23 @@ public final class ABPropsService {
         }
 
         LOGGER.log(System.Logger.Level.INFO, "Synced {0} AB props from server (delta={1})", count, isDelta);
+
+        // Parse SamplingConfig entries for WAM event sampling overrides.
+        // In the AB props response, these appear as <prop> nodes with
+        // event_code and sampling_weight attributes instead of the
+        // standard config_code/config_value pair.
+        var samplingNodes = propsNode.getChildren("sampling_config");
+        if (!samplingNodes.isEmpty()) {
+            samplingConfigs.clear();
+            for (var samplingNode : samplingNodes) {
+                var eventCode = samplingNode.getAttributeAsInt("event_code");
+                var samplingWeight = samplingNode.getAttributeAsInt("sampling_weight");
+                if (eventCode.isPresent() && samplingWeight.isPresent()) {
+                    samplingConfigs.put(eventCode.getAsInt(), samplingWeight.getAsInt());
+                }
+            }
+        }
+
         return true;
     }
 
@@ -265,13 +292,15 @@ public final class ABPropsService {
     /**
      * Returns the raw string value for the given AB prop.
      *
-     * <p>If the server has not provided a value for this prop, the
-     * {@linkplain ABProp#defaultValue() default value} is returned. If the initial sync
+     * <p>If the server has not provided a value for this prop, the fallback depends on
+     * whether the user has joined the WhatsApp Web Beta programme: if so,
+     * {@linkplain ABProp#debugDefaultValue() debugDefaultValue} is used; otherwise
+     * {@linkplain ABProp#defaultValue() defaultValue} is used. If the initial sync
      * hasn't completed, this method will wait (up to the configured timeout) for the sync
      * to complete before querying.
      *
      * @param prop the AB prop definition
-     * @return the string value from the server, or the default value if not available
+     * @return the string value from the server, or the appropriate default value if not available
      */
     public String getString(ABProp prop) {
         return getString(prop, true);
@@ -288,7 +317,8 @@ public final class ABPropsService {
         if (waitForSync) {
             awaitSync();
         }
-        return props.getOrDefault(prop.code(), prop.defaultValue());
+        var defaultValue = client.store().externalWebBeta() ? prop.debugDefaultValue() : prop.defaultValue();
+        return props.getOrDefault(prop.code(), defaultValue);
     }
 
     /**
@@ -425,6 +455,32 @@ public final class ABPropsService {
     }
 
     /**
+     * Returns the overridden sampling weight for the given WAM event
+     * code, or empty if no override was received from the server.
+     *
+     * @param eventCode the numeric WAM event identifier
+     * @return an {@code OptionalInt} containing the override weight, or
+     *         empty if no override exists for this event
+     */
+    public OptionalInt getSamplingWeight(int eventCode) {
+        var weight = samplingConfigs.get(eventCode);
+        return weight != null ? OptionalInt.of(weight) : OptionalInt.empty();
+    }
+
+    /**
+     * Returns an unmodifiable copy of all WAM event sampling weight
+     * overrides parsed from the most recent AB props sync.
+     *
+     * <p>Each entry maps a WAM event code to its overridden sampling
+     * weight. Returns an empty map if no overrides were received.
+     *
+     * @return a defensive copy of the sampling configs map
+     */
+    public Map<Integer, Integer> samplingConfigs() {
+        return Map.copyOf(samplingConfigs);
+    }
+
+    /**
      * Returns the number of AB props currently stored.
      *
      * @return the count of synced props
@@ -454,6 +510,7 @@ public final class ABPropsService {
      */
     public void clear() {
         props.clear();
+        samplingConfigs.clear();
         currentHash = null;
         currentAbKey = null;
         syncFuture.set(new CompletableFuture<>());

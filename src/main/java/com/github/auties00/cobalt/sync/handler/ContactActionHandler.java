@@ -61,8 +61,13 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
                 var contact = client.store()
                         .findContactByJid(contactJid)
                         .orElseGet(() -> client.store().addNewContact(contactJid));
-                action.fullName().ifPresent(contact::setFullName);
-                action.firstName().ifPresent(contact::setShortName);
+                // Web: fullName ?? "" (coalesces absent to empty string)
+                var fullName = action.fullName().orElse("");
+                contact.setFullName(fullName);
+                // Web: firstName ?? getShortName(fullName) ?? ""
+                var shortName = action.firstName()
+                        .orElseGet(() -> deriveShortName(fullName));
+                contact.setShortName(shortName);
                 action.username().ifPresent(contact::setUsername);
                 action.lidJid().ifPresent(lid -> {
                     contact.setLid(lid);
@@ -70,15 +75,37 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
                 });
             }
             case REMOVE -> {
+                // Web: setNotMyContact() clears name, shortName, sets type
+                // to "out", and sets isUsernameContact to false
                 var contact = client.store()
                         .findContactByJid(contactJid);
                 if (contact.isPresent()) {
                     contact.get().setFullName(null);
                     contact.get().setShortName(null);
+                    contact.get().setUsername(null);
                 }
             }
         }
 
         return true;
+    }
+
+    /**
+     * Derives a short name from a full name by extracting the first word,
+     * matching WhatsApp Web's {@code getShortName} logic.
+     *
+     * @param fullName the full name to derive from
+     * @return the first word of the full name, or an empty string if the name
+     *         is blank or the first character is not alphabetic
+     */
+    static String deriveShortName(String fullName) {
+        if (fullName == null || fullName.isEmpty()) {
+            return "";
+        }
+        if (!Character.isLetter(fullName.codePointAt(0))) {
+            return "";
+        }
+        var spaceIndex = fullName.indexOf(' ');
+        return spaceIndex > 0 ? fullName.substring(0, spaceIndex) : fullName;
     }
 }

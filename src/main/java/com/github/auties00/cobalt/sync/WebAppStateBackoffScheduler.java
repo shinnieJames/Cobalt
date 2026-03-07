@@ -20,7 +20,17 @@ public final class WebAppStateBackoffScheduler implements Closeable {
         this.pendingRetries = new ConcurrentHashMap<>();
     }
 
-    public boolean scheduleRetry(SyncPatchType collectionName, long firstFailureTimestamp, int attemptNumber, Runnable retryAction) {
+    /**
+     * Schedules a retry with exponential backoff.
+     *
+     * @param collectionName        the collection to retry
+     * @param firstFailureTimestamp the timestamp of the first failure in this series
+     * @param attemptNumber         the current retry attempt number
+     * @param serverBackoffMs       the server-suggested backoff in milliseconds, or {@code null}
+     * @param retryAction           the action to execute on retry
+     * @return {@code true} if the retry was scheduled, {@code false} if the failure window expired
+     */
+    public boolean scheduleRetry(SyncPatchType collectionName, long firstFailureTimestamp, int attemptNumber, Long serverBackoffMs, Runnable retryAction) {
         // Check if failure window has expired
         var elapsed = System.currentTimeMillis() - firstFailureTimestamp;
         if (elapsed >= FINITE_FAILURE_EXPIRY_MS) {
@@ -30,8 +40,11 @@ public final class WebAppStateBackoffScheduler implements Closeable {
         // Cancel any existing retry for this collection
         cancelRetry(collectionName);
 
-        // Calculate backoff delay
+        // Calculate backoff delay, applying server backoff floor per WA Web
         var delayMs = calculateBackoff(attemptNumber);
+        if (serverBackoffMs != null && serverBackoffMs > 0) {
+            delayMs = Math.max(delayMs, serverBackoffMs);
+        }
 
         // Schedule the retry
         var future = SchedulerUtils.scheduleDelayed(Duration.ofMillis(delayMs), () -> {

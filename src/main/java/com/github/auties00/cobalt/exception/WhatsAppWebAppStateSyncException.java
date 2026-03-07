@@ -513,11 +513,15 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         /**
          * Returns whether this exception represents a fatal error.
          *
-         * @return {@code false} - decryption errors are retryable
+         * <p>Per WhatsApp Web, all decryption failures (value MAC mismatch,
+         * index MAC mismatch) are classified as {@code SyncdFatalError}.
+         * An immediate resync is required rather than retrying.
+         *
+         * @return {@code true} - decryption errors are fatal
          */
         @Override
         public boolean isFatal() {
-            return false;
+            return true;
         }
     }
 

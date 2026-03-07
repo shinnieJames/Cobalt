@@ -3,9 +3,12 @@ package com.github.auties00.cobalt.sync.handler;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolution;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadAction;
+import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
@@ -73,39 +76,69 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
      * Resolves conflicts using message range comparison.
      *
      * <p>Per WhatsApp Web {@code WAWebMarkChatAsReadSync.resolveConflicts}:
-     * the mutation whose message range covers a broader scope of messages
-     * wins. When ranges are equal, timestamp is used as a tiebreaker.
+     * <ul>
+     *   <li>If remote range encloses local: apply remote, drop local
+     *   <li>If local range encloses remote: skip remote
+     *   <li>If ranges are equal: timestamp tiebreaker (local {@code <=} remote means apply remote)
+     *   <li>If ranges don't enclose each other: merge the two ranges, pick
+     *       the {@code read} value from the newer mutation, and return
+     *       {@code SKIP_REMOTE_DROP_LOCAL} with the merged mutation
+     * </ul>
      *
      * @param localMutation  the local pending mutation
      * @param remoteMutation the incoming remote mutation
-     * @return the resolution state indicating which mutation to keep
+     * @return the conflict resolution indicating which mutation to keep
      */
     @Override
-    public ConflictResolutionState resolveConflicts(DecryptedMutation.Trusted localMutation, DecryptedMutation.Trusted remoteMutation) {
-        var localRange = localMutation.value().action()
+    public ConflictResolution resolveConflicts(DecryptedMutation.Trusted localMutation, DecryptedMutation.Trusted remoteMutation) {
+        var localAction = localMutation.value().action()
                 .filter(a -> a instanceof MarkChatAsReadAction)
                 .map(a -> (MarkChatAsReadAction) a)
-                .flatMap(MarkChatAsReadAction::messageRange)
                 .orElse(null);
-        var remoteRange = remoteMutation.value().action()
+        var remoteAction = remoteMutation.value().action()
                 .filter(a -> a instanceof MarkChatAsReadAction)
                 .map(a -> (MarkChatAsReadAction) a)
-                .flatMap(MarkChatAsReadAction::messageRange)
                 .orElse(null);
 
+        if (localAction == null || remoteAction == null) {
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+        }
+
+        var localRange = localAction.messageRange().orElse(null);
+        var remoteRange = remoteAction.messageRange().orElse(null);
+
         if (localRange == null || remoteRange == null) {
-            return remoteMutation.timestamp().compareTo(localMutation.timestamp()) >= 0
-                    ? ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL
-                    : ConflictResolutionState.SKIP_REMOTE;
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
-            case RANGE_A_ENCLOSES_RANGE_B -> ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL;
-            case RANGE_B_ENCLOSES_RANGE_A -> ConflictResolutionState.SKIP_REMOTE;
-            case RANGES_ARE_EQUAL, RANGES_NOT_ENCLOSING ->
+            case RANGE_A_ENCLOSES_RANGE_B -> ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
+            case RANGE_B_ENCLOSES_RANGE_A -> ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+            case RANGES_ARE_EQUAL ->
                     localMutation.timestamp().compareTo(remoteMutation.timestamp()) <= 0
-                            ? ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL
-                            : ConflictResolutionState.SKIP_REMOTE;
+                            ? ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL)
+                            : ConflictResolution.of(ConflictResolutionState.SKIP_REMOTE);
+            case RANGES_NOT_ENCLOSING -> {
+                var localWins = localMutation.timestamp().compareTo(remoteMutation.timestamp()) > 0;
+                var read = localWins ? localAction.read() : remoteAction.read();
+                var mergedRange = MessageRangeUtils.mergeMessageRanges(remoteRange, localRange);
+                var mergedAction = new MarkChatAsReadActionBuilder()
+                        .read(read)
+                        .messageRange(mergedRange)
+                        .build();
+                var mergedValue = new SyncActionValueBuilder()
+                        .timestamp(remoteMutation.timestamp())
+                        .markChatAsReadAction(mergedAction)
+                        .build();
+                var merged = new DecryptedMutation.Trusted(
+                        localMutation.index(),
+                        mergedValue,
+                        localMutation.operation(),
+                        localMutation.timestamp(),
+                        localMutation.actionVersion()
+                );
+                yield ConflictResolution.merged(merged);
+            }
         };
     }
 }

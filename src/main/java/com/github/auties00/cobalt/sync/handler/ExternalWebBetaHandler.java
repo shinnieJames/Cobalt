@@ -10,7 +10,8 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * Handles external web beta actions.
  *
  * <p>This handler processes mutations that control external web beta enrollment
- * status. The mutation is acknowledged but not applied locally.
+ * status. On SET, reads the {@code isOptIn} flag from the mutation value and
+ * updates the store. Other operations are acknowledged as unsupported.
  *
  * <p>Index format: ["external_web_beta"]
  */
@@ -42,11 +43,11 @@ public final class ExternalWebBetaHandler implements WebAppStateActionHandler {
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof ExternalWebBetaAction action)) {
-            return false;
+            return true;
         }
 
         client.store().setExternalWebBeta(action.isOptIn());

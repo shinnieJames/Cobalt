@@ -30,8 +30,9 @@ public record EncryptedMutation(
         // Create ActionDataSync with no padding (WA Web uses MAX_OF_MIN_DATA_LENGTH = 0)
         var mutation = patch.mutation();
         var actionVersion = mutation.value()
-                .version()
-                .orElseThrow(() -> new IllegalArgumentException("Sync version must be present"));
+                .action()
+                .orElseThrow(() -> new IllegalArgumentException("Sync action must be present"))
+                .actionVersion();
         var actionData = new SyncActionDataBuilder()
                 .index(patch.mutation().index().getBytes(StandardCharsets.UTF_8))
                 .value(mutation.value())

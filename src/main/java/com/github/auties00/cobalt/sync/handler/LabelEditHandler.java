@@ -39,18 +39,18 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!(mutation.value().action().orElse(null) instanceof LabelEditAction action)) {
-            return false;
-        }
-
         // Web only supports SET; REMOVE is unsupported
         if (mutation.operation() != SyncdOperation.SET) {
             return true;
         }
 
+        if (!(mutation.value().action().orElse(null) instanceof LabelEditAction action)) {
+            return false;
+        }
+
         var indexArray = JSON.parseArray(mutation.index());
-        var labelId = indexArray.getInteger(1);
-        if (labelId == null) {
+        var labelId = indexArray.getString(1);
+        if (labelId == null || labelId.isEmpty()) {
             return false;
         }
 
@@ -58,23 +58,24 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
             client.store()
                     .removeLabel(labelId);
         } else {
-            var existing = client.store()
-                    .findLabel(labelId);
-            if (existing.isPresent()) {
-                var label = existing.get();
-                action.name().ifPresent(label::setName);
-                action.color().ifPresent(label::setColor);
-            } else {
-                var name = action.name().orElse("");
-                var color = action.color().orElse(0);
-                var label = new LabelBuilder()
-                        .id(labelId)
-                        .name(name)
-                        .color(color)
-                        .build();
-                client.store()
-                        .addLabel(label);
-            }
+            // Web: uses createOrReplace semantics — builds a new label object
+            // and replaces any existing label with the same ID
+            var name = action.name().orElse("");
+            var color = action.color().orElse(0);
+            var label = new LabelBuilder()
+                    .id(labelId)
+                    .name(name)
+                    .color(color)
+                    .predefinedId(action.predefinedId().isPresent() ? action.predefinedId().getAsInt() : null)
+                    .orderIndex(action.orderIndex().isPresent() ? action.orderIndex().getAsInt() : null)
+                    .isActive(action.isActive() ? true : null)
+                    .type(action.type().orElse(null))
+                    .isImmutable(action.isImmutable() ? true : null)
+                    .build();
+            client.store()
+                    .removeLabel(labelId);
+            client.store()
+                    .addLabel(label);
         }
 
         return true;

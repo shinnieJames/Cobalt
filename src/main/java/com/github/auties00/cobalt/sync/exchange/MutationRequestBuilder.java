@@ -55,11 +55,16 @@ public final class MutationRequestBuilder {
     /**
      * Builds a sync request node for the specified collection.
      *
+     * <p>Per WhatsApp Web {@code WAWebSyncdServerSync}: when the request
+     * includes outgoing mutations, the returned {@link SyncRequest} carries
+     * upload metadata so the caller can run the {@code _uploadSuccessful}
+     * path after a successful server response.
+     *
      * @param patchType the collection type to sync
      * @param patches   the pending mutations to include
-     * @return the IQ request node builder
+     * @return the sync request containing the IQ node and optional upload info
      */
-    public NodeBuilder buildSyncRequest(SyncPatchType patchType, SequencedCollection<SyncPendingMutation> patches) {
+    public SyncRequest buildSyncRequest(SyncPatchType patchType, SequencedCollection<SyncPendingMutation> patches) {
         // Get current hash state for this collection
         var hashState = whatsapp.store()
                 .findWebAppHashStateByName(patchType)
@@ -76,13 +81,15 @@ public final class MutationRequestBuilder {
         var compacted = compactPatch(patches);
 
         // Build patch node if we have mutations
+        SyncRequest.UploadedPatchInfo uploadInfo = null;
         if (!compacted.isEmpty()) {
-            var patchBytes = buildPatchProtobuf(patchType, compacted, hashState);
+            var buildResult = buildPatchProtobuf(patchType, compacted, hashState);
             var patchNode = new NodeBuilder()
                     .description("patch")
-                    .content(patchBytes)
+                    .content(buildResult.bytes())
                     .build();
             collectionBuilder.content(patchNode);
+            uploadInfo = buildResult.uploadInfo();
         }
 
         var collectionNode = collectionBuilder.build();
@@ -94,18 +101,26 @@ public final class MutationRequestBuilder {
                 .build();
 
         // Build IQ request
-        return new NodeBuilder()
+        var node = new NodeBuilder()
                 .description("iq")
                 .attribute("type", "set")
                 .attribute("xmlns", "w:sync:app:state")
                 .content(syncNode);
+
+        return new SyncRequest(node, uploadInfo);
+    }
+
+    private record PatchBuildResult(byte[] bytes, SyncRequest.UploadedPatchInfo uploadInfo) {
     }
 
     /**
      * Builds a serialized {@code SyncdPatch} protobuf containing encrypted
      * mutations with computed snapshotMac and patchMac.
+     *
+     * <p>Also captures upload metadata for post-response processing via
+     * {@link SyncRequest.UploadedPatchInfo}.
      */
-    private byte[] buildPatchProtobuf(SyncPatchType patchType, SequencedCollection<SyncPendingMutation> patches, SyncHashValue hashState) {
+    private PatchBuildResult buildPatchProtobuf(SyncPatchType patchType, SequencedCollection<SyncPendingMutation> patches, SyncHashValue hashState) {
         var keys = whatsapp.store().appStateKeys();
         if (keys.isEmpty()) {
             throw new IllegalStateException("No app state sync keys available");
@@ -122,9 +137,11 @@ public final class MutationRequestBuilder {
         try (var derivedKeys = MutationKeys.ofSyncKey(latestKeyData)) {
             // Step 1: Encrypt all mutations
             var encryptedMutations = encryptMutations(patchType, patches, derivedKeys, latestKeyId);
+            var userMutationCount = encryptedMutations.size();
 
             // Step 1b: Key rotation — re-encrypt old-key entries with the latest key
-            var keyRotationMutations = buildKeyRotationMutations(patchType, patches, derivedKeys, latestKeyId);
+            var keyRotationSources = new ArrayList<DecryptedMutation.Trusted>();
+            var keyRotationMutations = buildKeyRotationMutations(patchType, patches, derivedKeys, latestKeyId, keyRotationSources);
             encryptedMutations.addAll(keyRotationMutations);
 
             // Step 2: Compute new LT-Hash from encrypted mutations
@@ -145,6 +162,27 @@ public final class MutationRequestBuilder {
                 }
             }
             var newLtHash = MutationLTHash.subtractThenAdd(currentLtHash, toAdd, toRemove);
+
+            // Build upload metadata by pairing encrypted mutations with source data
+            var patchesIterator = patches.iterator();
+            var keyRotationIterator = keyRotationSources.iterator();
+            var uploadedMutations = new ArrayList<SyncRequest.UploadedMutationInfo>(encryptedMutations.size());
+            var index = 0;
+            for (var encrypted : encryptedMutations) {
+                var source = index < userMutationCount
+                        ? patchesIterator.next().mutation()
+                        : keyRotationIterator.next();
+                uploadedMutations.add(new SyncRequest.UploadedMutationInfo(
+                        encrypted.indexMac(),
+                        encrypted.valueMac(),
+                        encrypted.keyId(),
+                        encrypted.operation(),
+                        source.index(),
+                        source.value(),
+                        source.actionVersion()
+                ));
+                index++;
+            }
 
             // Step 3: Compute MACs
             var newVersion = hashState.version() + 1;
@@ -180,6 +218,10 @@ public final class MutationRequestBuilder {
                     .build();
             var clientDebugData = PatchDebugDataSpec.encode(debugData);
 
+            // Capture upload metadata for post-response processing
+            var uploadInfo = new SyncRequest.UploadedPatchInfo(
+                    patchType, newLtHash, newVersion, List.copyOf(uploadedMutations));
+
             // Step 5: Check if mutations should be uploaded externally
             var maxInlineCount = Math.min(2000, Math.max(100, abPropsService.getInt(ABProp.SYNCD_INLINE_MUTATIONS_MAX_COUNT)));
             var externalRef = (ExternalBlobReference) null;
@@ -201,7 +243,7 @@ public final class MutationRequestBuilder {
                 if (inlineBytes.length > maxSizeBytes) {
                     externalRef = uploadExternalMutations(syncdMutations);
                 } else {
-                    return inlineBytes;
+                    return new PatchBuildResult(inlineBytes, uploadInfo);
                 }
             }
 
@@ -216,7 +258,7 @@ public final class MutationRequestBuilder {
                     .clientDebugData(clientDebugData)
                     .build();
 
-            return SyncdPatchSpec.encode(syncdPatch);
+            return new PatchBuildResult(SyncdPatchSpec.encode(syncdPatch), uploadInfo);
         } catch (GeneralSecurityException exception) {
             throw new IllegalStateException("Failed to build outgoing patch", exception);
         }
@@ -270,27 +312,34 @@ public final class MutationRequestBuilder {
     }
 
     /**
-     * Builds additional SET mutations for key rotation by finding sync action
-     * entries encrypted with old keys and re-encrypting them with the latest key.
+     * Builds additional SET and REMOVE mutations for key rotation.
      *
      * <p>Per WhatsApp Web {@code WAWebSyncdRequestBuilderBuild}: when building
      * an outgoing patch, entries encrypted with keys older than the current key
      * are included as additional SET mutations to gradually rotate all entries
-     * to the latest key. The number of additional mutations per patch is limited
-     * by the {@code syncd_additional_mutations_count} AB prop.
+     * to the latest key. The number of additional SET mutations per patch is
+     * limited by the {@code syncd_additional_mutations_count} AB prop.
+     *
+     * <p>Per WhatsApp Web {@code _generateMutationsToUpload}: after collecting
+     * SET mutations (both user and rotation), REMOVE mutations are generated for
+     * every stored entry whose index appears as a SET in the batch and whose key
+     * is not the latest. This tells the server to explicitly remove the old-key
+     * entry before the new-key entry is applied.
      *
      * @param patchType   the collection type
      * @param patches     the core mutations being sent (to exclude from rotation)
      * @param derivedKeys the derived keys from the latest sync key
      * @param latestKeyId the latest app state sync key ID
-     * @return the additional encrypted mutations for key rotation
+     * @param keyRotationSourcesOut output list populated with source data for upload metadata
+     * @return the additional encrypted mutations for key rotation (SETs + REMOVEs)
      * @throws GeneralSecurityException if encryption fails
      */
     private List<EncryptedMutation> buildKeyRotationMutations(
             SyncPatchType patchType,
             SequencedCollection<SyncPendingMutation> patches,
             MutationKeys derivedKeys,
-            byte[] latestKeyId
+            byte[] latestKeyId,
+            List<DecryptedMutation.Trusted> keyRotationSourcesOut
     ) throws GeneralSecurityException {
         // Collect indices already in the current batch to avoid duplicates
         var batchIndices = new HashSet<String>();
@@ -300,7 +349,7 @@ public final class MutationRequestBuilder {
 
         // Find entries with old keys that are not in the current batch
         var allEntries = whatsapp.store().getSyncActionEntries(patchType);
-        var maxAdditional = Math.min(50, Math.max(1, abPropsService.getInt(ABProp.SYNCD_ADDITIONAL_MUTATIONS_COUNT)));
+        var maxAdditional = Math.min(5, Math.max(1, abPropsService.getInt(ABProp.SYNCD_ADDITIONAL_MUTATIONS_COUNT)));
         var result = new ArrayList<EncryptedMutation>();
 
         for (var entry : allEntries) {
@@ -331,8 +380,45 @@ public final class MutationRequestBuilder {
                     Instant.now(),
                     entry.actionVersion()
             );
+            keyRotationSourcesOut.add(trusted);
             var pending = new SyncPendingMutation(trusted, 0);
             result.add(EncryptedMutation.of(pending, derivedKeys, latestKeyId));
+        }
+
+        // Per WA Web: generate REMOVE mutations for old-key entries whose index
+        // is being SET (either by user mutations or rotation SETs above).
+        // Collect all SET indices from user mutations + rotation SETs.
+        var allSetIndices = new HashSet<>(batchIndices);
+        for (var rotationSource : keyRotationSourcesOut) {
+            allSetIndices.add(rotationSource.index());
+        }
+
+        for (var entry : allEntries) {
+            // Only process entries whose index appears as a SET
+            if (entry.actionIndex() == null || !allSetIndices.contains(entry.actionIndex())) {
+                continue;
+            }
+
+            // Only generate REMOVE for entries with an old key
+            if (Arrays.equals(entry.keyId(), latestKeyId)) {
+                continue;
+            }
+
+            // Skip entries without stored plaintext
+            if (entry.actionValue() == null) {
+                continue;
+            }
+
+            var removeTrusted = new DecryptedMutation.Trusted(
+                    entry.actionIndex(),
+                    entry.actionValue(),
+                    SyncdOperation.REMOVE,
+                    Instant.now(),
+                    entry.actionVersion()
+            );
+            keyRotationSourcesOut.add(removeTrusted);
+            var removePending = new SyncPendingMutation(removeTrusted, 0);
+            result.add(EncryptedMutation.of(removePending, derivedKeys, latestKeyId));
         }
 
         return result;
@@ -367,10 +453,10 @@ public final class MutationRequestBuilder {
 
             var compacted = compactPatch(patches);
             if (!compacted.isEmpty()) {
-                var patchBytes = buildPatchProtobuf(patchType, compacted, hashState);
+                var buildResult = buildPatchProtobuf(patchType, compacted, hashState);
                 var patchNode = new NodeBuilder()
                         .description("patch")
-                        .content(patchBytes)
+                        .content(buildResult.bytes())
                         .build();
                 collectionBuilder.content(patchNode);
             }

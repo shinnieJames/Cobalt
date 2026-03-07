@@ -40,7 +40,10 @@ public final class Sticker implements MediaProvider {
     @ProtobufProperty(index = 10, type = ProtobufType.UINT32)
     final Integer deviceIdHint;
 
-    Sticker(String mediaUrl, byte[] fileEncSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String mediaDirectPath, Long mediaSize, boolean favorite, Integer deviceIdHint) {
+    @ProtobufProperty(index = 11, type = ProtobufType.UINT64)
+    Long timestamp;
+
+    Sticker(String mediaUrl, byte[] fileEncSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String mediaDirectPath, Long mediaSize, boolean favorite, Integer deviceIdHint, Long timestamp) {
         this.mediaUrl = mediaUrl;
         this.fileEncSha256 = fileEncSha256;
         this.mediaKey = mediaKey;
@@ -51,6 +54,7 @@ public final class Sticker implements MediaProvider {
         this.mediaSize = mediaSize;
         this.favorite = favorite;
         this.deviceIdHint = deviceIdHint;
+        this.timestamp = timestamp;
     }
 
     @Override
@@ -141,6 +145,14 @@ public final class Sticker implements MediaProvider {
         return deviceIdHint == null ? OptionalInt.empty() : OptionalInt.of(deviceIdHint);
     }
 
+    public OptionalLong timestamp() {
+        return timestamp == null ? OptionalLong.empty() : OptionalLong.of(timestamp);
+    }
+
+    public void setTimestamp(Long timestamp) {
+        this.timestamp = timestamp;
+    }
+
     @Override
     public boolean equals(Object o) {
         return o instanceof Sticker that
@@ -153,12 +165,13 @@ public final class Sticker implements MediaProvider {
                && Objects.deepEquals(mediaKey, that.mediaKey)
                && Objects.equals(mimetype, that.mimetype)
                && Objects.equals(mediaDirectPath, that.mediaDirectPath)
-               && Objects.equals(deviceIdHint, that.deviceIdHint);
+               && Objects.equals(deviceIdHint, that.deviceIdHint)
+               && Objects.equals(timestamp, that.timestamp);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mediaUrl, Arrays.hashCode(fileEncSha256), Arrays.hashCode(mediaKey), mimetype, height, width, mediaDirectPath, mediaSize, favorite, deviceIdHint);
+        return Objects.hash(mediaUrl, Arrays.hashCode(fileEncSha256), Arrays.hashCode(mediaKey), mimetype, height, width, mediaDirectPath, mediaSize, favorite, deviceIdHint, timestamp);
     }
 
     @Override
@@ -173,6 +186,7 @@ public final class Sticker implements MediaProvider {
                "directPath=" + mediaDirectPath + ", " +
                "mediaSize=" + mediaSize + ", " +
                "favorite=" + favorite + ", " +
-               "deviceIdHint=" + deviceIdHint + ']';
+               "deviceIdHint=" + deviceIdHint + ", " +
+               "timestamp=" + timestamp + ']';
     }
 }

@@ -6,7 +6,11 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.zip.Inflater;
 import java.util.zip.DataFormatException;
@@ -32,10 +36,14 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
  *     <li>Nested node structures with attributes and child nodes</li>
  * </ul>
  * <p>
+ * Instances are obtained via the {@link #of(ByteBuffer)} factory method, which
+ * automatically selects the appropriate implementation based on the compression
+ * flag in the data header.
+ * <p>
  * Usage example:
  * <pre>{@code
  * ByteBuffer buffer = ByteBuffer.wrap(encodedData);
- * NodeDecoder decoder = new NodeDecoder(buffer);
+ * NodeDecoder decoder = NodeDecoder.of(buffer);
  * Node node = decoder.decode();
  * }</pre>
  *
@@ -45,7 +53,17 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
  * @see NodeTokens
  * @see NodeTags
  */
-public final class NodeDecoder implements AutoCloseable {
+public sealed abstract class NodeDecoder implements AutoCloseable {
+    /**
+     * VarHandle for reading 16-bit values in big-endian byte order from byte arrays.
+     */
+    private static final VarHandle SHORT_HANDLE = MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * VarHandle for reading 32-bit values in big-endian byte order from byte arrays.
+     */
+    private static final VarHandle INT_HANDLE = MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
+
     /**
      * Alphabet used for decoding nibble-encoded strings (4-bit per character).
      * Contains digits, hyphen, period, and special characters.
@@ -61,192 +79,91 @@ public final class NodeDecoder implements AutoCloseable {
     /**
      * Maximum size of the temporary buffer used for decompression operations.
      */
-    private static final int MAX_DECOMPRESSION_BUFFER_SIZE = 8192;
+    private static final int DECOMPRESSION_BUFFER_SIZE = 8192;
 
     /**
      * The source ByteBuffer containing the encoded node data.
      */
-    private final ByteBuffer source;
+    final ByteBuffer source;
 
     /**
-     * Indicates whether the data is compressed and requires decompression.
-     */
-    private final boolean compressionEnabled;
-
-    /**
-     * The inflater used for decompressing data when compression is enabled.
-     */
-    private final Inflater inflater;
-
-    /**
-     * Temporary buffer used for decompression operations.
-     * Only allocated when compression is enabled.
-     * Size is determined based on source ByteBuffer capacity with a maximum of 8192 bytes.
-     */
-    private final byte[] decompressionBuffer;
-
-    /**
-     * Current position in the decompression buffer for reading.
-     */
-    private int bufferPosition;
-
-    /**
-     * Number of valid bytes available in the decompression buffer.
-     */
-    private int bufferLimit;
-
-    /**
-     * Constructs a new NodeDecoder with the provided ByteBuffer.
-     * <p>
-     * The constructor automatically detects whether the data is compressed by reading
-     * the first byte's compression flag (bit 2). If compression is detected, an
-     * inflater and temporary decompression buffer are initialized. The decompression
-     * buffer size is calculated as the minimum of 8192 bytes and the maximum possible
-     * expanded size based on the source ByteBuffer's remaining capacity.
+     * Constructs a new {@code NodeDecoder} backed by the given source buffer.
      *
      * @param source the ByteBuffer containing the encoded node data
      */
-    public NodeDecoder(ByteBuffer source) {
+    private NodeDecoder(ByteBuffer source) {
         this.source = source;
+    }
+
+    /**
+     * Creates a new {@code NodeDecoder} for the provided ByteBuffer.
+     * <p>
+     * The factory reads the first byte's compression flag (bit 2) to determine
+     * whether the data is DEFLATE-compressed. If compression is detected, a
+     * decompressing decoder is returned; otherwise, a direct-read decoder is
+     * returned.
+     *
+     * @param source the ByteBuffer containing the encoded node data
+     * @return a {@code NodeDecoder} appropriate for the data's compression mode
+     */
+    public static NodeDecoder of(ByteBuffer source) {
         var flags = source.get() & 0xFF;
-        this.compressionEnabled = (flags & 2) != 0;
-        if (compressionEnabled) {
-            this.inflater = new Inflater();
-            this.decompressionBuffer = new byte[MAX_DECOMPRESSION_BUFFER_SIZE];
-            this.bufferPosition = 0;
-            this.bufferLimit = 0;
+        if ((flags & 2) != 0) {
+            return new Compressed(source);
         } else {
-            this.inflater = null;
-            this.decompressionBuffer = null;
+            return new Uncompressed(source);
         }
     }
 
     /**
      * Decodes a node from the ByteBuffer.
-     * <p>
-     * This method reads from either the source ByteBuffer directly (if compression
-     * is disabled) or from the decompression buffer (if compression is enabled).
      *
      * @return the decoded {@link Node} object representing the node structure
      * @throws IOException if an I/O error occurs while reading or decompressing data
      */
-    public Node decode() throws IOException {
+    public final Node decode() throws IOException {
         return readNode();
     }
 
     /**
      * Checks if there is more data available to be processed.
-     * <p>
-     * If compression is disabled, this checks if the source ByteBuffer has remaining bytes.
-     * If compression is enabled, this checks if there are bytes in the decompression buffer
-     * or if the inflater has not finished processing all data.
      *
-     * @return true if more data is available to read, false otherwise
+     * @return {@code true} if more data is available to read, {@code false} otherwise
      */
-    public boolean hasData() {
-        if (!compressionEnabled) {
-            return source.hasRemaining();
-        }else {
-            return bufferPosition < bufferLimit
-                   || !inflater.finished()
-                   || source.hasRemaining();
-        }
-    }
+    public abstract boolean hasData();
 
     /**
-     * Reads a single byte from the appropriate source.
-     * <p>
-     * If compression is disabled, reads directly from the source ByteBuffer.
-     * If compression is enabled, reads from the decompression buffer, filling it
-     * from the compressed source as needed.
+     * Reads a single byte from the underlying data source.
      *
      * @return the next byte value (0-255)
      * @throws IOException if an I/O error occurs or end of data is reached
      */
-    private int read() throws IOException {
-        if (!compressionEnabled) {
-            if (!source.hasRemaining()) {
-                throw new IOException("Unexpected end of data");
-            }
-            return source.get() & 0xFF;
-        }
-
-        if (bufferPosition >= bufferLimit) {
-            fillDecompressionBuffer();
-        }
-
-        if (bufferPosition >= bufferLimit) {
-            throw new IOException("Unexpected end of decompressed data");
-        }
-
-        return decompressionBuffer[bufferPosition++] & 0xFF;
-    }
+    abstract int read() throws IOException;
 
     /**
-     * Reads the specified number of bytes into a new byte array.
-     * <p>
-     * If compression is disabled, reads directly from the source ByteBuffer.
-     * If compression is enabled, reads from the decompression buffer, filling it
-     * from the compressed source as needed.
+     * Reads a 16-bit unsigned value in big-endian byte order from the underlying data source.
+     *
+     * @return the next 16-bit value (0-65535)
+     * @throws IOException if an I/O error occurs or insufficient data is available
+     */
+    abstract int readShort() throws IOException;
+
+    /**
+     * Reads a 32-bit signed value in big-endian byte order from the underlying data source.
+     *
+     * @return the next 32-bit value
+     * @throws IOException if an I/O error occurs or insufficient data is available
+     */
+    abstract int readInt() throws IOException;
+
+    /**
+     * Reads the specified number of bytes into a new byte array from the underlying data source.
      *
      * @param length the number of bytes to read
      * @return a byte array containing the read data
      * @throws IOException if an I/O error occurs or insufficient data is available
      */
-    private byte[] readBytes(int length) throws IOException {
-        var result = new byte[length];
-
-        if (!compressionEnabled) {
-            if (source.remaining() < length) {
-                throw new IOException("Insufficient data available");
-            }
-            source.get(result);
-            return result;
-        }
-
-        var offset = 0;
-        while (offset < length) {
-            if (bufferPosition >= bufferLimit) {
-                fillDecompressionBuffer();
-            }
-
-            if (bufferPosition >= bufferLimit) {
-                throw new IOException("Unexpected end of decompressed data");
-            }
-
-            var available = bufferLimit - bufferPosition;
-            var toRead = Math.min(available, length - offset);
-            System.arraycopy(decompressionBuffer, bufferPosition, result, offset, toRead);
-            bufferPosition += toRead;
-            offset += toRead;
-        }
-
-        return result;
-    }
-
-    /**
-     * Fills the decompression buffer by inflating data from the source ByteBuffer.
-     * <p>
-     * This method feeds compressed data from the source to the inflater and
-     * decompresses it into the temporary buffer.
-     *
-     * @throws IOException if a decompression error occurs
-     */
-    private void fillDecompressionBuffer() throws IOException {
-        try {
-            if (inflater.needsInput() && source.hasRemaining()) {
-                var available = source.remaining();
-                var input = new byte[Math.min(available, decompressionBuffer.length)];
-                source.get(input);
-                inflater.setInput(input);
-            }
-
-            bufferPosition = 0;
-            bufferLimit = inflater.inflate(decompressionBuffer);
-        } catch (DataFormatException e) {
-            throw new IOException("Decompression error", e);
-        }
-    }
+    abstract byte[] readBytes(int length) throws IOException;
 
     /**
      * Reads and decodes a complete node from the data source.
@@ -279,6 +196,8 @@ public final class NodeDecoder implements AutoCloseable {
         var tag = (byte) read();
         return switch (tag) {
             case LIST_EMPTY -> new Node.EmptyNode(description, attrs);
+            case JID_INTEROP -> new Node.JidNode(description, attrs, readInteropJid());
+            case JID_FB -> new Node.JidNode(description, attrs, readFbJid());
             case AD_JID -> new Node.JidNode(description, attrs, readAdJid());
             case LIST_8 -> new Node.ContainerNode(description, attrs, readList8());
             case LIST_16 -> new Node.ContainerNode(description, attrs, readList16());
@@ -292,7 +211,13 @@ public final class NodeDecoder implements AutoCloseable {
             case DICTIONARY_1 -> new Node.TextNode(description, attrs, readDictionaryToken(DICTIONARY_1_TOKENS));
             case DICTIONARY_2 -> new Node.TextNode(description, attrs, readDictionaryToken(DICTIONARY_2_TOKENS));
             case DICTIONARY_3 -> new Node.TextNode(description, attrs, readDictionaryToken(DICTIONARY_3_TOKENS));
-            default -> new Node.TextNode(description, attrs, readSingleByteToken(tag));
+            default -> {
+                var index = tag & 0xFF;
+                if (index >= 240) {
+                    throw new IOException("Unexpected tag in node content: " + index);
+                }
+                yield new Node.TextNode(description, attrs, readSingleByteToken(tag));
+            }
         };
     }
 
@@ -313,7 +238,7 @@ public final class NodeDecoder implements AutoCloseable {
         var token = (byte) read();
         return switch (token) {
             case LIST_8 -> read() & 0xFF;
-            case LIST_16 -> (read() << 8) | read();
+            case LIST_16 -> readShort();
             default -> throw new IllegalStateException("Unexpected value: " + token);
         };
     }
@@ -333,14 +258,20 @@ public final class NodeDecoder implements AutoCloseable {
             case LIST_EMPTY -> null;
             case HEX_8 -> readPacked(HEX_ALPHABET);
             case NIBBLE_8 -> readPacked(NIBBLE_ALPHABET);
-            case BINARY_8 -> new String(readBinary8());
-            case BINARY_20 -> new String(readBinary20());
-            case BINARY_32 -> new String(readBinary32());
+            case BINARY_8 -> new String(readBinary8(), StandardCharsets.UTF_8);
+            case BINARY_20 -> new String(readBinary20(), StandardCharsets.UTF_8);
+            case BINARY_32 -> new String(readBinary32(), StandardCharsets.UTF_8);
             case DICTIONARY_0 -> readDictionaryToken(DICTIONARY_0_TOKENS);
             case DICTIONARY_1 -> readDictionaryToken(DICTIONARY_1_TOKENS);
             case DICTIONARY_2 -> readDictionaryToken(DICTIONARY_2_TOKENS);
             case DICTIONARY_3 -> readDictionaryToken(DICTIONARY_3_TOKENS);
-            default -> readSingleByteToken(tag);
+            default -> {
+                var index = tag & 0xFF;
+                if (index >= 240) {
+                    throw new IOException("Unexpected tag in string position: " + index);
+                }
+                yield readSingleByteToken(tag);
+            }
         };
     }
 
@@ -364,7 +295,7 @@ public final class NodeDecoder implements AutoCloseable {
      * @throws IOException if an I/O error occurs
      */
     private byte[] readBinary20() throws IOException {
-        var size = (read() << 16)
+        var size = ((read() & 0x0F) << 16)
                    | (read() << 8)
                    | read();
         return readBytes(size);
@@ -379,11 +310,7 @@ public final class NodeDecoder implements AutoCloseable {
      * @throws IOException if an I/O error occurs
      */
     private byte[] readBinary32() throws IOException {
-        var size = (read() << 24)
-                   | (read() << 16)
-                   | (read() << 8)
-                   | read();
-        return readBytes(size);
+        return readBytes(readInt());
     }
 
     /**
@@ -425,7 +352,7 @@ public final class NodeDecoder implements AutoCloseable {
      * @throws IOException if an I/O error occurs during reading
      */
     private SequencedMap<String, NodeAttribute> readAttributes(int size) throws IOException {
-        var attributes = new LinkedHashMap<String, NodeAttribute>();
+        var attributes = new LinkedHashMap<String, NodeAttribute>(size / 2);
         while (size >= 2) {
             var key = readString();
             var value = readAttribute();
@@ -449,9 +376,17 @@ public final class NodeDecoder implements AutoCloseable {
         var tag = (byte) read();
         return switch (tag) {
             case LIST_EMPTY -> null;
+            case JID_INTEROP -> new NodeAttribute.JidAttribute(readInteropJid());
+            case JID_FB -> new NodeAttribute.JidAttribute(readFbJid());
             case AD_JID -> new NodeAttribute.JidAttribute(readAdJid());
-            case LIST_8 -> throw new IllegalStateException("Unexpected LIST_8 tag");
-            case LIST_16 -> throw new IllegalStateException("Unexpected LIST_16 tag");
+            case LIST_8 -> {
+                readList8();
+                yield null;
+            }
+            case LIST_16 -> {
+                readList16();
+                yield null;
+            }
             case JID_PAIR -> new NodeAttribute.JidAttribute(readJidPair());
             case HEX_8 -> new NodeAttribute.TextAttribute(readPacked(HEX_ALPHABET));
             case BINARY_8 -> new NodeAttribute.BytesAttribute(readBinary8());
@@ -462,7 +397,13 @@ public final class NodeDecoder implements AutoCloseable {
             case DICTIONARY_1 -> new NodeAttribute.TextAttribute(readDictionaryToken(DICTIONARY_1_TOKENS));
             case DICTIONARY_2 -> new NodeAttribute.TextAttribute(readDictionaryToken(DICTIONARY_2_TOKENS));
             case DICTIONARY_3 -> new NodeAttribute.TextAttribute(readDictionaryToken(DICTIONARY_3_TOKENS));
-            default -> new NodeAttribute.TextAttribute(readSingleByteToken(tag));
+            default -> {
+                var index = tag & 0xFF;
+                if (index >= 240) {
+                    throw new IOException("Unexpected tag in attribute position: " + index);
+                }
+                yield new NodeAttribute.TextAttribute(readSingleByteToken(tag));
+            }
         };
     }
 
@@ -486,9 +427,7 @@ public final class NodeDecoder implements AutoCloseable {
      * @throws IOException if an I/O error occurs
      */
     private SequencedCollection<Node> readList16() throws IOException {
-        var length = (read() << 8)
-                     | read();
-        return readList(length);
+        return readList(readShort());
     }
 
     /**
@@ -559,29 +498,308 @@ public final class NodeDecoder implements AutoCloseable {
     }
 
     /**
-     * Reads a JID which includes agent and device identifiers.
+     * Reads an AD JID which includes domain type and device identifiers.
      * <p>
      * AD JIDs are used for multi-device WhatsApp accounts and contain:
      * <ul>
-     *     <li>Agent ID (8-bit)</li>
+     *     <li>Domain type (8-bit): determines the server domain</li>
      *     <li>Device ID (8-bit)</li>
      *     <li>User identifier string</li>
      * </ul>
-     * The resulting JID uses the user server type with device and agent metadata.
+     * The domain type is mapped to a {@link JidServer} as follows:
+     * <ul>
+     *     <li>{@code 0} → {@code s.whatsapp.net} (WHATSAPP)</li>
+     *     <li>{@code 1} → {@code lid} (LID)</li>
+     *     <li>{@code 129} → {@code hosted.lid} (HOSTED_LID)</li>
+     *     <li>Even values with bit 7 set → {@code hosted} (HOSTED)</li>
+     * </ul>
      *
      * @return a {@link Jid} object representing the device-specific user identifier
-     * @throws IOException if an I/O error occurs
+     * @throws IOException if an I/O error occurs or the domain type is invalid
      */
     private Jid readAdJid() throws IOException {
-        var agent = read() & 0xFF;
+        var domainType = read() & 0xFF;
         var device = read() & 0xFF;
         var user = readString();
-        return Jid.of(user, JidServer.user(), device, agent);
+        var server = switch (domainType) {
+            case DOMAIN_WHATSAPP -> JidServer.user();
+            case DOMAIN_LID -> JidServer.lid();
+            case DOMAIN_HOSTED_LID -> JidServer.hostedLid();
+            default -> {
+                if ((domainType & 1) == 0 && (domainType & DOMAIN_HOSTED) != 0) {
+                    yield JidServer.hosted();
+                }
+                throw new IOException("Invalid AD_JID domain type: " + domainType);
+            }
+        };
+        return Jid.of(user, server, device, 0);
     }
 
-    @Override
-    public void close() {
-        if(inflater != null) {
+    /**
+     * Reads a Facebook Messenger JID (tag 246).
+     * <p>
+     * FB JIDs represent Messenger users participating in cross-platform conversations
+     * and contain:
+     * <ul>
+     *     <li>User identifier string</li>
+     *     <li>Device ID (16-bit)</li>
+     *     <li>Domain string (consumed but not used, as the server is implicit)</li>
+     * </ul>
+     *
+     * @return a {@link Jid} object representing the Messenger user
+     * @throws IOException if an I/O error occurs
+     */
+    private Jid readFbJid() throws IOException {
+        var user = readString();
+        var device = readShort();
+        // Domain string is part of the wire format but the server is implicit (msgr)
+        var _ = readString();
+        return Jid.of(user, JidServer.messenger(), device, 0);
+    }
+
+    /**
+     * Reads a cross-platform interoperability JID (tag 245).
+     * <p>
+     * Interop JIDs represent users from external platforms and contain:
+     * <ul>
+     *     <li>User identifier string</li>
+     *     <li>Device ID (16-bit)</li>
+     *     <li>Integrator ID (16-bit platform identifier)</li>
+     *     <li>Domain string (consumed but not used, as the server is implicit)</li>
+     * </ul>
+     * The integrator and user are combined as {@code integrator-user} in the
+     * resulting JID's user component.
+     *
+     * @return a {@link Jid} object representing the interop user
+     * @throws IOException if an I/O error occurs
+     */
+    private Jid readInteropJid() throws IOException {
+        var user = readString();
+        var device = readShort();
+        var integrator = readShort();
+        // Domain string is part of the wire format but the server is implicit (interop)
+        var _ = readString();
+        return Jid.of(integrator + "-" + user, JidServer.interop(), device, 0);
+    }
+
+    /**
+     * A decoder implementation for uncompressed node data that reads directly
+     * from the source {@link ByteBuffer} without any decompression.
+     */
+    private static final class Uncompressed extends NodeDecoder {
+        /**
+         * Constructs a new uncompressed decoder backed by the given source buffer.
+         *
+         * @param source the ByteBuffer containing the encoded node data
+         */
+        Uncompressed(ByteBuffer source) {
+            super(source);
+        }
+
+        @Override
+        public boolean hasData() {
+            return source.hasRemaining();
+        }
+
+        @Override
+        int read() throws IOException {
+            if (!source.hasRemaining()) {
+                throw new IOException("Unexpected end of data");
+            }
+            return source.get() & 0xFF;
+        }
+
+        @Override
+        int readShort() throws IOException {
+            if (source.remaining() < 2) {
+                throw new IOException("Unexpected end of data");
+            }
+            return source.getShort() & 0xFFFF;
+        }
+
+        @Override
+        int readInt() throws IOException {
+            if (source.remaining() < 4) {
+                throw new IOException("Unexpected end of data");
+            }
+            return source.getInt();
+        }
+
+        @Override
+        byte[] readBytes(int length) throws IOException {
+            if (source.remaining() < length) {
+                throw new IOException("Insufficient data available");
+            }
+            var result = new byte[length];
+            source.get(result);
+            return result;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    /**
+     * A decoder implementation for DEFLATE-compressed node data that inflates
+     * data from the source {@link ByteBuffer} through a buffered decompression layer.
+     */
+    private static final class Compressed extends NodeDecoder {
+        /**
+         * The inflater used for decompressing data.
+         */
+        private final Inflater inflater;
+
+        /**
+         * Temporary buffer used for decompression output.
+         */
+        private final byte[] decompressionBuffer;
+
+        /**
+         * Pre-allocated buffer used for feeding compressed data to the inflater.
+         */
+        private final byte[] inflaterInputBuffer;
+
+        /**
+         * Current read position in the decompression buffer.
+         */
+        private int bufferPosition;
+
+        /**
+         * Number of valid bytes available in the decompression buffer.
+         */
+        private int bufferLimit;
+
+        /**
+         * Constructs a new compressed decoder backed by the given source buffer.
+         *
+         * @param source the ByteBuffer containing the DEFLATE-compressed node data
+         */
+        Compressed(ByteBuffer source) {
+            super(source);
+            this.inflater = new Inflater();
+            this.decompressionBuffer = new byte[DECOMPRESSION_BUFFER_SIZE];
+            this.inflaterInputBuffer = new byte[DECOMPRESSION_BUFFER_SIZE];
+        }
+
+        @Override
+        public boolean hasData() {
+            return bufferPosition < bufferLimit
+                   || !inflater.finished()
+                   || source.hasRemaining();
+        }
+
+        @Override
+        int read() throws IOException {
+            if (bufferPosition >= bufferLimit) {
+                fillDecompressionBuffer();
+            }
+
+            if (bufferPosition >= bufferLimit) {
+                throw new IOException("Unexpected end of decompressed data");
+            }
+
+            return decompressionBuffer[bufferPosition++] & 0xFF;
+        }
+
+        @Override
+        int readShort() throws IOException {
+            ensureAvailable(2);
+            var value = (short) SHORT_HANDLE.get(decompressionBuffer, bufferPosition);
+            bufferPosition += 2;
+            return value & 0xFFFF;
+        }
+
+        @Override
+        int readInt() throws IOException {
+            ensureAvailable(4);
+            var value = (int) INT_HANDLE.get(decompressionBuffer, bufferPosition);
+            bufferPosition += 4;
+            return value;
+        }
+
+        /**
+         * Ensures that at least the specified number of bytes are available contiguously
+         * in the decompression buffer starting at {@code bufferPosition}.
+         * <p>
+         * If fewer bytes are available, the remaining bytes are compacted to the start
+         * of the buffer and more data is inflated until the requirement is met.
+         *
+         * @param needed the minimum number of contiguous bytes required
+         * @throws IOException if the stream ends before enough bytes are available
+         */
+        private void ensureAvailable(int needed) throws IOException {
+            var available = bufferLimit - bufferPosition;
+            if (available >= needed) {
+                return;
+            }
+            if (available > 0) {
+                System.arraycopy(decompressionBuffer, bufferPosition, decompressionBuffer, 0, available);
+            }
+            bufferPosition = 0;
+            bufferLimit = available;
+            try {
+                while (bufferLimit < needed) {
+                    if (inflater.needsInput() && source.hasRemaining()) {
+                        var toRead = Math.min(source.remaining(), inflaterInputBuffer.length);
+                        source.get(inflaterInputBuffer, 0, toRead);
+                        inflater.setInput(inflaterInputBuffer, 0, toRead);
+                    }
+                    var inflated = inflater.inflate(decompressionBuffer, bufferLimit, decompressionBuffer.length - bufferLimit);
+                    if (inflated == 0) {
+                        throw new IOException("Unexpected end of decompressed data");
+                    }
+                    bufferLimit += inflated;
+                }
+            } catch (DataFormatException e) {
+                throw new IOException("Decompression error", e);
+            }
+        }
+
+        @Override
+        byte[] readBytes(int length) throws IOException {
+            var result = new byte[length];
+            var offset = 0;
+            while (offset < length) {
+                if (bufferPosition >= bufferLimit) {
+                    fillDecompressionBuffer();
+                }
+
+                if (bufferPosition >= bufferLimit) {
+                    throw new IOException("Unexpected end of decompressed data");
+                }
+
+                var available = bufferLimit - bufferPosition;
+                var toRead = Math.min(available, length - offset);
+                System.arraycopy(decompressionBuffer, bufferPosition, result, offset, toRead);
+                bufferPosition += toRead;
+                offset += toRead;
+            }
+            return result;
+        }
+
+        /**
+         * Fills the decompression buffer by inflating data from the source ByteBuffer.
+         *
+         * @throws IOException if a decompression error occurs
+         */
+        private void fillDecompressionBuffer() throws IOException {
+            try {
+                if (inflater.needsInput() && source.hasRemaining()) {
+                    var available = Math.min(source.remaining(), inflaterInputBuffer.length);
+                    source.get(inflaterInputBuffer, 0, available);
+                    inflater.setInput(inflaterInputBuffer, 0, available);
+                }
+
+                bufferPosition = 0;
+                bufferLimit = inflater.inflate(decompressionBuffer);
+            } catch (DataFormatException e) {
+                throw new IOException("Decompression error", e);
+            }
+        }
+
+        @Override
+        public void close() {
             inflater.close();
         }
     }

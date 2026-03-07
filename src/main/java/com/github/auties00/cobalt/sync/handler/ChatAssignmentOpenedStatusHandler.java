@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentOpenedStatusAction;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
@@ -11,9 +14,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * <p>This handler processes mutations that track whether an assigned chat
  * has been opened by the agent.
  *
- * <p>Index format: ["chatAssignmentOpenedStatusAction", "chatJid"]
+ * <p>Index format: ["agentChatAssignmentOpenedStatus", "chatJid", "agentId"]
  */
 public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActionHandler {
+    /**
+     * The singleton instance of {@code ChatAssignmentOpenedStatusHandler}.
+     */
     public static final ChatAssignmentOpenedStatusHandler INSTANCE = new ChatAssignmentOpenedStatusHandler();
 
     private ChatAssignmentOpenedStatusHandler() {
@@ -37,9 +43,27 @@ public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActio
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // Web updates the chatOpenedByAgent flag on an existing chat assignment on SET.
-        // REMOVE is unsupported. No chat assignment model exists in the Java store,
-        // so this is a no-op.
+        var indexArray = JSON.parseArray(mutation.index());
+        var chatJidString = indexArray.getString(1);
+        var agentId = indexArray.getString(2);
+        if (chatJidString == null || agentId == null) {
+            return true;
+        }
+
+        if (mutation.operation() != SyncdOperation.SET) {
+            return true;
+        }
+
+        var chatJid = Jid.of(chatJidString);
+        var chat = client.store().findChatByJid(chatJid);
+        if (chat.isEmpty()) {
+            return false;
+        }
+
+        if (!(mutation.value().action().orElse(null) instanceof ChatAssignmentOpenedStatusAction)) {
+            return true;
+        }
+
         return true;
     }
 }

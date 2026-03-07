@@ -43,7 +43,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         if (mutation.operation() != SyncdOperation.SET) {
-            return false;
+            return true;
         }
 
         if (!(mutation.value().action().orElse(null) instanceof MuteAction action)) {
@@ -64,14 +64,30 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
             return false;
         }
 
-        var muteEndSeconds = action.muteEndTimestamp()
-                .map(Instant::getEpochSecond)
+        // Per WA Web: protobuf value is millis, check expiration in millis,
+        // then convert to seconds for storage
+        var muteEndMillis = action.muteEndTimestamp()
+                .map(Instant::toEpochMilli)
                 .orElse(0L);
-        if (muteEndSeconds > 0 && muteEndSeconds < Instant.now().getEpochSecond()) {
+        long muteEndSeconds;
+        if (muteEndMillis > 0 && muteEndMillis < System.currentTimeMillis()) {
             muteEndSeconds = 0L;
+        } else {
+            muteEndSeconds = muteEndMillis / 1000;
         }
 
         chat.get().setMute(ChatMute.mutedUntil(muteEndSeconds));
+
+        action.muteEveryoneMentionEndTimestamp().ifPresent(mentionTs -> {
+            var mentionMillis = mentionTs.toEpochMilli();
+            long mentionSeconds;
+            if (mentionMillis > 0 && mentionMillis < System.currentTimeMillis()) {
+                mentionSeconds = 0L;
+            } else {
+                mentionSeconds = mentionMillis / 1000;
+            }
+            client.store().setMentionEveryoneMuteExpiration(chatJid, ChatMute.mutedUntil(mentionSeconds));
+        });
 
         return true;
     }

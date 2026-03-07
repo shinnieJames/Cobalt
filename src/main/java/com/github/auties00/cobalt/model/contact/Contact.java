@@ -146,6 +146,24 @@ public final class Contact implements JidProvider {
     ADVEncryptionType encryptionType;
 
     /**
+     * Whether the local user has opted to share their own phone number with this
+     * LID-identified contact. Populated by the {@code shareOwnPn} app state sync
+     * action and used by the LID metadata update job to control phone number
+     * visibility in LID-addressed conversations.
+     */
+    @ProtobufProperty(index = 12, type = ProtobufType.BOOL)
+    boolean phoneNumberShared;
+
+    /**
+     * Whether this contact record was created through the username-based contact
+     * discovery flow rather than through phone number lookup. Used to scope
+     * {@code REMOVE} operations in {@link com.github.auties00.cobalt.sync.handler.LidContactHandler}:
+     * only username-originated contacts have their name fields cleared on removal.
+     */
+    @ProtobufProperty(index = 13, type = ProtobufType.BOOL)
+    boolean addedByUsername;
+
+    /**
      * Constructs a new contact with the given field values.
      *
      * @param jid                the non-{@code null} JID uniquely identifying this contact
@@ -161,7 +179,7 @@ public final class Contact implements JidProvider {
      * @param username           the username for this contact, or {@code null}
      * @param encryptionType     the ADV encryption type, or {@code null}
      */
-    Contact(Jid jid, String chosenName, String fullName, String shortName, ContactStatus lastKnownPresence, Long lastSeenSeconds, boolean blocked, boolean statusMuted, Jid lid, String username, ADVEncryptionType encryptionType) {
+    Contact(Jid jid, String chosenName, String fullName, String shortName, ContactStatus lastKnownPresence, Long lastSeenSeconds, boolean blocked, boolean statusMuted, Jid lid, String username, ADVEncryptionType encryptionType, boolean phoneNumberShared, boolean addedByUsername) {
         this.jid = Objects.requireNonNull(jid, "value cannot be null");
         this.chosenName = chosenName;
         this.fullName = fullName;
@@ -173,6 +191,8 @@ public final class Contact implements JidProvider {
         this.lid = lid;
         this.username = username;
         this.encryptionType = encryptionType;
+        this.phoneNumberShared = phoneNumberShared;
+        this.addedByUsername = addedByUsername;
     }
 
     /**
@@ -438,6 +458,46 @@ public final class Contact implements JidProvider {
      */
     public Contact setEncryptionType(ADVEncryptionType encryptionType) {
         this.encryptionType = encryptionType;
+        return this;
+    }
+
+    /**
+     * Returns whether the local user has shared their phone number with this contact.
+     *
+     * @return {@code true} if the phone number has been shared
+     */
+    public boolean isPhoneNumberShared() {
+        return phoneNumberShared;
+    }
+
+    /**
+     * Sets whether the local user has shared their phone number with this contact.
+     *
+     * @param phoneNumberShared {@code true} if the phone number is shared
+     * @return this contact instance
+     */
+    public Contact setPhoneNumberShared(boolean phoneNumberShared) {
+        this.phoneNumberShared = phoneNumberShared;
+        return this;
+    }
+
+    /**
+     * Returns whether this contact was added through username-based discovery.
+     *
+     * @return {@code true} if the contact was added by username
+     */
+    public boolean isAddedByUsername() {
+        return addedByUsername;
+    }
+
+    /**
+     * Sets whether this contact was added through username-based discovery.
+     *
+     * @param addedByUsername {@code true} if added by username
+     * @return this contact instance
+     */
+    public Contact setAddedByUsername(boolean addedByUsername) {
+        this.addedByUsername = addedByUsername;
         return this;
     }
 

@@ -60,14 +60,26 @@ public final class LidContactHandler implements WebAppStateActionHandler {
                 var contact = client.store()
                         .findContactByJid(lidJid)
                         .orElseGet(() -> client.store().addNewContact(lidJid));
-                action.fullName().ifPresent(contact::setFullName);
-                action.firstName().ifPresent(contact::setShortName);
+                // Web: fullName ?? "" (coalesces absent to empty string)
+                var fullName = action.fullName().orElse("");
+                contact.setFullName(fullName);
+                // Web: firstName ?? getShortName(firstName) ?? ""
+                var shortName = action.firstName().orElse("");
+                contact.setShortName(shortName);
                 action.username().ifPresent(contact::setUsername);
             }
             case REMOVE -> {
+                // Web: calls setNotAddressBookContacts and
+                // setContactsNotMyUsernameContacts, which clears name,
+                // shortName, sets type to "out", and clears username
+                // Only applies to contacts that were added via username flow
                 client.store().findContactByJid(lidJid).ifPresent(contact -> {
-                    contact.setFullName(null);
-                    contact.setShortName(null);
+                    if (contact.isAddedByUsername()) {
+                        contact.setFullName(null);
+                        contact.setShortName(null);
+                        contact.setUsername(null);
+                        contact.setAddedByUsername(false);
+                    }
                 });
             }
         }
