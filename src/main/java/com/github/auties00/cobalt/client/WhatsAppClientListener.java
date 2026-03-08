@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.contact.Contact;
+import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -254,6 +255,16 @@ public interface WhatsAppClientListener {
      * @param newAbout the non-null new about text
      */
     default void onAboutChanged(WhatsAppClient whatsapp, String oldAbout, String newAbout) {
+    }
+
+    /**
+     * Called when a contact's text status metadata changes.
+     *
+     * @param whatsapp an instance of the calling API
+     * @param contact  the contact whose text status changed
+     * @param status   the new text status
+     */
+    default void onContactTextStatus(WhatsAppClient whatsapp, Jid contact, ContactTextStatus status) {
     }
 
     /**

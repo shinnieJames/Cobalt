@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.contact.Contact;
+import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
@@ -26,12 +27,14 @@ import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
+import com.github.auties00.cobalt.model.payment.OrphanPaymentNotification;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
+import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
 import com.github.auties00.cobalt.model.sync.OrphanMutationEntry;
 import com.github.auties00.cobalt.model.sync.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.SyncCollectionMetadata;
@@ -788,6 +791,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
      */
     Collection<Contact> contacts();
 
+    Collection<ContactTextStatus> contactTextStatuses();
+
     /**
      * Finds a contact by either phone number JID or LID.
      *
@@ -803,6 +808,94 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @return the contact that was added
      */
     Contact addContact(Contact contact);
+
+    Optional<ContactTextStatus> findContactTextStatus(JidProvider jid);
+
+    void addContactTextStatus(Jid contactJid, ContactTextStatus status);
+
+    Optional<ContactTextStatus> removeContactTextStatus(JidProvider jid);
+
+    Optional<WaffleAccountLinkStateAction.AccountLinkState> waffleAccountLinkState();
+
+    WhatsAppStore setWaffleAccountLinkState(WaffleAccountLinkStateAction.AccountLinkState state);
+
+    boolean hostedAutomationOnboarded();
+
+    WhatsAppStore setHostedAutomationOnboarded(boolean onboarded);
+
+    Optional<OrphanPaymentNotification> findOrphanPaymentNotification(String messageId);
+
+    void addOrphanPaymentNotification(OrphanPaymentNotification notification);
+
+    Optional<OrphanPaymentNotification> removeOrphanPaymentNotification(String messageId);
+
+    Optional<byte[]> routingInfo();
+
+    WhatsAppStore setRoutingInfo(byte[] routingInfo);
+
+    Optional<String> routingDomain();
+
+    WhatsAppStore setRoutingDomain(String routingDomain);
+
+    Optional<Instant> clientExpiration();
+
+    WhatsAppStore setClientExpiration(Instant clientExpiration);
+
+    Set<String> tosNoticeIds();
+
+    WhatsAppStore setTosNoticeIds(Set<String> noticeIds);
+
+    boolean aiAvailable();
+
+    WhatsAppStore setAiAvailable(boolean aiAvailable);
+
+    Optional<String> businessOptOutListHash();
+
+    WhatsAppStore setBusinessOptOutListHash(String hash);
+
+    Map<String, Boolean> businessFeatureFlags();
+
+    WhatsAppStore setBusinessFeatureFlags(Map<String, Boolean> flags);
+
+    Map<String, String> businessCampaignStatuses();
+
+    WhatsAppStore setBusinessCampaignStatuses(Map<String, String> statuses);
+
+    Optional<String> businessAccountNonce();
+
+    WhatsAppStore setBusinessAccountNonce(String nonce);
+
+    Optional<Boolean> ctwaDataSharingEnabled();
+
+    WhatsAppStore setCtwaDataSharingEnabled(Boolean enabled);
+
+    Map<String, String> businessSubscriptionStatuses();
+
+    WhatsAppStore setBusinessSubscriptionStatuses(Map<String, String> statuses);
+
+    Map<String, Long> businessSubscriptionExpirations();
+
+    WhatsAppStore setBusinessSubscriptionExpirations(Map<String, Long> expirations);
+
+    Map<String, Long> businessSubscriptionCreationTimes();
+
+    WhatsAppStore setBusinessSubscriptionCreationTimes(Map<String, Long> creationTimes);
+
+    boolean subscriptionDeactivated();
+
+    WhatsAppStore setSubscriptionDeactivated(boolean deactivated);
+
+    boolean subscriptionAutoRenewing();
+
+    WhatsAppStore setSubscriptionAutoRenewing(boolean autoRenewing);
+
+    Optional<Long> subscriptionExpirationDate();
+
+    WhatsAppStore setSubscriptionExpirationDate(Long expirationDate);
+
+    boolean detectedOutcomesEnabled();
+
+    WhatsAppStore setDetectedOutcomesEnabled(boolean enabled);
 
     /**
      * Adds a new contact with only its JID populated.
@@ -1394,11 +1487,31 @@ public interface WhatsAppStore extends SignalProtocolStore {
     List<OrphanMutationEntry> findOrphanMutations(SyncPatchType collectionName);
 
     /**
+     * Returns orphan mutations matching the specified model identifier within a collection.
+     *
+     * <p>This enables targeted orphan lookups by entity (e.g. by chat JID) instead of
+     * requiring a full scan of all orphan mutations for the collection.
+     *
+     * @param collectionName the collection name
+     * @param modelId        the model identifier to match (e.g. a JID string)
+     * @return the list of matching orphan mutation entries, never {@code null}
+     */
+    List<OrphanMutationEntry> findOrphanMutationsByModel(SyncPatchType collectionName, String modelId);
+
+    /**
      * Removes all orphan mutations for the specified collection.
      *
      * @param collectionName the collection name
      */
     void removeOrphanMutations(SyncPatchType collectionName);
+
+    /**
+     * Removes specific orphan mutation entries from the specified collection.
+     *
+     * @param collectionName the collection name
+     * @param entries        the entries to remove
+     */
+    void removeOrphanMutations(SyncPatchType collectionName, Collection<OrphanMutationEntry> entries);
 
     /**
      * Marks a participant as having received the sender key for a group.

@@ -58,12 +58,13 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
             return false;
         }
 
-        var chatJidString = indexArray.getString(1);
+        var chatJid = Jid.of(indexArray.getString(1));
         var messageId = indexArray.getString(2);
-        // var fromMe = indexArray.getString(3);
-        // var participant = indexArray.getString(4);
-
-        var chatJid = Jid.of(chatJidString);
+        var fromMe = "1".equals(indexArray.getString(3));
+        var participantString = indexArray.getString(4);
+        var participant = participantString != null && !participantString.isEmpty()
+                ? Jid.of(participantString)
+                : null;
 
         var message = client.store()
                 .findMessageById(chatJid, messageId);
@@ -71,7 +72,18 @@ public final class StarMessageHandler implements WebAppStateActionHandler {
             return false;
         }
 
-        starMessage(message.get(), action.starred());
+        var found = message.get();
+        if (found instanceof ChatMessageInfo chatMsg) {
+            if (chatMsg.key().fromMe() != fromMe) {
+                return false;
+            }
+
+            if (participant != null && !participant.toUserJid().equals(chatMsg.key().senderJid().map(Jid::toUserJid).orElse(null))) {
+                return false;
+            }
+        }
+
+        starMessage(found, action.starred());
 
         return true;
     }

@@ -158,13 +158,13 @@ public final class MutationResponseParser {
             case "409" -> throw new WhatsAppWebAppStateSyncException.Conflict(
                     collectionNode.hasAttribute("has_more_patches")
             );
-            case "400", "404", "405", "406" -> throw new WhatsAppWebAppStateSyncException.UnexpectedError(
+            case "400", "404" -> throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "Server returned fatal error code: " + errorCode, null
             );
             default -> {
                 // Per WA Web: extract server backoff from error response
                 var serverBackoffMs = errorNode
-                        .map(e -> e.getAttributeAsLong("retry-after", null))
+                        .map(e -> e.getAttributeAsLong("backoff", null))
                         .orElse(null);
                 throw new WhatsAppWebAppStateSyncException.RetryableServerError(errorCode, serverBackoffMs);
             }
@@ -190,7 +190,7 @@ public final class MutationResponseParser {
             default -> {
                 // Per WA Web: extract server backoff from IQ error response
                 var serverBackoffMs = errorNode != null
-                        ? errorNode.getAttributeAsLong("retry-after", null)
+                        ? errorNode.getAttributeAsLong("backoff", null)
                         : null;
                 throw new WhatsAppWebAppStateSyncException.RetryableServerError(
                         String.valueOf(errorCode), serverBackoffMs);

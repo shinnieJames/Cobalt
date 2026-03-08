@@ -105,6 +105,30 @@ public interface WhatsAppClientErrorHandler {
                 return Result.DISCARD;
             }
 
+            if (exception instanceof com.github.auties00.cobalt.exception.WhatsAppSessionException.Reconnect) {
+                logger.log(WARNING, "[{0}] Session requires reconnect", jid);
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.RECONNECT;
+            }
+
+            if (exception instanceof com.github.auties00.cobalt.exception.WhatsAppSessionException.LoggedOut) {
+                logger.log(WARNING, "[{0}] Session logged out by server", jid);
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.LOG_OUT;
+            }
+
+            if (exception instanceof com.github.auties00.cobalt.exception.WhatsAppSessionException.Banned) {
+                logger.log(WARNING, "[{0}] Session banned by server", jid);
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.BAN;
+            }
+
             var fatal = exception.isFatal();
             logger.log(ERROR, "[{0}] Socket failure at {1}: {2} failure", jid, exception.getClass().getSimpleName(), fatal ? "Fatal" : "Ignored");
             if (printer != null) {
@@ -135,6 +159,11 @@ public interface WhatsAppClientErrorHandler {
          * Indicates that the session should be disconnected and immediately reconnected
          */
         RECONNECT,
+
+        /**
+         * Indicates that the current session should be terminated as banned.
+         */
+        BAN,
 
         /**
          * Indicates that the current session should be completely terminated and deleted

@@ -222,7 +222,7 @@ public final class WamService {
         this.deviceName = store.name();
         this.memClass = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
         this.numCpu = Runtime.getRuntime().availableProcessors();
-        this.browser = "Cobalt";
+        this.browser = "Chrome";
         this.browserVersion = appVersion;
         this.osVersion = System.getProperty("os.name", "") + " " + System.getProperty("os.version", "");
         this.deviceVersion = osVersion;
@@ -277,54 +277,6 @@ public final class WamService {
         } catch (Exception _) {
             return null;
         }
-    }
-
-    /**
-     * Updates the application version global at runtime, matching
-     * WhatsApp Web's {@code Global.set()} for the {@code appVersion}
-     * and {@code browserVersion} fields.
-     *
-     * @param version the new application version string, or {@code null}
-     */
-    public void setAppVersion(String version) {
-        this.appVersion = version;
-        this.browserVersion = version;
-    }
-
-    /**
-     * Updates the companion phone app version global at runtime.
-     *
-     * @param version the new companion app version string, or {@code null}
-     */
-    public void setCompanionAppVersion(String version) {
-        this.companionAppVersion = version;
-    }
-
-    /**
-     * Updates the AB key global at runtime.
-     *
-     * @param abKey2 the new AB key string, or {@code null}
-     */
-    public void setAbKey2(String abKey2) {
-        this.abKey2 = abKey2;
-    }
-
-    /**
-     * Updates the web revision global at runtime.
-     *
-     * @param webcRevision the new revision number
-     */
-    public void setWebcRevision(int webcRevision) {
-        this.webcRevision = webcRevision;
-    }
-
-    /**
-     * Updates the service improvement opt-out global at runtime.
-     *
-     * @param optOut {@code true} if opted out
-     */
-    public void setServiceImprovementOptOut(boolean optOut) {
-        this.serviceImprovementOptOut = optOut;
     }
 
     /**

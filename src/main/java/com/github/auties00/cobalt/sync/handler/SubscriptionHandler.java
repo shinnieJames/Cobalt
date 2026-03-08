@@ -37,6 +37,14 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
 
     @Override
     public boolean applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
+        if (!(mutation.value().action().orElse(null) instanceof SubscriptionAction action)) {
+            return true;
+        }
+
+        client.store()
+                .setSubscriptionDeactivated(action.isDeactivated())
+                .setSubscriptionAutoRenewing(action.isAutoRenewing())
+                .setSubscriptionExpirationDate(action.expirationDate().isPresent() ? action.expirationDate().getAsLong() : null);
         return true;
     }
 }

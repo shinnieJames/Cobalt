@@ -361,16 +361,13 @@ public final class JidDevice {
     /**
      * Creates a {@code JidDevice} configured as a web companion device.
      *
-     * <p>The returned device emulates a Surface Pro 4 running macOS 10.0 with the
-     * {@link WhatsAppClientType#WEB} client type.
-     *
      * @return a new web-configured device descriptor
      */
     public static JidDevice web() {
         return new JidDevice(
                 "Surface Pro 4",
                 "Microsoft",
-                ClientPlatformType.MACOS,
+                ClientPlatformType.WEB,
                 ClientAppVersion.of("10.0"),
                 null,
                 null,

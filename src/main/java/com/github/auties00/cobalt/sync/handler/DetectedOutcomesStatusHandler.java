@@ -46,10 +46,11 @@ public final class DetectedOutcomesStatusHandler implements WebAppStateActionHan
             return true;
         }
 
-        if (!(mutation.value().action().orElse(null) instanceof DetectedOutcomesStatusAction)) {
+        if (!(mutation.value().action().orElse(null) instanceof DetectedOutcomesStatusAction action)) {
             return true;
         }
 
+        client.store().setDetectedOutcomesEnabled(action.isEnabled());
         return true;
     }
 }

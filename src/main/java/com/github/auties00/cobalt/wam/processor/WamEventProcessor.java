@@ -11,7 +11,6 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
-import java.io.IOException;
 import java.util.Set;
 
 /**
@@ -41,16 +40,10 @@ public final class WamEventProcessor extends AbstractProcessor {
                             .writeTo(processingEnv.getFiler());
                     WamBuilderGenerator.generate(eventElement)
                             .writeTo(processingEnv.getFiler());
-                } catch (IOException e) {
+                } catch (Throwable e) {
                     processingEnv.getMessager().printMessage(
                             Diagnostic.Kind.ERROR,
                             "Failed to generate WAM sources: " + e.getMessage(),
-                            element
-                    );
-                } catch (IllegalStateException e) { // TODO: Use custom exception
-                    processingEnv.getMessager().printMessage(
-                            Diagnostic.Kind.ERROR,
-                            e.getMessage(),
                             element
                     );
                 }

@@ -43,10 +43,6 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.node.mex.json.request.CommunityRequests;
-import com.github.auties00.cobalt.node.mex.json.request.NewsletterRequests;
-import com.github.auties00.cobalt.node.mex.json.request.UserRequests;
-import com.github.auties00.cobalt.node.mex.json.response.*;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.socket.WhatsAppSocketClient;
 import com.github.auties00.cobalt.socket.WhatsAppSocketListener;
@@ -140,7 +136,7 @@ public final class WhatsAppClient {
         this.messageService = new MessageService(this, sessionCipher, groupCipher, deviceService, abPropsService);
         this.wamService = new WamService(this, abPropsService);
         this.pendingSocketRequests = new ConcurrentHashMap<>();
-        this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService);
+        this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService, webAppStateService);
         this.messagePreviewHandler = messagePreviewHandler;
     }
 
@@ -227,7 +223,7 @@ public final class WhatsAppClient {
                 Thread.startVirtualThread(() -> listener.onNodeReceived(this, node));
             }
             resolvePendingRequest(node);
-            socketStream.digest(node);
+            socketStream.handle(node);
         } catch (WhatsAppStreamException exception) {
             handleFailure(exception);
         } catch (Throwable throwable) {
@@ -252,6 +248,17 @@ public final class WhatsAppClient {
     }
 
     private void disconnect(WhatsAppClientDisconnectReason reason, boolean canRemoveShutdownHook) {
+        // Per WA Web WAWebSocketModel.sendLogout: flush pending sentinel
+        // mutations before disconnecting so key expiration is propagated
+        if (reason == WhatsAppClientDisconnectReason.LOGGED_OUT
+                || reason == WhatsAppClientDisconnectReason.DISCONNECTED) {
+            try {
+                webAppStateService.flushDirtyCollections();
+            } catch (Exception e) {
+                // Best-effort: don't let flush failures block disconnect
+            }
+        }
+
         wamService.close();
 
         if (socketClient != null) {
@@ -400,6 +407,7 @@ public final class WhatsAppClient {
     public void handleFailure(WhatsAppException exception) {
         var result = errorHandler.handleError(this, exception);
         switch (result) {
+            case BAN -> disconnect(WhatsAppClientDisconnectReason.BANNED);
             case LOG_OUT -> disconnect(WhatsAppClientDisconnectReason.LOGGED_OUT);
             case DISCONNECT -> disconnect(WhatsAppClientDisconnectReason.DISCONNECTED);
             case RECONNECT -> disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
@@ -1797,6 +1805,21 @@ public final class WhatsAppClient {
         return false;
     }
 
+    /**
+     * Sends a peer protocol message to a companion device.
+     *
+     * <p>Peer messages are sent with {@code category="peer"} and
+     * {@code push_priority="high"} to ensure prompt delivery to
+     * the user's own devices.
+     *
+     * @param targetDevice the target companion device JID
+     * @param messageInfo  the protocol message to send
+     * @apiNote WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg
+     */
+    public void sendPeerMessage(Jid targetDevice, ChatMessageInfo messageInfo) {
+        messageService.sendPeer(targetDevice, messageInfo);
+    }
+
     //</editor-fold>
 
     //<editor-fold desc="Send status updates">
@@ -2500,6 +2523,7 @@ public final class WhatsAppClient {
                 .or(() -> response.getChild("group"))
                 .orElseThrow(() -> new NoSuchElementException("Erroneous response: %s".formatted(response)));
         var metadata = parseChatMetadata(metadataNode);
+        store.addChatMetadata(metadata);
         var chat = store.findChatByJid(metadata.jid())
                 .orElseGet(() -> store().addNewChat(metadata.jid()));
         chat.setName(metadata.subject());

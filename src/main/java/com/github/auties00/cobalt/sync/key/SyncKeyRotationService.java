@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.sync.key;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.*;
@@ -15,8 +18,10 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.util.SchedulerUtils;
 
 import java.security.SecureRandom;
+import java.util.concurrent.CompletableFuture;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -54,10 +59,17 @@ public final class SyncKeyRotationService {
      */
     private static final int MAX_KEY_MAX_USE_DAYS = 90;
 
+    /**
+     * Per WhatsApp Web {@code WAWebTasksDefinitions}: the periodic key rotation
+     * check runs every 27 days.
+     */
+    private static final Duration PERIODIC_ROTATION_INTERVAL = Duration.ofDays(27);
+
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final WhatsAppClient whatsapp;
     private final ABPropsService abPropsService;
+    private volatile CompletableFuture<?> periodicRotationJob;
 
     /**
      * Constructs a new sync key rotation service.
@@ -353,6 +365,12 @@ public final class SyncKeyRotationService {
             return;
         }
 
+        var myJid = whatsapp.store().jid().orElse(null);
+        if (myJid == null) {
+            LOGGER.warning("Cannot share rotated key: own JID not available");
+            return;
+        }
+
         var keyShare = new AppStateSyncKeyShareBuilder()
                 .keys(List.of(key))
                 .build();
@@ -366,9 +384,22 @@ public final class SyncKeyRotationService {
                 .protocolMessage(protocolMessage)
                 .build();
 
+        // Per WA Web WAWebKeyManagementSendKeyShareApi: key rotation shares
+        // are sent as peer messages (category="peer", push_priority="high")
+        // with subtype "app_state_sync_key_share"
         for (var device : companionDevices) {
             try {
-                whatsapp.sendMessage(device, messageContainer);
+                var messageKey = new MessageKeyBuilder()
+                        .id(MessageKey.randomId(whatsapp.store().clientType()))
+                        .chatJid(myJid)
+                        .fromMe(true)
+                        .senderJid(myJid)
+                        .build();
+                var messageInfo = new ChatMessageInfoBuilder()
+                        .key(messageKey)
+                        .message(messageContainer)
+                        .build();
+                whatsapp.sendPeerMessage(device, messageInfo);
             } catch (Exception e) {
                 LOGGER.warning("Failed to send rotated key to device " + device + ": " + e.getMessage());
             }
@@ -407,7 +438,7 @@ public final class SyncKeyRotationService {
                 .build();
 
         for (var collection : SyncPatchType.values()) {
-            var index = "sentinel," + collection.name();
+            var index = "[\"sentinel\",\"" + collection + "\"]";
             var mutation = new DecryptedMutation.Trusted(
                     index,
                     actionValue,
@@ -445,6 +476,45 @@ public final class SyncKeyRotationService {
                 .filter(device -> device.id() != myJid.device())
                 .map(device -> device.toDeviceJid(myJid.user(), myJid.server()))
                 .toList();
+    }
+
+    /**
+     * Starts a periodic background job that checks key rotation every 27 days.
+     *
+     * <p>Per WhatsApp Web {@code WAWebTasksDefinitions}: a persisted
+     * {@code RotateKeyTask} runs every 27 days as a background check
+     * independent of mutation push. This ensures expired keys are rotated
+     * even if no mutations are pushed for extended periods.
+     */
+    public void startPeriodicRotationJob() {
+        stopPeriodicRotationJob();
+        scheduleNextPeriodicRotation();
+    }
+
+    private void scheduleNextPeriodicRotation() {
+        periodicRotationJob = SchedulerUtils.scheduleDelayed(
+                PERIODIC_ROTATION_INTERVAL,
+                () -> {
+                    try {
+                        ensureActiveKey(true);
+                    } catch (Exception e) {
+                        LOGGER.warning("Periodic key rotation check failed: " + e.getMessage());
+                    } finally {
+                        scheduleNextPeriodicRotation();
+                    }
+                }
+        );
+    }
+
+    /**
+     * Stops the periodic key rotation background job.
+     */
+    public void stopPeriodicRotationJob() {
+        var job = periodicRotationJob;
+        if (job != null) {
+            job.cancel(false);
+            periodicRotationJob = null;
+        }
     }
 
     /**

@@ -12,8 +12,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
-import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
-
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -82,9 +80,9 @@ public sealed interface DecryptedMutation {
 
             // Verify index MAC
             var actionIndex = actionData.index()
-                    .orElseThrow(() -> new IllegalStateException("Missing index from action data"));
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing index from action data", null));
             var actionValue = actionData.value()
-                    .orElseThrow(() -> new IllegalStateException("Missing value from action data"));
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing value from action data", null));
             var actionTimestamp = actionValue.timestamp()
                     .orElseThrow(WhatsAppWebAppStateSyncException.MissingActionTimestamp::new);
             var indexMac2 = Mac.getInstance("HmacSHA256");
@@ -96,8 +94,8 @@ public sealed interface DecryptedMutation {
 
             // Per WA Web: missing version is a fatal error, not a default-to-0 case
             var actionVersion = actionData.version()
-                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.TerminalPatch(
-                            null, 100));
+                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
+                            "Missing version in action data", null));
             return new Untrusted(
                     new String(actionIndex, StandardCharsets.UTF_8),
                     indexMac,

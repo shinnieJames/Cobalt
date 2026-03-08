@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.exchange;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.media.ExternalBlobReference;
 import com.github.auties00.cobalt.model.media.ExternalBlobReferenceBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
@@ -19,6 +20,7 @@ import com.github.auties00.cobalt.sync.crypto.EncryptedMutation;
 import com.github.auties00.cobalt.sync.crypto.MutationIntegrityVerifier;
 import com.github.auties00.cobalt.sync.crypto.MutationKeys;
 import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
+import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
 
 import javax.crypto.Mac;
 import java.io.ByteArrayInputStream;
@@ -75,7 +77,7 @@ public final class MutationRequestBuilder {
                 .description("collection")
                 .attribute("name", patchType.toString())
                 .attribute("version", hashState.version())
-                .attribute("return_snapshot", hashState.version() == 0 ? "true" : "false");
+                .attribute("return_snapshot", !whatsapp.store().findWebAppState(patchType).bootstrapped() ? "true" : "false");
 
         // Compact: deduplicate by index, keeping the last mutation for each index
         var compacted = compactPatch(patches);
@@ -105,6 +107,7 @@ public final class MutationRequestBuilder {
                 .description("iq")
                 .attribute("type", "set")
                 .attribute("xmlns", "w:sync:app:state")
+                .attribute("to", Jid.userServer())
                 .content(syncNode);
 
         return new SyncRequest(node, uploadInfo);
@@ -348,7 +351,11 @@ public final class MutationRequestBuilder {
         }
 
         // Find entries with old keys that are not in the current batch
-        var allEntries = whatsapp.store().getSyncActionEntries(patchType);
+        // Per WA Web: sort by key epoch ascending to rotate oldest keys first
+        var allEntries = whatsapp.store().getSyncActionEntries(patchType)
+                .stream()
+                .sorted(Comparator.comparingInt(e -> SyncKeyUtils.getKeyEpoch(e.keyId())))
+                .toList();
         var maxAdditional = Math.min(5, Math.max(1, abPropsService.getInt(ABProp.SYNCD_ADDITIONAL_MUTATIONS_COUNT)));
         var result = new ArrayList<EncryptedMutation>();
 
@@ -418,7 +425,20 @@ public final class MutationRequestBuilder {
             );
             keyRotationSourcesOut.add(removeTrusted);
             var removePending = new SyncPendingMutation(removeTrusted, 0);
-            result.add(EncryptedMutation.of(removePending, derivedKeys, latestKeyId));
+
+            // Per WA Web: REMOVE mutations must be encrypted with the original key
+            // that was used for the stored entry, not the latest key. This mirrors
+            // the logic in encryptMutations() for user-initiated REMOVEs.
+            var originalKeyData = whatsapp.store()
+                    .findWebAppStateKeyById(entry.keyId())
+                    .flatMap(AppStateSyncKey::keyData)
+                    .flatMap(AppStateSyncKeyData::keyData)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Original sync key not found for key rotation REMOVE"
+                    ));
+            try (var originalDerivedKeys = MutationKeys.ofSyncKey(originalKeyData)) {
+                result.add(EncryptedMutation.of(removePending, originalDerivedKeys, entry.keyId()));
+            }
         }
 
         return result;
@@ -449,7 +469,7 @@ public final class MutationRequestBuilder {
                     .description("collection")
                     .attribute("name", patchType.toString())
                     .attribute("version", hashState.version())
-                    .attribute("return_snapshot", hashState.version() == 0 ? "true" : "false");
+                    .attribute("return_snapshot", !whatsapp.store().findWebAppState(patchType).bootstrapped() ? "true" : "false");
 
             var compacted = compactPatch(patches);
             if (!compacted.isEmpty()) {
@@ -473,6 +493,7 @@ public final class MutationRequestBuilder {
                 .description("iq")
                 .attribute("type", "set")
                 .attribute("xmlns", "w:sync:app:state")
+                .attribute("to", Jid.userServer())
                 .content(syncNode);
     }
 

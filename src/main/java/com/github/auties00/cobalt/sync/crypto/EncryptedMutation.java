@@ -44,12 +44,14 @@ public record EncryptedMutation(
         var plaintext = SyncActionDataSpec.encode(actionData);
 
         // Encrypt with AES-256-CBC
+        var iv = new byte[IV_LENGTH];
+        FastRandomUtils.randomByteArray(iv, 0, IV_LENGTH);
+        var ivSpec = new IvParameterSpec(iv);
         var cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, keys.valueEncryptionKey(), ivSpec);
         var ciphertextLength = cipher.getOutputSize(plaintext.length);
         var encryptedValue = new byte[IV_LENGTH + ciphertextLength + MAC_LENGTH];
-        FastRandomUtils.randomByteArray(encryptedValue, 0, IV_LENGTH);
-        var ivSpec = new IvParameterSpec(encryptedValue, 0, IV_LENGTH);
-        cipher.init(Cipher.ENCRYPT_MODE, keys.valueEncryptionKey(), ivSpec);
+        System.arraycopy(iv, 0, encryptedValue, 0, IV_LENGTH);
         if(cipher.doFinal(plaintext, 0, plaintext.length, encryptedValue, IV_LENGTH) != ciphertextLength) {
             throw new InternalError("Ciphertext length mismatch");
         }

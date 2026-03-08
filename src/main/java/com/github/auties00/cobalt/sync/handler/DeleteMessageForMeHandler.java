@@ -51,10 +51,17 @@ public final class DeleteMessageForMeHandler implements WebAppStateActionHandler
         }
 
         var indexArray = JSON.parseArray(mutation.index());
-        var chatJidString = indexArray.getString(1);
-        var messageId = indexArray.getString(2);
+        if (indexArray.size() < 5) {
+            return false;
+        }
 
-        var chatJid = Jid.of(chatJidString);
+        var chatJid = Jid.of(indexArray.getString(1));
+        var messageId = indexArray.getString(2);
+        var fromMe = "1".equals(indexArray.getString(3));
+        var participantString = indexArray.getString(4);
+        var participant = participantString != null && !participantString.isEmpty()
+                ? Jid.of(participantString)
+                : null;
 
         var chat = client.store()
                 .findChatByJid(chatJid);
@@ -64,7 +71,10 @@ public final class DeleteMessageForMeHandler implements WebAppStateActionHandler
 
         client.store()
                 .findMessageById(chat.get(), messageId)
-                .ifPresent(chatMessageInfo -> chat.get().removeMessage(chatMessageInfo.id()));
+                .filter(msg -> msg.key().fromMe() == fromMe)
+                .filter(msg -> participant == null || participant.toUserJid().equals(msg.key().senderJid().map(Jid::toUserJid).orElse(null)))
+                .flatMap(info -> info.key().id())
+                .ifPresent(id -> chat.get().removeMessage(id));
 
         return true;
     }

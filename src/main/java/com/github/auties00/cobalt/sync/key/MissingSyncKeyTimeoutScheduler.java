@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 public final class MissingSyncKeyTimeoutScheduler {
     private static final System.Logger LOGGER = System.getLogger(MissingSyncKeyTimeoutScheduler.class.getName());
 
-    private static final long RE_REQUEST_INTERVAL_HOURS = 24;
+    private static final long RE_REQUEST_INTERVAL_HOURS = 6;
 
     private final WhatsAppClient client;
     private final WhatsAppStore store;

@@ -17,6 +17,13 @@ import java.util.Objects;
  * @param state the current synchronization state
  * @param retryCount the number of retry attempts (for error states)
  * @param lastErrorTimestamp the timestamp of the last error (Unix millis)
+ * @param macMismatch whether a snapshot MAC mismatch has been detected for this
+ *                    collection; per WhatsApp Web {@code isCollectionInMacMismatchFatal},
+ *                    this flag persists across state transitions
+ * @param bootstrapped whether this collection has completed at least one sync round;
+ *                     per WhatsApp Web {@code WAWebSyncdCollectionUtils.isBootstrap},
+ *                     a collection is considered bootstrap when its version is absent
+ *                     (never synced), distinct from version 0 (synced but empty)
  */
 public record SyncCollectionMetadata(
         SyncPatchType name,
@@ -25,7 +32,9 @@ public record SyncCollectionMetadata(
         long lastSyncTimestamp,
         SyncCollectionState state,
         int retryCount,
-        long lastErrorTimestamp
+        long lastErrorTimestamp,
+        boolean macMismatch,
+        boolean bootstrapped
 ) {
     /**
      * Creates a new CollectionMetadata with validation.
@@ -67,7 +76,9 @@ public record SyncCollectionMetadata(
                 lastSyncTimestamp,
                 state,
                 retryCount + 1,
-                System.currentTimeMillis()
+                System.currentTimeMillis(),
+                macMismatch,
+                bootstrapped
         );
     }
 
@@ -84,17 +95,21 @@ public record SyncCollectionMetadata(
                 lastSyncTimestamp,
                 state,
                 0,
-                0
+                0,
+                macMismatch,
+                bootstrapped
         );
     }
 
     @Override
     public boolean equals(Object o) {
-        return o instanceof SyncCollectionMetadata(var thatName, var thatVersion, var thatHash, var thatSyncTimestamp, var thatState, var thatCount, var thatErrorTimestamp)
+        return o instanceof SyncCollectionMetadata(var thatName, var thatVersion, var thatHash, var thatSyncTimestamp, var thatState, var thatCount, var thatErrorTimestamp, var thatMacMismatch, var thatBootstrapped)
                && version == thatVersion
                && retryCount == thatCount
                && lastSyncTimestamp == thatSyncTimestamp
                && lastErrorTimestamp == thatErrorTimestamp
+               && macMismatch == thatMacMismatch
+               && bootstrapped == thatBootstrapped
                && Objects.equals(name, thatName)
                && Objects.deepEquals(ltHash, thatHash)
                && state == thatState;
@@ -102,6 +117,6 @@ public record SyncCollectionMetadata(
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, version, Arrays.hashCode(ltHash), lastSyncTimestamp, state, retryCount, lastErrorTimestamp);
+        return Objects.hash(name, version, Arrays.hashCode(ltHash), lastSyncTimestamp, state, retryCount, lastErrorTimestamp, macMismatch, bootstrapped);
     }
 }

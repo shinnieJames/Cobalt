@@ -9,6 +9,9 @@ import java.util.Optional;
 public final class WebAppStateHandlerRegistry {
     private final Map<String, WebAppStateActionHandler> handlers;
 
+    /**
+     * Constructs a new handler registry and registers the default handlers.
+     */
     public WebAppStateHandlerRegistry() {
         this.handlers = new HashMap<>();
         registerDefaultHandlers();

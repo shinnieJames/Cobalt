@@ -46,7 +46,7 @@ public final class MutationKeys implements AutoCloseable {
             return new MutationKeys(
                     new SecretKeySpec(derivedBytes, 0, 32, "HmacSHA256"),
                     new SecretKeySpec(derivedBytes, 32, 32, "AES"),
-                    new SecretKeySpec(derivedBytes, 64, 32, "HmacSHA256"),
+                    new SecretKeySpec(derivedBytes, 64, 32, "HmacSHA512"),
                     new SecretKeySpec(derivedBytes, 96, 32, "HmacSHA256"),
                     new SecretKeySpec(derivedBytes, 128, 32, "HmacSHA256")
             );

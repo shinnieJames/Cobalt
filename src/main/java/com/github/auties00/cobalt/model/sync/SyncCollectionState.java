@@ -57,14 +57,5 @@ public enum SyncCollectionState {
      * Fatal error occurred (e.g., decryption failure, tampering detected).
      * Requires manual intervention or snapshot recovery.
      */
-    ERROR_FATAL,
-
-    /**
-     * A patch snapshot MAC mismatch was detected but processing continued.
-     *
-     * <p>Per WhatsApp Web: when a patch's computed snapshot MAC doesn't match the
-     * wire value, the collection enters this state rather than failing fatally.
-     * The collection continues to function but integrity may be degraded.
-     */
-    MAC_MISMATCH
+    ERROR_FATAL
 }

@@ -558,6 +558,28 @@ public sealed interface Node {
     }
 
     /**
+     * Finds the first child node whose description matches one of the provided descriptions.
+     * The descriptions are checked in the same order they are provided.
+     *
+     * @param descriptions the descriptions of the child nodes to find; cannot be null
+     * @return an {@link Optional} containing the first matching child node if one is found,
+     *         otherwise an empty {@code Optional}
+     * @throws NullPointerException if the descriptions array or one of its values is null
+     */
+    default Optional<Node> getChild(String... descriptions) {
+        Objects.requireNonNull(descriptions, "descriptions cannot be null");
+        for (var description : descriptions) {
+            Objects.requireNonNull(description, "description cannot be null");
+            var child = getChild(description);
+            if (child.isPresent()) {
+                return child;
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
      * Finds a child node by its description within the current container node.
      * If no child node with the specified description exists, {@code defaultValue} is returned
      *
@@ -588,6 +610,22 @@ public sealed interface Node {
     }
 
     /**
+     * Finds the first child node whose description matches one of the provided descriptions.
+     * The descriptions are checked in the same order they are provided.
+     *
+     * @param descriptions the descriptions of the child nodes to find; cannot be null
+     * @return the first matching child node
+     * @throws NullPointerException if the descriptions array or one of its values is null
+     * @throws IllegalArgumentException if no child node with any of the specified descriptions exists
+     */
+    default Node getRequiredChild(String... descriptions) {
+        return getChild(descriptions)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No child node found with descriptions: " + Arrays.toString(descriptions)
+                ));
+    }
+
+    /**
      * Finds a child node by its description within the current container node.
      * If no child node with the specified description exists, an empty {@code Stream} is returned.
      *
@@ -600,6 +638,20 @@ public sealed interface Node {
         Objects.requireNonNull(description, "description cannot be null");
         return streamChildren(description)
                 .findFirst()
+                .stream();
+    }
+
+    /**
+     * Finds the first child node whose description matches one of the provided descriptions.
+     * The descriptions are checked in the same order they are provided.
+     *
+     * @param descriptions the descriptions of the child nodes to find; cannot be null
+     * @return a {@code Stream} containing the first matching child node if one is found,
+     *         otherwise an empty {@code Stream}
+     * @throws NullPointerException if the descriptions array or one of its values is null
+     */
+    default Stream<Node> streamChild(String... descriptions) {
+        return getChild(descriptions)
                 .stream();
     }
 
@@ -620,6 +672,19 @@ public sealed interface Node {
     }
 
     /**
+     * Finds all children nodes whose descriptions match any of the provided descriptions.
+     * The returned collection preserves the original child order.
+     *
+     * @param descriptions the descriptions of the child nodes to find; cannot be null
+     * @return a {@code SequencedCollection} containing the matching children nodes
+     * @throws NullPointerException if the descriptions array or one of its values is null
+     */
+    default SequencedCollection<Node> getChildren(String... descriptions) {
+        return streamChildren(descriptions)
+                .toList();
+    }
+
+    /**
      * Finds all children nodes by their descriptions within the current container node.
      * If no child node with the specified description exists, an empty {@code Stream} is returned.
      *
@@ -635,6 +700,26 @@ public sealed interface Node {
     }
 
     /**
+     * Finds all children nodes whose descriptions match any of the provided descriptions.
+     * The returned stream preserves the original child order.
+     *
+     * @param descriptions the descriptions of the child nodes to find; cannot be null
+     * @return a {@code Stream} containing the matching children nodes
+     * @throws NullPointerException if the descriptions array or one of its values is null
+     */
+    default Stream<Node> streamChildren(String... descriptions) {
+        var descriptionSet = new LinkedHashSet<String>();
+        Objects.requireNonNull(descriptions, "descriptions cannot be null");
+        for (var description : descriptions) {
+            descriptionSet.add(Objects.requireNonNull(description, "description cannot be null"));
+        }
+
+        return children()
+                .stream()
+                .filter(node -> descriptionSet.contains(node.description()));
+    }
+
+    /**
      * Checks whether this node has a child node with the specified description.
      *
      * @param description the description of the child node to check for; cannot be null
@@ -645,6 +730,17 @@ public sealed interface Node {
         return children()
                 .stream()
                 .anyMatch(node -> node.hasDescription(description));
+    }
+
+    /**
+     * Checks whether this node has a child whose description matches any of the provided descriptions.
+     *
+     * @param descriptions the descriptions of the child nodes to check for; cannot be null
+     * @return {@code true} if any matching child node exists, {@code false} otherwise
+     * @throws NullPointerException if the descriptions array or one of its values is null
+     */
+    default boolean hasChild(String... descriptions) {
+        return getChild(descriptions).isPresent();
     }
 
     /**

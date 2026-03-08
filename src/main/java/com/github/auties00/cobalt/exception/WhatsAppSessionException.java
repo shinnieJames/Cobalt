@@ -39,8 +39,11 @@ package com.github.auties00.cobalt.exception;
 public sealed abstract class WhatsAppSessionException
         extends WhatsAppException
         permits WhatsAppSessionException.BadMac,
+                WhatsAppSessionException.Banned,
                 WhatsAppSessionException.Closed,
-                WhatsAppSessionException.Conflict {
+                WhatsAppSessionException.Conflict,
+                WhatsAppSessionException.LoggedOut,
+                WhatsAppSessionException.Reconnect {
 
     /**
      * Constructs a new session exception with the specified detail message.
@@ -244,6 +247,48 @@ public sealed abstract class WhatsAppSessionException
          * @param cause   the underlying cause of the conflict
          */
         public Conflict(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    public static final class LoggedOut extends WhatsAppSessionException {
+        public LoggedOut() {
+            super("Session invalidated: logged out by server");
+        }
+
+        public LoggedOut(String message) {
+            super(message);
+        }
+
+        public LoggedOut(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    public static final class Banned extends WhatsAppSessionException {
+        public Banned() {
+            super("Session invalidated: account banned by server");
+        }
+
+        public Banned(String message) {
+            super(message);
+        }
+
+        public Banned(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    public static final class Reconnect extends WhatsAppSessionException {
+        public Reconnect() {
+            super("Session requires reconnect");
+        }
+
+        public Reconnect(String message) {
+            super(message);
+        }
+
+        public Reconnect(String message, Throwable cause) {
             super(message, cause);
         }
     }

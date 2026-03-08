@@ -6,31 +6,49 @@ import com.github.auties00.cobalt.util.SchedulerUtils;
 import java.io.Closeable;
 import java.time.Duration;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Schedules retries for failed app state sync operations using exponential backoff.
+ *
+ * <p>Per WhatsApp Web, this scheduler uses a single global attempt counter shared
+ * across all collections, rather than per-collection counters. The backoff delay
+ * is computed as {@code BASE_DELAY_MS * 2^attempt}, capped at {@code MAX_DELAY_MS}.
+ *
+ * <p>If the elapsed time since the first failure exceeds the finite failure expiry
+ * window ({@value #FINITE_FAILURE_EXPIRY_MS} ms), the retry is rejected.
+ */
 public final class WebAppStateBackoffScheduler implements Closeable {
     private static final long BASE_DELAY_MS = 1000;
     private static final long MAX_DELAY_MS = 3_600_000;
     private static final int MULTIPLIER = 2;
-    private static final long JITTER_MS = 1000;
     private static final long FINITE_FAILURE_EXPIRY_MS = 2 * 24 * 60 * 60 * 1000L;
 
     private final ConcurrentHashMap<SyncPatchType, CompletableFuture<?>> pendingRetries;
+    private final AtomicInteger globalAttemptCounter;
 
+    /**
+     * Constructs a new {@code WebAppStateBackoffScheduler}.
+     */
     public WebAppStateBackoffScheduler() {
         this.pendingRetries = new ConcurrentHashMap<>();
+        this.globalAttemptCounter = new AtomicInteger(0);
     }
 
     /**
-     * Schedules a retry with exponential backoff.
+     * Schedules a retry with exponential backoff using the global attempt counter.
      *
-     * @param collectionName        the collection to retry
+     * <p>The global attempt counter is incremented on each call. If a server-suggested
+     * backoff is provided, the actual delay is the maximum of the computed backoff and
+     * the server suggestion.
+     *
+     * @param collectionName       the collection to retry
      * @param firstFailureTimestamp the timestamp of the first failure in this series
-     * @param attemptNumber         the current retry attempt number
-     * @param serverBackoffMs       the server-suggested backoff in milliseconds, or {@code null}
-     * @param retryAction           the action to execute on retry
+     * @param serverBackoffMs      the server-suggested backoff in milliseconds, or {@code null}
+     * @param retryAction          the action to execute on retry
      * @return {@code true} if the retry was scheduled, {@code false} if the failure window expired
      */
-    public boolean scheduleRetry(SyncPatchType collectionName, long firstFailureTimestamp, int attemptNumber, Long serverBackoffMs, Runnable retryAction) {
+    public boolean scheduleRetry(SyncPatchType collectionName, long firstFailureTimestamp, Long serverBackoffMs, Runnable retryAction) {
         // Check if failure window has expired
         var elapsed = System.currentTimeMillis() - firstFailureTimestamp;
         if (elapsed >= FINITE_FAILURE_EXPIRY_MS) {
@@ -40,8 +58,10 @@ public final class WebAppStateBackoffScheduler implements Closeable {
         // Cancel any existing retry for this collection
         cancelRetry(collectionName);
 
-        // Calculate backoff delay, applying server backoff floor per WA Web
-        var delayMs = calculateBackoff(attemptNumber);
+        // Per WA Web: increment attempt counter BEFORE computing delay,
+        // so the first retry uses attempt=1 giving 2^1 * 1000 = 2000ms
+        var attempt = globalAttemptCounter.incrementAndGet();
+        var delayMs = calculateBackoff(attempt);
         if (serverBackoffMs != null && serverBackoffMs > 0) {
             delayMs = Math.max(delayMs, serverBackoffMs);
         }
@@ -57,22 +77,21 @@ public final class WebAppStateBackoffScheduler implements Closeable {
     }
 
     private long calculateBackoff(int attemptNumber) {
-        if (attemptNumber < 0) {
-            throw new IllegalArgumentException("Attempt number cannot be negative");
-        }
-
         // Calculate exponential delay
         var delay = (long) (BASE_DELAY_MS * Math.pow(MULTIPLIER, attemptNumber));
 
         // Cap at maximum delay
         delay = Math.min(delay, MAX_DELAY_MS);
 
-        // Add random jitter to prevent thundering herd
-        delay += (long) (Math.random() * JITTER_MS);
-
         return delay;
     }
 
+    /**
+     * Cancels a pending retry for the specified collection.
+     *
+     * @param collectionName the collection whose retry to cancel
+     * @return {@code true} if a pending retry was cancelled
+     */
     public boolean cancelRetry(SyncPatchType collectionName) {
         var future = pendingRetries.remove(collectionName);
         if (future != null) {
@@ -82,11 +101,22 @@ public final class WebAppStateBackoffScheduler implements Closeable {
         return false;
     }
 
+    /**
+     * Resets the global attempt counter.
+     *
+     * <p>Should be called when a sync succeeds or on reconnect to reset the
+     * backoff progression.
+     */
+    public void resetAttemptCounter() {
+        globalAttemptCounter.set(0);
+    }
+
     @Override
     public void close() {
         for (var future : pendingRetries.values()) {
             future.cancel(true);
         }
         pendingRetries.clear();
+        globalAttemptCounter.set(0);
     }
 }

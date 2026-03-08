@@ -54,12 +54,13 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
                     return true;
                 }
 
-                if (!(mutation.value().action().orElse(null) instanceof CtwaPerCustomerDataSharingAction)) {
+                if (!(mutation.value().action().orElse(null) instanceof CtwaPerCustomerDataSharingAction action)) {
                     return true;
                 }
+
+                client.store().setCtwaDataSharingEnabled(action.isCtwaPerCustomerDataSharingEnabled());
             }
-            case REMOVE -> {
-            }
+            case REMOVE -> client.store().setCtwaDataSharingEnabled(false);
         }
 
         return true;

@@ -50,6 +50,24 @@ public final class OrphanMutationEntry {
     int actionVersion;
 
     /**
+     * The action name extracted from the mutation index (position 0).
+     *
+     * <p>Used to identify the type of orphan mutation for targeted lookups
+     * (e.g. {@code "star"}, {@code "contact"}, {@code "deleteMessageForMe"}).
+     */
+    @ProtobufProperty(index = 6, type = ProtobufType.STRING)
+    String modelType;
+
+    /**
+     * The primary entity identifier extracted from the mutation index (position 1).
+     *
+     * <p>Typically a JID string representing the chat or contact that the
+     * mutation references. Used for targeted orphan lookups by entity.
+     */
+    @ProtobufProperty(index = 7, type = ProtobufType.STRING)
+    String modelId;
+
+    /**
      * Constructs a new {@code OrphanMutationEntry} with the specified fields.
      *
      * @param index         the plaintext index string
@@ -57,13 +75,17 @@ public final class OrphanMutationEntry {
      * @param operation     the mutation operation type
      * @param timestamp     the mutation timestamp
      * @param actionVersion the action version number
+     * @param modelType     the action name from the index
+     * @param modelId       the primary entity identifier from the index
      */
-    OrphanMutationEntry(String index, SyncActionValue value, SyncdOperation operation, Instant timestamp, int actionVersion) {
+    OrphanMutationEntry(String index, SyncActionValue value, SyncdOperation operation, Instant timestamp, int actionVersion, String modelType, String modelId) {
         this.index = index;
         this.value = value;
         this.operation = operation;
         this.timestamp = timestamp;
         this.actionVersion = actionVersion;
+        this.modelType = modelType;
+        this.modelId = modelId;
     }
 
     /**
@@ -109,5 +131,23 @@ public final class OrphanMutationEntry {
      */
     public int actionVersion() {
         return actionVersion;
+    }
+
+    /**
+     * Returns the action name extracted from the mutation index.
+     *
+     * @return the model type, or {@code null} if not set
+     */
+    public String modelType() {
+        return modelType;
+    }
+
+    /**
+     * Returns the primary entity identifier extracted from the mutation index.
+     *
+     * @return the model identifier, or {@code null} if not set
+     */
+    public String modelId() {
+        return modelId;
     }
 }

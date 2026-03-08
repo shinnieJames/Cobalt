@@ -62,6 +62,7 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
             return true;
         }
 
+        client.store().setWaffleAccountLinkState(action.linkState().get());
         return true;
     }
 }
