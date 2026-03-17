@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.model.contact.ContactTextStatusBuilder;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
-import com.github.auties00.cobalt.model.newsletter.NewsletterMetadata;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMetadataBuilder;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
 import com.github.auties00.cobalt.node.Node;
@@ -405,10 +404,10 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
         var current = whatsapp.store()
                 .findContactTextStatus(canonicalJid)
                 .orElseGet(() -> new ContactTextStatusBuilder().build());
-        current.setText(text)
-                .setEmoji(emoji)
-                .setEphemeralDurationSeconds(ephemeralDurationSeconds)
-                .setLastUpdateTime(lastUpdateTime);
+        current.setText(text);
+        current.setEmoji(emoji);
+        current.setEphemeralDurationSeconds(ephemeralDurationSeconds);
+        current.setLastUpdateTime(lastUpdateTime);
         whatsapp.store().addContactTextStatus(canonicalJid, current);
         notifyContactTextStatusChanged(canonicalJid, current);
         return current;
@@ -437,11 +436,11 @@ final class NotificationMexStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        newsletter.setState(refreshed.state().orElse(null))
-                .setMetadata(refreshed.metadata().orElse(null))
-                .setViewerMetadata(refreshed.viewerMetadata().orElse(null))
-                .setUnreadMessagesCount(refreshed.unreadMessagesCount())
-                .setTimestamp(refreshed.timestampSeconds().orElse(null));
+        newsletter.setState(refreshed.state().orElse(null));
+        newsletter.setMetadata(refreshed.metadata().orElse(null));
+        newsletter.setViewerMetadata(refreshed.viewerMetadata().orElse(null));
+        newsletter.setUnreadMessagesCount(refreshed.unreadMessagesCount());
+        newsletter.setTimestamp(refreshed.timestamp().orElse(null));
     }
 
     private void markTerminatedNewsletter(Jid newsletterJid) {

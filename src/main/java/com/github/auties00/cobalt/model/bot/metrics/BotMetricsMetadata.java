@@ -83,11 +83,9 @@ public final class BotMetricsMetadata {
      * Sets the JID of the destination bot.
      *
      * @param destinationId the new destination bot JID, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetricsMetadata setDestinationId(String destinationId) {
+    public void setDestinationId(String destinationId) {
         this.destinationId = destinationId;
-        return this;
     }
 
     /**
@@ -95,11 +93,9 @@ public final class BotMetricsMetadata {
      * interaction.
      *
      * @param destinationEntryPoint the new entry point, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetricsMetadata setDestinationEntryPoint(BotMetricsEntryPoint destinationEntryPoint) {
+    public void setDestinationEntryPoint(BotMetricsEntryPoint destinationEntryPoint) {
         this.destinationEntryPoint = destinationEntryPoint;
-        return this;
     }
 
     /**
@@ -107,10 +103,8 @@ public final class BotMetricsMetadata {
      * originated.
      *
      * @param threadOrigin the new thread origin, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetricsMetadata setThreadOrigin(BotMetricsThreadEntryPoint threadOrigin) {
+    public void setThreadOrigin(BotMetricsThreadEntryPoint threadOrigin) {
         this.threadOrigin = threadOrigin;
-        return this;
     }
 }

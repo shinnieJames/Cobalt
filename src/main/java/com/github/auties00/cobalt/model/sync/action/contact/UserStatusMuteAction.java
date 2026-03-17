@@ -52,9 +52,8 @@ public final class UserStatusMuteAction implements SyncAction<UserStatusMuteActi
         return muted != null && muted;
     }
 
-    public UserStatusMuteAction setMuted(Boolean muted) {
+    public void setMuted(Boolean muted) {
         this.muted = muted;
-        return this;
     }
 
 

@@ -54,13 +54,11 @@ public final class ChatLockSettings implements SyncAction<SyncActionEmptyArgs> {
         return Optional.ofNullable(secretCode);
     }
 
-    public ChatLockSettings setHideLockedChats(Boolean hideLockedChats) {
+    public void setHideLockedChats(Boolean hideLockedChats) {
         this.hideLockedChats = hideLockedChats;
-        return this;
     }
 
-    public ChatLockSettings setSecretCode(UserPassword secretCode) {
+    public void setSecretCode(UserPassword secretCode) {
         this.secretCode = secretCode;
-        return this;
     }
 }

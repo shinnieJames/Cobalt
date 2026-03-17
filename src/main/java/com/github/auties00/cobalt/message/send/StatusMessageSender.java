@@ -22,12 +22,7 @@ import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Sends status updates ({@code status@broadcast}).
@@ -179,7 +174,7 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
         // WAWebEncryptAndSendStatusMsg: build the stanza
         var stanza = new NodeBuilder()
                 .description("message")
-                .attribute("id", messageInfo.key().id())
+                .attribute("id", messageInfo.key().id().orElseThrow())
                 .attribute("to", statusJid)
                 .attribute("type", resolveStanzaType(container))
                 .attribute("edit", resolveEditAttribute(container))
@@ -243,7 +238,7 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
             Collection<Jid> currentAudience
     ) {
         if (!(container.content() instanceof ProtocolMessage pm)
-            || pm.protocolType() != ProtocolMessage.Type.REVOKE) {
+            || pm.type().orElse(null) != ProtocolMessage.Type.REVOKE) {
             return new RevokeResolution(false, currentAudience);
         }
 
@@ -252,7 +247,9 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
             return new RevokeResolution(false, currentAudience);
         }
 
-        var originalRecipients = store.findReceiptRecords(originalKey.id());
+        var originalRecipients = originalKey.id()
+                .map(store::findReceiptRecords)
+                .orElse(Set.of());
         if (originalRecipients.isEmpty()) {
             return new RevokeResolution(false, currentAudience);
         }
@@ -327,7 +324,7 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
                 ? buildIdentityNode() : null;
 
         var stanza = ChatFanoutStanza.build(
-                messageInfo.key().id(),
+                messageInfo.key().id().orElseThrow(),
                 statusJid,
                 resolveStanzaType(container),
                 payloads,

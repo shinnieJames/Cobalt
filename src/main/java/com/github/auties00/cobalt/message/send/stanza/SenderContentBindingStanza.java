@@ -51,7 +51,7 @@ public final class SenderContentBindingStanza {
         }
 
         var message = messageInfo.message().content();
-        if (!(message instanceof TextMessage text) || text.matchedText().isEmpty()) {
+        if (!(message instanceof ExtendedTextMessage text) || text.matchedText().isEmpty()) {
             return null;
         }
 
@@ -60,7 +60,7 @@ public final class SenderContentBindingStanza {
 
         try {
             var bindings = ContentBindingToken.generate(
-                    messageInfo.key().id(), messageSecret,
+                    messageInfo.key().id().orElseThrow(), messageSecret,
                     userJid, List.of(userJid), contentId);
             return build(userJid, bindings);
         } catch (GeneralSecurityException e) {

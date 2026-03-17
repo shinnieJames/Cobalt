@@ -46,23 +46,19 @@ public final class SyncdSnapshot {
         return Optional.ofNullable(keyId);
     }
 
-    public SyncdSnapshot setVersion(SyncdVersion version) {
+    public void setVersion(SyncdVersion version) {
         this.version = version;
-        return this;
     }
 
-    public SyncdSnapshot setRecords(List<SyncdRecord> records) {
+    public void setRecords(List<SyncdRecord> records) {
         this.records = records;
-        return this;
     }
 
-    public SyncdSnapshot setMac(byte[] mac) {
+    public void setMac(byte[] mac) {
         this.mac = mac;
-        return this;
     }
 
-    public SyncdSnapshot setKeyId(KeyId keyId) {
+    public void setKeyId(KeyId keyId) {
         this.keyId = keyId;
-        return this;
     }
 }

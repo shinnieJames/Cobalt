@@ -205,6 +205,6 @@ public final class IcdcComputer {
      * @apiNote WAWebBizCoexGatingUtils.bizHostedDevicesEnabled.
      */
     private boolean isBizHostedDevicesEnabled() {
-        return abPropsService.getBool(ABProp.BIZ_HOSTED_DEVICES_ENABLED);
+        return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES);
     }
 }

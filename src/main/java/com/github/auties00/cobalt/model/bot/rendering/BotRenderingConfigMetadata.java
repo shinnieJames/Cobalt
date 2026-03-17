@@ -72,21 +72,17 @@ public final class BotRenderingConfigMetadata {
      * Sets the Bloks UI framework version identifier.
      *
      * @param bloksVersioningId the new version identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotRenderingConfigMetadata setBloksVersioningId(String bloksVersioningId) {
+    public void setBloksVersioningId(String bloksVersioningId) {
         this.bloksVersioningId = bloksVersioningId;
-        return this;
     }
 
     /**
      * Sets the device's pixel density.
      *
      * @param pixelDensity the new pixel density, or {@code null}
-     * @return this instance for chaining
      */
-    public BotRenderingConfigMetadata setPixelDensity(Double pixelDensity) {
+    public void setPixelDensity(Double pixelDensity) {
         this.pixelDensity = pixelDensity;
-        return this;
     }
 }

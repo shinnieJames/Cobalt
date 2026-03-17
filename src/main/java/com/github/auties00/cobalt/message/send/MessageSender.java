@@ -2,28 +2,35 @@ package com.github.auties00.cobalt.message.send;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.icdc.IcdcResult;
+import com.github.auties00.cobalt.exception.WhatsAppCorruptedStoreException;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.icdc.IcdcEnricher;
+import com.github.auties00.cobalt.model.chat.ChatKeepType;
+import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.EmptyMessage;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.MessageInfo;
+import com.github.auties00.cobalt.model.message.contact.ContactMessage;
+import com.github.auties00.cobalt.model.message.contact.ContactsArrayMessage;
 import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.event.EventMessage;
+import com.github.auties00.cobalt.model.message.group.GroupInviteMessage;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveResponseMessage;
+import com.github.auties00.cobalt.model.message.location.LiveLocationMessage;
+import com.github.auties00.cobalt.model.message.location.LocationMessage;
+import com.github.auties00.cobalt.model.message.media.*;
 import com.github.auties00.cobalt.model.message.newsletter.NewsletterAdminInviteMessage;
 import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollResultSnapshotMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
-import com.github.auties00.cobalt.model.message.security.SecretEncryptedMessage;
-import com.github.auties00.cobalt.model.message.system.DeviceSentMessageBuilder;
-import com.github.auties00.cobalt.model.message.system.KeepInChatMessage;
-import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
-import com.github.auties00.cobalt.model.message.system.RequestPhoneNumberMessage;
+import com.github.auties00.cobalt.model.message.security.SecretEncMessage;
+import com.github.auties00.cobalt.model.message.system.*;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.node.Node;
@@ -31,10 +38,7 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Base class for all message senders, providing shared cryptographic,
@@ -89,8 +93,12 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * {@code getSignalProtocolStore().flushBufferToDiskIfNotMemOnlyMode()}
      * before the stanza is sent on the wire.
      */
-    void flushStore() throws IOException {
-        store.save();
+    void flushStore() {
+        try {
+            store.save();
+        } catch (IOException ex) {
+            client.handleFailure(new WhatsAppCorruptedStoreException(ex));
+        }
     }
 
     /**
@@ -207,8 +215,8 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             // secretEncryptedMessage(EVENT_EDIT) → "event"
             case EventMessage _ -> "event";
             case EncEventResponseMessage _ -> "event";
-            case SecretEncryptedMessage s
-                    when s.secretEncType().orElse(null) == SecretEncryptedMessage.SecretEncType.EVENT_EDIT -> "event";
+            case SecretEncMessage s
+                    when s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.EVENT_EDIT -> "event";
 
             // WAWebE2EProtoUtils: pollCreation*, pollUpdate, pollResultSnapshot → "poll"
             case PollCreationMessage _ -> "poll";
@@ -271,11 +279,11 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
         return switch (message) {
             // WAWebSendMsgCommonApi: protocolMessage REVOKE →
             // 7 (sender_revoke) or 8 (admin_revoke)
-            case ProtocolMessage p when p.protocolType() == ProtocolMessage.Type.REVOKE ->
+            case ProtocolMessage p when p.type().orElse(null) == ProtocolMessage.Type.REVOKE ->
                     isAdminRevoke ? "8" : "7";
 
             // WAWebSendMsgCommonApi: protocolMessage MESSAGE_EDIT → 1
-            case ProtocolMessage p when p.protocolType() == ProtocolMessage.Type.MESSAGE_EDIT -> "1";
+            case ProtocolMessage p when p.type().orElse(null) == ProtocolMessage.Type.MESSAGE_EDIT -> "1";
 
             // WAWebSendMsgCommonApi: keepInChatMessage UNDO_KEEP_FOR_ALL → 7
             case KeepInChatMessage keep when isUndoKeepForAll(keep) -> "7";
@@ -284,7 +292,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             case PinInChatMessage _ -> "2";
 
             // WAWebSendMsgCommonApi: reactionMessage with revoked text → 7
-            case ReactionMessage r when r.content() == null || r.content().isEmpty() -> "7";
+            case ReactionMessage r when r.text().isEmpty() -> "7";
 
             default -> null;
         };
@@ -304,14 +312,14 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
         var message = container.content();
         return switch (message) {
             case ReactionMessage _ -> "hide";
-            case EncryptedReactionMessage _ -> "hide";
+            case EncReactionMessage _ -> "hide";
             case PollUpdateMessage _ -> "hide";
             case KeepInChatMessage _ -> "hide";
             case PinInChatMessage _ -> "hide";
-            case EncryptedEventResponseMessage _ -> "hide";
-            case SecretEncryptedMessage s
-                    when s.secretEncType() == SecretEncryptedMessage.SecretEncType.EVENT_EDIT -> "hide";
-            case ProtocolMessage p -> switch (p.protocolType()) {
+            case EncEventResponseMessage _ -> "hide";
+            case SecretEncMessage s
+                    when s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.EVENT_EDIT -> "hide";
+            case ProtocolMessage p when p.type().isPresent() -> switch (p.type().get()) {
                 case REVOKE, MESSAGE_EDIT, EPHEMERAL_SYNC_RESPONSE, REQUEST_WELCOME_MESSAGE -> "hide";
                 default -> null;
             };
@@ -333,16 +341,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
         var message = container.content();
         return switch (message) {
             case ImageMessage _ -> "image";
-            case VideoOrGifMessage v -> v.gifPlayback() ? "gif" : "video";
-            case AudioMessage a -> a.voiceMessage() ? "ptt" : "audio";
+            case VideoMessage v -> v.gifPlayback() ? "gif" : "video";
+            case AudioMessage a -> a.ptt() ? "ptt" : "audio";
             case DocumentMessage _ -> "document";
             case StickerMessage _ -> "sticker";
-            case LocationMessage l -> l.live() ? "livelocation" : "location";
+            case LocationMessage l -> l.isLive() ? "livelocation" : "location";
             case LiveLocationMessage _ -> "livelocation";
             case ContactMessage _ -> "vcard";
-            case ContactsMessage _ -> "contact_array";
+            case ContactsArrayMessage _ -> "contact_array";
             case GroupInviteMessage _ -> "url";
-            case TextMessage t when t.matchedText().isPresent() -> "url";
+            case ExtendedTextMessage t when t.matchedText().isPresent() -> "url";
             case PollCreationMessage _ -> null;
             case PollUpdateMessage _ -> null;
             case ReactionMessage _ -> null;
@@ -361,10 +369,17 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      */
     String resolveNativeFlowName(MessageContainer container) {
         var message = container.content();
-        if (message instanceof InteractiveResponseMessage irm && irm.nativeFlowResponseMessage() != null) {
-            return irm.nativeFlowResponseMessage().name();
+        if (!(message instanceof InteractiveResponseMessage irm)) {
+            return null;
         }
-        return null;
+
+        var content = irm.content();
+        if (content.isEmpty() || !(content.get() instanceof InteractiveResponseMessage.NativeFlowResponseMessage nfr)) {
+            return null;
+        }
+
+        return nfr.name()
+                .orElse(null);
     }
 
     /**
@@ -380,7 +395,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
         return store.signedDeviceIdentity()
                 .map(identity -> new NodeBuilder()
                         .description("device-identity")
-                        .content(SignedDeviceIdentitySpec.encode(identity))
+                        .content(ADVSignedDeviceIdentitySpec.encode(identity))
                         .build())
                 .orElse(null);
     }
@@ -395,6 +410,6 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     private boolean isUndoKeepForAll(KeepInChatMessage keep) {
         // WAWebSendMsgCommonApi: keepInChatMessage.key.fromMe === true
         // && keepType === UNDO_KEEP_FOR_ALL
-        return keep.keepType() == KeepInChat.Type.UNDO_KEEP_FOR_ALL;
+        return keep.keepType().orElse(null) == ChatKeepType.UNDO_KEEP_FOR_ALL;
     }
 }

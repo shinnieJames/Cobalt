@@ -48,8 +48,7 @@ public final class UGCBotAction implements SyncAction<SyncActionEmptyArgs> {
         return Optional.ofNullable(definition);
     }
 
-    public UGCBotAction setDefinition(byte[] definition) {
+    public void setDefinition(byte[] definition) {
         this.definition = definition;
-        return this;
     }
 }

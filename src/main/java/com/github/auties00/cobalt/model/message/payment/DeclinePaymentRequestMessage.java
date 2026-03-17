@@ -21,8 +21,7 @@ public final class DeclinePaymentRequestMessage implements Message {
         return Optional.ofNullable(key);
     }
 
-    public DeclinePaymentRequestMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 }

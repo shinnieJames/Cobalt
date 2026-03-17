@@ -27,13 +27,11 @@ public final class WallpaperSettings {
         return opacity == null ? OptionalInt.empty() : OptionalInt.of(opacity);
     }
 
-    public WallpaperSettings setFilename(String filename) {
+    public void setFilename(String filename) {
         this.filename = filename;
-        return this;
     }
 
-    public WallpaperSettings setOpacity(Integer opacity) {
+    public void setOpacity(Integer opacity) {
         this.opacity = opacity;
-        return this;
     }
 }

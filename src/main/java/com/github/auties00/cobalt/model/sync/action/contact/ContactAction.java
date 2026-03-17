@@ -94,34 +94,28 @@ public final class ContactAction implements SyncAction<ContactActionArgs> {
         return Optional.ofNullable(username);
     }
 
-    public ContactAction setFullName(String fullName) {
+    public void setFullName(String fullName) {
         this.fullName = fullName;
-        return this;
     }
 
-    public ContactAction setFirstName(String firstName) {
+    public void setFirstName(String firstName) {
         this.firstName = firstName;
-        return this;
     }
 
-    public ContactAction setLidJid(Jid lidJid) {
+    public void setLidJid(Jid lidJid) {
         this.lidJid = lidJid;
-        return this;
     }
 
-    public ContactAction setSaveOnPrimaryAddressbook(Boolean saveOnPrimaryAddressbook) {
+    public void setSaveOnPrimaryAddressbook(Boolean saveOnPrimaryAddressbook) {
         this.saveOnPrimaryAddressbook = saveOnPrimaryAddressbook;
-        return this;
     }
 
-    public ContactAction setPnJid(Jid pnJid) {
+    public void setPnJid(Jid pnJid) {
         this.pnJid = pnJid;
-        return this;
     }
 
-    public ContactAction setUsername(String username) {
+    public void setUsername(String username) {
         this.username = username;
-        return this;
     }
 
 

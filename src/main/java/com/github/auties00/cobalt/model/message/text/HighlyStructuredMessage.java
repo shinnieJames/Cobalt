@@ -90,49 +90,40 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
         return Optional.ofNullable(hydratedHsm);
     }
 
-    public HighlyStructuredMessage setNamespace(String namespace) {
+    public void setNamespace(String namespace) {
         this.namespace = namespace;
-        return this;
     }
 
-    public HighlyStructuredMessage setElementName(String elementName) {
+    public void setElementName(String elementName) {
         this.elementName = elementName;
-        return this;
     }
 
-    public HighlyStructuredMessage setParams(List<String> params) {
+    public void setParams(List<String> params) {
         this.params = params;
-        return this;
     }
 
-    public HighlyStructuredMessage setFallbackLg(String fallbackLg) {
+    public void setFallbackLg(String fallbackLg) {
         this.fallbackLg = fallbackLg;
-        return this;
     }
 
-    public HighlyStructuredMessage setFallbackLc(String fallbackLc) {
+    public void setFallbackLc(String fallbackLc) {
         this.fallbackLc = fallbackLc;
-        return this;
     }
 
-    public HighlyStructuredMessage setLocalizableParams(List<HSMLocalizableParameter> localizableParams) {
+    public void setLocalizableParams(List<HSMLocalizableParameter> localizableParams) {
         this.localizableParams = localizableParams;
-        return this;
     }
 
-    public HighlyStructuredMessage setDeterministicLg(String deterministicLg) {
+    public void setDeterministicLg(String deterministicLg) {
         this.deterministicLg = deterministicLg;
-        return this;
     }
 
-    public HighlyStructuredMessage setDeterministicLc(String deterministicLc) {
+    public void setDeterministicLc(String deterministicLc) {
         this.deterministicLc = deterministicLc;
-        return this;
     }
 
-    public HighlyStructuredMessage setHydratedHsm(TemplateMessage hydratedHsm) {
+    public void setHydratedHsm(TemplateMessage hydratedHsm) {
         this.hydratedHsm = hydratedHsm;
-        return this;
     }
 
     public sealed interface ParamOneof permits HSMLocalizableParameter.HSMCurrency, HSMLocalizableParameter.HSMDateTime {
@@ -166,20 +157,17 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
             return Optional.empty();
         }
 
-        public HSMLocalizableParameter setDefaultValue(String defaultValue) {
+        public void setDefaultValue(String defaultValue) {
             this.defaultValue = defaultValue;
-            return this;
-        }
+    }
 
-        public HSMLocalizableParameter setCurrency(HSMCurrency currency) {
+        public void setCurrency(HSMCurrency currency) {
             this.currency = currency;
-            return this;
-        }
+    }
 
-        public HSMLocalizableParameter setDateTime(HSMDateTime dateTime) {
+        public void setDateTime(HSMDateTime dateTime) {
             this.dateTime = dateTime;
-            return this;
-        }
+    }
 
         public sealed interface DatetimeOneof permits HSMDateTime.HSMDateTimeComponent, HSMDateTime.HSMDateTimeUnixEpoch {
         }
@@ -206,15 +194,13 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
                 return amount1000 == null ? OptionalLong.empty() : OptionalLong.of(amount1000);
             }
 
-            public HSMCurrency setCurrencyCode(String currencyCode) {
+            public void setCurrencyCode(String currencyCode) {
                 this.currencyCode = currencyCode;
-                return this;
-            }
+    }
 
-            public HSMCurrency setAmount1000(Long amount1000) {
+            public void setAmount1000(Long amount1000) {
                 this.amount1000 = amount1000;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime")
@@ -237,15 +223,13 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
                 return Optional.empty();
             }
 
-            public HSMDateTime setComponent(HSMDateTimeComponent component) {
+            public void setComponent(HSMDateTimeComponent component) {
                 this.component = component;
-                return this;
-            }
+    }
 
-            public HSMDateTime setUnixEpoch(HSMDateTimeUnixEpoch unixEpoch) {
+            public void setUnixEpoch(HSMDateTimeUnixEpoch unixEpoch) {
                 this.unixEpoch = unixEpoch;
-                return this;
-            }
+    }
 
             @ProtobufMessage(name = "Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent")
             public static final class HSMDateTimeComponent implements DatetimeOneof {
@@ -309,40 +293,33 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
                     return Optional.ofNullable(calendar);
                 }
 
-                public HSMDateTimeComponent setDayOfWeek(DayOfWeekType dayOfWeek) {
+                public void setDayOfWeek(DayOfWeekType dayOfWeek) {
                     this.dayOfWeek = dayOfWeek;
-                    return this;
-                }
+    }
 
-                public HSMDateTimeComponent setYear(Integer year) {
+                public void setYear(Integer year) {
                     this.year = year;
-                    return this;
-                }
+    }
 
-                public HSMDateTimeComponent setMonth(Integer month) {
+                public void setMonth(Integer month) {
                     this.month = month;
-                    return this;
-                }
+    }
 
-                public HSMDateTimeComponent setDayOfMonth(Integer dayOfMonth) {
+                public void setDayOfMonth(Integer dayOfMonth) {
                     this.dayOfMonth = dayOfMonth;
-                    return this;
-                }
+    }
 
-                public HSMDateTimeComponent setHour(Integer hour) {
+                public void setHour(Integer hour) {
                     this.hour = hour;
-                    return this;
-                }
+    }
 
-                public HSMDateTimeComponent setMinute(Integer minute) {
+                public void setMinute(Integer minute) {
                     this.minute = minute;
-                    return this;
-                }
+    }
 
-                public HSMDateTimeComponent setCalendar(CalendarType calendar) {
+                public void setCalendar(CalendarType calendar) {
                     this.calendar = calendar;
-                    return this;
-                }
+    }
 
                 @ProtobufEnum(name = "Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent.CalendarType")
                 public static enum CalendarType {
@@ -396,10 +373,9 @@ public final class HighlyStructuredMessage implements TemplateMessage.Title, Mes
                     return Optional.ofNullable(timestamp);
                 }
 
-                public HSMDateTimeUnixEpoch setTimestamp(Instant timestamp) {
+                public void setTimestamp(Instant timestamp) {
                     this.timestamp = timestamp;
-                    return this;
-                }
+    }
             }
         }
     }

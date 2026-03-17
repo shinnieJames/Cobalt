@@ -21,9 +21,8 @@ public final class UrlTrackingMap {
         return urlTrackingMapElements == null ? List.of() : Collections.unmodifiableList(urlTrackingMapElements);
     }
 
-    public UrlTrackingMap setUrlTrackingMapElements(List<UrlTrackingMapElement> urlTrackingMapElements) {
+    public void setUrlTrackingMapElements(List<UrlTrackingMapElement> urlTrackingMapElements) {
         this.urlTrackingMapElements = urlTrackingMapElements;
-        return this;
     }
 
     @ProtobufMessage(name = "UrlTrackingMap.UrlTrackingMapElement")
@@ -64,24 +63,20 @@ public final class UrlTrackingMap {
             return cardIndex == null ? OptionalInt.empty() : OptionalInt.of(cardIndex);
         }
 
-        public UrlTrackingMapElement setOriginalUrl(String originalUrl) {
+        public void setOriginalUrl(String originalUrl) {
             this.originalUrl = originalUrl;
-            return this;
-        }
+    }
 
-        public UrlTrackingMapElement setUnconsentedUsersUrl(String unconsentedUsersUrl) {
+        public void setUnconsentedUsersUrl(String unconsentedUsersUrl) {
             this.unconsentedUsersUrl = unconsentedUsersUrl;
-            return this;
-        }
+    }
 
-        public UrlTrackingMapElement setConsentedUsersUrl(String consentedUsersUrl) {
+        public void setConsentedUsersUrl(String consentedUsersUrl) {
             this.consentedUsersUrl = consentedUsersUrl;
-            return this;
-        }
+    }
 
-        public UrlTrackingMapElement setCardIndex(Integer cardIndex) {
+        public void setCardIndex(Integer cardIndex) {
             this.cardIndex = cardIndex;
-            return this;
-        }
+    }
     }
 }

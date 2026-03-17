@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.message.media;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
 import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
@@ -15,16 +16,16 @@ import java.util.OptionalLong;
 @ProtobufMessage(name = "Message.AudioMessage")
 public final class AudioMessage implements InteractiveMessage.Media, MediaMessage {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    String url;
+    String mediaUrl;
 
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
     String mimetype;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
-    byte[] fileSha256;
+    byte[] mediaSha256;
 
     @ProtobufProperty(index = 4, type = ProtobufType.UINT64)
-    Long fileLength;
+    Long mediaSize;
 
     @ProtobufProperty(index = 5, type = ProtobufType.UINT32)
     Integer seconds;
@@ -36,10 +37,10 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
     byte[] mediaKey;
 
     @ProtobufProperty(index = 8, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 9, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
     @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
@@ -66,16 +67,16 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
     MediaMessageKeyDomain mediaKeyDomain;
 
 
-    AudioMessage(String url, String mimetype, byte[] fileSha256, Long fileLength, Integer seconds, Boolean ptt, byte[] mediaKey, byte[] fileEncSha256, String directPath, Instant mediaKeyTimestamp, ContextInfo contextInfo, byte[] streamingSidecar, byte[] waveform, Integer backgroundArgb, Boolean viewOnce, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain) {
-        this.url = url;
+    AudioMessage(String mediaUrl, String mimetype, byte[] mediaSha256, Long mediaSize, Integer seconds, Boolean ptt, byte[] mediaKey, byte[] mediaEncryptedSha256, String mediaDirectPath, Instant mediaKeyTimestamp, ContextInfo contextInfo, byte[] streamingSidecar, byte[] waveform, Integer backgroundArgb, Boolean viewOnce, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain) {
+        this.mediaUrl = mediaUrl;
         this.mimetype = mimetype;
-        this.fileSha256 = fileSha256;
-        this.fileLength = fileLength;
+        this.mediaSha256 = mediaSha256;
+        this.mediaSize = mediaSize;
         this.seconds = seconds;
         this.ptt = ptt;
         this.mediaKey = mediaKey;
-        this.fileEncSha256 = fileEncSha256;
-        this.directPath = directPath;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+        this.mediaDirectPath = mediaDirectPath;
         this.mediaKeyTimestamp = mediaKeyTimestamp;
         this.contextInfo = contextInfo;
         this.streamingSidecar = streamingSidecar;
@@ -87,7 +88,12 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
     }
 
     public Optional<String> url() {
-        return Optional.ofNullable(url);
+        return Optional.ofNullable(mediaUrl);
+    }
+
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.ofNullable(mediaUrl);
     }
 
     public Optional<String> mimetype() {
@@ -95,11 +101,21 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
     }
 
     public Optional<byte[]> fileSha256() {
-        return Optional.ofNullable(fileSha256);
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(mediaSha256);
     }
 
     public OptionalLong fileLength() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     public OptionalInt seconds() {
@@ -115,11 +131,21 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
     }
 
     public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaEncryptedSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
     }
 
     public Optional<Instant> mediaKeyTimestamp() {
@@ -154,88 +180,83 @@ public final class AudioMessage implements InteractiveMessage.Media, MediaMessag
         return Optional.ofNullable(mediaKeyDomain);
     }
 
-    public AudioMessage setUrl(String url) {
-        this.url = url;
-        return this;
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.AUDIO;
     }
 
-    public AudioMessage setMimetype(String mimetype) {
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
-    public AudioMessage setFileSha256(byte[] fileSha256) {
-        this.fileSha256 = fileSha256;
-        return this;
+    @Override
+    public void setMediaSha256(byte[] mediaSha256) {
+        this.mediaSha256 = mediaSha256;
     }
 
-    public AudioMessage setFileLength(Long fileLength) {
-        this.fileLength = fileLength;
-        return this;
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
     }
 
-    public AudioMessage setSeconds(Integer seconds) {
+    public void setSeconds(Integer seconds) {
         this.seconds = seconds;
-        return this;
     }
 
-    public AudioMessage setPtt(Boolean ptt) {
+    public void setPtt(Boolean ptt) {
         this.ptt = ptt;
-        return this;
     }
 
-    public AudioMessage setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public AudioMessage setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
     }
 
-    public AudioMessage setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    public AudioMessage setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    @Override
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public AudioMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public AudioMessage setStreamingSidecar(byte[] streamingSidecar) {
+    public void setStreamingSidecar(byte[] streamingSidecar) {
         this.streamingSidecar = streamingSidecar;
-        return this;
     }
 
-    public AudioMessage setWaveform(byte[] waveform) {
+    public void setWaveform(byte[] waveform) {
         this.waveform = waveform;
-        return this;
     }
 
-    public AudioMessage setBackgroundArgb(Integer backgroundArgb) {
+    public void setBackgroundArgb(Integer backgroundArgb) {
         this.backgroundArgb = backgroundArgb;
-        return this;
     }
 
-    public AudioMessage setViewOnce(Boolean viewOnce) {
+    public void setViewOnce(Boolean viewOnce) {
         this.viewOnce = viewOnce;
-        return this;
     }
 
-    public AudioMessage setAccessibilityLabel(String accessibilityLabel) {
+    public void setAccessibilityLabel(String accessibilityLabel) {
         this.accessibilityLabel = accessibilityLabel;
-        return this;
     }
 
-    public AudioMessage setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
+    public void setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
         this.mediaKeyDomain = mediaKeyDomain;
-        return this;
     }
 }

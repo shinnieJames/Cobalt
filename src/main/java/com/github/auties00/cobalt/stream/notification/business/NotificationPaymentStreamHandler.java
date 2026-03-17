@@ -9,9 +9,12 @@ import com.github.auties00.cobalt.model.payment.OrphanPaymentNotificationBuilder
 import com.github.auties00.cobalt.model.payment.PaymentInfo;
 import com.github.auties00.cobalt.model.payment.PaymentInfoBuilder;
 import com.github.auties00.cobalt.node.Node;
+import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.message.PaymentMessageStatus;
 import com.github.auties00.cobalt.stream.message.PaymentMessageTransactionType;
 import com.github.auties00.cobalt.stream.SocketStream;
+
+import java.util.Objects;
 
 final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     private static final System.Logger LOGGER = System.getLogger(NotificationPaymentStreamHandler.class.getName());
@@ -57,7 +60,7 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
         }
 
         var self = whatsapp.store().jid().orElse(null);
-        var fromMe = self != null && java.util.Objects.equals(self.toUserJid(), sender.toUserJid());
+        var fromMe = self != null && Objects.equals(self.toUserJid(), sender.toUserJid());
         var group = transaction.getAttributeAsJid("group").orElse(null);
         var remote = group != null ? group : fromMe ? receiver : sender;
         var participant = group != null ? sender : null;
@@ -80,12 +83,12 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
         var type = transaction.getAttributeAsString("transaction-type", null);
         var status = transaction.getAttributeAsString("status", null);
 
-        paymentInfo.setReceiverJid(receiver)
-                .setAmount1000(transaction.getAttributeAsLong("amount_1000", (Long) null))
-                .setCurrency(transaction.getAttributeAsString("currency", null))
-                .setTransactionTimestamp(transaction.getAttributeAsLong("ts", (Long) null))
-                .setStatus(mapPaymentStatus(type, status, fromMe))
-                .setTxnStatus(mapTxnStatus(type, status, fromMe));
+        paymentInfo.setReceiverJid(receiver);
+        paymentInfo.setAmount1000(transaction.getAttributeAsLong("amount_1000", (Long) null));
+        paymentInfo.setCurrency(transaction.getAttributeAsString("currency", null));
+        paymentInfo.setTransactionTimestamp(transaction.getAttributeAsLong("ts", (Long) null));
+        paymentInfo.setStatus(mapPaymentStatus(type, status, fromMe));
+        paymentInfo.setTxnStatus(mapTxnStatus(type, status, fromMe));
 
         chatMessageInfo.setPaymentInfo(paymentInfo);
         for (var listener : whatsapp.store().listeners()) {
@@ -98,7 +101,7 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
         var direct = whatsapp.store()
                 .findMessageByKey(new MessageKeyBuilder()
                         .id(messageId)
-                        .chatJid(remote)
+                        .parentJid(remote)
                         .fromMe(fromMe)
                         .senderJid(participant != null ? participant : remote)
                         .build())
@@ -171,6 +174,7 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     private PaymentMessageStatus paymentMessageStatus(String type, String status, boolean fromMe) {
         var statusValue = status == null ? "" : status.toUpperCase();
         return switch (paymentMessageTransactionType(type, fromMe)) {
+            case TYPE_P2M_PAYOUT -> throw new UnsupportedOperationException();
             case TYPE_P2P_SENT, TYPE_P2M_SENT, TYPE_DEPOSIT -> switch (statusValue) {
                 case "PENDING_RECEIVER_SETUP" -> PaymentMessageStatus.SEND_PAY_PENDING_RECEIVER;
                 case "FAILED_DA" -> PaymentMessageStatus.SEND_PAY_PENDING;
@@ -260,7 +264,7 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        whatsapp.sendNodeWithNoResponse(new com.github.auties00.cobalt.node.NodeBuilder()
+        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
                 .description("ack")
                 .attribute("id", stanzaId)
                 .attribute("class", node.description())

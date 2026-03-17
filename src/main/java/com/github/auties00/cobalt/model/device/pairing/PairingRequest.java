@@ -34,18 +34,15 @@ public final class PairingRequest {
         return Optional.ofNullable(advSecret);
     }
 
-    public PairingRequest setCompanionPublicKey(byte[] companionPublicKey) {
+    public void setCompanionPublicKey(byte[] companionPublicKey) {
         this.companionPublicKey = companionPublicKey;
-        return this;
     }
 
-    public PairingRequest setCompanionIdentityKey(byte[] companionIdentityKey) {
+    public void setCompanionIdentityKey(byte[] companionIdentityKey) {
         this.companionIdentityKey = companionIdentityKey;
-        return this;
     }
 
-    public PairingRequest setAdvSecret(byte[] advSecret) {
+    public void setAdvSecret(byte[] advSecret) {
         this.advSecret = advSecret;
-        return this;
     }
 }

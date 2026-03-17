@@ -19,8 +19,7 @@ public final class InitialSecurityNotificationSettingSync implements Message {
         return securityNotificationEnabled != null && securityNotificationEnabled;
     }
 
-    public InitialSecurityNotificationSettingSync setSecurityNotificationEnabled(Boolean securityNotificationEnabled) {
+    public void setSecurityNotificationEnabled(Boolean securityNotificationEnabled) {
         this.securityNotificationEnabled = securityNotificationEnabled;
-        return this;
     }
 }

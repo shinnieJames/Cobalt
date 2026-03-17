@@ -239,10 +239,9 @@ public sealed interface ContactCard {
          * @param version the version to set
          * @return this parsed contact card instance
          */
-        public Parsed setVersion(String version) {
+        public void setVersion(String version) {
             this.version = version;
-            return this;
-        }
+    }
 
         /**
          * Returns the formatted display name from the vCard.
@@ -259,10 +258,9 @@ public sealed interface ContactCard {
          * @param name the name to set, or {@code null} to clear
          * @return this parsed contact card instance
          */
-        public Parsed setName(String name) {
+        public void setName(String name) {
             this.name = name;
-            return this;
-        }
+    }
 
         /**
          * Returns the business display name from the {@code X-WA-BIZ-NAME} property.
@@ -280,10 +278,9 @@ public sealed interface ContactCard {
          * @param businessName the business name to set, or {@code null} to clear
          * @return this parsed contact card instance
          */
-        public Parsed setBusinessName(String businessName) {
+        public void setBusinessName(String businessName) {
             this.businessName = businessName;
-            return this;
-        }
+    }
 
         /**
          * Returns the phone numbers associated with the given vCard telephone type.

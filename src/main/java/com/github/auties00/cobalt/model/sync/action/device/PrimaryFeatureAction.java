@@ -56,8 +56,7 @@ public final class PrimaryFeatureAction implements SyncAction<SyncActionEmptyArg
         return flags == null ? List.of() : Collections.unmodifiableList(flags);
     }
 
-    public PrimaryFeatureAction setFlags(List<String> flags) {
+    public void setFlags(List<String> flags) {
         this.flags = flags;
-        return this;
     }
 }

@@ -205,11 +205,9 @@ public final class CommunityLinkedGroup {
      * Sets the JID that identifies this linked subgroup.
      *
      * @param jid the subgroup JID
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setJid(Jid jid) {
+    public void setJid(Jid jid) {
         this.jid = jid;
-        return this;
     }
 
     /**
@@ -231,11 +229,9 @@ public final class CommunityLinkedGroup {
      *
      * @param participantCount the participant count, or {@code null} to
      *                         clear the value
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setParticipantCount(Integer participantCount) {
+    public void setParticipantCount(Integer participantCount) {
         this.participantCount = participantCount;
-        return this;
     }
 
     /**
@@ -253,11 +249,9 @@ public final class CommunityLinkedGroup {
      * Sets the display name (subject) of this linked subgroup.
      *
      * @param subject the subject text, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setSubject(String subject) {
+    public void setSubject(String subject) {
         this.subject = subject;
-        return this;
     }
 
     /**
@@ -275,11 +269,9 @@ public final class CommunityLinkedGroup {
      *
      * @param subjectTimestamp the subject change timestamp, or {@code null}
      *                        to clear
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setSubjectTimestamp(Instant subjectTimestamp) {
+    public void setSubjectTimestamp(Instant subjectTimestamp) {
         this.subjectTimestamp = subjectTimestamp;
-        return this;
     }
 
     /**
@@ -298,11 +290,9 @@ public final class CommunityLinkedGroup {
      *
      * @param parentGroupJid the parent community JID, or {@code null} to
      *                       clear
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setParentGroupJid(Jid parentGroupJid) {
+    public void setParentGroupJid(Jid parentGroupJid) {
         this.parentGroupJid = parentGroupJid;
-        return this;
     }
 
     /**
@@ -319,11 +309,9 @@ public final class CommunityLinkedGroup {
      * Sets whether this subgroup is the default announcement subgroup.
      *
      * @param defaultSubgroup {@code true} to mark as default subgroup
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setDefaultSubgroup(boolean defaultSubgroup) {
+    public void setDefaultSubgroup(boolean defaultSubgroup) {
         this.defaultSubgroup = defaultSubgroup;
-        return this;
     }
 
     /**
@@ -340,11 +328,9 @@ public final class CommunityLinkedGroup {
      * Sets whether this subgroup is the general chat subgroup.
      *
      * @param generalSubgroup {@code true} to mark as general subgroup
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setGeneralSubgroup(boolean generalSubgroup) {
+    public void setGeneralSubgroup(boolean generalSubgroup) {
         this.generalSubgroup = generalSubgroup;
-        return this;
     }
 
     /**
@@ -362,11 +348,9 @@ public final class CommunityLinkedGroup {
      * Sets the description text of this linked subgroup.
      *
      * @param description the description text, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
     /**
@@ -384,11 +368,9 @@ public final class CommunityLinkedGroup {
      *
      * @param creationTimestamp the creation timestamp, or {@code null} to
      *                         clear
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setCreationTimestamp(Instant creationTimestamp) {
+    public void setCreationTimestamp(Instant creationTimestamp) {
         this.creationTimestamp = creationTimestamp;
-        return this;
     }
 
     /**
@@ -406,11 +388,9 @@ public final class CommunityLinkedGroup {
      * Sets the JID of the user who originally created this subgroup.
      *
      * @param ownerJid the creator JID, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setOwnerJid(Jid ownerJid) {
+    public void setOwnerJid(Jid ownerJid) {
         this.ownerJid = ownerJid;
-        return this;
     }
 
     /**
@@ -429,11 +409,9 @@ public final class CommunityLinkedGroup {
      *
      * @param membershipApprovalMode {@code true} to enable membership
      *                               approval mode
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setMembershipApprovalMode(boolean membershipApprovalMode) {
+    public void setMembershipApprovalMode(boolean membershipApprovalMode) {
         this.membershipApprovalMode = membershipApprovalMode;
-        return this;
     }
 
     /**
@@ -451,11 +429,9 @@ public final class CommunityLinkedGroup {
      * list.
      *
      * @param hiddenSubgroup {@code true} to mark as hidden
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setHiddenSubgroup(boolean hiddenSubgroup) {
+    public void setHiddenSubgroup(boolean hiddenSubgroup) {
         this.hiddenSubgroup = hiddenSubgroup;
-        return this;
     }
 
     /**
@@ -471,10 +447,8 @@ public final class CommunityLinkedGroup {
      * Sets whether this subgroup has been suspended.
      *
      * @param suspended {@code true} to mark as suspended
-     * @return this instance for method chaining
      */
-    public CommunityLinkedGroup setSuspended(boolean suspended) {
+    public void setSuspended(boolean suspended) {
         this.suspended = suspended;
-        return this;
     }
 }

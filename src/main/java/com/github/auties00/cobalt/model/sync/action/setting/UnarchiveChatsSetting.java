@@ -52,8 +52,7 @@ public final class UnarchiveChatsSetting implements SyncAction<SyncActionEmptyAr
         return unarchiveChats != null && unarchiveChats;
     }
 
-    public UnarchiveChatsSetting setUnarchiveChats(Boolean unarchiveChats) {
+    public void setUnarchiveChats(Boolean unarchiveChats) {
         this.unarchiveChats = unarchiveChats;
-        return this;
     }
 }

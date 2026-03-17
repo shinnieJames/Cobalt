@@ -87,49 +87,40 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
         return Optional.empty();
     }
 
-    public InteractiveMessage setHeader(InteractiveHeader header) {
+    public void setHeader(InteractiveHeader header) {
         this.header = header;
-        return this;
     }
 
-    public InteractiveMessage setBody(Body body) {
+    public void setBody(Body body) {
         this.body = body;
-        return this;
     }
 
-    public InteractiveMessage setFooter(Footer footer) {
+    public void setFooter(Footer footer) {
         this.footer = footer;
-        return this;
     }
 
-    public InteractiveMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public InteractiveMessage setUrlTrackingMap(UrlTrackingMap urlTrackingMap) {
+    public void setUrlTrackingMap(UrlTrackingMap urlTrackingMap) {
         this.urlTrackingMap = urlTrackingMap;
-        return this;
     }
 
-    public InteractiveMessage setShopStorefrontMessage(ShopMessage shopStorefrontMessage) {
+    public void setShopStorefrontMessage(ShopMessage shopStorefrontMessage) {
         this.shopStorefrontMessage = shopStorefrontMessage;
-        return this;
     }
 
-    public InteractiveMessage setCollectionMessage(CollectionMessage collectionMessage) {
+    public void setCollectionMessage(CollectionMessage collectionMessage) {
         this.collectionMessage = collectionMessage;
-        return this;
     }
 
-    public InteractiveMessage setNativeFlowMessage(NativeFlowMessage nativeFlowMessage) {
+    public void setNativeFlowMessage(NativeFlowMessage nativeFlowMessage) {
         this.nativeFlowMessage = nativeFlowMessage;
-        return this;
     }
 
-    public InteractiveMessage setCarouselMessage(CarouselMessage carouselMessage) {
+    public void setCarouselMessage(CarouselMessage carouselMessage) {
         this.carouselMessage = carouselMessage;
-        return this;
     }
 
     public sealed interface Media permits AudioMessage {
@@ -170,10 +161,9 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return Optional.ofNullable(text);
         }
 
-        public Body setText(String text) {
+        public void setText(String text) {
             this.text = text;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.CarouselMessage")
@@ -206,20 +196,17 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return Optional.ofNullable(carouselCardType);
         }
 
-        public CarouselMessage setCards(List<InteractiveMessage> cards) {
+        public void setCards(List<InteractiveMessage> cards) {
             this.cards = cards;
-            return this;
-        }
+    }
 
-        public CarouselMessage setMessageVersion(Integer messageVersion) {
+        public void setMessageVersion(Integer messageVersion) {
             this.messageVersion = messageVersion;
-            return this;
-        }
+    }
 
-        public CarouselMessage setCarouselCardType(CarouselCardType carouselCardType) {
+        public void setCarouselCardType(CarouselCardType carouselCardType) {
             this.carouselCardType = carouselCardType;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.InteractiveMessage.CarouselMessage.CarouselCardType")
         public static enum CarouselCardType {
@@ -269,20 +256,17 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return messageVersion == null ? OptionalInt.empty() : OptionalInt.of(messageVersion);
         }
 
-        public CollectionMessage setBizJid(Jid bizJid) {
+        public void setBizJid(Jid bizJid) {
             this.bizJid = bizJid;
-            return this;
-        }
+    }
 
-        public CollectionMessage setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
 
-        public CollectionMessage setMessageVersion(Integer messageVersion) {
+        public void setMessageVersion(Integer messageVersion) {
             this.messageVersion = messageVersion;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.Footer")
@@ -316,20 +300,17 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return Optional.empty();
         }
 
-        public Footer setText(String text) {
+        public void setText(String text) {
             this.text = text;
-            return this;
-        }
+    }
 
-        public Footer setHasMediaAttachment(Boolean hasMediaAttachment) {
+        public void setHasMediaAttachment(Boolean hasMediaAttachment) {
             this.hasMediaAttachment = hasMediaAttachment;
-            return this;
-        }
+    }
 
-        public Footer setAudioMessage(AudioMessage audioMessage) {
+        public void setAudioMessage(AudioMessage audioMessage) {
             this.audioMessage = audioMessage;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.Header")
@@ -396,50 +377,41 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return Optional.empty();
         }
 
-        public InteractiveHeader setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setSubtitle(String subtitle) {
+        public void setSubtitle(String subtitle) {
             this.subtitle = subtitle;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setHasMediaAttachment(Boolean hasMediaAttachment) {
+        public void setHasMediaAttachment(Boolean hasMediaAttachment) {
             this.hasMediaAttachment = hasMediaAttachment;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setDocumentMessage(DocumentMessage documentMessage) {
+        public void setDocumentMessage(DocumentMessage documentMessage) {
             this.documentMessage = documentMessage;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setImageMessage(ImageMessage imageMessage) {
+        public void setImageMessage(ImageMessage imageMessage) {
             this.imageMessage = imageMessage;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setJpegThumbnail(byte[] jpegThumbnail) {
+        public void setJpegThumbnail(byte[] jpegThumbnail) {
             this.jpegThumbnail = jpegThumbnail;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setVideoMessage(VideoMessage videoMessage) {
+        public void setVideoMessage(VideoMessage videoMessage) {
             this.videoMessage = videoMessage;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setLocationMessage(LocationMessage locationMessage) {
+        public void setLocationMessage(LocationMessage locationMessage) {
             this.locationMessage = locationMessage;
-            return this;
-        }
+    }
 
-        public InteractiveHeader setProductMessage(ProductMessage productMessage) {
+        public void setProductMessage(ProductMessage productMessage) {
             this.productMessage = productMessage;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.InteractiveMessage.NativeFlowMessage")
@@ -472,20 +444,17 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return messageVersion == null ? OptionalInt.empty() : OptionalInt.of(messageVersion);
         }
 
-        public NativeFlowMessage setButtons(List<NativeFlowButton> buttons) {
+        public void setButtons(List<NativeFlowButton> buttons) {
             this.buttons = buttons;
-            return this;
-        }
+    }
 
-        public NativeFlowMessage setMessageParamsJson(String messageParamsJson) {
+        public void setMessageParamsJson(String messageParamsJson) {
             this.messageParamsJson = messageParamsJson;
-            return this;
-        }
+    }
 
-        public NativeFlowMessage setMessageVersion(Integer messageVersion) {
+        public void setMessageVersion(Integer messageVersion) {
             this.messageVersion = messageVersion;
-            return this;
-        }
+    }
 
         @ProtobufMessage(name = "Message.InteractiveMessage.NativeFlowMessage.NativeFlowButton")
         public static final class NativeFlowButton {
@@ -509,15 +478,13 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
                 return Optional.ofNullable(buttonParamsJson);
             }
 
-            public NativeFlowButton setName(String name) {
+            public void setName(String name) {
                 this.name = name;
-                return this;
-            }
+    }
 
-            public NativeFlowButton setButtonParamsJson(String buttonParamsJson) {
+            public void setButtonParamsJson(String buttonParamsJson) {
                 this.buttonParamsJson = buttonParamsJson;
-                return this;
-            }
+    }
         }
     }
 
@@ -551,20 +518,17 @@ public final class InteractiveMessage implements TemplateFormat, ContextualMessa
             return messageVersion == null ? OptionalInt.empty() : OptionalInt.of(messageVersion);
         }
 
-        public ShopMessage setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
 
-        public ShopMessage setSurface(Surface surface) {
+        public void setSurface(Surface surface) {
             this.surface = surface;
-            return this;
-        }
+    }
 
-        public ShopMessage setMessageVersion(Integer messageVersion) {
+        public void setMessageVersion(Integer messageVersion) {
             this.messageVersion = messageVersion;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.InteractiveMessage.ShopMessage.Surface")
         public static enum Surface {

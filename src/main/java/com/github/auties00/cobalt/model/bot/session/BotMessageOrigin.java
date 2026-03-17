@@ -46,11 +46,9 @@ public final class BotMessageOrigin {
      * Sets the type of origination for this bot message.
      *
      * @param type the new origination type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMessageOrigin setType(BotMessageOriginType type) {
+    public void setType(BotMessageOriginType type) {
         this.type = type;
-        return this;
     }
 
     /**

@@ -365,198 +365,162 @@ public final class InThreadSurveyMetadata {
      * Sets the analytics session identifier used for telemetry tracking.
      *
      * @param analyticsSessionId the new analytics session identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setAnalyticsSessionId(String analyticsSessionId) {
+    public void setAnalyticsSessionId(String analyticsSessionId) {
         this.analyticsSessionId = analyticsSessionId;
-        return this;
     }
 
     /**
      * Sets the survey session identifier used to correlate survey responses.
      *
      * @param surveySessionId the new survey session identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setSurveySessionId(String surveySessionId) {
+    public void setSurveySessionId(String surveySessionId) {
         this.surveySessionId = surveySessionId;
-        return this;
     }
 
     /**
      * Sets the unique identifier for this survey definition.
      *
      * @param surveyId the new survey identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setSurveyId(String surveyId) {
+    public void setSurveyId(String surveyId) {
         this.surveyId = surveyId;
-        return this;
     }
 
     /**
      * Sets the analytics root identifier used for tracing.
      *
      * @param analyticsRootId the new analytics root identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setAnalyticsRootId(String analyticsRootId) {
+    public void setAnalyticsRootId(String analyticsRootId) {
         this.analyticsRootId = analyticsRootId;
-        return this;
     }
 
     /**
      * Sets the request identifier associated with the AI bot response that triggered this survey.
      *
      * @param requestId the new request identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setRequestId(String requestId) {
+    public void setRequestId(String requestId) {
         this.requestId = requestId;
-        return this;
     }
 
     /**
      * Sets the analytics event name used for logging this survey interaction.
      *
      * @param analyticsEvent the new analytics event name, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setAnalyticsEvent(String analyticsEvent) {
+    public void setAnalyticsEvent(String analyticsEvent) {
         this.analyticsEvent = analyticsEvent;
-        return this;
     }
 
     /**
      * Sets the header text displayed in the survey invitation.
      *
      * @param invitationHeaderText the new invitation header text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setInvitationHeaderText(String invitationHeaderText) {
+    public void setInvitationHeaderText(String invitationHeaderText) {
         this.invitationHeaderText = invitationHeaderText;
-        return this;
     }
 
     /**
      * Sets the body text displayed in the survey invitation.
      *
      * @param invitationBodyText the new invitation body text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setInvitationBodyText(String invitationBodyText) {
+    public void setInvitationBodyText(String invitationBodyText) {
         this.invitationBodyText = invitationBodyText;
-        return this;
     }
 
     /**
      * Sets the call-to-action button text displayed in the survey invitation.
      *
      * @param invitationCallToActionText the new invitation call-to-action text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setInvitationCallToActionText(String invitationCallToActionText) {
+    public void setInvitationCallToActionText(String invitationCallToActionText) {
         this.invitationCallToActionText = invitationCallToActionText;
-        return this;
     }
 
     /**
      * Sets the URL that the call-to-action button links to in the survey invitation.
      *
      * @param invitationCallToActionUrl the new invitation call-to-action URL, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setInvitationCallToActionUrl(URI invitationCallToActionUrl) {
+    public void setInvitationCallToActionUrl(URI invitationCallToActionUrl) {
         this.invitationCallToActionUrl = invitationCallToActionUrl;
-        return this;
     }
 
     /**
      * Sets the title displayed at the top of the survey form.
      *
      * @param surveyTitle the new survey title, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setSurveyTitle(String surveyTitle) {
+    public void setSurveyTitle(String surveyTitle) {
         this.surveyTitle = surveyTitle;
-        return this;
     }
 
     /**
      * Sets the list of questions presented to the user in this survey.
      *
      * @param questions the new list of survey questions, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setQuestions(List<InThreadSurveyQuestion> questions) {
+    public void setQuestions(List<InThreadSurveyQuestion> questions) {
         this.questions = questions;
-        return this;
     }
 
     /**
      * Sets the text displayed on the continue button in a multi-question survey.
      *
      * @param surveyContinueButtonText the new continue button text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setSurveyContinueButtonText(String surveyContinueButtonText) {
+    public void setSurveyContinueButtonText(String surveyContinueButtonText) {
         this.surveyContinueButtonText = surveyContinueButtonText;
-        return this;
     }
 
     /**
      * Sets the text displayed on the submit button of the survey.
      *
      * @param surveySubmitButtonText the new submit button text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setSurveySubmitButtonText(String surveySubmitButtonText) {
+    public void setSurveySubmitButtonText(String surveySubmitButtonText) {
         this.surveySubmitButtonText = surveySubmitButtonText;
-        return this;
     }
 
     /**
      * Sets the full privacy statement text displayed to the user during the survey.
      *
      * @param privacyStatementFull the new full privacy statement text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setPrivacyStatementFull(String privacyStatementFull) {
+    public void setPrivacyStatementFull(String privacyStatementFull) {
         this.privacyStatementFull = privacyStatementFull;
-        return this;
     }
 
     /**
      * Sets the structured parts of the privacy statement.
      *
      * @param privacyStatementParts the new list of privacy statement parts, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setPrivacyStatementParts(List<InThreadSurveyPrivacyStatementPart> privacyStatementParts) {
+    public void setPrivacyStatementParts(List<InThreadSurveyPrivacyStatementPart> privacyStatementParts) {
         this.privacyStatementParts = privacyStatementParts;
-        return this;
     }
 
     /**
      * Sets the toast notification text shown after the user submits the survey.
      *
      * @param feedbackToastText the new feedback toast text, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setFeedbackToastText(String feedbackToastText) {
+    public void setFeedbackToastText(String feedbackToastText) {
         this.feedbackToastText = feedbackToastText;
-        return this;
     }
 
     /**
      * Sets the zero-based index of the first question to display when the survey opens.
      *
      * @param startQuestionIndex the new start question index, or {@code null}
-     * @return this instance for chaining
      */
-    public InThreadSurveyMetadata setStartQuestionIndex(Integer startQuestionIndex) {
+    public void setStartQuestionIndex(Integer startQuestionIndex) {
         this.startQuestionIndex = startQuestionIndex;
-        return this;
     }
 
     /**
@@ -631,34 +595,28 @@ public final class InThreadSurveyMetadata {
          * Sets the string value of this option.
          *
          * @param stringValue the new string value, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyOption setStringValue(String stringValue) {
+        public void setStringValue(String stringValue) {
             this.stringValue = stringValue;
-            return this;
-        }
+    }
 
         /**
          * Sets the numeric value of this option.
          *
          * @param numericValue the new numeric value, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyOption setNumericValue(Integer numericValue) {
+        public void setNumericValue(Integer numericValue) {
             this.numericValue = numericValue;
-            return this;
-        }
+    }
 
         /**
          * Sets the translated text label displayed to the user for this option.
          *
          * @param textTranslated the new translated display text, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyOption setTextTranslated(String textTranslated) {
+        public void setTextTranslated(String textTranslated) {
             this.textTranslated = textTranslated;
-            return this;
-        }
+    }
     }
 
     /**
@@ -718,23 +676,19 @@ public final class InThreadSurveyMetadata {
          * Sets the text content of this privacy statement segment.
          *
          * @param text the new text content, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyPrivacyStatementPart setText(String text) {
+        public void setText(String text) {
             this.text = text;
-            return this;
-        }
+    }
 
         /**
          * Sets the URL associated with this privacy statement segment.
          *
          * @param url the new URL, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyPrivacyStatementPart setUrl(String url) {
+        public void setUrl(String url) {
             this.url = url;
-            return this;
-        }
+    }
     }
 
     /**
@@ -809,33 +763,27 @@ public final class InThreadSurveyMetadata {
          * Sets the display text of this question shown to the user.
          *
          * @param questionText the new question text, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyQuestion setQuestionText(String questionText) {
+        public void setQuestionText(String questionText) {
             this.questionText = questionText;
-            return this;
-        }
+    }
 
         /**
          * Sets the unique identifier for this question.
          *
          * @param questionId the new question identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyQuestion setQuestionId(String questionId) {
+        public void setQuestionId(String questionId) {
             this.questionId = questionId;
-            return this;
-        }
+    }
 
         /**
          * Sets the list of selectable options available for this question.
          *
          * @param questionOptions the new list of survey options, or {@code null}
-         * @return this instance for chaining
          */
-        public InThreadSurveyQuestion setQuestionOptions(List<InThreadSurveyOption> questionOptions) {
+        public void setQuestionOptions(List<InThreadSurveyOption> questionOptions) {
             this.questionOptions = questionOptions;
-            return this;
-        }
+    }
     }
 }

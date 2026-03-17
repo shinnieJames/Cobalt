@@ -44,11 +44,9 @@ public final class BotDocumentMessageMetadata {
      * Sets the document-processing plugin type.
      *
      * @param pluginType the new plugin type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotDocumentMessageMetadata setPluginType(DocumentPluginType pluginType) {
+    public void setPluginType(DocumentPluginType pluginType) {
         this.pluginType = pluginType;
-        return this;
     }
 
     /**

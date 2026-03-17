@@ -92,54 +92,44 @@ public final class ButtonsMessage implements ContextualMessage {
         return Optional.empty();
     }
 
-    public ButtonsMessage setContentText(String contentText) {
+    public void setContentText(String contentText) {
         this.contentText = contentText;
-        return this;
     }
 
-    public ButtonsMessage setFooterText(String footerText) {
+    public void setFooterText(String footerText) {
         this.footerText = footerText;
-        return this;
     }
 
-    public ButtonsMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public ButtonsMessage setButtons(List<TemplateButtonVariant> buttons) {
+    public void setButtons(List<TemplateButtonVariant> buttons) {
         this.buttons = buttons;
-        return this;
     }
 
-    public ButtonsMessage setHeaderType(HeaderType headerType) {
+    public void setHeaderType(HeaderType headerType) {
         this.headerType = headerType;
-        return this;
     }
 
-    public ButtonsMessage setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
-    public ButtonsMessage setDocumentMessage(DocumentMessage documentMessage) {
+    public void setDocumentMessage(DocumentMessage documentMessage) {
         this.documentMessage = documentMessage;
-        return this;
     }
 
-    public ButtonsMessage setImageMessage(ImageMessage imageMessage) {
+    public void setImageMessage(ImageMessage imageMessage) {
         this.imageMessage = imageMessage;
-        return this;
     }
 
-    public ButtonsMessage setVideoMessage(VideoMessage videoMessage) {
+    public void setVideoMessage(VideoMessage videoMessage) {
         this.videoMessage = videoMessage;
-        return this;
     }
 
-    public ButtonsMessage setLocationMessage(LocationMessage locationMessage) {
+    public void setLocationMessage(LocationMessage locationMessage) {
         this.locationMessage = locationMessage;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ButtonsMessage.HeaderType")
@@ -201,25 +191,21 @@ public final class ButtonsMessage implements ContextualMessage {
             return Optional.ofNullable(nativeFlowInfo);
         }
 
-        public TemplateButtonVariant setButtonId(String buttonId) {
+        public void setButtonId(String buttonId) {
             this.buttonId = buttonId;
-            return this;
-        }
+    }
 
-        public TemplateButtonVariant setButtonText(ButtonText buttonText) {
+        public void setButtonText(ButtonText buttonText) {
             this.buttonText = buttonText;
-            return this;
-        }
+    }
 
-        public TemplateButtonVariant setType(Type type) {
+        public void setType(Type type) {
             this.type = type;
-            return this;
-        }
+    }
 
-        public TemplateButtonVariant setNativeFlowInfo(NativeFlowInfo nativeFlowInfo) {
+        public void setNativeFlowInfo(NativeFlowInfo nativeFlowInfo) {
             this.nativeFlowInfo = nativeFlowInfo;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.ButtonsMessage.Button.Type")
         public static enum Type {
@@ -252,10 +238,9 @@ public final class ButtonsMessage implements ContextualMessage {
                 return Optional.ofNullable(displayText);
             }
 
-            public ButtonText setDisplayText(String displayText) {
+            public void setDisplayText(String displayText) {
                 this.displayText = displayText;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.ButtonsMessage.Button.NativeFlowInfo")
@@ -280,15 +265,13 @@ public final class ButtonsMessage implements ContextualMessage {
                 return Optional.ofNullable(paramsJson);
             }
 
-            public NativeFlowInfo setName(String name) {
+            public void setName(String name) {
                 this.name = name;
-                return this;
-            }
+    }
 
-            public NativeFlowInfo setParamsJson(String paramsJson) {
+            public void setParamsJson(String paramsJson) {
                 this.paramsJson = paramsJson;
-                return this;
-            }
+    }
         }
     }
 }

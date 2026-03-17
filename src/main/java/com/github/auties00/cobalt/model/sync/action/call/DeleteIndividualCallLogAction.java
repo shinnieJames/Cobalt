@@ -56,14 +56,12 @@ public final class DeleteIndividualCallLogAction implements SyncAction<DeleteInd
         return isIncoming != null && isIncoming;
     }
 
-    public DeleteIndividualCallLogAction setPeerJid(Jid peerJid) {
+    public void setPeerJid(Jid peerJid) {
         this.peerJid = peerJid;
-        return this;
     }
 
-    public DeleteIndividualCallLogAction setIncoming(Boolean isIncoming) {
+    public void setIncoming(Boolean isIncoming) {
         this.isIncoming = isIncoming;
-        return this;
     }
 
 

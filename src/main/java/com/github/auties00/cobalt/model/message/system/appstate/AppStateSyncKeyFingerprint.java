@@ -39,18 +39,15 @@ public final class AppStateSyncKeyFingerprint implements Message {
         return deviceIndexes == null ? List.of() : Collections.unmodifiableList(deviceIndexes);
     }
 
-    public AppStateSyncKeyFingerprint setRawId(Integer rawId) {
+    public void setRawId(Integer rawId) {
         this.rawId = rawId;
-        return this;
     }
 
-    public AppStateSyncKeyFingerprint setCurrentIndex(Integer currentIndex) {
+    public void setCurrentIndex(Integer currentIndex) {
         this.currentIndex = currentIndex;
-        return this;
     }
 
-    public AppStateSyncKeyFingerprint setDeviceIndexes(List<Integer> deviceIndexes) {
+    public void setDeviceIndexes(List<Integer> deviceIndexes) {
         this.deviceIndexes = deviceIndexes;
-        return this;
     }
 }

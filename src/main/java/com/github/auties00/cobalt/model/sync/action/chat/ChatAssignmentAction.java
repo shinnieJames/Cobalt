@@ -53,9 +53,8 @@ public final class ChatAssignmentAction implements SyncAction<ChatAssignmentActi
         return Optional.ofNullable(deviceAgentID);
     }
 
-    public ChatAssignmentAction setDeviceAgentID(String deviceAgentID) {
+    public void setDeviceAgentID(String deviceAgentID) {
         this.deviceAgentID = deviceAgentID;
-        return this;
     }
 
 

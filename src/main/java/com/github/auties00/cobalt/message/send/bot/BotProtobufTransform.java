@@ -1,10 +1,11 @@
 package com.github.auties00.cobalt.message.send.bot;
 
+import com.github.auties00.cobalt.model.bot.feedback.BotFeedbackMessage;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.system.FutureProofMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
-import com.github.auties00.cobalt.model.sync.BotFeedbackMessage;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.util.Objects;
@@ -71,14 +72,12 @@ public final class BotProtobufTransform {
             return;
         }
 
-        var participant = contextInfo.quotedMessage()
-                .map(quotedMessage -> store.findMessageById(quotedMessage))
-                .orElse(null);
-        if (participant == null || participant.hasBotServer()) {
+        var participant = contextInfo.quotedMessageSenderJid();
+        if (participant.isEmpty() || participant.get().hasBotServer()) {
             return;
         }
 
-        store.findLidByPhone(participant)
+        store.findLidByPhone(participant.get())
                 .ifPresent(contextInfo::setQuotedMessageSenderJid);
     }
 
@@ -129,7 +128,7 @@ public final class BotProtobufTransform {
 
     /**
      * Resolves the inner {@link ContextInfo}, handling the
-     * botInvokeMessage {@link com.github.auties00.cobalt.model.message.FutureMessageContainer} wrapper.
+     * botInvokeMessage {@link FutureProofMessage} wrapper.
      */
     private static ContextInfo resolveInnerContextInfo(MessageContainer container) {
         return container.content() instanceof ContextualMessage contextualMessage
@@ -177,6 +176,6 @@ public final class BotProtobufTransform {
         // Strip remoteJid from the bot feedback message key
         pm.botFeedbackMessage()
                 .flatMap(BotFeedbackMessage::messageKey)
-                .ifPresent(key -> key.setChatJid(null));
+                .ifPresent(key -> key.setParentJid(null));
     }
 }

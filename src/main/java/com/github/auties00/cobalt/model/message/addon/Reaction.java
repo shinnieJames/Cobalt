@@ -55,28 +55,23 @@ public final class Reaction {
         return unread != null && unread;
     }
 
-    public Reaction setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public Reaction setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
-    public Reaction setGroupingKey(String groupingKey) {
+    public void setGroupingKey(String groupingKey) {
         this.groupingKey = groupingKey;
-        return this;
     }
 
-    public Reaction setSenderTimestampMs(Instant senderTimestampMs) {
+    public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
-        return this;
     }
 
-    public Reaction setUnread(Boolean unread) {
+    public void setUnread(Boolean unread) {
         this.unread = unread;
-        return this;
     }
 }

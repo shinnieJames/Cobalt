@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.device.adv;
 import com.github.auties00.cobalt.device.DeviceConstants;
 import com.github.auties00.cobalt.exception.WhatsAppAdvValidationException;
 import com.github.auties00.cobalt.model.device.identity.*;
+import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.props.ABProp;
@@ -17,8 +18,8 @@ import it.auties.protobuf.exception.ProtobufDeserializationException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
-import java.time.Instant;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -108,7 +109,7 @@ public final class DeviceADVValidator {
      * verifies account signature, and generates device signature using local identity key.
      * Uses advSecretKey (not companion public key) for HMAC verification.
      */
-    public SignedDeviceIdentity extractAndValidateLocalSignedDeviceIdentity(Node deviceIdentityNode) {
+    public ADVSignedDeviceIdentity extractAndValidateLocalSignedDeviceIdentity(Node deviceIdentityNode) {
         Objects.requireNonNull(deviceIdentityNode, "deviceIdentityNode cannot be null");
 
         var localJid = store.jid()
@@ -129,11 +130,11 @@ public final class DeviceADVValidator {
                     .orElseThrow(() -> new WhatsAppAdvValidationException.EmptyDeviceIdentity(localJid));
 
             // WAWebHandlePairSuccess: decode ADVSignedDeviceIdentityHMACSpec
-            var deviceIdentityHmac = SignedDeviceIdentityHMACSpec.decode(deviceIdentityHmacBytes);
-            var details = deviceIdentityHmac.details();
-            var hmac = deviceIdentityHmac.hmac();
-            Objects.requireNonNull(details, "details cannot be null");
-            Objects.requireNonNull(hmac, "hmac cannot be null");
+            var deviceIdentityHmac = ADVSignedDeviceIdentityHMACSpec.decode(deviceIdentityHmacBytes);
+            var details = deviceIdentityHmac.details()
+                    .orElseThrow(() -> new NullPointerException("details cannot be null"));
+            var hmac = deviceIdentityHmac.hmac()
+                    .orElseThrow(() -> new NullPointerException("hmac cannot be null"));
 
             // WAWebHandlePairSuccess: determine HMAC input based on platform and encryption type
             // The HOSTED header is ONLY prepended when:
@@ -141,8 +142,10 @@ public final class DeviceADVValidator {
             // 2. AND the accountType in the protobuf is HOSTED
             // For regular consumer accounts (android/iphone), the header is never prepended
             byte[] hmacInput;
-            var outerEncryptionType = deviceIdentityHmac.encryptionType();
-            var isSMB = store.device().platform().isBusiness();
+            var outerEncryptionType = deviceIdentityHmac.accountType()
+                    .orElse(ADVEncryptionType.E2EE);
+            var platform = store.device().platform();
+            var isSMB = platform == ClientPlatformType.ANDROID_BUSINESS || platform == ClientPlatformType.IOS_BUSINESS;
             if (isSMB && outerEncryptionType == ADVEncryptionType.HOSTED) {
                 // WAWebHandlePairSuccess: Binary.build(ADV_HOSTED_PREFIX_DEVICE_IDENTITY_ACCOUNT_SIGNATURE, details)
                 hmacInput = FastRandomUtils.concatByteArrays(HOSTED_ACCOUNT_SIGNATURE_HEADER, details);
@@ -161,19 +164,23 @@ public final class DeviceADVValidator {
             }
 
             // Decode the inner SignedDeviceIdentity
-            var deviceIdentity = SignedDeviceIdentitySpec.decode(details);
-            Objects.requireNonNull(deviceIdentity, "deviceIdentity required");
-            Objects.requireNonNull(deviceIdentity.details(), "details required");
-            Objects.requireNonNull(deviceIdentity.accountSignatureKey(), "accountSignatureKey required");
-            Objects.requireNonNull(deviceIdentity.accountSignature(), "accountSignature required");
+            var deviceIdentity = ADVSignedDeviceIdentitySpec.decode(details);
+            var deviceIdentityDetails = deviceIdentity.details()
+                    .orElseThrow(() -> new NullPointerException("details cannot be null"));
+            var deviceIdentityAccountSignatureKey = deviceIdentity.accountSignatureKey()
+                    .orElseThrow(() -> new NullPointerException("accountSignatureKey cannot be null"));
+            var deviceIdentityAccountSignature = deviceIdentity.accountSignature()
+                    .orElseThrow(() -> new NullPointerException("AccountSignature cannot be null"));
 
             // WAWebAdvSignatureApi (function A): select account signature header based on deviceType
             // from the INNER ADVDeviceIdentitySpec, gated by bizHostedDevicesEnabled
             var accountSignatureHeader = E2EE_ACCOUNT_SIGNATURE_HEADER;
             if (isBizHostedDevicesEnabled()) {
                 try {
-                    var innerDeviceIdentity = DeviceIdentitySpec.decode(deviceIdentity.details());
-                    if (innerDeviceIdentity.deviceType() == ADVEncryptionType.HOSTED) {
+                    var innerDeviceIdentity = ADVDeviceIdentitySpec.decode(deviceIdentityDetails);
+                    var advEncryptionType = innerDeviceIdentity.deviceType()
+                            .orElse(ADVEncryptionType.E2EE);
+                    if (advEncryptionType == ADVEncryptionType.HOSTED) {
                         accountSignatureHeader = HOSTED_ACCOUNT_SIGNATURE_HEADER;
                     }
                 } catch (ProtobufDeserializationException e) {
@@ -183,8 +190,8 @@ public final class DeviceADVValidator {
 
             // WAWebAdvSignatureApi: verifies account signature: sign(header + details + identityKey)
             var localIdentityKey = localIdentityKeyPair.publicKey().toEncodedPoint();
-            var message = FastRandomUtils.concatByteArrays(accountSignatureHeader, deviceIdentity.details(), localIdentityKey);
-            if (!Curve25519.verifySignature(deviceIdentity.accountSignatureKey(), message, deviceIdentity.accountSignature())) {
+            var message = FastRandomUtils.concatByteArrays(accountSignatureHeader, deviceIdentityDetails, localIdentityKey);
+            if (!Curve25519.verifySignature(deviceIdentityAccountSignatureKey, message, deviceIdentityAccountSignature)) {
                 throw new WhatsAppAdvValidationException.AccountSignatureFailed(localJid);
             }
 
@@ -193,16 +200,16 @@ public final class DeviceADVValidator {
             // The HOSTED header [6, 6] is only used for VERIFICATION of remote devices
             var deviceSignatureMessage = FastRandomUtils.concatByteArrays(
                     E2EE_DEVICE_SIGNATURE_HEADER,
-                    deviceIdentity.details(),
+                    deviceIdentityDetails,
                     localIdentityKey,
-                    deviceIdentity.accountSignatureKey()
+                    deviceIdentityAccountSignatureKey
             );
             var deviceSignature = Curve25519.sign(localIdentityKeyPair.privateKey().toEncodedPoint(), deviceSignatureMessage);
 
-            return new SignedDeviceIdentityBuilder()
-                    .details(deviceIdentity.details())
-                    .accountSignatureKey(deviceIdentity.accountSignatureKey())
-                    .accountSignature(deviceIdentity.accountSignature())
+            return new ADVSignedDeviceIdentityBuilder()
+                    .details(deviceIdentityDetails)
+                    .accountSignatureKey(deviceIdentityAccountSignatureKey)
+                    .accountSignature(deviceIdentityAccountSignature)
                     .deviceSignature(deviceSignature)
                     .build();
         } catch (GeneralSecurityException exception) {
@@ -225,7 +232,7 @@ public final class DeviceADVValidator {
      * is missing from protobuf. Header selection uses deviceType from protobuf for account
      * signature (gated by bizHostedDevicesEnabled), and isHosted parameter for device signature.
      */
-    public Optional<SignedDeviceIdentity> extractAndValidateRemoteSignedDeviceIdentity(
+    public Optional<ADVSignedDeviceIdentity> extractAndValidateRemoteSignedDeviceIdentity(
             Jid remoteJid,
             Node remoteIdentityNode,
             byte[] remoteIdentityKey,
@@ -254,19 +261,22 @@ public final class DeviceADVValidator {
                 .orElseThrow(() -> new WhatsAppAdvValidationException.MissingDeviceIdentity(remoteJid))
                 .toContentBytes()
                 .orElseThrow(() -> new WhatsAppAdvValidationException.EmptyDeviceIdentity(remoteJid));
-        var remoteIdentity = SignedDeviceIdentitySpec.decode(remoteIdentityBytes);
+        var remoteIdentity = ADVSignedDeviceIdentitySpec.decode(remoteIdentityBytes);
 
         // WAWebAdvSignatureApi (function A): for account signature, decode details and check deviceType
         // This is different from device signature which uses isHosted from WID
-        var remoteIdentityDetails = Objects.requireNonNull(remoteIdentity.details(), "details cannot be null");
+        var remoteIdentityDetails = remoteIdentity.details()
+                .orElseThrow(() -> new NullPointerException("details cannot be null"));
 
         // WAWebAdvSignatureApi (function A): select account signature header based on deviceType from protobuf
         // Only check deviceType if bizHostedDevicesEnabled
         var accountSignatureHeader = E2EE_ACCOUNT_SIGNATURE_HEADER;
         if (isBizHostedDevicesEnabled()) {
             try {
-                var decodedDeviceIdentity = DeviceIdentitySpec.decode(remoteIdentityDetails);
-                if (decodedDeviceIdentity.deviceType() == ADVEncryptionType.HOSTED) {
+                var decodedDeviceIdentity = ADVDeviceIdentitySpec.decode(remoteIdentityDetails);
+                var deviceType = decodedDeviceIdentity.deviceType()
+                        .orElse(ADVEncryptionType.E2EE);
+                if (deviceType == ADVEncryptionType.HOSTED) {
                     accountSignatureHeader = HOSTED_ACCOUNT_SIGNATURE_HEADER;
                 }
             } catch (ProtobufDeserializationException e) {
@@ -284,7 +294,8 @@ public final class DeviceADVValidator {
         // WAWebAdvSignatureApi (function F): determine account signature key with fallback logic
         // Always use protobuf's accountSignatureKey first, then fallback to stored user identity key
         // WA Web does NOT have special handling for same-user case
-        var remoteIdentityAccountSignatureKey = remoteIdentity.accountSignatureKey();
+        var remoteIdentityAccountSignatureKey = remoteIdentity.accountSignatureKey()
+                .orElse(null);
 
         // WAWebAdvSignatureApi (function F): fallback to stored if null
         if (remoteIdentityAccountSignatureKey == null) {
@@ -304,14 +315,16 @@ public final class DeviceADVValidator {
         }
 
         // WAWebAdvSignatureApi (function A): verify account signature: sign(header + details + identityKey)
-        var remoteIdentityAccountSignature = Objects.requireNonNull(remoteIdentity.accountSignature(), "accountSignature cannot be null");
+        var remoteIdentityAccountSignature = remoteIdentity.accountSignature()
+                .orElseThrow(() -> new NullPointerException("accountSignature cannot be null"));
         var accountMessage = FastRandomUtils.concatByteArrays(accountSignatureHeader, remoteIdentityDetails, remoteIdentityKey);
         if (!Curve25519.verifySignature(remoteIdentityAccountSignatureKey, accountMessage, remoteIdentityAccountSignature)) {
             throw new WhatsAppAdvValidationException.AccountSignatureFailed(remoteJid);
         }
 
         // WAWebAdvSignatureApi (function B): verify device signature: sign(header + details + identityKey + accountSignatureKey)
-        var remoteIdentityDeviceSignature = Objects.requireNonNull(remoteIdentity.deviceSignature(), "deviceSignature cannot be null");
+        var remoteIdentityDeviceSignature = remoteIdentity.deviceSignature()
+                .orElseThrow(() -> new NullPointerException("deviceSignature cannot be null"));
         var deviceMessage = FastRandomUtils.concatByteArrays(deviceSignatureHeader, remoteIdentityDetails, remoteIdentityKey, remoteIdentityAccountSignatureKey);
         if (!Curve25519.verifySignature(remoteIdentityKey, deviceMessage, remoteIdentityDeviceSignature)) {
             throw new WhatsAppAdvValidationException.DeviceSignatureFailed(remoteJid);
@@ -335,46 +348,53 @@ public final class DeviceADVValidator {
 
         try {
             // WAWebHandleAdvDeviceNotificationUtils: decode outer SignedKeyIndexList protobuf
-            var signedKeyIndexList = SignedKeyIndexListSpec.decode(signedKeyIndexBytes);
-            if (signedKeyIndexList.details() == null) {
+            var signedKeyIndexList = ADVSignedKeyIndexListSpec.decode(signedKeyIndexBytes);
+            var details = signedKeyIndexList.details();
+            if (details.isEmpty()) {
                 return Optional.empty();
             }
 
             // WAWebHandleAdvDeviceNotificationUtils (function p): use ONLY embedded accountSignatureKey
             // No fallback to stored key - return empty if missing
             var accountSignatureKey = signedKeyIndexList.accountSignatureKey();
-            if (accountSignatureKey == null || accountSignatureKey.length == 0) {
+            if (accountSignatureKey.isEmpty() || accountSignatureKey.get().length == 0) {
                 return Optional.empty();
             }
 
             // WAWebHandleAdvDeviceNotificationUtils: verify account signature
             var accountSignature = signedKeyIndexList.accountSignature();
-            if (accountSignature == null || accountSignature.length == 0) {
+            if (accountSignature.isEmpty() || accountSignature.get().length == 0) {
                 return Optional.empty();
             }
 
             // WAWebAdvSignatureApi (function G): verify signature with [6, 2] header
-            var message = FastRandomUtils.concatByteArrays(KEY_INDEX_LIST_SIGNATURE_HEADER, signedKeyIndexList.details());
-            if (!Curve25519.verifySignature(accountSignatureKey, message, accountSignature)) {
+            var message = FastRandomUtils.concatByteArrays(KEY_INDEX_LIST_SIGNATURE_HEADER, details.get());
+            if (!Curve25519.verifySignature(accountSignatureKey.get(), message, accountSignature.get())) {
                 return Optional.empty();
             }
 
             // WAWebHandleAdvDeviceNotificationUtils: decode inner KeyIndexList protobuf
-            var keyIndexList = KeyIndexListSpec.decode(signedKeyIndexList.details());
+            var keyIndexList = ADVKeyIndexListSpec.decode(details.get());
 
             // WAWebHandleAdvDeviceNotificationUtils (function p): return null if timestamp OR rawId is null
-            // In Java, primitives default to 0 when not present
-            if (keyIndexList.rawId() == 0 || keyIndexList.timestamp() == 0) {
+            var keyIndexListRawId = keyIndexList.rawId();
+            var keyIndexListTimestamp = keyIndexList.timestamp();
+            if (keyIndexListRawId.isEmpty() || keyIndexListTimestamp.isEmpty()) {
                 return Optional.empty();
             }
+            var keyIndexListValidIndexesSet = new LinkedHashSet<>(keyIndexList.validIndexes());
+            var keyIndexListCurrentIndex = keyIndexList.currentIndex()
+                    .orElse(0);
+            var keyIndexListAccountType = keyIndexList.accountType()
+                    .orElse(ADVEncryptionType.E2EE);
 
             var result = new ValidatedKeyIndexListResult(
-                    keyIndexList.rawId(),
-                    Instant.ofEpochSecond(keyIndexList.timestamp()),
-                    keyIndexList.validIndexes(),
-                    keyIndexList.currentIndex(),
-                    keyIndexList.accountType(),
-                    accountSignatureKey
+                    keyIndexListRawId.getAsInt(),
+                    keyIndexListTimestamp.get(),
+                    keyIndexListValidIndexesSet,
+                    keyIndexListCurrentIndex,
+                    keyIndexListAccountType,
+                    accountSignatureKey.get()
             );
 
             return Optional.of(result);

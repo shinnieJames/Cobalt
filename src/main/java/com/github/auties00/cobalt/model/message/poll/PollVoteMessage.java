@@ -22,8 +22,7 @@ public final class PollVoteMessage implements Message {
         return selectedOptions == null ? List.of() : Collections.unmodifiableList(selectedOptions);
     }
 
-    public PollVoteMessage setSelectedOptions(List<byte[]> selectedOptions) {
+    public void setSelectedOptions(List<byte[]> selectedOptions) {
         this.selectedOptions = selectedOptions;
-        return this;
     }
 }

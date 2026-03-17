@@ -21,8 +21,7 @@ public final class FutureProofMessage implements Message {
         return Optional.ofNullable(messageContainer);
     }
 
-    public FutureProofMessage setMessage(MessageContainer messageContainer) {
+    public void setMessage(MessageContainer messageContainer) {
         this.messageContainer = messageContainer;
-        return this;
     }
 }

@@ -22,8 +22,7 @@ public final class AppStateSyncKeyRequest implements Message {
         return keyIds == null ? List.of() : Collections.unmodifiableList(keyIds);
     }
 
-    public AppStateSyncKeyRequest setKeyIds(List<AppStateSyncKeyId> keyIds) {
+    public void setKeyIds(List<AppStateSyncKeyId> keyIds) {
         this.keyIds = keyIds;
-        return this;
     }
 }

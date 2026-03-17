@@ -81,43 +81,35 @@ public final class DeviceListMetadata {
         return recipientKeyIndexes == null ? List.of() : Collections.unmodifiableList(recipientKeyIndexes);
     }
 
-    public DeviceListMetadata setSenderKeyHash(byte[] senderKeyHash) {
+    public void setSenderKeyHash(byte[] senderKeyHash) {
         this.senderKeyHash = senderKeyHash;
-        return this;
     }
 
-    public DeviceListMetadata setSenderTimestamp(Instant senderTimestamp) {
+    public void setSenderTimestamp(Instant senderTimestamp) {
         this.senderTimestamp = senderTimestamp;
-        return this;
     }
 
-    public DeviceListMetadata setSenderKeyIndexes(List<Integer> senderKeyIndexes) {
+    public void setSenderKeyIndexes(List<Integer> senderKeyIndexes) {
         this.senderKeyIndexes = senderKeyIndexes;
-        return this;
     }
 
-    public DeviceListMetadata setSenderAccountType(ADVEncryptionType senderAccountType) {
+    public void setSenderAccountType(ADVEncryptionType senderAccountType) {
         this.senderAccountType = senderAccountType;
-        return this;
     }
 
-    public DeviceListMetadata setReceiverAccountType(ADVEncryptionType receiverAccountType) {
+    public void setReceiverAccountType(ADVEncryptionType receiverAccountType) {
         this.receiverAccountType = receiverAccountType;
-        return this;
     }
 
-    public DeviceListMetadata setRecipientKeyHash(byte[] recipientKeyHash) {
+    public void setRecipientKeyHash(byte[] recipientKeyHash) {
         this.recipientKeyHash = recipientKeyHash;
-        return this;
     }
 
-    public DeviceListMetadata setRecipientTimestamp(Instant recipientTimestamp) {
+    public void setRecipientTimestamp(Instant recipientTimestamp) {
         this.recipientTimestamp = recipientTimestamp;
-        return this;
     }
 
-    public DeviceListMetadata setRecipientKeyIndexes(List<Integer> recipientKeyIndexes) {
+    public void setRecipientKeyIndexes(List<Integer> recipientKeyIndexes) {
         this.recipientKeyIndexes = recipientKeyIndexes;
-        return this;
     }
 }

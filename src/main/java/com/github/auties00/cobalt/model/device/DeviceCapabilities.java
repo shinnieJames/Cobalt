@@ -81,34 +81,28 @@ public final class DeviceCapabilities implements SyncAction<SyncActionEmptyArgs>
         return Optional.ofNullable(aiThread);
     }
 
-    public DeviceCapabilities setChatLockSupportLevel(ChatLockSupportLevel chatLockSupportLevel) {
+    public void setChatLockSupportLevel(ChatLockSupportLevel chatLockSupportLevel) {
         this.chatLockSupportLevel = chatLockSupportLevel;
-        return this;
     }
 
-    public DeviceCapabilities setLidMigration(LIDMigration lidMigration) {
+    public void setLidMigration(LIDMigration lidMigration) {
         this.lidMigration = lidMigration;
-        return this;
     }
 
-    public DeviceCapabilities setBusinessBroadcast(BusinessBroadcast businessBroadcast) {
+    public void setBusinessBroadcast(BusinessBroadcast businessBroadcast) {
         this.businessBroadcast = businessBroadcast;
-        return this;
     }
 
-    public DeviceCapabilities setUserHasAvatar(UserHasAvatar userHasAvatar) {
+    public void setUserHasAvatar(UserHasAvatar userHasAvatar) {
         this.userHasAvatar = userHasAvatar;
-        return this;
     }
 
-    public DeviceCapabilities setMemberNameTagPrimarySupport(MemberNameTagPrimarySupport memberNameTagPrimarySupport) {
+    public void setMemberNameTagPrimarySupport(MemberNameTagPrimarySupport memberNameTagPrimarySupport) {
         this.memberNameTagPrimarySupport = memberNameTagPrimarySupport;
-        return this;
     }
 
-    public DeviceCapabilities setAiThread(AiThread aiThread) {
+    public void setAiThread(AiThread aiThread) {
         this.aiThread = aiThread;
-        return this;
     }
 
     @ProtobufEnum(name = "DeviceCapabilities.ChatLockSupportLevel")
@@ -159,10 +153,9 @@ public final class DeviceCapabilities implements SyncAction<SyncActionEmptyArgs>
             return Optional.ofNullable(supportLevel);
         }
 
-        public AiThread setSupportLevel(SupportLevel supportLevel) {
+        public void setSupportLevel(SupportLevel supportLevel) {
             this.supportLevel = supportLevel;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "DeviceCapabilities.AiThread.SupportLevel")
         public static enum SupportLevel {
@@ -196,10 +189,9 @@ public final class DeviceCapabilities implements SyncAction<SyncActionEmptyArgs>
             return importListEnabled != null && importListEnabled;
         }
 
-        public BusinessBroadcast setImportListEnabled(Boolean importListEnabled) {
+        public void setImportListEnabled(Boolean importListEnabled) {
             this.importListEnabled = importListEnabled;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "DeviceCapabilities.LIDMigration")
@@ -216,10 +208,9 @@ public final class DeviceCapabilities implements SyncAction<SyncActionEmptyArgs>
             return Optional.ofNullable(chatDbMigrationTimestamp);
         }
 
-        public LIDMigration setChatDbMigrationTimestamp(Instant chatDbMigrationTimestamp) {
+        public void setChatDbMigrationTimestamp(Instant chatDbMigrationTimestamp) {
             this.chatDbMigrationTimestamp = chatDbMigrationTimestamp;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "DeviceCapabilities.UserHasAvatar")
@@ -236,9 +227,8 @@ public final class DeviceCapabilities implements SyncAction<SyncActionEmptyArgs>
             return userHasAvatar != null && userHasAvatar;
         }
 
-        public UserHasAvatar setUserHasAvatar(Boolean userHasAvatar) {
+        public void setUserHasAvatar(Boolean userHasAvatar) {
             this.userHasAvatar = userHasAvatar;
-            return this;
-        }
+    }
     }
 }

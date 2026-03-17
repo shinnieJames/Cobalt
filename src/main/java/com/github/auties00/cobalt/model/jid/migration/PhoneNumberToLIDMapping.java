@@ -75,21 +75,17 @@ public final class PhoneNumberToLIDMapping {
      * Sets the phone number JID being mapped.
      *
      * @param pnJid the new phone number JID, or {@code null}
-     * @return this instance for chaining
      */
-    public PhoneNumberToLIDMapping setPnJid(Jid pnJid) {
+    public void setPnJid(Jid pnJid) {
         this.pnJid = pnJid;
-        return this;
     }
 
     /**
      * Sets the LID JID that corresponds to the phone number.
      *
      * @param lidJid the new LID JID, or {@code null}
-     * @return this instance for chaining
      */
-    public PhoneNumberToLIDMapping setLidJid(Jid lidJid) {
+    public void setLidJid(Jid lidJid) {
         this.lidJid = lidJid;
-        return this;
     }
 }

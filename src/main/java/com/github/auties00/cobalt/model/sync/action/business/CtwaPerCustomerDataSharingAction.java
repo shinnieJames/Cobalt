@@ -52,9 +52,8 @@ public final class CtwaPerCustomerDataSharingAction implements SyncAction<CtwaPe
         return isCtwaPerCustomerDataSharingEnabled != null && isCtwaPerCustomerDataSharingEnabled;
     }
 
-    public CtwaPerCustomerDataSharingAction setCtwaPerCustomerDataSharingEnabled(Boolean isCtwaPerCustomerDataSharingEnabled) {
+    public void setCtwaPerCustomerDataSharingEnabled(Boolean isCtwaPerCustomerDataSharingEnabled) {
         this.isCtwaPerCustomerDataSharingEnabled = isCtwaPerCustomerDataSharingEnabled;
-        return this;
     }
 
 

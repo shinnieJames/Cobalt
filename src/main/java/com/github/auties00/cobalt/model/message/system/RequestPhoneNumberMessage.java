@@ -21,8 +21,7 @@ public final class RequestPhoneNumberMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public RequestPhoneNumberMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

@@ -29,13 +29,11 @@ public final class GroupHistoryIndividualMessageInfo {
         return editedAfterReceivedAsHistory != null && editedAfterReceivedAsHistory;
     }
 
-    public GroupHistoryIndividualMessageInfo setBundleMessageKey(MessageKey bundleMessageKey) {
+    public void setBundleMessageKey(MessageKey bundleMessageKey) {
         this.bundleMessageKey = bundleMessageKey;
-        return this;
     }
 
-    public GroupHistoryIndividualMessageInfo setEditedAfterReceivedAsHistory(Boolean editedAfterReceivedAsHistory) {
+    public void setEditedAfterReceivedAsHistory(Boolean editedAfterReceivedAsHistory) {
         this.editedAfterReceivedAsHistory = editedAfterReceivedAsHistory;
-        return this;
     }
 }

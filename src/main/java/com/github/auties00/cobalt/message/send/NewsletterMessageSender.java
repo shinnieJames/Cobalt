@@ -7,15 +7,24 @@ import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.NewsletterStanza;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.FutureProofMessageType;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
-import com.github.auties00.cobalt.model.message.media.MediaMessage;
+import com.github.auties00.cobalt.model.message.contact.ContactMessage;
+import com.github.auties00.cobalt.model.message.media.*;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
+import com.github.auties00.cobalt.model.message.poll.PollResultSnapshotMessage;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
+import com.github.auties00.cobalt.model.message.system.QuestionResponseMessage;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+
+import java.util.Optional;
 
 /**
  * Sends messages to newsletters ({@code newsletter@newsletter}).
@@ -73,15 +82,15 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     @Override
     AckResult send(Jid newsletterJid, NewsletterMessageInfo messageInfo) {
         var container = messageInfo.message();
+        var containerType = container.futureProofContentType();
 
         // WASmaxOutMessagePublishNewsletterClientIdContent: question and
         // question reply wrappers take priority over inner content type
-        var containerType = container.type();
-        if (containerType == Message.Type.NEWSLETTER_QUESTION || containerType == Message.Type.NEWSLETTER_QUESTION_REPLY) {
+        if (containerType == FutureProofMessageType.QUESTION || containerType == FutureProofMessageType.QUESTION_REPLY) {
             var innerContent = container.content();
             var innerType = resolveSmaxMediaType(innerContent);
-            var payload = MessageContainerSpec.encode(container.unbox());
-            var metaNode = containerType == Message.Type.NEWSLETTER_QUESTION
+            var payload = MessageContainerSpec.encode(MessageContainer.of(innerContent));
+            var metaNode = containerType == FutureProofMessageType.QUESTION
                     ? MetaStanza.buildNewsletterQuestion()
                     : MetaStanza.buildNewsletterQuestionReply();
             var plaintextNode = NewsletterStanza.buildPlaintext(payload,
@@ -89,7 +98,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
             var mediaIdNode = NewsletterStanza.buildMediaId(messageInfo);
             var stanza = new NodeBuilder()
                     .description("message")
-                    .attribute("id", messageInfo.id())
+                    .attribute("id", messageInfo.key().id().orElseThrow())
                     .attribute("to", newsletterJid)
                     .attribute("type", innerType)
                     .content(metaNode, plaintextNode, mediaIdNode);
@@ -100,11 +109,11 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
 
             var stanza = switch (message) {
                 // WASmaxOutMessagePublishNewsletterRevokeMixin
-                case ProtocolMessage p when p.protocolType() == ProtocolMessage.Type.REVOKE ->
+                case ProtocolMessage p when p.type().orElse(null) == ProtocolMessage.Type.REVOKE ->
                         buildRevoke(messageInfo, newsletterJid);
 
                 // WASmaxOutMessagePublishNewsletterEditMixin (text edit)
-                case ProtocolMessage p when p.protocolType() == ProtocolMessage.Type.MESSAGE_EDIT ->
+                case ProtocolMessage p when p.type().orElse(null) == ProtocolMessage.Type.MESSAGE_EDIT ->
                         buildEdit(messageInfo, newsletterJid);
 
                 // WASmaxOutMessagePublishContentTypePollCreationMixin
@@ -127,7 +136,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 case QuestionResponseMessage _ -> buildQuestionResponse(messageInfo, newsletterJid, container);
 
                 // WASmaxOutMessagePublishNewsletterTextMixin
-                case TextMessage t when t.matchedText().isEmpty() ->
+                case ExtendedTextMessage t when t.matchedText().isEmpty() ->
                         buildText(messageInfo, newsletterJid);
 
                 // WASmaxOutMessagePublishNewsletterMediaPublishMixin:
@@ -153,7 +162,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
         var plaintextNode = NewsletterStanza.buildPlaintext(payload);
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("type", "text")
                 .content(plaintextNode);
@@ -172,7 +181,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
         var plaintextNode = NewsletterStanza.buildPlaintext(payload);
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", messageInfo.id())
+                .attribute("id", messageInfo.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("server_id", String.valueOf(messageInfo.serverId()))
                 .content(metaNode, plaintextNode);
@@ -196,7 +205,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
         var mediaIdNode = NewsletterStanza.buildMediaId(info);
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("type", mediaType)
                 .content(plaintextNode, mediaIdNode);
@@ -221,7 +230,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
         var plaintextNode = NewsletterStanza.buildPlaintext(payload);
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("type", "poll")
                 .content(metaNode, plaintextNode);
@@ -239,7 +248,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 .build();
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("edit", resolveEditAttribute(info.message()))
                 .content(adminRevokeNode);
@@ -275,7 +284,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
         // Newsletter edits use "3", distinct from regular MESSAGE_EDIT ("1")
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("type", type)
                 .attribute("edit", NEWSLETTER_MSG_EDIT)
@@ -295,27 +304,30 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     private NodeBuilder buildReaction(
             NewsletterMessageInfo info, Jid newsletterJid, ReactionMessage reaction
     ) {
-        var code = reaction.content();
-        var isRevoke = code == null || code.isEmpty();
 
-        Node reactionNode;
-        if (isRevoke) {
-            reactionNode = new NodeBuilder()
-                    .description("reaction_revoke")
-                    .build();
-        } else {
-            reactionNode = new NodeBuilder()
-                    .description("reaction")
-                    .attribute("code", code)
-                    .build();
-        }
+        Node reactionNode = reaction.text()
+                .map(this::buildReactionContent)
+                .orElseGet(this::buildReactionRevoke);
 
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("server_id", info.serverId())
                 .content(reactionNode);
+    }
+
+    private Node buildReactionContent(String s) {
+        return new NodeBuilder()
+                .description("reaction")
+                .attribute("code", s)
+                .build();
+    }
+
+    private Node buildReactionRevoke() {
+        return new NodeBuilder()
+                .description("reaction_revoke")
+                .build();
     }
 
     /**
@@ -330,7 +342,20 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     ) {
         // WASmaxOutMessagePublishNewsletterPollVoteMixin: each vote
         // element contains the option name as its value
-        var voteChildren = pollUpdate.voteOptionNames().stream()
+        var pollKey = pollUpdate.pollCreationMessageKey();
+        if(pollKey.isEmpty()) {
+            return null;
+        }
+
+        var pollMessage = store.findMessageByKey(pollKey.get());
+        if(pollMessage.isEmpty() || !(pollMessage.get().message().content() instanceof PollCreationMessage pollCreationMessage)) {
+            return null;
+        }
+
+        var voteChildren = pollCreationMessage.options()
+                .stream()
+                .map(PollCreationMessage.Option::optionName)
+                .flatMap(Optional::stream)
                 .map(name -> new NodeBuilder()
                         .description("vote")
                         .content(name)
@@ -342,7 +367,7 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 .build();
         return new NodeBuilder()
                 .description("message")
-                .attribute("id", info.id())
+                .attribute("id", info.key().id().orElseThrow())
                 .attribute("to", newsletterJid)
                 .attribute("server_id", String.valueOf(info.serverId()))
                 .content(pollVoteNode);
@@ -361,13 +386,12 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     private static String resolveSmaxMediaType(Message message) {
         return switch (message) {
             case ImageMessage _ -> "image";
-            case VideoOrGifMessage v -> v.gifPlayback() ? "gif" : "video";
-            case AudioMessage a -> a.voiceMessage() ? "ptt" : "audio";
+            case VideoMessage v -> v.gifPlayback() ? "gif" : "video";
+            case AudioMessage a -> a.ptt() ? "ptt" : "audio";
             case DocumentMessage _ -> "document";
             case StickerMessage _ -> "sticker";
             case ContactMessage _ -> "vcard";
-            case TextMessage t when t.matchedText().isPresent() -> "url";
-            case TextMessage _ -> "text";
+            case ExtendedTextMessage t when t.matchedText().isPresent() -> "url";
             default -> "text";
         };
     }

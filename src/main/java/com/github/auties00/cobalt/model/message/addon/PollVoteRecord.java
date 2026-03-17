@@ -56,28 +56,23 @@ public final class PollVoteRecord {
         return unread != null && unread;
     }
 
-    public PollVoteRecord setPollUpdateMessageKey(MessageKey pollUpdateMessageKey) {
+    public void setPollUpdateMessageKey(MessageKey pollUpdateMessageKey) {
         this.pollUpdateMessageKey = pollUpdateMessageKey;
-        return this;
     }
 
-    public PollVoteRecord setVote(PollVoteMessage vote) {
+    public void setVote(PollVoteMessage vote) {
         this.vote = vote;
-        return this;
     }
 
-    public PollVoteRecord setSenderTimestampMs(Instant senderTimestampMs) {
+    public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
-        return this;
     }
 
-    public PollVoteRecord setServerTimestampMs(Instant serverTimestampMs) {
+    public void setServerTimestampMs(Instant serverTimestampMs) {
         this.serverTimestampMs = serverTimestampMs;
-        return this;
     }
 
-    public PollVoteRecord setUnread(Boolean unread) {
+    public void setUnread(Boolean unread) {
         this.unread = unread;
-        return this;
     }
 }

@@ -52,9 +52,8 @@ public final class NuxAction implements SyncAction<NuxActionArgs> {
         return acknowledged != null && acknowledged;
     }
 
-    public NuxAction setAcknowledged(Boolean acknowledged) {
+    public void setAcknowledged(Boolean acknowledged) {
         this.acknowledged = acknowledged;
-        return this;
     }
 
 

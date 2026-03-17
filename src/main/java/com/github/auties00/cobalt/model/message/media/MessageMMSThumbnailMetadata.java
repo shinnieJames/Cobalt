@@ -80,43 +80,35 @@ public final class MessageMMSThumbnailMetadata implements Message {
         return Optional.ofNullable(mediaKeyDomain);
     }
 
-    public MessageMMSThumbnailMetadata setThumbnailDirectPath(String thumbnailDirectPath) {
+    public void setThumbnailDirectPath(String thumbnailDirectPath) {
         this.thumbnailDirectPath = thumbnailDirectPath;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setThumbnailSha256(byte[] thumbnailSha256) {
+    public void setThumbnailSha256(byte[] thumbnailSha256) {
         this.thumbnailSha256 = thumbnailSha256;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setThumbnailEncSha256(byte[] thumbnailEncSha256) {
+    public void setThumbnailEncSha256(byte[] thumbnailEncSha256) {
         this.thumbnailEncSha256 = thumbnailEncSha256;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setMediaKey(byte[] mediaKey) {
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setThumbnailHeight(Integer thumbnailHeight) {
+    public void setThumbnailHeight(Integer thumbnailHeight) {
         this.thumbnailHeight = thumbnailHeight;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setThumbnailWidth(Integer thumbnailWidth) {
+    public void setThumbnailWidth(Integer thumbnailWidth) {
         this.thumbnailWidth = thumbnailWidth;
-        return this;
     }
 
-    public MessageMMSThumbnailMetadata setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
+    public void setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
         this.mediaKeyDomain = mediaKeyDomain;
-        return this;
     }
 }

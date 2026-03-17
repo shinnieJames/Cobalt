@@ -3,14 +3,10 @@ package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.client.*;
 import com.github.auties00.cobalt.media.MediaConnection;
-import com.github.auties00.cobalt.model.business.BusinessVerifiedNameCertificate;
+import com.github.auties00.cobalt.model.business.BusinessVerifiedName;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.call.CallOffer;
-import com.github.auties00.cobalt.model.chat.Chat;
-import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.chat.ChatMetadata;
-import com.github.auties00.cobalt.model.chat.ChatMute;
+import com.github.auties00.cobalt.model.chat.*;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
@@ -34,27 +30,22 @@ import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
+import com.github.auties00.cobalt.model.sync.*;
+import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastInsightsAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
-import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
 import com.github.auties00.cobalt.model.sync.action.business.MarketingMessageAction;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
 import com.github.auties00.cobalt.model.sync.action.device.AgentAction;
-import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethod;
-import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
-import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
 import com.github.auties00.cobalt.model.sync.action.media.MusicUserIdAction;
 import com.github.auties00.cobalt.model.sync.action.media.RecentEmojiWeight;
+import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethod;
+import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
+import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
-import com.github.auties00.cobalt.model.sync.OrphanMutationEntry;
-import com.github.auties00.cobalt.model.sync.SyncActionEntry;
-import com.github.auties00.cobalt.model.sync.SyncCollectionMetadata;
-import com.github.auties00.cobalt.model.sync.SyncHashValue;
-import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
 import com.github.auties00.libsignal.SignalProtocolAddress;
 import com.github.auties00.libsignal.SignalProtocolStore;
 import com.github.auties00.libsignal.groups.SignalSenderKeyName;
@@ -1056,6 +1047,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<NewsletterMessageInfo> findMessageById(Newsletter newsletter, String id);
 
     /**
+     * Finds the message that the given message is quoting, if any.
+     *
+     * @param info the message whose quoted message should be resolved
+     * @return an {@code Optional} containing the quoted message if found
+     */
+    Optional<? extends MessageInfo> findQuotedMessage(MessageInfo info);
+
+    /**
      * Returns all status updates stored in this session.
      *
      * @return an unmodifiable collection of status updates
@@ -1837,7 +1836,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param jid the user JID
      * @return an {@code Optional} containing the record if found
      */
-    Optional<BusinessVerifiedNameCertificate> findVerifiedBusinessName(Jid jid);
+    Optional<BusinessVerifiedName> findVerifiedBusinessName(Jid jid);
 
     /**
      * Adds or replaces a verified business name record.
@@ -1845,7 +1844,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param jid the jid that owns the record
      * @param record the record to store
      */
-    void addVerifiedBusinessName(Jid jid, BusinessVerifiedNameCertificate record);
+    void addVerifiedBusinessName(Jid jid, BusinessVerifiedName record);
 
     /**
      * Removes the verified business name record for the given JID.
@@ -1861,7 +1860,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param groupJid the group or community JID
      * @return an {@code Optional} containing the metadata if found
      */
-    Optional<ChatMetadata<?>> findChatMetadata(Jid groupJid);
+    Optional<ChatMetadata> findChatMetadata(Jid groupJid);
 
     /**
      * Stores the metadata for a group or community, replacing any
@@ -1869,7 +1868,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
      *
      * @param metadata the non-{@code null} metadata to store
      */
-    void addChatMetadata(ChatMetadata<?> metadata);
+    void addChatMetadata(ChatMetadata metadata);
 
     /**
      * Removes the stored metadata for the group or community identified

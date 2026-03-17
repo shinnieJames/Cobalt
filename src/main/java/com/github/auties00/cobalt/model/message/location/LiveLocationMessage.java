@@ -96,53 +96,43 @@ public final class LiveLocationMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public LiveLocationMessage setDegreesLatitude(Double degreesLatitude) {
+    public void setDegreesLatitude(Double degreesLatitude) {
         this.degreesLatitude = degreesLatitude;
-        return this;
     }
 
-    public LiveLocationMessage setDegreesLongitude(Double degreesLongitude) {
+    public void setDegreesLongitude(Double degreesLongitude) {
         this.degreesLongitude = degreesLongitude;
-        return this;
     }
 
-    public LiveLocationMessage setAccuracyInMeters(Integer accuracyInMeters) {
+    public void setAccuracyInMeters(Integer accuracyInMeters) {
         this.accuracyInMeters = accuracyInMeters;
-        return this;
     }
 
-    public LiveLocationMessage setSpeedInMps(Float speedInMps) {
+    public void setSpeedInMps(Float speedInMps) {
         this.speedInMps = speedInMps;
-        return this;
     }
 
-    public LiveLocationMessage setDegreesClockwiseFromMagneticNorth(Integer degreesClockwiseFromMagneticNorth) {
+    public void setDegreesClockwiseFromMagneticNorth(Integer degreesClockwiseFromMagneticNorth) {
         this.degreesClockwiseFromMagneticNorth = degreesClockwiseFromMagneticNorth;
-        return this;
     }
 
-    public LiveLocationMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public LiveLocationMessage setSequenceNumber(Long sequenceNumber) {
+    public void setSequenceNumber(Long sequenceNumber) {
         this.sequenceNumber = sequenceNumber;
-        return this;
     }
 
-    public LiveLocationMessage setTimeOffset(Integer timeOffset) {
+    public void setTimeOffset(Integer timeOffset) {
         this.timeOffset = timeOffset;
-        return this;
     }
 
-    public LiveLocationMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public LiveLocationMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

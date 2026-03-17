@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.message.media;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveHeader;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
@@ -17,7 +18,7 @@ import java.util.OptionalLong;
 @ProtobufMessage(name = "Message.DocumentMessage")
 public final class DocumentMessage implements InteractiveHeader, InteractiveMessage.MediaSpec, TemplateMessage.Title, TemplateMessage.TitleSpec, MediaMessage {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    String url;
+    String mediaUrl;
 
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
     String mimetype;
@@ -26,10 +27,10 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     String title;
 
     @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
-    byte[] fileSha256;
+    byte[] mediaSha256;
 
     @ProtobufProperty(index = 5, type = ProtobufType.UINT64)
-    Long fileLength;
+    Long mediaSize;
 
     @ProtobufProperty(index = 6, type = ProtobufType.UINT32)
     Integer pageCount;
@@ -41,10 +42,10 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     String fileName;
 
     @ProtobufProperty(index = 9, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 10, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
     @ProtobufProperty(index = 11, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
@@ -83,17 +84,17 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     MediaMessageKeyDomain mediaKeyDomain;
 
 
-    DocumentMessage(String url, String mimetype, String title, byte[] fileSha256, Long fileLength, Integer pageCount, byte[] mediaKey, String fileName, byte[] fileEncSha256, String directPath, Instant mediaKeyTimestamp, Boolean contactVcard, String thumbnailDirectPath, byte[] thumbnailSha256, byte[] thumbnailEncSha256, byte[] jpegThumbnail, ContextInfo contextInfo, Integer thumbnailHeight, Integer thumbnailWidth, String caption, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain) {
-        this.url = url;
+    DocumentMessage(String mediaUrl, String mimetype, String title, byte[] mediaSha256, Long mediaSize, Integer pageCount, byte[] mediaKey, String fileName, byte[] mediaEncryptedSha256, String mediaDirectPath, Instant mediaKeyTimestamp, Boolean contactVcard, String thumbnailDirectPath, byte[] thumbnailSha256, byte[] thumbnailEncSha256, byte[] jpegThumbnail, ContextInfo contextInfo, Integer thumbnailHeight, Integer thumbnailWidth, String caption, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain) {
+        this.mediaUrl = mediaUrl;
         this.mimetype = mimetype;
         this.title = title;
-        this.fileSha256 = fileSha256;
-        this.fileLength = fileLength;
+        this.mediaSha256 = mediaSha256;
+        this.mediaSize = mediaSize;
         this.pageCount = pageCount;
         this.mediaKey = mediaKey;
         this.fileName = fileName;
-        this.fileEncSha256 = fileEncSha256;
-        this.directPath = directPath;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+        this.mediaDirectPath = mediaDirectPath;
         this.mediaKeyTimestamp = mediaKeyTimestamp;
         this.contactVcard = contactVcard;
         this.thumbnailDirectPath = thumbnailDirectPath;
@@ -109,7 +110,12 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     }
 
     public Optional<String> url() {
-        return Optional.ofNullable(url);
+        return Optional.ofNullable(mediaUrl);
+    }
+
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.ofNullable(mediaUrl);
     }
 
     public Optional<String> mimetype() {
@@ -121,11 +127,21 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     }
 
     public Optional<byte[]> fileSha256() {
-        return Optional.ofNullable(fileSha256);
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(mediaSha256);
     }
 
     public OptionalLong fileLength() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     public OptionalInt pageCount() {
@@ -141,11 +157,21 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
     }
 
     public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaEncryptedSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
     }
 
     public Optional<Instant> mediaKeyTimestamp() {
@@ -196,113 +222,103 @@ public final class DocumentMessage implements InteractiveHeader, InteractiveMess
         return Optional.ofNullable(mediaKeyDomain);
     }
 
-    public DocumentMessage setUrl(String url) {
-        this.url = url;
-        return this;
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.DOCUMENT;
     }
 
-    public DocumentMessage setMimetype(String mimetype) {
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
-    public DocumentMessage setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public DocumentMessage setFileSha256(byte[] fileSha256) {
-        this.fileSha256 = fileSha256;
-        return this;
+    @Override
+    public void setMediaSha256(byte[] mediaSha256) {
+        this.mediaSha256 = mediaSha256;
     }
 
-    public DocumentMessage setFileLength(Long fileLength) {
-        this.fileLength = fileLength;
-        return this;
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
     }
 
-    public DocumentMessage setPageCount(Integer pageCount) {
+    public void setPageCount(Integer pageCount) {
         this.pageCount = pageCount;
-        return this;
     }
 
-    public DocumentMessage setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public DocumentMessage setFileName(String fileName) {
+    public void setFileName(String fileName) {
         this.fileName = fileName;
-        return this;
     }
 
-    public DocumentMessage setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
     }
 
-    public DocumentMessage setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    public DocumentMessage setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    @Override
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public DocumentMessage setContactVcard(Boolean contactVcard) {
+    public void setContactVcard(Boolean contactVcard) {
         this.contactVcard = contactVcard;
-        return this;
     }
 
-    public DocumentMessage setThumbnailDirectPath(String thumbnailDirectPath) {
+    public void setThumbnailDirectPath(String thumbnailDirectPath) {
         this.thumbnailDirectPath = thumbnailDirectPath;
-        return this;
     }
 
-    public DocumentMessage setThumbnailSha256(byte[] thumbnailSha256) {
+    public void setThumbnailSha256(byte[] thumbnailSha256) {
         this.thumbnailSha256 = thumbnailSha256;
-        return this;
     }
 
-    public DocumentMessage setThumbnailEncSha256(byte[] thumbnailEncSha256) {
+    public void setThumbnailEncSha256(byte[] thumbnailEncSha256) {
         this.thumbnailEncSha256 = thumbnailEncSha256;
-        return this;
     }
 
-    public DocumentMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public DocumentMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public DocumentMessage setThumbnailHeight(Integer thumbnailHeight) {
+    public void setThumbnailHeight(Integer thumbnailHeight) {
         this.thumbnailHeight = thumbnailHeight;
-        return this;
     }
 
-    public DocumentMessage setThumbnailWidth(Integer thumbnailWidth) {
+    public void setThumbnailWidth(Integer thumbnailWidth) {
         this.thumbnailWidth = thumbnailWidth;
-        return this;
     }
 
-    public DocumentMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public DocumentMessage setAccessibilityLabel(String accessibilityLabel) {
+    public void setAccessibilityLabel(String accessibilityLabel) {
         this.accessibilityLabel = accessibilityLabel;
-        return this;
     }
 
-    public DocumentMessage setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
+    public void setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
         this.mediaKeyDomain = mediaKeyDomain;
-        return this;
     }
 }

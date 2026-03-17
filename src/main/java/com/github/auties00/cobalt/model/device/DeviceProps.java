@@ -52,29 +52,24 @@ public final class DeviceProps {
         return Optional.ofNullable(historySyncConfig);
     }
 
-    public DeviceProps setOs(String os) {
+    public void setOs(String os) {
         this.os = os;
-        return this;
     }
 
-    public DeviceProps setVersion(ClientAppVersion version) {
+    public void setVersion(ClientAppVersion version) {
         this.version = version;
-        return this;
     }
 
-    public DeviceProps setPlatformType(DevicePlatformType platformType) {
+    public void setPlatformType(DevicePlatformType platformType) {
         this.platformType = platformType;
-        return this;
     }
 
-    public DeviceProps setRequireFullSync(Boolean requireFullSync) {
+    public void setRequireFullSync(Boolean requireFullSync) {
         this.requireFullSync = requireFullSync;
-        return this;
     }
 
-    public DeviceProps setHistorySyncConfig(HistorySyncConfig historySyncConfig) {
+    public void setHistorySyncConfig(HistorySyncConfig historySyncConfig) {
         this.historySyncConfig = historySyncConfig;
-        return this;
     }
 
     @ProtobufMessage(name = "DeviceProps.HistorySyncConfig")
@@ -243,104 +238,84 @@ public final class DeviceProps {
             return initialSyncMaxMessagesPerChat == null ? OptionalInt.empty() : OptionalInt.of(initialSyncMaxMessagesPerChat);
         }
 
-        public HistorySyncConfig setFullSyncDaysLimit(Integer fullSyncDaysLimit) {
+        public void setFullSyncDaysLimit(Integer fullSyncDaysLimit) {
             this.fullSyncDaysLimit = fullSyncDaysLimit;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setFullSyncSizeMbLimit(Integer fullSyncSizeMbLimit) {
+        public void setFullSyncSizeMbLimit(Integer fullSyncSizeMbLimit) {
             this.fullSyncSizeMbLimit = fullSyncSizeMbLimit;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setStorageQuotaMb(Integer storageQuotaMb) {
+        public void setStorageQuotaMb(Integer storageQuotaMb) {
             this.storageQuotaMb = storageQuotaMb;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setInlineInitialPayloadInE2EeMsg(Boolean inlineInitialPayloadInE2EeMsg) {
+        public void setInlineInitialPayloadInE2EeMsg(Boolean inlineInitialPayloadInE2EeMsg) {
             this.inlineInitialPayloadInE2EeMsg = inlineInitialPayloadInE2EeMsg;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setRecentSyncDaysLimit(Integer recentSyncDaysLimit) {
+        public void setRecentSyncDaysLimit(Integer recentSyncDaysLimit) {
             this.recentSyncDaysLimit = recentSyncDaysLimit;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportCallLogHistory(Boolean supportCallLogHistory) {
+        public void setSupportCallLogHistory(Boolean supportCallLogHistory) {
             this.supportCallLogHistory = supportCallLogHistory;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportBotUserAgentChatHistory(Boolean supportBotUserAgentChatHistory) {
+        public void setSupportBotUserAgentChatHistory(Boolean supportBotUserAgentChatHistory) {
             this.supportBotUserAgentChatHistory = supportBotUserAgentChatHistory;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportCagReactionsAndPolls(Boolean supportCagReactionsAndPolls) {
+        public void setSupportCagReactionsAndPolls(Boolean supportCagReactionsAndPolls) {
             this.supportCagReactionsAndPolls = supportCagReactionsAndPolls;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportBizHostedMsg(Boolean supportBizHostedMsg) {
+        public void setSupportBizHostedMsg(Boolean supportBizHostedMsg) {
             this.supportBizHostedMsg = supportBizHostedMsg;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportRecentSyncChunkMessageCountTuning(Boolean supportRecentSyncChunkMessageCountTuning) {
+        public void setSupportRecentSyncChunkMessageCountTuning(Boolean supportRecentSyncChunkMessageCountTuning) {
             this.supportRecentSyncChunkMessageCountTuning = supportRecentSyncChunkMessageCountTuning;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportHostedGroupMsg(Boolean supportHostedGroupMsg) {
+        public void setSupportHostedGroupMsg(Boolean supportHostedGroupMsg) {
             this.supportHostedGroupMsg = supportHostedGroupMsg;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportFbidBotChatHistory(Boolean supportFbidBotChatHistory) {
+        public void setSupportFbidBotChatHistory(Boolean supportFbidBotChatHistory) {
             this.supportFbidBotChatHistory = supportFbidBotChatHistory;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportAddOnHistorySyncMigration(Boolean supportAddOnHistorySyncMigration) {
+        public void setSupportAddOnHistorySyncMigration(Boolean supportAddOnHistorySyncMigration) {
             this.supportAddOnHistorySyncMigration = supportAddOnHistorySyncMigration;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportMessageAssociation(Boolean supportMessageAssociation) {
+        public void setSupportMessageAssociation(Boolean supportMessageAssociation) {
             this.supportMessageAssociation = supportMessageAssociation;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportGroupHistory(Boolean supportGroupHistory) {
+        public void setSupportGroupHistory(Boolean supportGroupHistory) {
             this.supportGroupHistory = supportGroupHistory;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setOnDemandReady(Boolean onDemandReady) {
+        public void setOnDemandReady(Boolean onDemandReady) {
             this.onDemandReady = onDemandReady;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setSupportGuestChat(Boolean supportGuestChat) {
+        public void setSupportGuestChat(Boolean supportGuestChat) {
             this.supportGuestChat = supportGuestChat;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setCompleteOnDemandReady(Boolean completeOnDemandReady) {
+        public void setCompleteOnDemandReady(Boolean completeOnDemandReady) {
             this.completeOnDemandReady = completeOnDemandReady;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setThumbnailSyncDaysLimit(Integer thumbnailSyncDaysLimit) {
+        public void setThumbnailSyncDaysLimit(Integer thumbnailSyncDaysLimit) {
             this.thumbnailSyncDaysLimit = thumbnailSyncDaysLimit;
-            return this;
-        }
+    }
 
-        public HistorySyncConfig setInitialSyncMaxMessagesPerChat(Integer initialSyncMaxMessagesPerChat) {
+        public void setInitialSyncMaxMessagesPerChat(Integer initialSyncMaxMessagesPerChat) {
             this.initialSyncMaxMessagesPerChat = initialSyncMaxMessagesPerChat;
-            return this;
-        }
+    }
     }
 }

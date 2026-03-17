@@ -36,18 +36,15 @@ public final class SyncdRecord {
         return Optional.ofNullable(keyId);
     }
 
-    public SyncdRecord setIndex(SyncdIndex index) {
+    public void setIndex(SyncdIndex index) {
         this.index = index;
-        return this;
     }
 
-    public SyncdRecord setValue(SyncdValue value) {
+    public void setValue(SyncdValue value) {
         this.value = value;
-        return this;
     }
 
-    public SyncdRecord setKeyId(KeyId keyId) {
+    public void setKeyId(KeyId keyId) {
         this.keyId = keyId;
-        return this;
     }
 }

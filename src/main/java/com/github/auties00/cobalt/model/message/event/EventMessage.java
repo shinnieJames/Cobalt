@@ -114,63 +114,51 @@ public final class EventMessage implements ContextualMessage {
         return reminderOffsetSec == null ? OptionalLong.empty() : OptionalLong.of(reminderOffsetSec);
     }
 
-    public EventMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public EventMessage setCanceled(Boolean isCanceled) {
+    public void setCanceled(Boolean isCanceled) {
         this.isCanceled = isCanceled;
-        return this;
     }
 
-    public EventMessage setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public EventMessage setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
-    public EventMessage setLocation(LocationMessage location) {
+    public void setLocation(LocationMessage location) {
         this.location = location;
-        return this;
     }
 
-    public EventMessage setJoinLink(String joinLink) {
+    public void setJoinLink(String joinLink) {
         this.joinLink = joinLink;
-        return this;
     }
 
-    public EventMessage setStartTime(Instant startTime) {
+    public void setStartTime(Instant startTime) {
         this.startTime = startTime;
-        return this;
     }
 
-    public EventMessage setEndTime(Instant endTime) {
+    public void setEndTime(Instant endTime) {
         this.endTime = endTime;
-        return this;
     }
 
-    public EventMessage setExtraGuestsAllowed(Boolean extraGuestsAllowed) {
+    public void setExtraGuestsAllowed(Boolean extraGuestsAllowed) {
         this.extraGuestsAllowed = extraGuestsAllowed;
-        return this;
     }
 
-    public EventMessage setScheduleCall(Boolean isScheduleCall) {
+    public void setScheduleCall(Boolean isScheduleCall) {
         this.isScheduleCall = isScheduleCall;
-        return this;
     }
 
-    public EventMessage setHasReminder(Boolean hasReminder) {
+    public void setHasReminder(Boolean hasReminder) {
         this.hasReminder = hasReminder;
-        return this;
     }
 
-    public EventMessage setReminderOffsetSec(Long reminderOffsetSec) {
+    public void setReminderOffsetSec(Long reminderOffsetSec) {
         this.reminderOffsetSec = reminderOffsetSec;
-        return this;
     }
 }

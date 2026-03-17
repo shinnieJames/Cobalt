@@ -72,11 +72,9 @@ public final class AIRichResponseCodeMetadata implements AIRichResponseSubMessag
      * Sets the programming language of the code in this block.
      *
      * @param codeLanguage the language identifier to set
-     * @return this instance for chaining
      */
-    public AIRichResponseCodeMetadata setCodeLanguage(String codeLanguage) {
+    public void setCodeLanguage(String codeLanguage) {
         this.codeLanguage = codeLanguage;
-        return this;
     }
 
     /**
@@ -84,11 +82,9 @@ public final class AIRichResponseCodeMetadata implements AIRichResponseSubMessag
      * code block.
      *
      * @param codeBlocks the code blocks to set
-     * @return this instance for chaining
      */
-    public AIRichResponseCodeMetadata setCodeBlocks(List<AIRichResponseCodeBlock> codeBlocks) {
+    public void setCodeBlocks(List<AIRichResponseCodeBlock> codeBlocks) {
         this.codeBlocks = codeBlocks;
-        return this;
     }
 
     /**
@@ -199,22 +195,18 @@ public final class AIRichResponseCodeMetadata implements AIRichResponseSubMessag
          * Sets the syntax highlight category for this token.
          *
          * @param highlightType the highlight type to set
-         * @return this instance for chaining
          */
-        public AIRichResponseCodeBlock setHighlightType(AIRichResponseCodeHighlightType highlightType) {
+        public void setHighlightType(AIRichResponseCodeHighlightType highlightType) {
             this.highlightType = highlightType;
-            return this;
-        }
+    }
 
         /**
          * Sets the source code text of this token.
          *
          * @param codeContent the code content to set
-         * @return this instance for chaining
          */
-        public AIRichResponseCodeBlock setCodeContent(String codeContent) {
+        public void setCodeContent(String codeContent) {
             this.codeContent = codeContent;
-            return this;
-        }
+    }
     }
 }

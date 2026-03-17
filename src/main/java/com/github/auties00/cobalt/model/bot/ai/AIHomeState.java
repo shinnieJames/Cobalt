@@ -100,33 +100,27 @@ public final class AIHomeState {
      * Sets the timestamp at which the home screen options were last fetched.
      *
      * @param lastFetchTime the new fetch timestamp, or {@code null}
-     * @return this instance for chaining
      */
-    public AIHomeState setLastFetchTime(Instant lastFetchTime) {
+    public void setLastFetchTime(Instant lastFetchTime) {
         this.lastFetchTime = lastFetchTime;
-        return this;
     }
 
     /**
      * Sets the list of capability-oriented cards.
      *
      * @param capabilityOptions the new capability options list, or {@code null}
-     * @return this instance for chaining
      */
-    public AIHomeState setCapabilityOptions(List<AIHomeOption> capabilityOptions) {
+    public void setCapabilityOptions(List<AIHomeOption> capabilityOptions) {
         this.capabilityOptions = capabilityOptions;
-        return this;
     }
 
     /**
      * Sets the list of conversation-starter cards.
      *
      * @param conversationOptions the new conversation options list, or {@code null}
-     * @return this instance for chaining
      */
-    public AIHomeState setConversationOptions(List<AIHomeOption> conversationOptions) {
+    public void setConversationOptions(List<AIHomeOption> conversationOptions) {
         this.conversationOptions = conversationOptions;
-        return this;
     }
 
     /**
@@ -301,89 +295,73 @@ public final class AIHomeState {
          * Sets the action type this option performs when tapped.
          *
          * @param type the new action type, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setType(AIHomeActionType type) {
+        public void setType(AIHomeActionType type) {
             this.type = type;
-            return this;
-        }
+    }
 
         /**
          * Sets the display title shown on the card.
          *
          * @param title the new title, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
         /**
          * Sets the prompt text sent to the AI when this option is tapped.
          *
          * @param promptText the new prompt text, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setPromptText(String promptText) {
+        public void setPromptText(String promptText) {
             this.promptText = promptText;
-            return this;
-        }
+    }
 
         /**
          * Sets the AI session identifier associated with this option.
          *
          * @param sessionId the new session identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setSessionId(String sessionId) {
+        public void setSessionId(String sessionId) {
             this.sessionId = sessionId;
-            return this;
-        }
+    }
 
         /**
          * Sets the design-system asset identifier for the icon image.
          *
          * @param imageAssetIdentifier the new asset identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setImageAssetIdentifier(String imageAssetIdentifier) {
+        public void setImageAssetIdentifier(String imageAssetIdentifier) {
             this.imageAssetIdentifier = imageAssetIdentifier;
-            return this;
-        }
+    }
 
         /**
          * Sets the tint color applied to the icon image.
          *
          * @param imageTintColor the new tint color, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setImageTintColor(String imageTintColor) {
+        public void setImageTintColor(String imageTintColor) {
             this.imageTintColor = imageTintColor;
-            return this;
-        }
+    }
 
         /**
          * Sets the background color behind the icon image.
          *
          * @param imageBackgroundColor the new background color, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setImageBackgroundColor(String imageBackgroundColor) {
+        public void setImageBackgroundColor(String imageBackgroundColor) {
             this.imageBackgroundColor = imageBackgroundColor;
-            return this;
-        }
+    }
 
         /**
          * Sets the card layout type identifier.
          *
          * @param cardTypeId the new card type identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public AIHomeOption setCardTypeId(String cardTypeId) {
+        public void setCardTypeId(String cardTypeId) {
             this.cardTypeId = cardTypeId;
-            return this;
-        }
+    }
 
         /**
          * The type of action performed when an {@link AIHomeOption} is tapped on

@@ -53,8 +53,7 @@ public final class AndroidUnsupportedActions implements SyncAction<SyncActionEmp
         return allowed != null && allowed;
     }
 
-    public AndroidUnsupportedActions setAllowed(Boolean allowed) {
+    public void setAllowed(Boolean allowed) {
         this.allowed = allowed;
-        return this;
     }
 }

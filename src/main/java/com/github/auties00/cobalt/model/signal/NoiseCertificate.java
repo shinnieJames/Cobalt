@@ -28,14 +28,12 @@ public final class NoiseCertificate {
         return Optional.ofNullable(signature);
     }
 
-    public NoiseCertificate setDetails(byte[] details) {
+    public void setDetails(byte[] details) {
         this.details = details;
-        return this;
     }
 
-    public NoiseCertificate setSignature(byte[] signature) {
+    public void setSignature(byte[] signature) {
         this.signature = signature;
-        return this;
     }
 
     @ProtobufMessage(name = "NoiseCertificate.Details")
@@ -84,29 +82,24 @@ public final class NoiseCertificate {
             return Optional.ofNullable(key);
         }
 
-        public Details setSerial(Integer serial) {
+        public void setSerial(Integer serial) {
             this.serial = serial;
-            return this;
-        }
+    }
 
-        public Details setsuer(String issuer) {
+        public void setsuer(String issuer) {
             this.issuer = issuer;
-            return this;
-        }
+    }
 
-        public Details setExpires(Long expires) {
+        public void setExpires(Long expires) {
             this.expires = expires;
-            return this;
-        }
+    }
 
-        public Details setSubject(String subject) {
+        public void setSubject(String subject) {
             this.subject = subject;
-            return this;
-        }
+    }
 
-        public Details setKey(byte[] key) {
+        public void setKey(byte[] key) {
             this.key = key;
-            return this;
-        }
+    }
     }
 }

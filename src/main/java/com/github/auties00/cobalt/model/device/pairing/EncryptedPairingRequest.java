@@ -26,13 +26,11 @@ public final class EncryptedPairingRequest {
         return Optional.ofNullable(iv);
     }
 
-    public EncryptedPairingRequest setEncryptedPayload(byte[] encryptedPayload) {
+    public void setEncryptedPayload(byte[] encryptedPayload) {
         this.encryptedPayload = encryptedPayload;
-        return this;
     }
 
-    public EncryptedPairingRequest setIv(byte[] iv) {
+    public void setIv(byte[] iv) {
         this.iv = iv;
-        return this;
     }
 }

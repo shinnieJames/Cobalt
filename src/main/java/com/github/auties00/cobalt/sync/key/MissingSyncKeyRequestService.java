@@ -1,11 +1,12 @@
 package com.github.auties00.cobalt.sync.key;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKeyBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
@@ -14,13 +15,7 @@ import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyR
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HexFormat;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -182,8 +177,8 @@ public final class MissingSyncKeyRequestService {
                     .protocolMessage(protocolMessage)
                     .build();
             var messageKey = new MessageKeyBuilder()
-                    .id(MessageKey.randomId(store.clientType()))
-                    .chatJid(self)
+                    .id(MessageIdGenerator.generate(MessageIdVersion.V2, self))
+                    .parentJid(self)
                     .fromMe(true)
                     .senderJid(self)
                     .build();

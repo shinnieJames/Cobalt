@@ -139,13 +139,11 @@ public final class Point {
      *
      * @param xDeprecated the deprecated x-coordinate, or {@code null} to
      *                    clear the value
-     * @return this instance for method chaining
      * @deprecated Use {@link #setX(Double)} instead.
      */
     @Deprecated
-    public Point setXDeprecated(Integer xDeprecated) {
+    public void setXDeprecated(Integer xDeprecated) {
         this.xDeprecated = xDeprecated;
-        return this;
     }
 
     /**
@@ -153,34 +151,28 @@ public final class Point {
      *
      * @param yDeprecated the deprecated y-coordinate, or {@code null} to
      *                    clear the value
-     * @return this instance for method chaining
      * @deprecated Use {@link #setY(Double)} instead.
      */
     @Deprecated
-    public Point setYDeprecated(Integer yDeprecated) {
+    public void setYDeprecated(Integer yDeprecated) {
         this.yDeprecated = yDeprecated;
-        return this;
     }
 
     /**
      * Sets the double-precision x-coordinate of this vertex.
      *
      * @param x the x-coordinate, or {@code null} to clear the value
-     * @return this instance for method chaining
      */
-    public Point setX(Double x) {
+    public void setX(Double x) {
         this.x = x;
-        return this;
     }
 
     /**
      * Sets the double-precision y-coordinate of this vertex.
      *
      * @param y the y-coordinate, or {@code null} to clear the value
-     * @return this instance for method chaining
      */
-    public Point setY(Double y) {
+    public void setY(Double y) {
         this.y = y;
-        return this;
     }
 }

@@ -36,19 +36,16 @@ public final class PaymentLinkMetadata implements Message {
         return Optional.ofNullable(provider);
     }
 
-    public PaymentLinkMetadata setButton(PaymentLinkButton button) {
+    public void setButton(PaymentLinkButton button) {
         this.button = button;
-        return this;
     }
 
-    public PaymentLinkMetadata setHeader(PaymentLinkHeader header) {
+    public void setHeader(PaymentLinkHeader header) {
         this.header = header;
-        return this;
     }
 
-    public PaymentLinkMetadata setProvider(PaymentLinkProvider provider) {
+    public void setProvider(PaymentLinkProvider provider) {
         this.provider = provider;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.PaymentLinkMetadata.PaymentLinkButton")
@@ -65,10 +62,9 @@ public final class PaymentLinkMetadata implements Message {
             return Optional.ofNullable(displayText);
         }
 
-        public PaymentLinkButton setDisplayText(String displayText) {
+        public void setDisplayText(String displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PaymentLinkMetadata.PaymentLinkHeader")
@@ -85,10 +81,9 @@ public final class PaymentLinkMetadata implements Message {
             return Optional.ofNullable(headerType);
         }
 
-        public PaymentLinkHeader setHeaderType(PaymentLinkHeaderType headerType) {
+        public void setHeaderType(PaymentLinkHeaderType headerType) {
             this.headerType = headerType;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.PaymentLinkMetadata.PaymentLinkHeader.PaymentLinkHeaderType")
         public static enum PaymentLinkHeaderType {
@@ -121,9 +116,8 @@ public final class PaymentLinkMetadata implements Message {
             return Optional.ofNullable(paramsJson);
         }
 
-        public PaymentLinkProvider setParamsJson(String paramsJson) {
+        public void setParamsJson(String paramsJson) {
             this.paramsJson = paramsJson;
-            return this;
-        }
+    }
     }
 }

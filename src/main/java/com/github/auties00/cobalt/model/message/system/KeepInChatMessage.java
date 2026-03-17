@@ -41,18 +41,15 @@ public final class KeepInChatMessage implements Message {
         return Optional.ofNullable(timestampMs);
     }
 
-    public KeepInChatMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public KeepInChatMessage setKeepType(ChatKeepType keepType) {
+    public void setKeepType(ChatKeepType keepType) {
         this.keepType = keepType;
-        return this;
     }
 
-    public KeepInChatMessage setTimestampMs(Instant timestampMs) {
+    public void setTimestampMs(Instant timestampMs) {
         this.timestampMs = timestampMs;
-        return this;
     }
 }

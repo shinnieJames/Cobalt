@@ -53,8 +53,7 @@ public final class PushNameSetting implements SyncAction<SyncActionEmptyArgs> {
         return Optional.ofNullable(name);
     }
 
-    public PushNameSetting setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 }

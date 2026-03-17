@@ -69,21 +69,17 @@ public final class AIRegenerateMetadata {
      * Sets the key that uniquely identifies the original bot response message.
      *
      * @param messageKey the new message key, or {@code null}
-     * @return this instance for chaining
      */
-    public AIRegenerateMetadata setMessageKey(MessageKey messageKey) {
+    public void setMessageKey(MessageKey messageKey) {
         this.messageKey = messageKey;
-        return this;
     }
 
     /**
      * Sets the timestamp at which the original bot response was produced.
      *
      * @param responseTimestamp the new response timestamp, or {@code null}
-     * @return this instance for chaining
      */
-    public AIRegenerateMetadata setResponseTimestamp(Instant responseTimestamp) {
+    public void setResponseTimestamp(Instant responseTimestamp) {
         this.responseTimestamp = responseTimestamp;
-        return this;
     }
 }

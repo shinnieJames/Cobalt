@@ -295,9 +295,8 @@ public final class PaymentInfo {
      * @param currencyDeprecated the currency enum value
      * @return this instance
      */
-    public PaymentInfo setCurrencyDeprecated(Currency currencyDeprecated) {
+    public void setCurrencyDeprecated(Currency currencyDeprecated) {
         this.currencyDeprecated = currencyDeprecated;
-        return this;
     }
 
     /**
@@ -306,9 +305,8 @@ public final class PaymentInfo {
      * @param amount1000 the amount
      * @return this instance
      */
-    public PaymentInfo setAmount1000(Long amount1000) {
+    public void setAmount1000(Long amount1000) {
         this.amount1000 = amount1000;
-        return this;
     }
 
     /**
@@ -317,9 +315,8 @@ public final class PaymentInfo {
      * @param receiverJid the receiver JID
      * @return this instance
      */
-    public PaymentInfo setReceiverJid(Jid receiverJid) {
+    public void setReceiverJid(Jid receiverJid) {
         this.receiverJid = receiverJid;
-        return this;
     }
 
     /**
@@ -328,9 +325,8 @@ public final class PaymentInfo {
      * @param status the payment status
      * @return this instance
      */
-    public PaymentInfo setStatus(Status status) {
+    public void setStatus(Status status) {
         this.status = status;
-        return this;
     }
 
     /**
@@ -339,9 +335,8 @@ public final class PaymentInfo {
      * @param transactionTimestamp the timestamp as epoch seconds
      * @return this instance
      */
-    public PaymentInfo setTransactionTimestamp(Long transactionTimestamp) {
+    public void setTransactionTimestamp(Long transactionTimestamp) {
         this.transactionTimestamp = transactionTimestamp;
-        return this;
     }
 
     /**
@@ -350,9 +345,8 @@ public final class PaymentInfo {
      * @param requestMessageKey the request message key
      * @return this instance
      */
-    public PaymentInfo setRequestMessageKey(MessageKey requestMessageKey) {
+    public void setRequestMessageKey(MessageKey requestMessageKey) {
         this.requestMessageKey = requestMessageKey;
-        return this;
     }
 
     /**
@@ -361,9 +355,8 @@ public final class PaymentInfo {
      * @param expiryTimestamp the expiry timestamp as epoch seconds
      * @return this instance
      */
-    public PaymentInfo setExpiryTimestamp(Long expiryTimestamp) {
+    public void setExpiryTimestamp(Long expiryTimestamp) {
         this.expiryTimestamp = expiryTimestamp;
-        return this;
     }
 
     /**
@@ -372,9 +365,8 @@ public final class PaymentInfo {
      * @param futureproofed {@code true} for future-proofed, {@code false} otherwise
      * @return this instance
      */
-    public PaymentInfo setFutureproofed(Boolean futureproofed) {
+    public void setFutureproofed(Boolean futureproofed) {
         this.futureproofed = futureproofed;
-        return this;
     }
 
     /**
@@ -383,9 +375,8 @@ public final class PaymentInfo {
      * @param currency the currency code
      * @return this instance
      */
-    public PaymentInfo setCurrency(String currency) {
+    public void setCurrency(String currency) {
         this.currency = currency;
-        return this;
     }
 
     /**
@@ -394,9 +385,8 @@ public final class PaymentInfo {
      * @param txnStatus the transaction status
      * @return this instance
      */
-    public PaymentInfo setTxnStatus(TxnStatus txnStatus) {
+    public void setTxnStatus(TxnStatus txnStatus) {
         this.txnStatus = txnStatus;
-        return this;
     }
 
     /**
@@ -406,9 +396,8 @@ public final class PaymentInfo {
      *                          otherwise
      * @return this instance
      */
-    public PaymentInfo setUseNoviFiatFormat(Boolean useNoviFiatFormat) {
+    public void setUseNoviFiatFormat(Boolean useNoviFiatFormat) {
         this.useNoviFiatFormat = useNoviFiatFormat;
-        return this;
     }
 
     /**
@@ -417,9 +406,8 @@ public final class PaymentInfo {
      * @param primaryAmount the primary amount
      * @return this instance
      */
-    public PaymentInfo setPrimaryAmount(Money primaryAmount) {
+    public void setPrimaryAmount(Money primaryAmount) {
         this.primaryAmount = primaryAmount;
-        return this;
     }
 
     /**
@@ -428,9 +416,8 @@ public final class PaymentInfo {
      * @param exchangeAmount the exchange amount
      * @return this instance
      */
-    public PaymentInfo setExchangeAmount(Money exchangeAmount) {
+    public void setExchangeAmount(Money exchangeAmount) {
         this.exchangeAmount = exchangeAmount;
-        return this;
     }
 
     /**

@@ -63,34 +63,28 @@ public final class CloudAPIThreadControlNotification implements Message {
         return shouldSuppressNotification != null && shouldSuppressNotification;
     }
 
-    public CloudAPIThreadControlNotification setStatus(CloudAPIThreadControl status) {
+    public void setStatus(CloudAPIThreadControl status) {
         this.status = status;
-        return this;
     }
 
-    public CloudAPIThreadControlNotification setSenderNotificationTimestampMs(Instant senderNotificationTimestampMs) {
+    public void setSenderNotificationTimestampMs(Instant senderNotificationTimestampMs) {
         this.senderNotificationTimestampMs = senderNotificationTimestampMs;
-        return this;
     }
 
-    public CloudAPIThreadControlNotification setConsumerLid(String consumerLid) {
+    public void setConsumerLid(String consumerLid) {
         this.consumerLid = consumerLid;
-        return this;
     }
 
-    public CloudAPIThreadControlNotification setConsumerPhoneNumber(String consumerPhoneNumber) {
+    public void setConsumerPhoneNumber(String consumerPhoneNumber) {
         this.consumerPhoneNumber = consumerPhoneNumber;
-        return this;
     }
 
-    public CloudAPIThreadControlNotification setNotificationContent(CloudAPIThreadControlNotificationContent notificationContent) {
+    public void setNotificationContent(CloudAPIThreadControlNotificationContent notificationContent) {
         this.notificationContent = notificationContent;
-        return this;
     }
 
-    public CloudAPIThreadControlNotification setShouldSuppressNotification(Boolean shouldSuppressNotification) {
+    public void setShouldSuppressNotification(Boolean shouldSuppressNotification) {
         this.shouldSuppressNotification = shouldSuppressNotification;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.CloudAPIThreadControlNotification.CloudAPIThreadControl")
@@ -132,14 +126,12 @@ public final class CloudAPIThreadControlNotification implements Message {
             return Optional.ofNullable(extraJson);
         }
 
-        public CloudAPIThreadControlNotificationContent setHandoffNotificationText(String handoffNotificationText) {
+        public void setHandoffNotificationText(String handoffNotificationText) {
             this.handoffNotificationText = handoffNotificationText;
-            return this;
-        }
+    }
 
-        public CloudAPIThreadControlNotificationContent setExtraJson(String extraJson) {
+        public void setExtraJson(String extraJson) {
             this.extraJson = extraJson;
-            return this;
-        }
+    }
     }
 }

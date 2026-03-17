@@ -28,13 +28,11 @@ public final class ChatProtocolMessage implements Message {
         return Optional.ofNullable(id);
     }
 
-    public ChatProtocolMessage setDisplayName(String displayName) {
+    public void setDisplayName(String displayName) {
         this.displayName = displayName;
-        return this;
     }
 
-    public ChatProtocolMessage setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 }

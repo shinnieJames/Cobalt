@@ -26,13 +26,11 @@ public final class QuarantinedMessage {
         return Optional.ofNullable(extractedText);
     }
 
-    public QuarantinedMessage setOriginalData(byte[] originalData) {
+    public void setOriginalData(byte[] originalData) {
         this.originalData = originalData;
-        return this;
     }
 
-    public QuarantinedMessage setExtractedText(String extractedText) {
+    public void setExtractedText(String extractedText) {
         this.extractedText = extractedText;
-        return this;
     }
 }

@@ -58,33 +58,27 @@ public final class NotificationSettings {
         return Optional.ofNullable(callVibrate);
     }
 
-    public NotificationSettings setMessageVibrate(String messageVibrate) {
+    public void setMessageVibrate(String messageVibrate) {
         this.messageVibrate = messageVibrate;
-        return this;
     }
 
-    public NotificationSettings setMessagePopup(String messagePopup) {
+    public void setMessagePopup(String messagePopup) {
         this.messagePopup = messagePopup;
-        return this;
     }
 
-    public NotificationSettings setMessageLight(String messageLight) {
+    public void setMessageLight(String messageLight) {
         this.messageLight = messageLight;
-        return this;
     }
 
-    public NotificationSettings setLowPriorityNotifications(Boolean lowPriorityNotifications) {
+    public void setLowPriorityNotifications(Boolean lowPriorityNotifications) {
         this.lowPriorityNotifications = lowPriorityNotifications;
-        return this;
     }
 
-    public NotificationSettings setReactionsMuted(Boolean reactionsMuted) {
+    public void setReactionsMuted(Boolean reactionsMuted) {
         this.reactionsMuted = reactionsMuted;
-        return this;
     }
 
-    public NotificationSettings setCallVibrate(String callVibrate) {
+    public void setCallVibrate(String callVibrate) {
         this.callVibrate = callVibrate;
-        return this;
     }
 }

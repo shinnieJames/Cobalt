@@ -108,44 +108,36 @@ public final class BotSignatureVerificationUseCaseProof {
      * Sets the version of the signature verification protocol.
      *
      * @param version the new version, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSignatureVerificationUseCaseProof setVersion(Integer version) {
+    public void setVersion(Integer version) {
         this.version = version;
-        return this;
     }
 
     /**
      * Sets the use case this proof applies to.
      *
      * @param useCase the new use case, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSignatureVerificationUseCaseProof setUseCase(BotSignatureUseCase useCase) {
+    public void setUseCase(BotSignatureUseCase useCase) {
         this.useCase = useCase;
-        return this;
     }
 
     /**
      * Sets the raw cryptographic signature bytes.
      *
      * @param signature the new signature bytes, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSignatureVerificationUseCaseProof setSignature(byte[] signature) {
+    public void setSignature(byte[] signature) {
         this.signature = signature;
-        return this;
     }
 
     /**
      * Sets the certificate chain used to validate the signature.
      *
      * @param certificateChain the new certificate chain, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSignatureVerificationUseCaseProof setCertificateChain(List<byte[]> certificateChain) {
+    public void setCertificateChain(List<byte[]> certificateChain) {
         this.certificateChain = certificateChain;
-        return this;
     }
 
     /**

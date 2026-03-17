@@ -244,10 +244,10 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
         var current = whatsapp.store()
                 .findContactTextStatus(canonicalJid)
                 .orElseGet(() -> new ContactTextStatusBuilder().build());
-        current.setText(text)
-                .setEmoji(emoji)
-                .setEphemeralDurationSeconds(ephemeralDurationSeconds)
-                .setLastUpdateTime(lastUpdateTime);
+        current.setText(text);
+        current.setEmoji(emoji);
+        current.setEphemeralDurationSeconds(ephemeralDurationSeconds);
+        current.setLastUpdateTime(lastUpdateTime);
         whatsapp.store().addContactTextStatus(canonicalJid, current);
         notifyContactTextStatusChanged(canonicalJid, current);
         return current;

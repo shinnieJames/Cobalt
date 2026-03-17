@@ -16,14 +16,15 @@ import com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParser;
 import com.github.auties00.cobalt.device.timestamp.DeviceExpectedTsUtils;
 import com.github.auties00.cobalt.exception.WhatsAppAdvValidationException;
 import com.github.auties00.cobalt.exception.WhatsAppDeviceSyncException;
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
-import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
 import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.*;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.node.Node;
@@ -918,7 +919,9 @@ public final class DeviceService {
         // WAWebBizCoexHostedAddVerification: verify hosted users are in cache
         // This prevents accepting transitions from potentially spoofed hosted device updates
         if (newType == ADVEncryptionType.HOSTED) {
-            store.assertCoexHostedVerification(userJid);
+            if(!store.isInCoexHostedVerificationCache(userJid)) {
+                throw new IllegalStateException(userJid + " is not in the coex hosted verification cache");
+            }
         }
 
         // WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: cleanup all Signal sessions
@@ -971,18 +974,18 @@ public final class DeviceService {
         // WAWebBizCoexUtils: E2EE→HOSTED = no longer E2E encrypted (CIPHERTEXT)
         // HOSTED→E2EE = now E2E encrypted (E2E_ENCRYPTED_NOW)
         var stubType = (newType == ADVEncryptionType.E2EE)
-                ? MessageInfoStubType.E2E_ENCRYPTED_NOW
-                : MessageInfoStubType.CIPHERTEXT;
+                ? ChatMessageInfo.StubType.E2E_ENCRYPTED_NOW
+                : ChatMessageInfo.StubType.CIPHERTEXT;
 
         var key = new MessageKeyBuilder()
-                .id(MessageKey.randomId(store.clientType()))
-                .chatJid(chat.jid())
+                .id(MessageIdGenerator.generate(MessageIdVersion.V2, userJid))
+                .parentJid(chat.jid())
                 .senderJid(userJid)
 
                 .build();
         var message = new ChatMessageInfoBuilder()
                 .status(MessageStatus.DELIVERED)
-                .timestampSeconds(Instant.now().getEpochSecond())
+                .timestamp(Instant.now())
                 .key(key)
                 .ignore(true)
                 .stubType(stubType)
@@ -1409,16 +1412,6 @@ public final class DeviceService {
     }
 
     /**
-     * Gets the complete fanout for a group message.
-     *
-     * @param groupJid    the group JID
-     * @param myDeviceJid the current device's JID (to exclude from fanout)
-     * @return the fanout result containing device list and phash
-     *
-     * @apiNote WAWebDBDeviceListFanout.getFanOutList: generates device lists for message fanout.
-     * WAWebPhashUtils.phashV2: calculates the participant hash for group messages.
-     */
-    /**
      * Computes the fanout device list for a 1:1 user chat.
      *
      * <p>This resolves device lists for both the recipient and the sender,
@@ -1460,7 +1453,7 @@ public final class DeviceService {
             var metadata = client.queryChatMetadata(groupJid);
             var participants = metadata.participants()
                     .stream()
-                    .map(GroupParticipant::userJid)
+                    .map(entry -> entry.userJid())
                     .toList();
             var deviceLists = getDeviceLists(participants, "message", null, false);
 

@@ -68,21 +68,17 @@ public final class BotSessionMetadata {
      * Sets the server-assigned unique identifier for this session.
      *
      * @param sessionId the new session identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSessionMetadata setSessionId(String sessionId) {
+    public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
-        return this;
     }
 
     /**
      * Sets the origin that triggered the creation of this session.
      *
      * @param sessionSource the new session source, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSessionMetadata setSessionSource(BotSessionSource sessionSource) {
+    public void setSessionSource(BotSessionSource sessionSource) {
         this.sessionSource = sessionSource;
-        return this;
     }
 }

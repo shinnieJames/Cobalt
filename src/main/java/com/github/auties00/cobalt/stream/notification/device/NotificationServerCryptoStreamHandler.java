@@ -13,6 +13,8 @@ import javax.crypto.Cipher;
 import javax.crypto.KDF;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.HKDFParameterSpec;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.Set;
 
 final class NotificationServerCryptoStreamHandler implements SocketStream.Handler {
@@ -143,11 +145,11 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
             var hkdf = KDF.getInstance("HKDF-SHA256");
             var params = HKDFParameterSpec.ofExtract()
                     .addIKM(mediaKey)
-                    .thenExpand("WhatsApp Media Retry Notification".getBytes(java.nio.charset.StandardCharsets.UTF_8), 32);
+                    .thenExpand("WhatsApp Media Retry Notification".getBytes(StandardCharsets.UTF_8), 32);
             var retryKey = hkdf.deriveKey("AES", params);
             var cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, retryKey, new GCMParameterSpec(128, encIv));
-            cipher.updateAAD(message.id().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            cipher.updateAAD(message.key().id().orElse("").getBytes(StandardCharsets.UTF_8));
             var decoded = cipher.doFinal(encP);
             var notification = MediaRetryNotificationSpec.decode(decoded);
             notification.directPath().ifPresent(directPath -> {
@@ -216,7 +218,7 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
         }
 
         var statusMessage = whatsapp.store().status().stream()
-                .filter(message -> java.util.Objects.equals(message.id(), id))
+                .filter(message -> Objects.equals(message.key().id().orElse(""), id))
                 .findFirst()
                 .orElse(null);
         if (statusMessage != null) {

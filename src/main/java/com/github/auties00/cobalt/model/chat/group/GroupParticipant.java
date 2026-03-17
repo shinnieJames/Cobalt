@@ -38,18 +38,15 @@ public final class GroupParticipant {
         return Optional.ofNullable(memberLabel);
     }
 
-    public GroupParticipant setUserJid(Jid userJid) {
+    public void setUserJid(Jid userJid) {
         this.userJid = userJid;
-        return this;
     }
 
-    public GroupParticipant setRank(GroupPartipantRole rank) {
+    public void setRank(GroupPartipantRole rank) {
         this.rank = rank;
-        return this;
     }
 
-    public GroupParticipant setMemberLabel(GroupParticipantLabel memberLabel) {
+    public void setMemberLabel(GroupParticipantLabel memberLabel) {
         this.memberLabel = memberLabel;
-        return this;
     }
 }

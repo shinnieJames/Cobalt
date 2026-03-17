@@ -120,49 +120,40 @@ public final class LabelEditAction implements SyncAction<LabelEditActionArgs> {
         return Optional.ofNullable(muteEndTimeMs);
     }
 
-    public LabelEditAction setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public LabelEditAction setColor(Integer color) {
+    public void setColor(Integer color) {
         this.color = color;
-        return this;
     }
 
-    public LabelEditAction setPredefinedId(Integer predefinedId) {
+    public void setPredefinedId(Integer predefinedId) {
         this.predefinedId = predefinedId;
-        return this;
     }
 
-    public LabelEditAction setDeleted(Boolean deleted) {
+    public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
-        return this;
     }
 
-    public LabelEditAction setOrderIndex(Integer orderIndex) {
+    public void setOrderIndex(Integer orderIndex) {
         this.orderIndex = orderIndex;
-        return this;
     }
 
-    public LabelEditAction setActive(Boolean isActive) {
+    public void setActive(Boolean isActive) {
         this.isActive = isActive;
-        return this;
     }
 
-    public LabelEditAction setType(ListType type) {
+    public void setType(ListType type) {
         this.type = type;
-        return this;
     }
 
-    public LabelEditAction setImmutable(Boolean isImmutable) {
+    public void setImmutable(Boolean isImmutable) {
         this.isImmutable = isImmutable;
-        return this;
     }
 
-    public LabelEditAction setMuteEndTimeMs(Instant muteEndTimeMs) {
+    public void setMuteEndTimeMs(Instant muteEndTimeMs) {
         this.muteEndTimeMs = muteEndTimeMs;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.LabelEditAction.ListType")

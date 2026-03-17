@@ -79,24 +79,20 @@ public final class MerchantPaymentPartnerAction implements SyncAction<SyncAction
         return Optional.ofNullable(credentialId);
     }
 
-    public MerchantPaymentPartnerAction setStatus(Status status) {
+    public void setStatus(Status status) {
         this.status = status;
-        return this;
     }
 
-    public MerchantPaymentPartnerAction setCountry(String country) {
+    public void setCountry(String country) {
         this.country = country;
-        return this;
     }
 
-    public MerchantPaymentPartnerAction setGatewayName(String gatewayName) {
+    public void setGatewayName(String gatewayName) {
         this.gatewayName = gatewayName;
-        return this;
     }
 
-    public MerchantPaymentPartnerAction setCredentialId(String credentialId) {
+    public void setCredentialId(String credentialId) {
         this.credentialId = credentialId;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.MerchantPaymentPartnerAction.Status")

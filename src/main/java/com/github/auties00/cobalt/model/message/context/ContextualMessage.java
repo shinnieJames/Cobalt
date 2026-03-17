@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.message.context;
 
+import com.github.auties00.cobalt.model.message.bot.AIRichResponseMessage;
 import com.github.auties00.cobalt.model.message.media.MediaMessage;
 import com.github.auties00.cobalt.model.message.Message;
 import com.github.auties00.cobalt.model.message.call.CallOfferMessage;
@@ -38,6 +39,7 @@ import java.util.Optional;
  */
 public sealed interface ContextualMessage extends Message permits
         MediaMessage,
+    AIRichResponseMessage,
     AlbumMessage,
     ButtonsMessage,
     ButtonsResponseMessage,
@@ -80,5 +82,5 @@ public sealed interface ContextualMessage extends Message permits
      * @param contextInfo the context information to associate with this message
      * @return this message instance for method chaining
      */
-    ContextualMessage setContextInfo(ContextInfo contextInfo);
+    void setContextInfo(ContextInfo contextInfo);
 }

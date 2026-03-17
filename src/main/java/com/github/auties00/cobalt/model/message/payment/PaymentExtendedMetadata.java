@@ -29,13 +29,11 @@ public final class PaymentExtendedMetadata implements Message {
         return Optional.ofNullable(platform);
     }
 
-    public PaymentExtendedMetadata setType(Integer type) {
+    public void setType(Integer type) {
         this.type = type;
-        return this;
     }
 
-    public PaymentExtendedMetadata setPlatform(String platform) {
+    public void setPlatform(String platform) {
         this.platform = platform;
-        return this;
     }
 }

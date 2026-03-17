@@ -92,32 +92,26 @@ public final class BusinessCatalog {
      * Sets the unique identifier of this collection.
      *
      * @param id the collection identifier to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalog setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
      * Sets the display name of this collection.
      *
      * @param name the collection name to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalog setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the product entries contained in this collection.
      *
      * @param products the product entries to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalog setProducts(List<BusinessCatalogEntry> products) {
+    public void setProducts(List<BusinessCatalogEntry> products) {
         this.products = products;
-        return this;
     }
 }

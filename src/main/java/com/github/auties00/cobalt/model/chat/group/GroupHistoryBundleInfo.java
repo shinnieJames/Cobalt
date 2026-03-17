@@ -28,14 +28,12 @@ public final class GroupHistoryBundleInfo {
         return Optional.ofNullable(processState);
     }
 
-    public GroupHistoryBundleInfo setDeprecatedMessageHistoryBundle(MessageHistoryBundle deprecatedMessageHistoryBundle) {
+    public void setDeprecatedMessageHistoryBundle(MessageHistoryBundle deprecatedMessageHistoryBundle) {
         this.deprecatedMessageHistoryBundle = deprecatedMessageHistoryBundle;
-        return this;
     }
 
-    public GroupHistoryBundleInfo setProcessState(ProcessState processState) {
+    public void setProcessState(ProcessState processState) {
         this.processState = processState;
-        return this;
     }
 
     @ProtobufEnum(name = "GroupHistoryBundleInfo.ProcessState")

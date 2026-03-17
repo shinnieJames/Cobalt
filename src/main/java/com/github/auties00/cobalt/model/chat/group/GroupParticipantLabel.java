@@ -30,13 +30,11 @@ public final class GroupParticipantLabel {
         return Optional.ofNullable(labelTimestamp);
     }
 
-    public GroupParticipantLabel setLabel(String label) {
+    public void setLabel(String label) {
         this.label = label;
-        return this;
     }
 
-    public GroupParticipantLabel setLabelTimestamp(Instant labelTimestamp) {
+    public void setLabelTimestamp(Instant labelTimestamp) {
         this.labelTimestamp = labelTimestamp;
-        return this;
     }
 }

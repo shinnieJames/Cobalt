@@ -20,8 +20,7 @@ public final class FullHistorySyncOnDemandRequestMetadata implements Message {
         return Optional.ofNullable(requestId);
     }
 
-    public FullHistorySyncOnDemandRequestMetadata setRequestId(String requestId) {
+    public void setRequestId(String requestId) {
         this.requestId = requestId;
-        return this;
     }
 }

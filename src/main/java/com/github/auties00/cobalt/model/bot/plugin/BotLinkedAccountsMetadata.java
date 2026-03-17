@@ -84,32 +84,26 @@ public final class BotLinkedAccountsMetadata {
      * Sets the list of external accounts linked to the bot.
      *
      * @param accounts the new list of linked accounts, or {@code null}
-     * @return this instance for chaining
      */
-    public BotLinkedAccountsMetadata setAccounts(List<BotLinkedAccount> accounts) {
+    public void setAccounts(List<BotLinkedAccount> accounts) {
         this.accounts = accounts;
-        return this;
     }
 
     /**
      * Sets the opaque authentication tokens for the account-linking flow.
      *
      * @param acAuthTokens the new auth tokens, or {@code null}
-     * @return this instance for chaining
      */
-    public BotLinkedAccountsMetadata setAcAuthTokens(byte[] acAuthTokens) {
+    public void setAcAuthTokens(byte[] acAuthTokens) {
         this.acAuthTokens = acAuthTokens;
-        return this;
     }
 
     /**
      * Sets the error code from the account-linking service.
      *
      * @param acErrorCode the new error code, or {@code null}
-     * @return this instance for chaining
      */
-    public BotLinkedAccountsMetadata setAcErrorCode(Integer acErrorCode) {
+    public void setAcErrorCode(Integer acErrorCode) {
         this.acErrorCode = acErrorCode;
-        return this;
     }
 }

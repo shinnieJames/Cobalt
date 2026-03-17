@@ -39,19 +39,16 @@ public final class InteractiveResponseMessage implements ContextualMessage {
         return Optional.empty();
     }
 
-    public InteractiveResponseMessage setBody(Body body) {
+    public void setBody(Body body) {
         this.body = body;
-        return this;
     }
 
-    public InteractiveResponseMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public InteractiveResponseMessage setNativeFlowResponseMessage(NativeFlowResponseMessage nativeFlowResponseMessage) {
+    public void setNativeFlowResponseMessage(NativeFlowResponseMessage nativeFlowResponseMessage) {
         this.nativeFlowResponseMessage = nativeFlowResponseMessage;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.InteractiveResponseMessage.Body")
@@ -76,15 +73,13 @@ public final class InteractiveResponseMessage implements ContextualMessage {
             return Optional.ofNullable(format);
         }
 
-        public Body setText(String text) {
+        public void setText(String text) {
             this.text = text;
-            return this;
-        }
+    }
 
-        public Body setFormat(TemplateFormat format) {
+        public void setFormat(TemplateFormat format) {
             this.format = format;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.InteractiveResponseMessage.Body.Format")
         public static enum TemplateFormat {
@@ -133,19 +128,16 @@ public final class InteractiveResponseMessage implements ContextualMessage {
             return version == null ? OptionalInt.empty() : OptionalInt.of(version);
         }
 
-        public NativeFlowResponseMessage setName(String name) {
+        public void setName(String name) {
             this.name = name;
-            return this;
-        }
+    }
 
-        public NativeFlowResponseMessage setParamsJson(String paramsJson) {
+        public void setParamsJson(String paramsJson) {
             this.paramsJson = paramsJson;
-            return this;
-        }
+    }
 
-        public NativeFlowResponseMessage setVersion(Integer version) {
+        public void setVersion(Integer version) {
             this.version = version;
-            return this;
-        }
+    }
     }
 }

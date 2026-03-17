@@ -28,13 +28,11 @@ public final class EmbeddedMessage implements EmbeddedContentVariant {
         return Optional.ofNullable(messageContainer);
     }
 
-    public EmbeddedMessage setStanzaId(String stanzaId) {
+    public void setStanzaId(String stanzaId) {
         this.stanzaId = stanzaId;
-        return this;
     }
 
-    public EmbeddedMessage setMessage(MessageContainer messageContainer) {
+    public void setMessage(MessageContainer messageContainer) {
         this.messageContainer = messageContainer;
-        return this;
     }
 }

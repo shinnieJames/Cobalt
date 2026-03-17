@@ -48,24 +48,20 @@ public final class PollResultSnapshotMessage implements ContextualMessage {
         return Optional.ofNullable(pollType);
     }
 
-    public PollResultSnapshotMessage setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public PollResultSnapshotMessage setPollVotes(List<PollVote> pollVotes) {
+    public void setPollVotes(List<PollVote> pollVotes) {
         this.pollVotes = pollVotes;
-        return this;
     }
 
-    public PollResultSnapshotMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public PollResultSnapshotMessage setPollType(PollType pollType) {
+    public void setPollType(PollType pollType) {
         this.pollType = pollType;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.PollResultSnapshotMessage.PollVote")
@@ -90,14 +86,12 @@ public final class PollResultSnapshotMessage implements ContextualMessage {
             return optionVoteCount == null ? OptionalLong.empty() : OptionalLong.of(optionVoteCount);
         }
 
-        public PollVote setOptionName(String optionName) {
+        public void setOptionName(String optionName) {
             this.optionName = optionName;
-            return this;
-        }
+    }
 
-        public PollVote setOptionVoteCount(Long optionVoteCount) {
+        public void setOptionVoteCount(Long optionVoteCount) {
             this.optionVoteCount = optionVoteCount;
-            return this;
-        }
+    }
     }
 }

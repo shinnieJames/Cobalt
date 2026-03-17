@@ -48,19 +48,16 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
         return peerDataOperationResult == null ? List.of() : Collections.unmodifiableList(peerDataOperationResult);
     }
 
-    public PeerDataOperationRequestResponseMessage setPeerDataOperationRequestType(PeerDataOperationRequestType peerDataOperationRequestType) {
+    public void setPeerDataOperationRequestType(PeerDataOperationRequestType peerDataOperationRequestType) {
         this.peerDataOperationRequestType = peerDataOperationRequestType;
-        return this;
     }
 
-    public PeerDataOperationRequestResponseMessage setStanzaId(String stanzaId) {
+    public void setStanzaId(String stanzaId) {
         this.stanzaId = stanzaId;
-        return this;
     }
 
-    public PeerDataOperationRequestResponseMessage setPeerDataOperationResult(List<PeerDataOperationResult> peerDataOperationResult) {
+    public void setPeerDataOperationResult(List<PeerDataOperationResult> peerDataOperationResult) {
         this.peerDataOperationResult = peerDataOperationResult;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult")
@@ -149,55 +146,45 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
             return Optional.ofNullable(historySyncChunkRetryResponse);
         }
 
-        public PeerDataOperationResult setMediaUploadResult(MediaRetryNotification.ResultType mediaUploadResult) {
+        public void setMediaUploadResult(MediaRetryNotification.ResultType mediaUploadResult) {
             this.mediaUploadResult = mediaUploadResult;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setStickerMessage(StickerMessage stickerMessage) {
+        public void setStickerMessage(StickerMessage stickerMessage) {
             this.stickerMessage = stickerMessage;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setLinkPreviewResponse(LinkPreviewResponse linkPreviewResponse) {
+        public void setLinkPreviewResponse(LinkPreviewResponse linkPreviewResponse) {
             this.linkPreviewResponse = linkPreviewResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setPlaceholderMessageResendResponse(PlaceholderMessageResendResponse placeholderMessageResendResponse) {
+        public void setPlaceholderMessageResendResponse(PlaceholderMessageResendResponse placeholderMessageResendResponse) {
             this.placeholderMessageResendResponse = placeholderMessageResendResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setWaffleNonceFetchRequestResponse(WaffleNonceFetchResponse waffleNonceFetchRequestResponse) {
+        public void setWaffleNonceFetchRequestResponse(WaffleNonceFetchResponse waffleNonceFetchRequestResponse) {
             this.waffleNonceFetchRequestResponse = waffleNonceFetchRequestResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setFullHistorySyncOnDemandRequestResponse(FullHistorySyncOnDemandRequestResponse fullHistorySyncOnDemandRequestResponse) {
+        public void setFullHistorySyncOnDemandRequestResponse(FullHistorySyncOnDemandRequestResponse fullHistorySyncOnDemandRequestResponse) {
             this.fullHistorySyncOnDemandRequestResponse = fullHistorySyncOnDemandRequestResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setCompanionMetaNonceFetchRequestResponse(CompanionMetaNonceFetchResponse companionMetaNonceFetchRequestResponse) {
+        public void setCompanionMetaNonceFetchRequestResponse(CompanionMetaNonceFetchResponse companionMetaNonceFetchRequestResponse) {
             this.companionMetaNonceFetchRequestResponse = companionMetaNonceFetchRequestResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setSyncdSnapshotFatalRecoveryResponse(SyncDSnapshotFatalRecoveryResponse syncdSnapshotFatalRecoveryResponse) {
+        public void setSyncdSnapshotFatalRecoveryResponse(SyncDSnapshotFatalRecoveryResponse syncdSnapshotFatalRecoveryResponse) {
             this.syncdSnapshotFatalRecoveryResponse = syncdSnapshotFatalRecoveryResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setCompanionCanonicalUserNonceFetchRequestResponse(CompanionCanonicalUserNonceFetchResponse companionCanonicalUserNonceFetchRequestResponse) {
+        public void setCompanionCanonicalUserNonceFetchRequestResponse(CompanionCanonicalUserNonceFetchResponse companionCanonicalUserNonceFetchRequestResponse) {
             this.companionCanonicalUserNonceFetchRequestResponse = companionCanonicalUserNonceFetchRequestResponse;
-            return this;
-        }
+    }
 
-        public PeerDataOperationResult setHistorySyncChunkRetryResponse(HistorySyncChunkRetryResponse historySyncChunkRetryResponse) {
+        public void setHistorySyncChunkRetryResponse(HistorySyncChunkRetryResponse historySyncChunkRetryResponse) {
             this.historySyncChunkRetryResponse = historySyncChunkRetryResponse;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FullHistorySyncOnDemandResponseCode")
         public static enum FullHistorySyncOnDemandResponseCode {
@@ -270,20 +257,17 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return forceRefresh != null && forceRefresh;
             }
 
-            public CompanionCanonicalUserNonceFetchResponse setNonce(String nonce) {
+            public void setNonce(String nonce) {
                 this.nonce = nonce;
-                return this;
-            }
+    }
 
-            public CompanionCanonicalUserNonceFetchResponse setWaFbid(String waFbid) {
+            public void setWaFbid(String waFbid) {
                 this.waFbid = waFbid;
-                return this;
-            }
+    }
 
-            public CompanionCanonicalUserNonceFetchResponse setForceRefresh(Boolean forceRefresh) {
+            public void setForceRefresh(Boolean forceRefresh) {
                 this.forceRefresh = forceRefresh;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionMetaNonceFetchResponse")
@@ -300,10 +284,9 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return Optional.ofNullable(nonce);
             }
 
-            public CompanionMetaNonceFetchResponse setNonce(String nonce) {
+            public void setNonce(String nonce) {
                 this.nonce = nonce;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FullHistorySyncOnDemandRequestResponse")
@@ -328,15 +311,13 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return Optional.ofNullable(responseCode);
             }
 
-            public FullHistorySyncOnDemandRequestResponse setRequestMetadata(FullHistorySyncOnDemandRequestMetadata requestMetadata) {
+            public void setRequestMetadata(FullHistorySyncOnDemandRequestMetadata requestMetadata) {
                 this.requestMetadata = requestMetadata;
-                return this;
-            }
+    }
 
-            public FullHistorySyncOnDemandRequestResponse setResponseCode(FullHistorySyncOnDemandResponseCode responseCode) {
+            public void setResponseCode(FullHistorySyncOnDemandResponseCode responseCode) {
                 this.responseCode = responseCode;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponse")
@@ -385,30 +366,25 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return canRecover != null && canRecover;
             }
 
-            public HistorySyncChunkRetryResponse setSyncType(HistorySyncType syncType) {
+            public void setSyncType(HistorySyncType syncType) {
                 this.syncType = syncType;
-                return this;
-            }
+    }
 
-            public HistorySyncChunkRetryResponse setChunkOrder(Integer chunkOrder) {
+            public void setChunkOrder(Integer chunkOrder) {
                 this.chunkOrder = chunkOrder;
-                return this;
-            }
+    }
 
-            public HistorySyncChunkRetryResponse setRequestId(String requestId) {
+            public void setRequestId(String requestId) {
                 this.requestId = requestId;
-                return this;
-            }
+    }
 
-            public HistorySyncChunkRetryResponse setResponseCode(HistorySyncChunkRetryResponseCode responseCode) {
+            public void setResponseCode(HistorySyncChunkRetryResponseCode responseCode) {
                 this.responseCode = responseCode;
-                return this;
-            }
+    }
 
-            public HistorySyncChunkRetryResponse setCanRecover(Boolean canRecover) {
+            public void setCanRecover(Boolean canRecover) {
                 this.canRecover = canRecover;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse")
@@ -481,45 +457,37 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return Optional.ofNullable(previewMetadata);
             }
 
-            public LinkPreviewResponse setUrl(String url) {
+            public void setUrl(String url) {
                 this.url = url;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setTitle(String title) {
+            public void setTitle(String title) {
                 this.title = title;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setDescription(String description) {
+            public void setDescription(String description) {
                 this.description = description;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setThumbData(byte[] thumbData) {
+            public void setThumbData(byte[] thumbData) {
                 this.thumbData = thumbData;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setMatchText(String matchText) {
+            public void setMatchText(String matchText) {
                 this.matchText = matchText;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setPreviewType(String previewType) {
+            public void setPreviewType(String previewType) {
                 this.previewType = previewType;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setHqThumbnail(LinkPreviewHighQualityThumbnail hqThumbnail) {
+            public void setHqThumbnail(LinkPreviewHighQualityThumbnail hqThumbnail) {
                 this.hqThumbnail = hqThumbnail;
-                return this;
-            }
+    }
 
-            public LinkPreviewResponse setPreviewMetadata(PaymentLinkPreviewMetadata previewMetadata) {
+            public void setPreviewMetadata(PaymentLinkPreviewMetadata previewMetadata) {
                 this.previewMetadata = previewMetadata;
-                return this;
-            }
+    }
 
             @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.LinkPreviewHighQualityThumbnail")
             public static final class LinkPreviewHighQualityThumbnail {
@@ -583,40 +551,33 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                     return thumbHeight == null ? OptionalInt.empty() : OptionalInt.of(thumbHeight);
                 }
 
-                public LinkPreviewHighQualityThumbnail setDirectPath(String directPath) {
+                public void setDirectPath(String directPath) {
                     this.directPath = directPath;
-                    return this;
-                }
+    }
 
-                public LinkPreviewHighQualityThumbnail setThumbHash(String thumbHash) {
+                public void setThumbHash(String thumbHash) {
                     this.thumbHash = thumbHash;
-                    return this;
-                }
+    }
 
-                public LinkPreviewHighQualityThumbnail setEncThumbHash(String encThumbHash) {
+                public void setEncThumbHash(String encThumbHash) {
                     this.encThumbHash = encThumbHash;
-                    return this;
-                }
+    }
 
-                public LinkPreviewHighQualityThumbnail setMediaKey(byte[] mediaKey) {
+                public void setMediaKey(byte[] mediaKey) {
                     this.mediaKey = mediaKey;
-                    return this;
-                }
+    }
 
-                public LinkPreviewHighQualityThumbnail setMediaKeyTimestampMs(Instant mediaKeyTimestampMs) {
+                public void setMediaKeyTimestampMs(Instant mediaKeyTimestampMs) {
                     this.mediaKeyTimestampMs = mediaKeyTimestampMs;
-                    return this;
-                }
+    }
 
-                public LinkPreviewHighQualityThumbnail setThumbWidth(Integer thumbWidth) {
+                public void setThumbWidth(Integer thumbWidth) {
                     this.thumbWidth = thumbWidth;
-                    return this;
-                }
+    }
 
-                public LinkPreviewHighQualityThumbnail setThumbHeight(Integer thumbHeight) {
+                public void setThumbHeight(Integer thumbHeight) {
                     this.thumbHeight = thumbHeight;
-                    return this;
-                }
+    }
             }
 
             @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.PaymentLinkPreviewMetadata")
@@ -641,15 +602,13 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                     return Optional.ofNullable(providerName);
                 }
 
-                public PaymentLinkPreviewMetadata setBusinessVerified(Boolean isBusinessVerified) {
+                public void setBusinessVerified(Boolean isBusinessVerified) {
                     this.isBusinessVerified = isBusinessVerified;
-                    return this;
-                }
+    }
 
-                public PaymentLinkPreviewMetadata setProviderName(String providerName) {
+                public void setProviderName(String providerName) {
                     this.providerName = providerName;
-                    return this;
-                }
+    }
             }
         }
 
@@ -667,10 +626,9 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return Optional.ofNullable(webMessageInfoBytes);
             }
 
-            public PlaceholderMessageResendResponse setWebMessageInfoBytes(byte[] webMessageInfoBytes) {
+            public void setWebMessageInfoBytes(byte[] webMessageInfoBytes) {
                 this.webMessageInfoBytes = webMessageInfoBytes;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse")
@@ -695,15 +653,13 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return isCompressed != null && isCompressed;
             }
 
-            public SyncDSnapshotFatalRecoveryResponse setCollectionSnapshot(byte[] collectionSnapshot) {
+            public void setCollectionSnapshot(byte[] collectionSnapshot) {
                 this.collectionSnapshot = collectionSnapshot;
-                return this;
-            }
+    }
 
-            public SyncDSnapshotFatalRecoveryResponse setCompressed(Boolean isCompressed) {
+            public void setCompressed(Boolean isCompressed) {
                 this.isCompressed = isCompressed;
-                return this;
-            }
+    }
         }
 
         @ProtobufMessage(name = "Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.WaffleNonceFetchResponse")
@@ -728,15 +684,13 @@ public final class PeerDataOperationRequestResponseMessage implements Message {
                 return Optional.ofNullable(waEntFbid);
             }
 
-            public WaffleNonceFetchResponse setNonce(String nonce) {
+            public void setNonce(String nonce) {
                 this.nonce = nonce;
-                return this;
-            }
+    }
 
-            public WaffleNonceFetchResponse setWaEntFbid(String waEntFbid) {
+            public void setWaEntFbid(String waEntFbid) {
                 this.waEntFbid = waEntFbid;
-                return this;
-            }
+    }
         }
     }
 }

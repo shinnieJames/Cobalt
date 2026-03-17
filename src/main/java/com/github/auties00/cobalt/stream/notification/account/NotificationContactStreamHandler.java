@@ -115,10 +115,10 @@ final class NotificationContactStreamHandler implements SocketStream.Handler {
                 .findContactByJid(newJid)
                 .orElseGet(() -> whatsapp.store().addNewContact(newJid));
         if (oldContact != null) {
-            updated.setChosenName(oldContact.chosenName().orElse(null))
-                    .setFullName(oldContact.fullName().orElse(null))
-                    .setShortName(oldContact.shortName().orElse(null))
-                    .setUsername(oldContact.username().orElse(null));
+            updated.setChosenName(oldContact.chosenName().orElse(null));
+            updated.setFullName(oldContact.fullName().orElse(null));
+            updated.setShortName(oldContact.shortName().orElse(null));
+            updated.setUsername(oldContact.username().orElse(null));
         }
 
         modifyNode.getAttributeAsJid("new_lid")

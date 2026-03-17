@@ -67,21 +67,17 @@ public final class BotPromptSuggestion {
      * Sets the display text of the prompt suggestion.
      *
      * @param prompt the new prompt text, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPromptSuggestion setPrompt(String prompt) {
+    public void setPrompt(String prompt) {
         this.prompt = prompt;
-        return this;
     }
 
     /**
      * Sets the unique identifier for this prompt suggestion.
      *
      * @param promptId the new prompt identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPromptSuggestion setPromptId(String promptId) {
+    public void setPromptId(String promptId) {
         this.promptId = promptId;
-        return this;
     }
 }

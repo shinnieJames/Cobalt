@@ -179,88 +179,72 @@ public final class ProcessedVideo {
      * Sets the CDN direct path to the transcoded video.
      *
      * @param directPath the direct path
-     * @return this instance for chaining
      */
-    public ProcessedVideo setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
     /**
      * Sets the SHA-256 digest of the transcoded video file.
      *
      * @param fileSha256 the SHA-256 hash
-     * @return this instance for chaining
      */
-    public ProcessedVideo setFileSha256(byte[] fileSha256) {
+    public void setFileSha256(byte[] fileSha256) {
         this.fileSha256 = fileSha256;
-        return this;
     }
 
     /**
      * Sets the height of the transcoded video in pixels.
      *
      * @param height the video height
-     * @return this instance for chaining
      */
-    public ProcessedVideo setHeight(Integer height) {
+    public void setHeight(Integer height) {
         this.height = height;
-        return this;
     }
 
     /**
      * Sets the width of the transcoded video in pixels.
      *
      * @param width the video width
-     * @return this instance for chaining
      */
-    public ProcessedVideo setWidth(Integer width) {
+    public void setWidth(Integer width) {
         this.width = width;
-        return this;
     }
 
     /**
      * Sets the total file length of the transcoded video in bytes.
      *
      * @param fileLength the file length
-     * @return this instance for chaining
      */
-    public ProcessedVideo setFileLength(Long fileLength) {
+    public void setFileLength(Long fileLength) {
         this.fileLength = fileLength;
-        return this;
     }
 
     /**
      * Sets the video bitrate in bits per second.
      *
      * @param bitrate the bitrate
-     * @return this instance for chaining
      */
-    public ProcessedVideo setBitrate(Integer bitrate) {
+    public void setBitrate(Integer bitrate) {
         this.bitrate = bitrate;
-        return this;
     }
 
     /**
      * Sets the quality tier of this transcoded video version.
      *
      * @param quality the video quality
-     * @return this instance for chaining
      */
-    public ProcessedVideo setQuality(VideoQuality quality) {
+    public void setQuality(VideoQuality quality) {
         this.quality = quality;
-        return this;
     }
 
     /**
      * Sets the list of playback capability identifiers.
      *
      * @param capabilities the capability strings
-     * @return this instance for chaining
      */
-    public ProcessedVideo setCapabilities(List<String> capabilities) {
+    public void setCapabilities(List<String> capabilities) {
         this.capabilities = capabilities;
-        return this;
     }
 
     /**

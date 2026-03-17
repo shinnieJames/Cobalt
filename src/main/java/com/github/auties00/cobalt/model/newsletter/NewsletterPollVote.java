@@ -57,23 +57,19 @@ public final class NewsletterPollVote {
      * Sets the poll option hash.
      *
      * @param hash the 32-byte option hash, must not be {@code null}
-     * @return this instance for chaining
      * @throws NullPointerException if {@code hash} is {@code null}
      */
-    public NewsletterPollVote setHash(byte[] hash) {
+    public void setHash(byte[] hash) {
         this.hash = Objects.requireNonNull(hash, "hash cannot be null");
-        return this;
     }
 
     /**
      * Sets the vote count for this option.
      *
      * @param count the vote count
-     * @return this instance for chaining
      */
-    public NewsletterPollVote setCount(long count) {
+    public void setCount(long count) {
         this.count = count;
-        return this;
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.chat.ChatMute;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
@@ -72,7 +73,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
                 : muteEndMillis / 1000;
         chat.get().setMute(ChatMute.mutedUntil(muteEndSeconds));
 
-        if (chatJid.hasGroupServer() && client.abPropsService().getBool(ABProp.ENABLE_MENTION_EVERYONE_RECEIVER_WEB)) {
+        if (chatJid.hasServer(JidServer.groupOrCommunity()) && client.abPropsService().getBool(ABProp.ENABLE_MENTION_EVERYONE_RECEIVER_WEB)) {
             action.muteEveryoneMentionEndTimestamp().ifPresent(mentionTs -> {
                 var mentionMillis = mentionTs.toEpochMilli();
                 var mentionSeconds = mentionMillis > 0 && mentionMillis < System.currentTimeMillis()

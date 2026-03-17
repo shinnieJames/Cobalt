@@ -84,9 +84,8 @@ public final class BusinessHoursEntry {
      * @param day the day of the week
      * @return this instance
      */
-    public BusinessHoursEntry setDay(BusinessHoursDay day) {
+    public void setDay(BusinessHoursDay day) {
         this.day = day;
-        return this;
     }
 
     /**
@@ -104,9 +103,8 @@ public final class BusinessHoursEntry {
      * @param mode the operating mode
      * @return this instance
      */
-    public BusinessHoursEntry setMode(BusinessHoursMode mode) {
+    public void setMode(BusinessHoursMode mode) {
         this.mode = mode;
-        return this;
     }
 
     /**
@@ -129,9 +127,8 @@ public final class BusinessHoursEntry {
      * @param openTime the opening time of day
      * @return this instance
      */
-    public BusinessHoursEntry setOpenTime(LocalTime openTime) {
+    public void setOpenTime(LocalTime openTime) {
         this.openTime = openTime;
-        return this;
     }
 
     /**
@@ -154,9 +151,8 @@ public final class BusinessHoursEntry {
      * @param closeTime the closing time of day
      * @return this instance
      */
-    public BusinessHoursEntry setCloseTime(LocalTime closeTime) {
+    public void setCloseTime(LocalTime closeTime) {
         this.closeTime = closeTime;
-        return this;
     }
 
     /**

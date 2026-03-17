@@ -65,14 +65,12 @@ public final class PaymentTosAction implements SyncAction<SyncActionEmptyArgs> {
         return accepted;
     }
 
-    public PaymentTosAction setPaymentNotice(PaymentNotice paymentNotice) {
+    public void setPaymentNotice(PaymentNotice paymentNotice) {
         this.paymentNotice = paymentNotice;
-        return this;
     }
 
-    public PaymentTosAction setAccepted(Boolean accepted) {
+    public void setAccepted(Boolean accepted) {
         this.accepted = accepted;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.PaymentTosAction.PaymentNotice")

@@ -41,18 +41,15 @@ public final class StickerSyncRMRMessage implements Message {
         return Optional.ofNullable(requestTimestamp);
     }
 
-    public StickerSyncRMRMessage setFilehash(List<String> filehash) {
+    public void setFilehash(List<String> filehash) {
         this.filehash = filehash;
-        return this;
     }
 
-    public StickerSyncRMRMessage setRmrSource(String rmrSource) {
+    public void setRmrSource(String rmrSource) {
         this.rmrSource = rmrSource;
-        return this;
     }
 
-    public StickerSyncRMRMessage setRequestTimestamp(Instant requestTimestamp) {
+    public void setRequestTimestamp(Instant requestTimestamp) {
         this.requestTimestamp = requestTimestamp;
-        return this;
     }
 }

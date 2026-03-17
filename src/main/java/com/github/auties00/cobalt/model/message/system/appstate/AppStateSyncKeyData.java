@@ -39,18 +39,15 @@ public final class AppStateSyncKeyData implements Message {
         return Optional.ofNullable(timestamp);
     }
 
-    public AppStateSyncKeyData setKeyData(byte[] keyData) {
+    public void setKeyData(byte[] keyData) {
         this.keyData = keyData;
-        return this;
     }
 
-    public AppStateSyncKeyData setFingerprint(AppStateSyncKeyFingerprint fingerprint) {
+    public void setFingerprint(AppStateSyncKeyFingerprint fingerprint) {
         this.fingerprint = fingerprint;
-        return this;
     }
 
-    public AppStateSyncKeyData setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 }

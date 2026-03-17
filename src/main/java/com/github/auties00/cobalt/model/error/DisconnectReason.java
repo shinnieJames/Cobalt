@@ -77,21 +77,17 @@ public final class DisconnectReason {
      * Sets the exit code that classifies the terminal condition.
      *
      * @param code the exit code, or {@code null} to clear
-     * @return this instance for chaining
      */
-    public DisconnectReason setCode(DisconnectCode code) {
+    public void setCode(DisconnectCode code) {
         this.code = code;
-        return this;
     }
 
     /**
      * Sets the human-readable description of the terminal condition.
      *
      * @param text the descriptive text, or {@code null} to clear
-     * @return this instance for chaining
      */
-    public DisconnectReason setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 }

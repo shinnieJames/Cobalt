@@ -42,18 +42,15 @@ public final class MessageHistoryMetadata implements Message {
         return messageCount == null ? OptionalLong.empty() : OptionalLong.of(messageCount);
     }
 
-    public MessageHistoryMetadata setHistoryReceivers(List<String> historyReceivers) {
+    public void setHistoryReceivers(List<String> historyReceivers) {
         this.historyReceivers = historyReceivers;
-        return this;
     }
 
-    public MessageHistoryMetadata setOldestMessageTimestamp(Instant oldestMessageTimestamp) {
+    public void setOldestMessageTimestamp(Instant oldestMessageTimestamp) {
         this.oldestMessageTimestamp = oldestMessageTimestamp;
-        return this;
     }
 
-    public MessageHistoryMetadata setMessageCount(Long messageCount) {
+    public void setMessageCount(Long messageCount) {
         this.messageCount = messageCount;
-        return this;
     }
 }

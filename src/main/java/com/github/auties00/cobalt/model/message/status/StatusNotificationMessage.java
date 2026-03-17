@@ -37,19 +37,16 @@ public final class StatusNotificationMessage implements Message {
         return Optional.ofNullable(type);
     }
 
-    public StatusNotificationMessage setResponseMessageKey(MessageKey responseMessageKey) {
+    public void setResponseMessageKey(MessageKey responseMessageKey) {
         this.responseMessageKey = responseMessageKey;
-        return this;
     }
 
-    public StatusNotificationMessage setOriginalMessageKey(MessageKey originalMessageKey) {
+    public void setOriginalMessageKey(MessageKey originalMessageKey) {
         this.originalMessageKey = originalMessageKey;
-        return this;
     }
 
-    public StatusNotificationMessage setType(StatusNotificationType type) {
+    public void setType(StatusNotificationType type) {
         this.type = type;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.StatusNotificationMessage.StatusNotificationType")

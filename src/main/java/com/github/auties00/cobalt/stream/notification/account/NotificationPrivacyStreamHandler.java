@@ -88,8 +88,8 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
                 .findChatByJid(chatJid)
                 .orElseGet(() -> whatsapp.store().addNewChat(chatJid));
         var senderTimestamp = getInstantAttribute(tokenNode, "t");
-        chat.setTcToken(token)
-                .setTcTokenTimestamp(Instant.now());
+        chat.setTcToken(token);
+        chat.setTcTokenTimestamp(Instant.now());
         if (senderTimestamp != null) {
             chat.setTcTokenSenderTimestamp(senderTimestamp);
         }

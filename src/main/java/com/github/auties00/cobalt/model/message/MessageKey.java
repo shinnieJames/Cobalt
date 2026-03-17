@@ -48,23 +48,19 @@ public final class MessageKey {
         }
     }
 
-    public MessageKey setParentJid(Jid chatJid) {
+    public void setParentJid(Jid chatJid) {
         this.parentJid = chatJid;
-        return this;
     }
 
-    public MessageKey setFromMe(Boolean fromMe) {
+    public void setFromMe(Boolean fromMe) {
         this.fromMe = fromMe;
-        return this;
     }
 
-    public MessageKey setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
-    public MessageKey setSenderJid(Jid senderJid) {
+    public void setSenderJid(Jid senderJid) {
         this.senderJid = senderJid;
-        return this;
     }
 }

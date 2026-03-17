@@ -45,23 +45,19 @@ public final class ContactMessage implements ContextualMessage {
         return isSelfContact != null && isSelfContact;
     }
 
-    public ContactMessage setDisplayName(String displayName) {
+    public void setDisplayName(String displayName) {
         this.displayName = displayName;
-        return this;
     }
 
-    public ContactMessage setVcard(String vcard) {
+    public void setVcard(String vcard) {
         this.vcard = vcard;
-        return this;
     }
 
-    public ContactMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public ContactMessage setSelfContact(Boolean isSelfContact) {
+    public void setSelfContact(Boolean isSelfContact) {
         this.isSelfContact = isSelfContact;
-        return this;
     }
 }

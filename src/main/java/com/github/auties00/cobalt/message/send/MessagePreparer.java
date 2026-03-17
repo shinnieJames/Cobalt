@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.message.send;
 
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.model.chat.ChatMessageContextInfoBuilder;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
@@ -10,9 +12,7 @@ import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.*;
 import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
-import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
-import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
-import com.github.auties00.cobalt.model.message.security.SecretEncryptedMessage;
+import com.github.auties00.cobalt.model.message.security.*;
 import com.github.auties00.cobalt.model.message.text.CommentMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
@@ -22,6 +22,7 @@ import com.github.auties00.cobalt.util.FastRandomUtils;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Prepares outgoing messages for sending by constructing the full
@@ -99,8 +100,8 @@ final class MessagePreparer {
 
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
-        var messageId = MessageKey.randomId(store.clientType());
-        var timestamp = Instant.now().getEpochSecond();
+        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, chatJid);
+        var timestamp = Instant.now();
 
         // WAWebOutgoingMessage: generate 32-byte message secret
         var messageSecret = FastRandomUtils.randomByteArray(MESSAGE_SECRET_SIZE);
@@ -124,7 +125,7 @@ final class MessagePreparer {
 
         var key = new MessageKeyBuilder()
                 .id(messageId)
-                .chatJid(chatJid)
+                .parentJid(chatJid)
                 .fromMe(true)
                 .senderJid(localJid)
                 .build();
@@ -134,7 +135,7 @@ final class MessagePreparer {
                 .senderJid(localJid)
                 .key(key)
                 .message(preparedContainer)
-                .timestampSeconds(timestamp)
+                .timestamp(timestamp)
                 .broadcast(chatJid.hasServer(JidServer.broadcast()))
                 .messageSecret(messageSecret)
                 .build();
@@ -161,20 +162,23 @@ final class MessagePreparer {
         var oldServerId = newsletter.newestMessage()
                 .map(NewsletterMessageInfo::serverId)
                 .orElse(0);
-        var info = new NewsletterMessageInfoBuilder()
-                .id(MessageKey.randomId(store.clientType()))
+        var key = new MessageKeyBuilder()
+                .id(MessageIdGenerator.generate(MessageIdVersion.V2, newsletterJid))
+                .parentJid(newsletterJid)
+                .fromMe(true)
+                .build();
+        return new NewsletterMessageInfoBuilder()
+                .key(key)
                 .serverId(oldServerId + 1)
-                .timestampSeconds(Instant.now().getEpochSecond())
+                .timestamp(Instant.now())
                 .message(container)
                 .status(MessageStatus.PENDING)
                 .build();
-        info.setNewsletter(newsletter);
-        return info;
     }
 
     /**
      * Validates addon encryption state and auto-converts
-     * {@link ReactionMessage} to {@link EncryptedReactionMessage} when
+     * {@link ReactionMessage} to {@link EncReactionMessage} when
      * targeting a CAG group.
      *
      * @param container the original message container
@@ -197,7 +201,7 @@ final class MessagePreparer {
             // PollUpdateMessage: validate encryptedMetadata is populated
             // (the simpleBuilder handles encryption, so this should already be set)
             case PollUpdateMessage poll -> {
-                if (poll.encryptedMetadata().isEmpty()) {
+                if (poll.metadata().isEmpty()) {
                     throw new IllegalArgumentException(
                             "PollUpdateMessage must have encrypted metadata: "
                             + "use PollUpdateMessageSimpleBuilder to create poll votes");
@@ -208,13 +212,13 @@ final class MessagePreparer {
             // ReactionMessage in CAG context: auto-convert to EncryptedReactionMessage
             // WAWebSendGroupMsgJob.isCagAddon: reactions in CAG groups need encryption
             case ReactionMessage reaction when requiresEncryptedReaction(chatJid) -> {
-                var parentMessage = resolveParentMessage(chatJid, reaction.key());
-                if (parentMessage == null) {
-                    throw new IllegalArgumentException("Cannot encrypt reaction: parent message not found for " + reaction.key().id());
+                var parentMessage = resolveParentMessage(chatJid, reaction.key().orElse(null));
+                if (parentMessage.isEmpty()) {
+                    throw new IllegalArgumentException("Cannot encrypt reaction: parent message not found");
                 }
                 var encrypted = new EncReactionMessageSimpleBuilder()
                         .reaction(reaction)
-                    .parentMessage(parentMessage)
+                        .parentMessage(parentMessage.get())
                         .selfJid(selfJid)
                         .build();
                 yield MessageContainer.of(encrypted);
@@ -239,7 +243,7 @@ final class MessagePreparer {
             }
 
             // SecretEncryptedMessage: validate already encrypted
-            case SecretEncryptedMessage enc -> {
+            case SecretEncMessage enc -> {
                 Objects.requireNonNull(enc.encPayload(),
                         "SecretEncryptedMessage must have encPayload populated");
                 Objects.requireNonNull(enc.encIv(),
@@ -249,13 +253,13 @@ final class MessagePreparer {
 
             // CommentMessage in CAG context: auto-convert to EncryptedCommentMessage
             case CommentMessage comment when requiresEncryptedReaction(chatJid) -> {
-                var parentMessage = resolveParentMessage(chatJid, comment.targetMessageKey());
-                if (parentMessage == null) {
-                    throw new IllegalArgumentException("Cannot encrypt comment: parent message not found for " + comment.targetMessageKey().id());
+                var parentMessage = resolveParentMessage(chatJid, comment.targetMessageKey().orElse(null));
+                if (parentMessage.isEmpty()) {
+                    throw new IllegalArgumentException("Cannot encrypt comment: parent message not found");
                 }
-                var encrypted = new EncryptedCommentMessageSimpleBuilder()
+                var encrypted = new EncCommentMessageSimpleBuilder()
                         .comment(comment)
-                        .parentMessage(parentMessage)
+                        .parentMessage(parentMessage.get())
                         .selfJid(selfJid)
                         .build();
                 yield MessageContainer.of(encrypted);
@@ -299,9 +303,10 @@ final class MessagePreparer {
     /**
      * Resolves the parent message referenced by a message key.
      */
-    private ChatMessageInfo resolveParentMessage(Jid chatJid, MessageKey key) {
-        return (ChatMessageInfo) store.findMessageById(chatJid, key.id())
-                .filter(msg -> msg instanceof ChatMessageInfo)
-                .orElse(null);
+    private Optional<ChatMessageInfo> resolveParentMessage(Jid parentJid, MessageKey key) {
+        return key == null ? Optional.empty() : key.id()
+                .flatMap(id -> store.findMessageById(parentJid, id))
+                .filter(entry -> entry instanceof ChatMessageInfo)
+                .map(entry -> (ChatMessageInfo) entry);
     }
 }

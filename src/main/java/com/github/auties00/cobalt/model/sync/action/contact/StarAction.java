@@ -52,9 +52,8 @@ public final class StarAction implements SyncAction<StarActionArgs> {
         return starred != null && starred;
     }
 
-    public StarAction setStarred(Boolean starred) {
+    public void setStarred(Boolean starred) {
         this.starred = starred;
-        return this;
     }
 
 

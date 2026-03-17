@@ -55,9 +55,8 @@ public final class CallLogAction implements SyncAction<CallLogActionArgs> {
         return Optional.ofNullable(log);
     }
 
-    public CallLogAction setLog(CallLog log) {
+    public void setLog(CallLog log) {
         this.log = log;
-        return this;
     }
 
 

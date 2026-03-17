@@ -90,9 +90,8 @@ public final class SyncdSnapshotRecovery {
      * @param version the version to set
      * @return this recovery for chaining
      */
-    public SyncdSnapshotRecovery setVersion(SyncdVersion version) {
+    public void setVersion(SyncdVersion version) {
         this.version = version;
-        return this;
     }
 
     /**
@@ -101,9 +100,8 @@ public final class SyncdSnapshotRecovery {
      * @param collectionName the collection name to set
      * @return this recovery for chaining
      */
-    public SyncdSnapshotRecovery setCollectionName(String collectionName) {
+    public void setCollectionName(String collectionName) {
         this.collectionName = collectionName;
-        return this;
     }
 
     /**
@@ -112,9 +110,8 @@ public final class SyncdSnapshotRecovery {
      * @param mutationRecords the records to set
      * @return this recovery for chaining
      */
-    public SyncdSnapshotRecovery setMutationRecords(List<SyncdPlainTextRecord> mutationRecords) {
+    public void setMutationRecords(List<SyncdPlainTextRecord> mutationRecords) {
         this.mutationRecords = mutationRecords;
-        return this;
     }
 
     /**
@@ -123,8 +120,7 @@ public final class SyncdSnapshotRecovery {
      * @param collectionLthash the LT-Hash bytes to set
      * @return this recovery for chaining
      */
-    public SyncdSnapshotRecovery setCollectionLthash(byte[] collectionLthash) {
+    public void setCollectionLthash(byte[] collectionLthash) {
         this.collectionLthash = collectionLthash;
-        return this;
     }
 }

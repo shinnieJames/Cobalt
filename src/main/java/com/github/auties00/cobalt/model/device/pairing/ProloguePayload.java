@@ -29,13 +29,11 @@ public final class ProloguePayload {
         return Optional.ofNullable(commitment);
     }
 
-    public ProloguePayload setCompanionEphemeralIdentity(byte[] companionEphemeralIdentity) {
+    public void setCompanionEphemeralIdentity(byte[] companionEphemeralIdentity) {
         this.companionEphemeralIdentity = companionEphemeralIdentity;
-        return this;
     }
 
-    public ProloguePayload setCommitment(CompanionCommitment commitment) {
+    public void setCommitment(CompanionCommitment commitment) {
         this.commitment = commitment;
-        return this;
     }
 }

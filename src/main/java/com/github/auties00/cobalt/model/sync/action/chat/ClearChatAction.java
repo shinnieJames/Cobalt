@@ -54,9 +54,8 @@ public final class ClearChatAction implements SyncAction<ClearChatActionArgs> {
         return Optional.ofNullable(messageRange);
     }
 
-    public ClearChatAction setMessageRange(SyncActionMessageRange messageRange) {
+    public void setMessageRange(SyncActionMessageRange messageRange) {
         this.messageRange = messageRange;
-        return this;
     }
 
 

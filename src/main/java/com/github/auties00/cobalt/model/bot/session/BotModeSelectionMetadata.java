@@ -55,11 +55,9 @@ public final class BotModeSelectionMetadata {
      * Sets the list of AI processing modes the user has selected.
      *
      * @param mode the new list of selected modes, or {@code null}
-     * @return this instance for chaining
      */
-    public BotModeSelectionMetadata setMode(List<BotUserSelectionMode> mode) {
+    public void setMode(List<BotUserSelectionMode> mode) {
         this.mode = mode;
-        return this;
     }
 
     /**

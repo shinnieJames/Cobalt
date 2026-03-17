@@ -740,417 +740,341 @@ public final class BotMetadata {
      * Sets the avatar metadata for the bot persona.
      *
      * @param avatarMetadata the new avatar metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setAvatarMetadata(BotAvatarMetadata avatarMetadata) {
+    public void setAvatarMetadata(BotAvatarMetadata avatarMetadata) {
         this.avatarMetadata = avatarMetadata;
-        return this;
     }
 
     /**
      * Sets the identifier of the bot persona.
      *
      * @param personaId the new persona identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setPersonaId(String personaId) {
+    public void setPersonaId(String personaId) {
         this.personaId = personaId;
-        return this;
     }
 
     /**
      * Sets the plugin metadata for this message.
      *
      * @param pluginMetadata the new plugin metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setPluginMetadata(BotPluginMetadata pluginMetadata) {
+    public void setPluginMetadata(BotPluginMetadata pluginMetadata) {
         this.pluginMetadata = pluginMetadata;
-        return this;
     }
 
     /**
      * Sets the suggested prompt metadata for this message.
      *
      * @param suggestedPromptMetadata the new suggested prompt metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setSuggestedPromptMetadata(BotSuggestedPromptMetadata suggestedPromptMetadata) {
+    public void setSuggestedPromptMetadata(BotSuggestedPromptMetadata suggestedPromptMetadata) {
         this.suggestedPromptMetadata = suggestedPromptMetadata;
-        return this;
     }
 
     /**
      * Sets the JID of the user who invoked the bot.
      *
      * @param invokerJid the new invoker JID, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setInvokerJid(Jid invokerJid) {
+    public void setInvokerJid(Jid invokerJid) {
         this.invokerJid = invokerJid;
-        return this;
     }
 
     /**
      * Sets the bot session metadata.
      *
      * @param sessionMetadata the new session metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setSessionMetadata(BotSessionMetadata sessionMetadata) {
+    public void setSessionMetadata(BotSessionMetadata sessionMetadata) {
         this.sessionMetadata = sessionMetadata;
-        return this;
     }
 
     /**
      * Sets the Meta AI menu metadata.
      *
      * @param memuMetadata the new menu metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setMemuMetadata(BotMemuMetadata memuMetadata) {
+    public void setMemuMetadata(BotMemuMetadata memuMetadata) {
         this.memuMetadata = memuMetadata;
-        return this;
     }
 
     /**
      * Sets the IANA timezone of the user.
      *
      * @param timezone the new timezone, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setTimezone(String timezone) {
+    public void setTimezone(String timezone) {
         this.timezone = timezone;
-        return this;
     }
 
     /**
      * Sets the reminder metadata associated with this message.
      *
      * @param reminderMetadata the new reminder metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setReminderMetadata(BotReminderMetadata reminderMetadata) {
+    public void setReminderMetadata(BotReminderMetadata reminderMetadata) {
         this.reminderMetadata = reminderMetadata;
-        return this;
     }
 
     /**
      * Sets the AI model metadata.
      *
      * @param modelMetadata the new model metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setModelMetadata(BotModelMetadata modelMetadata) {
+    public void setModelMetadata(BotModelMetadata modelMetadata) {
         this.modelMetadata = modelMetadata;
-        return this;
     }
 
     /**
      * Sets the disclaimer text displayed below the bot message.
      *
      * @param messageDisclaimerText the new disclaimer text, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setMessageDisclaimerText(String messageDisclaimerText) {
+    public void setMessageDisclaimerText(String messageDisclaimerText) {
         this.messageDisclaimerText = messageDisclaimerText;
-        return this;
     }
 
     /**
      * Sets the progress indicator metadata.
      *
      * @param progressIndicatorMetadata the new progress indicator metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setProgressIndicatorMetadata(BotProgressIndicatorMetadata progressIndicatorMetadata) {
+    public void setProgressIndicatorMetadata(BotProgressIndicatorMetadata progressIndicatorMetadata) {
         this.progressIndicatorMetadata = progressIndicatorMetadata;
-        return this;
     }
 
     /**
      * Sets the capability metadata advertised by the client.
      *
      * @param capabilityMetadata the new capability metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setCapabilityMetadata(BotCapabilityMetadata capabilityMetadata) {
+    public void setCapabilityMetadata(BotCapabilityMetadata capabilityMetadata) {
         this.capabilityMetadata = capabilityMetadata;
-        return this;
     }
 
     /**
      * Sets the image-generation ("Imagine") metadata.
      *
      * @param imagineMetadata the new imagine metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setImagineMetadata(BotImagineMetadata imagineMetadata) {
+    public void setImagineMetadata(BotImagineMetadata imagineMetadata) {
         this.imagineMetadata = imagineMetadata;
-        return this;
     }
 
     /**
      * Sets the bot memory metadata.
      *
      * @param memoryMetadata the new memory metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setMemoryMetadata(BotMemoryMetadata memoryMetadata) {
+    public void setMemoryMetadata(BotMemoryMetadata memoryMetadata) {
         this.memoryMetadata = memoryMetadata;
-        return this;
     }
 
     /**
      * Sets the rendering metadata for this message.
      *
      * @param renderingMetadata the new rendering metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setRenderingMetadata(BotRenderingMetadata renderingMetadata) {
+    public void setRenderingMetadata(BotRenderingMetadata renderingMetadata) {
         this.renderingMetadata = renderingMetadata;
-        return this;
     }
 
     /**
      * Sets the telemetry metrics metadata.
      *
      * @param botMetricsMetadata the new metrics metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotMetricsMetadata(BotMetricsMetadata botMetricsMetadata) {
+    public void setBotMetricsMetadata(BotMetricsMetadata botMetricsMetadata) {
         this.botMetricsMetadata = botMetricsMetadata;
-        return this;
     }
 
     /**
      * Sets the linked accounts metadata.
      *
      * @param botLinkedAccountsMetadata the new linked accounts metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotLinkedAccountsMetadata(BotLinkedAccountsMetadata botLinkedAccountsMetadata) {
+    public void setBotLinkedAccountsMetadata(BotLinkedAccountsMetadata botLinkedAccountsMetadata) {
         this.botLinkedAccountsMetadata = botLinkedAccountsMetadata;
-        return this;
     }
 
     /**
      * Sets the source attribution metadata for rich responses.
      *
      * @param richResponseSourcesMetadata the new sources metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setRichResponseSourcesMetadata(BotSourcesMetadata richResponseSourcesMetadata) {
+    public void setRichResponseSourcesMetadata(BotSourcesMetadata richResponseSourcesMetadata) {
         this.richResponseSourcesMetadata = richResponseSourcesMetadata;
-        return this;
     }
 
     /**
      * Sets the opaque AI conversation context bytes.
      *
      * @param aiConversationContext the new context bytes, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setAiConversationContext(byte[] aiConversationContext) {
+    public void setAiConversationContext(byte[] aiConversationContext) {
         this.aiConversationContext = aiConversationContext;
-        return this;
     }
 
     /**
      * Sets the promotional message metadata.
      *
      * @param botPromotionMessageMetadata the new promotion metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotPromotionMessageMetadata(BotPromotionMessageMetadata botPromotionMessageMetadata) {
+    public void setBotPromotionMessageMetadata(BotPromotionMessageMetadata botPromotionMessageMetadata) {
         this.botPromotionMessageMetadata = botPromotionMessageMetadata;
-        return this;
     }
 
     /**
      * Sets the AI mode selection metadata.
      *
      * @param botModeSelectionMetadata the new mode selection metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotModeSelectionMetadata(BotModeSelectionMetadata botModeSelectionMetadata) {
+    public void setBotModeSelectionMetadata(BotModeSelectionMetadata botModeSelectionMetadata) {
         this.botModeSelectionMetadata = botModeSelectionMetadata;
-        return this;
     }
 
     /**
      * Sets the usage quota metadata.
      *
      * @param botQuotaMetadata the new quota metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotQuotaMetadata(BotQuotaMetadata botQuotaMetadata) {
+    public void setBotQuotaMetadata(BotQuotaMetadata botQuotaMetadata) {
         this.botQuotaMetadata = botQuotaMetadata;
-        return this;
     }
 
     /**
      * Sets the age-verification collection metadata.
      *
      * @param botAgeCollectionMetadata the new age collection metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotAgeCollectionMetadata(BotAgeCollectionMetadata botAgeCollectionMetadata) {
+    public void setBotAgeCollectionMetadata(BotAgeCollectionMetadata botAgeCollectionMetadata) {
         this.botAgeCollectionMetadata = botAgeCollectionMetadata;
-        return this;
     }
 
     /**
      * Sets the conversation-starter prompt identifier.
      *
      * @param conversationStarterPromptId the new prompt identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setConversationStarterPromptId(String conversationStarterPromptId) {
+    public void setConversationStarterPromptId(String conversationStarterPromptId) {
         this.conversationStarterPromptId = conversationStarterPromptId;
-        return this;
     }
 
     /**
      * Sets the server-assigned bot response identifier.
      *
      * @param botResponseId the new response identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotResponseId(String botResponseId) {
+    public void setBotResponseId(String botResponseId) {
         this.botResponseId = botResponseId;
-        return this;
     }
 
     /**
      * Sets the signature verification metadata.
      *
      * @param verificationMetadata the new verification metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setVerificationMetadata(BotSignatureVerificationMetadata verificationMetadata) {
+    public void setVerificationMetadata(BotSignatureVerificationMetadata verificationMetadata) {
         this.verificationMetadata = verificationMetadata;
-        return this;
     }
 
     /**
      * Sets the unified response mutation data.
      *
      * @param unifiedResponseMutation the new mutation, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setUnifiedResponseMutation(BotUnifiedResponseMutation unifiedResponseMutation) {
+    public void setUnifiedResponseMutation(BotUnifiedResponseMutation unifiedResponseMutation) {
         this.unifiedResponseMutation = unifiedResponseMutation;
-        return this;
     }
 
     /**
      * Sets the message origin metadata.
      *
      * @param botMessageOriginMetadata the new origin metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotMessageOriginMetadata(BotMessageOriginMetadata botMessageOriginMetadata) {
+    public void setBotMessageOriginMetadata(BotMessageOriginMetadata botMessageOriginMetadata) {
         this.botMessageOriginMetadata = botMessageOriginMetadata;
-        return this;
     }
 
     /**
      * Sets the in-thread survey metadata.
      *
      * @param inThreadSurveyMetadata the new survey metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setInThreadSurveyMetadata(InThreadSurveyMetadata inThreadSurveyMetadata) {
+    public void setInThreadSurveyMetadata(InThreadSurveyMetadata inThreadSurveyMetadata) {
         this.inThreadSurveyMetadata = inThreadSurveyMetadata;
-        return this;
     }
 
     /**
      * Sets the AI thread information for this message.
      *
      * @param botThreadInfo the new thread info, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotThreadInfo(AIThreadInfo botThreadInfo) {
+    public void setBotThreadInfo(AIThreadInfo botThreadInfo) {
         this.botThreadInfo = botThreadInfo;
-        return this;
     }
 
     /**
      * Sets the response-regeneration metadata.
      *
      * @param regenerateMetadata the new regeneration metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setRegenerateMetadata(AIRegenerateMetadata regenerateMetadata) {
+    public void setRegenerateMetadata(AIRegenerateMetadata regenerateMetadata) {
         this.regenerateMetadata = regenerateMetadata;
-        return this;
     }
 
     /**
      * Sets the session transparency metadata.
      *
      * @param sessionTransparencyMetadata the new transparency metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setSessionTransparencyMetadata(SessionTransparencyMetadata sessionTransparencyMetadata) {
+    public void setSessionTransparencyMetadata(SessionTransparencyMetadata sessionTransparencyMetadata) {
         this.sessionTransparencyMetadata = sessionTransparencyMetadata;
-        return this;
     }
 
     /**
      * Sets the document message metadata.
      *
      * @param botDocumentMessageMetadata the new document metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotDocumentMessageMetadata(BotDocumentMessageMetadata botDocumentMessageMetadata) {
+    public void setBotDocumentMessageMetadata(BotDocumentMessageMetadata botDocumentMessageMetadata) {
         this.botDocumentMessageMetadata = botDocumentMessageMetadata;
-        return this;
     }
 
     /**
      * Sets the group context metadata.
      *
      * @param botGroupMetadata the new group metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotGroupMetadata(BotGroupMetadata botGroupMetadata) {
+    public void setBotGroupMetadata(BotGroupMetadata botGroupMetadata) {
         this.botGroupMetadata = botGroupMetadata;
-        return this;
     }
 
     /**
      * Sets the rendering configuration metadata.
      *
      * @param botRenderingConfigMetadata the new rendering config, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotRenderingConfigMetadata(BotRenderingConfigMetadata botRenderingConfigMetadata) {
+    public void setBotRenderingConfigMetadata(BotRenderingConfigMetadata botRenderingConfigMetadata) {
         this.botRenderingConfigMetadata = botRenderingConfigMetadata;
-        return this;
     }
 
     /**
      * Sets the infrastructure diagnostics data.
      *
      * @param botInfrastructureDiagnostics the new diagnostics, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setBotInfrastructureDiagnostics(BotInfrastructureDiagnostics botInfrastructureDiagnostics) {
+    public void setBotInfrastructureDiagnostics(BotInfrastructureDiagnostics botInfrastructureDiagnostics) {
         this.botInfrastructureDiagnostics = botInfrastructureDiagnostics;
-        return this;
     }
 
     /**
      * Sets the opaque internal metadata bytes.
      *
      * @param internalMetadata the new internal metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMetadata setInternalMetadata(byte[] internalMetadata) {
+    public void setInternalMetadata(byte[] internalMetadata) {
         this.internalMetadata = internalMetadata;
-        return this;
     }
 }

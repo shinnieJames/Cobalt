@@ -28,14 +28,12 @@ public final class CertChain {
         return Optional.ofNullable(intermediate);
     }
 
-    public CertChain setLeaf(NoiseCertificate leaf) {
+    public void setLeaf(NoiseCertificate leaf) {
         this.leaf = leaf;
-        return this;
     }
 
-    public CertChain setIntermediate(NoiseCertificate intermediate) {
+    public void setIntermediate(NoiseCertificate intermediate) {
         this.intermediate = intermediate;
-        return this;
     }
 
     @ProtobufMessage(name = "CertChain.NoiseCertificate")
@@ -60,15 +58,13 @@ public final class CertChain {
             return Optional.ofNullable(signature);
         }
 
-        public NoiseCertificate setDetails(byte[] details) {
+        public void setDetails(byte[] details) {
             this.details = details;
-            return this;
-        }
+    }
 
-        public NoiseCertificate setSignature(byte[] signature) {
+        public void setSignature(byte[] signature) {
             this.signature = signature;
-            return this;
-        }
+    }
 
         @ProtobufMessage(name = "CertChain.NoiseCertificate.Details")
         public static final class Details {
@@ -116,30 +112,25 @@ public final class CertChain {
                 return notAfter == null ? OptionalLong.empty() : OptionalLong.of(notAfter);
             }
 
-            public Details setSerial(Integer serial) {
+            public void setSerial(Integer serial) {
                 this.serial = serial;
-                return this;
-            }
+    }
 
-            public Details setsuerSerial(Integer issuerSerial) {
+            public void setsuerSerial(Integer issuerSerial) {
                 this.issuerSerial = issuerSerial;
-                return this;
-            }
+    }
 
-            public Details setKey(byte[] key) {
+            public void setKey(byte[] key) {
                 this.key = key;
-                return this;
-            }
+    }
 
-            public Details setNotBefore(Long notBefore) {
+            public void setNotBefore(Long notBefore) {
                 this.notBefore = notBefore;
-                return this;
-            }
+    }
 
-            public Details setNotAfter(Long notAfter) {
+            public void setNotAfter(Long notAfter) {
                 this.notAfter = notAfter;
-                return this;
-            }
+    }
         }
     }
 }

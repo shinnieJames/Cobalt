@@ -29,13 +29,11 @@ public final class MessageHistoryNotice implements ContextualMessage {
         return Optional.ofNullable(messageHistoryMetadata);
     }
 
-    public MessageHistoryNotice setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public MessageHistoryNotice setMessageHistoryMetadata(MessageHistoryMetadata messageHistoryMetadata) {
+    public void setMessageHistoryMetadata(MessageHistoryMetadata messageHistoryMetadata) {
         this.messageHistoryMetadata = messageHistoryMetadata;
-        return this;
     }
 }

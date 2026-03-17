@@ -16,19 +16,19 @@ import java.util.OptionalLong;
 @ProtobufMessage(name = "Message.HistorySyncNotification")
 public final class HistorySyncNotification implements Message, MediaProvider {
     @ProtobufProperty(index = 1, type = ProtobufType.BYTES)
-    byte[] fileSha256;
+    byte[] mediaSha256;
 
     @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
-    Long fileLength;
+    Long mediaSize;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
     byte[] mediaKey;
 
     @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
     @ProtobufProperty(index = 6, type = ProtobufType.ENUM)
     HistorySyncType syncType;
@@ -61,12 +61,12 @@ public final class HistorySyncNotification implements Message, MediaProvider {
     HistorySyncMessageAccessStatus messageAccessStatus;
 
 
-    HistorySyncNotification(byte[] fileSha256, Long fileLength, byte[] mediaKey, byte[] fileEncSha256, String directPath, HistorySyncType syncType, Integer chunkOrder, String originalMessageId, Integer progress, Instant oldestMsgInChunkTimestampSec, byte[] initialHistBootstrapInlinePayload, String peerDataRequestSessionId, FullHistorySyncOnDemandRequestMetadata fullHistorySyncOnDemandRequestMetadata, String encHandle, HistorySyncMessageAccessStatus messageAccessStatus) {
-        this.fileSha256 = fileSha256;
-        this.fileLength = fileLength;
+    HistorySyncNotification(byte[] mediaSha256, Long mediaSize, byte[] mediaKey, byte[] mediaEncryptedSha256, String mediaDirectPath, HistorySyncType syncType, Integer chunkOrder, String originalMessageId, Integer progress, Instant oldestMsgInChunkTimestampSec, byte[] initialHistBootstrapInlinePayload, String peerDataRequestSessionId, FullHistorySyncOnDemandRequestMetadata fullHistorySyncOnDemandRequestMetadata, String encHandle, HistorySyncMessageAccessStatus messageAccessStatus) {
+        this.mediaSha256 = mediaSha256;
+        this.mediaSize = mediaSize;
         this.mediaKey = mediaKey;
-        this.fileEncSha256 = fileEncSha256;
-        this.directPath = directPath;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+        this.mediaDirectPath = mediaDirectPath;
         this.syncType = syncType;
         this.chunkOrder = chunkOrder;
         this.originalMessageId = originalMessageId;
@@ -80,31 +80,21 @@ public final class HistorySyncNotification implements Message, MediaProvider {
     }
 
     public Optional<byte[]> fileSha256() {
-        return Optional.ofNullable(fileSha256);
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(mediaSha256);
     }
 
     public OptionalLong fileLength() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     @Override
-    public Optional<String> mediaUrl() {
-        return Optional.empty();
-    }
-
-    @Override
-    public void setMediaUrl(String mediaUrl) {
-
-    }
-
-    @Override
-    public Optional<String> mediaDirectPath() {
-        return Optional.ofNullable(directPath);
-    }
-
-    @Override
-    public void setMediaDirectPath(String mediaDirectPath) {
-        this.directPath = mediaDirectPath;
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     public Optional<byte[]> mediaKey() {
@@ -112,11 +102,21 @@ public final class HistorySyncNotification implements Message, MediaProvider {
     }
 
     public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaEncryptedSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
     }
 
     public Optional<HistorySyncType> syncType() {
@@ -159,14 +159,24 @@ public final class HistorySyncNotification implements Message, MediaProvider {
         return Optional.ofNullable(messageAccessStatus);
     }
 
-    public HistorySyncNotification setFileSha256(byte[] fileSha256) {
-        this.fileSha256 = fileSha256;
-        return this;
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.empty();
     }
 
-    public HistorySyncNotification setFileLength(Long fileLength) {
-        this.fileLength = fileLength;
-        return this;
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.HISTORY_SYNC;
+    }
+
+    @Override
+    public void setMediaSha256(byte[] mediaSha256) {
+        this.mediaSha256 = mediaSha256;
+    }
+
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
     }
 
     @Override
@@ -175,102 +185,60 @@ public final class HistorySyncNotification implements Message, MediaProvider {
     }
 
     @Override
-    public void setMediaKeyTimestamp(Long timestamp) {
-
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
     }
 
     @Override
-    public Optional<byte[]> mediaSha256() {
-        return Optional.ofNullable(fileSha256);
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    @Override
-    public void setMediaSha256(byte[] bytes) {
-        this.fileSha256 = bytes;
-    }
-
-    @Override
-    public Optional<byte[]> mediaEncryptedSha256() {
-        return Optional.ofNullable(fileEncSha256);
-    }
-
-    @Override
-    public void setMediaEncryptedSha256(byte[] bytes) {
-        this.fileEncSha256 = bytes;
-    }
-
-    @Override
-    public OptionalLong mediaSize() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
-    }
-
-    @Override
-    public void setMediaSize(long mediaSize) {
-        this.fileLength = mediaSize;
-    }
-
-    @Override
-    public MediaPath mediaPath() {
-        return MediaPath.HISTORY_SYNC;
-    }
-
-    public HistorySyncNotification setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
-    }
-
-    public HistorySyncNotification setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
-    }
-
-    public HistorySyncNotification setSyncType(HistorySyncType syncType) {
+    public void setSyncType(HistorySyncType syncType) {
         this.syncType = syncType;
-        return this;
     }
 
-    public HistorySyncNotification setChunkOrder(Integer chunkOrder) {
+    public void setChunkOrder(Integer chunkOrder) {
         this.chunkOrder = chunkOrder;
-        return this;
     }
 
-    public HistorySyncNotification setOriginalMessageId(String originalMessageId) {
+    public void setOriginalMessageId(String originalMessageId) {
         this.originalMessageId = originalMessageId;
-        return this;
     }
 
-    public HistorySyncNotification setProgress(Integer progress) {
+    public void setProgress(Integer progress) {
         this.progress = progress;
-        return this;
     }
 
-    public HistorySyncNotification setOldestMsgInChunkTimestampSec(Instant oldestMsgInChunkTimestampSec) {
+    public void setOldestMsgInChunkTimestampSec(Instant oldestMsgInChunkTimestampSec) {
         this.oldestMsgInChunkTimestampSec = oldestMsgInChunkTimestampSec;
-        return this;
     }
 
-    public HistorySyncNotification setInitialHistBootstrapInlinePayload(byte[] initialHistBootstrapInlinePayload) {
+    public void setInitialHistBootstrapInlinePayload(byte[] initialHistBootstrapInlinePayload) {
         this.initialHistBootstrapInlinePayload = initialHistBootstrapInlinePayload;
-        return this;
     }
 
-    public HistorySyncNotification setPeerDataRequestSessionId(String peerDataRequestSessionId) {
+    public void setPeerDataRequestSessionId(String peerDataRequestSessionId) {
         this.peerDataRequestSessionId = peerDataRequestSessionId;
-        return this;
     }
 
-    public HistorySyncNotification setFullHistorySyncOnDemandRequestMetadata(FullHistorySyncOnDemandRequestMetadata fullHistorySyncOnDemandRequestMetadata) {
+    public void setFullHistorySyncOnDemandRequestMetadata(FullHistorySyncOnDemandRequestMetadata fullHistorySyncOnDemandRequestMetadata) {
         this.fullHistorySyncOnDemandRequestMetadata = fullHistorySyncOnDemandRequestMetadata;
-        return this;
     }
 
-    public HistorySyncNotification setEncHandle(String encHandle) {
+    public void setEncHandle(String encHandle) {
         this.encHandle = encHandle;
-        return this;
     }
 
-    public HistorySyncNotification setMessageAccessStatus(HistorySyncMessageAccessStatus messageAccessStatus) {
+    public void setMessageAccessStatus(HistorySyncMessageAccessStatus messageAccessStatus) {
         this.messageAccessStatus = messageAccessStatus;
-        return this;
+    }
+
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+    }
+
+    @Override
+    public void setMediaKeyTimestamp(Instant timestamp) {
     }
 }

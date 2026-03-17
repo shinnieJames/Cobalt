@@ -48,9 +48,8 @@ public final class UsernameChatStartModeAction implements SyncAction<SyncActionE
         return Optional.ofNullable(chatStartMode);
     }
 
-    public UsernameChatStartModeAction setChatStartMode(ChatStartMode chatStartMode) {
+    public void setChatStartMode(ChatStartMode chatStartMode) {
         this.chatStartMode = chatStartMode;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.UsernameChatStartModeAction.ChatStartMode")

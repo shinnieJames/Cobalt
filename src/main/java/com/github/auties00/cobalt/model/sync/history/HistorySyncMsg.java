@@ -29,13 +29,11 @@ public final class HistorySyncMsg {
         return msgOrderId == null ? OptionalLong.empty() : OptionalLong.of(msgOrderId);
     }
 
-    public HistorySyncMsg setMessage(ChatMessageInfo message) {
+    public void setMessage(ChatMessageInfo message) {
         this.message = message;
-        return this;
     }
 
-    public HistorySyncMsg setMsgOrderId(Long msgOrderId) {
+    public void setMsgOrderId(Long msgOrderId) {
         this.msgOrderId = msgOrderId;
-        return this;
     }
 }

@@ -1,14 +1,11 @@
 package com.github.auties00.cobalt.message.send.stanza;
 
-import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
@@ -50,7 +47,7 @@ public final class CtwaAttributionStanza {
      */
     public Node build(Jid chatJid) {
         // WAWebExternalCtxConfig.isCtxLoggingEnabled
-        var isCtxLoggingEnabled = abPropsService.getBool(ABProp.CTWA_CONTEXT_LOGGING_ENABLED);
+        var isCtxLoggingEnabled = abPropsService.getBool(ABProp.EXTERNAL_CTX_AUTHORISE_WA_CHAT);
         if (!isCtxLoggingEnabled) {
             return null;
         }
@@ -60,25 +57,8 @@ public final class CtwaAttributionStanza {
             return null;
         }
 
-        var entryPoint = chat.ctwaEntryPoint().orElse(null);
-        if (entryPoint == null) {
-            return null;
-        }
-
-        // WAWebSendMsgCtwaAttributionNode: build JSON payload
-        // {lt: "WEB_" + deepLinkType, s?: 0, p?: partnerName}
-        var json = new JSONObject();
-        json.put("lt", "WEB_" + entryPoint.deepLinkType());
-        if (!entryPoint.authSuccess()) {
-            json.put("s", 0);
-        }
-        entryPoint.partnerName().ifPresent(name -> json.put("p", name));
-
-        var payload = json.toJSONString().getBytes(StandardCharsets.UTF_8);
-
-        return new NodeBuilder()
-                .description("ctwa_attribution")
-                .content(payload)
-                .build();
+        // TODO: Chat has no ctwa entry point
+        //       We don't want to add non-protobuf entries to chat, so figure out a way to fix this
+        return null;
     }
 }

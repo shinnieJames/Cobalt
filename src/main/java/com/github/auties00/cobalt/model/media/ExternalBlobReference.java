@@ -2,81 +2,84 @@ package com.github.auties00.cobalt.model.media;
 
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
+
+import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalLong;
 
-/**
- * A reference to an externally stored encrypted blob used during application
- * state synchronization.
- *
- * <p>When a synchronization snapshot or patch exceeds the inline size threshold,
- * the server stores the mutation data as an encrypted blob on the media CDN and
- * provides this reference so the client can download and decrypt it. The client
- * uses the {@code mediaKey} together with the {@code directPath} (or
- * {@code handle}) to fetch the blob, then verifies integrity against
- * {@code fileSha256} (plaintext) and {@code fileEncSha256} (ciphertext) before
- * processing the contained mutations.
- *
- * <p>This message is defined in {@code WAWebProtobufsServerSync.pb} and appears
- * inside {@code SyncdSnapshot} and {@code SyncdPatch} structures.
- */
 @ProtobufMessage(name = "ExternalBlobReference")
 public final class ExternalBlobReference implements MediaProvider {
-    /**
-     * The symmetric encryption key used to decrypt the downloaded blob.
-     */
     @ProtobufProperty(index = 1, type = ProtobufType.BYTES)
     byte[] mediaKey;
 
-    /**
-     * The CDN direct path from which the encrypted blob can be fetched.
-     */
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
-    /**
-     * An opaque server-assigned handle that identifies this blob on the CDN.
-     */
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
     String handle;
 
-    /**
-     * The size of the encrypted blob in bytes.
-     */
     @ProtobufProperty(index = 4, type = ProtobufType.UINT64)
-    Long fileSizeBytes;
+    Long mediaSize;
 
-    /**
-     * The SHA-256 digest of the plaintext (decrypted) blob content, used for
-     * integrity verification after decryption.
-     */
     @ProtobufProperty(index = 5, type = ProtobufType.BYTES)
-    byte[] fileSha256;
+    byte[] mediaSha256;
 
-    /**
-     * The SHA-256 digest of the encrypted blob content, used for integrity
-     * verification before decryption.
-     */
     @ProtobufProperty(index = 6, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
-    /**
-     * Constructs a new {@code ExternalBlobReference} with the given field values.
-     *
-     * @param mediaKey      the symmetric encryption key for the blob
-     * @param directPath    the CDN direct path to the blob
-     * @param handle        the opaque server-assigned blob handle
-     * @param fileSizeBytes the size of the encrypted blob in bytes
-     * @param fileSha256    the SHA-256 digest of the plaintext blob
-     * @param fileEncSha256 the SHA-256 digest of the encrypted blob
-     */
-    ExternalBlobReference(byte[] mediaKey, String directPath, String handle, Long fileSizeBytes, byte[] fileSha256, byte[] fileEncSha256) {
+
+    ExternalBlobReference(byte[] mediaKey, String mediaDirectPath, String handle, Long mediaSize, byte[] mediaSha256, byte[] mediaEncryptedSha256) {
         this.mediaKey = mediaKey;
-        this.directPath = directPath;
+        this.mediaDirectPath = mediaDirectPath;
         this.handle = handle;
-        this.fileSizeBytes = fileSizeBytes;
-        this.fileSha256 = fileSha256;
-        this.fileEncSha256 = fileEncSha256;
+        this.mediaSize = mediaSize;
+        this.mediaSha256 = mediaSha256;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+    }
+
+    @Override
+    public Optional<byte[]> mediaKey() {
+        return Optional.ofNullable(mediaKey);
+    }
+
+    public Optional<String> directPath() {
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    public Optional<String> handle() {
+        return Optional.ofNullable(handle);
+    }
+
+    public OptionalLong fileSizeBytes() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    public Optional<byte[]> fileSha256() {
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    public Optional<byte[]> fileEncSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     @Override
@@ -85,177 +88,44 @@ public final class ExternalBlobReference implements MediaProvider {
     }
 
     @Override
-    public void setMediaUrl(String mediaUrl) {
-
+    public MediaPath mediaPath() {
+        return MediaPath.APP_STATE;
     }
 
-    @Override
-    public Optional<String> mediaDirectPath() {
-        return Optional.ofNullable(directPath);
-    }
-
-    @Override
-    public void setMediaDirectPath(String mediaDirectPath) {
-        this.directPath = mediaDirectPath;
-    }
-
-    /**
-     * Returns the symmetric encryption key used to decrypt the downloaded blob.
-     *
-     * @return an {@link Optional} containing the media key, or empty if not set
-     */
-    @Override
-    public Optional<byte[]> mediaKey() {
-        return Optional.ofNullable(mediaKey);
-    }
-
-    /**
-     * Returns the CDN direct path from which the encrypted blob can be fetched.
-     *
-     * @return an {@link Optional} containing the direct path, or empty if not set
-     */
-    public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
-    }
-
-    /**
-     * Returns the opaque server-assigned handle that identifies this blob on the CDN.
-     *
-     * @return an {@link Optional} containing the handle, or empty if not set
-     */
-    public Optional<String> handle() {
-        return Optional.ofNullable(handle);
-    }
-
-    /**
-     * Returns the size of the encrypted blob in bytes.
-     *
-     * @return an {@link OptionalLong} containing the file size, or empty if not set
-     */
-    public OptionalLong fileSizeBytes() {
-        return fileSizeBytes == null ? OptionalLong.empty() : OptionalLong.of(fileSizeBytes);
-    }
-
-    /**
-     * Returns the SHA-256 digest of the plaintext blob content.
-     *
-     * @return an {@link Optional} containing the SHA-256 hash, or empty if not set
-     */
-    public Optional<byte[]> fileSha256() {
-        return Optional.ofNullable(fileSha256);
-    }
-
-    /**
-     * Returns the SHA-256 digest of the encrypted blob content.
-     *
-     * @return an {@link Optional} containing the encrypted SHA-256 hash, or empty if not set
-     */
-    public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
-    }
-
-    /**
-     * Sets the symmetric encryption key for the blob.
-     *
-     * @param mediaKey the encryption key
-     */
     @Override
     public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
     }
 
     @Override
-    public void setMediaKeyTimestamp(Long timestamp) {
-
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    @Override
-    public Optional<byte[]> mediaSha256() {
-        return Optional.ofNullable(fileSha256);
-    }
-
-    @Override
-    public void setMediaSha256(byte[] bytes) {
-        this.fileSha256 = bytes;
-    }
-
-    @Override
-    public Optional<byte[]> mediaEncryptedSha256() {
-        return Optional.ofNullable(fileEncSha256);
-    }
-
-    @Override
-    public void setMediaEncryptedSha256(byte[] bytes) {
-        this.fileEncSha256 = bytes;
-    }
-
-    @Override
-    public OptionalLong mediaSize() {
-        return fileSizeBytes == null ? OptionalLong.empty() : OptionalLong.of(fileSizeBytes);
+    public void setHandle(String handle) {
+        this.handle = handle;
     }
 
     @Override
     public void setMediaSize(long mediaSize) {
-        this.fileSizeBytes = mediaSize;
+        this.mediaSize = mediaSize;
     }
 
     @Override
-    public MediaPath mediaPath() {
-        return MediaPath.APP_STATE;
+    public void setMediaSha256(byte[] mediaSha256) {
+        this.mediaSha256 = mediaSha256;
     }
 
-    /**
-     * Sets the CDN direct path to the blob.
-     *
-     * @param directPath the direct path
-     * @return this instance for chaining
-     */
-    public ExternalBlobReference setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
     }
 
-    /**
-     * Sets the opaque server-assigned blob handle.
-     *
-     * @param handle the blob handle
-     * @return this instance for chaining
-     */
-    public ExternalBlobReference setHandle(String handle) {
-        this.handle = handle;
-        return this;
+    @Override
+    public void setMediaUrl(String mediaUrl) {
     }
 
-    /**
-     * Sets the size of the encrypted blob in bytes.
-     *
-     * @param fileSizeBytes the file size in bytes
-     * @return this instance for chaining
-     */
-    public ExternalBlobReference setFileSizeBytes(Long fileSizeBytes) {
-        this.fileSizeBytes = fileSizeBytes;
-        return this;
-    }
-
-    /**
-     * Sets the SHA-256 digest of the plaintext blob content.
-     *
-     * @param fileSha256 the plaintext SHA-256 hash
-     * @return this instance for chaining
-     */
-    public ExternalBlobReference setFileSha256(byte[] fileSha256) {
-        this.fileSha256 = fileSha256;
-        return this;
-    }
-
-    /**
-     * Sets the SHA-256 digest of the encrypted blob content.
-     *
-     * @param fileEncSha256 the encrypted SHA-256 hash
-     * @return this instance for chaining
-     */
-    public ExternalBlobReference setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
+    @Override
+    public void setMediaKeyTimestamp(Instant timestamp) {
     }
 }

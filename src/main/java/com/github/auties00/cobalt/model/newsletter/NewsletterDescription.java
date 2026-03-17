@@ -71,33 +71,27 @@ public final class NewsletterDescription {
      * Sets the description identifier.
      *
      * @param id the description id
-     * @return this instance for chaining
      */
-    public NewsletterDescription setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
      * Sets the description text.
      *
      * @param text the description text
-     * @return this instance for chaining
      */
-    public NewsletterDescription setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
     /**
      * Sets the timestamp of the last description update.
      *
      * @param updateTimestamp the update timestamp
-     * @return this instance for chaining
      */
-    public NewsletterDescription setUpdateTimestamp(Instant updateTimestamp) {
+    public void setUpdateTimestamp(Instant updateTimestamp) {
         this.updateTimestamp = updateTimestamp;
-        return this;
     }
 
     @Override

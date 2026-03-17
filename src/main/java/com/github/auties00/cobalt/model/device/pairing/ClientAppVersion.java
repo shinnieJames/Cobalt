@@ -120,28 +120,23 @@ public final class ClientAppVersion {
         return quinary == null ? OptionalInt.empty() : OptionalInt.of(quinary);
     }
 
-    public ClientAppVersion setPrimary(Integer primary) {
+    public void setPrimary(Integer primary) {
         this.primary = primary;
-        return this;
     }
 
-    public ClientAppVersion setSecondary(Integer secondary) {
+    public void setSecondary(Integer secondary) {
         this.secondary = secondary;
-        return this;
     }
 
-    public ClientAppVersion setTertiary(Integer tertiary) {
+    public void setTertiary(Integer tertiary) {
         this.tertiary = tertiary;
-        return this;
     }
 
-    public ClientAppVersion setQuaternary(Integer quaternary) {
+    public void setQuaternary(Integer quaternary) {
         this.quaternary = quaternary;
-        return this;
     }
 
-    public ClientAppVersion setQuinary(Integer quinary) {
+    public void setQuinary(Integer quinary) {
         this.quinary = quinary;
-        return this;
     }
 }

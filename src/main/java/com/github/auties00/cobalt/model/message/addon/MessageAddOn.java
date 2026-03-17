@@ -83,44 +83,36 @@ public final class MessageAddOn {
         return Optional.ofNullable(legacyMessage);
     }
 
-    public MessageAddOn setMessageAddOnType(MessageAddOnType messageAddOnType) {
+    public void setMessageAddOnType(MessageAddOnType messageAddOnType) {
         this.messageAddOnType = messageAddOnType;
-        return this;
     }
 
-    public MessageAddOn setMessageAddOn(MessageContainer messageContainerAddOn) {
+    public void setMessageAddOn(MessageContainer messageContainerAddOn) {
         this.messageContainerAddOn = messageContainerAddOn;
-        return this;
     }
 
-    public MessageAddOn setSenderTimestampMs(Instant senderTimestampMs) {
+    public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
-        return this;
     }
 
-    public MessageAddOn setServerTimestampMs(Instant serverTimestampMs) {
+    public void setServerTimestampMs(Instant serverTimestampMs) {
         this.serverTimestampMs = serverTimestampMs;
-        return this;
     }
 
-    public MessageAddOn setStatus(MessageStatus status) {
+    public void setStatus(MessageStatus status) {
         this.status = status;
-        return this;
     }
 
-    public MessageAddOn setAddOnContextInfo(MessageAddOnContextInfo addOnContextInfo) {
+    public void setAddOnContextInfo(MessageAddOnContextInfo addOnContextInfo) {
         this.addOnContextInfo = addOnContextInfo;
-        return this;
     }
 
-    public MessageAddOn setMessageAddOnKey(MessageKey messageAddOnKey) {
+    public void setMessageAddOnKey(MessageKey messageAddOnKey) {
         this.messageAddOnKey = messageAddOnKey;
-        return this;
     }
 
-    public MessageAddOn setLegacyMessage(LegacyMessageContainer legacyMessage) {
+    public void setLegacyMessage(LegacyMessageContainer legacyMessage) {
         this.legacyMessage = legacyMessage;
-        return this;
     }
 
     @ProtobufEnum(name = "MessageAddOn.MessageAddOnType")

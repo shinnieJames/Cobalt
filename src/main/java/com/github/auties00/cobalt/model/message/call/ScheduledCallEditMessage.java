@@ -29,14 +29,12 @@ public final class ScheduledCallEditMessage implements Message {
         return Optional.ofNullable(editType);
     }
 
-    public ScheduledCallEditMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public ScheduledCallEditMessage setEditType(EditType editType) {
+    public void setEditType(EditType editType) {
         this.editType = editType;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ScheduledCallEditMessage.EditType")

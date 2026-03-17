@@ -43,23 +43,19 @@ public final class SyncActionData {
         return version == null ? OptionalInt.empty() : OptionalInt.of(version);
     }
 
-    public SyncActionData setIndex(byte[] index) {
+    public void setIndex(byte[] index) {
         this.index = index;
-        return this;
     }
 
-    public SyncActionData setValue(SyncActionValue value) {
+    public void setValue(SyncActionValue value) {
         this.value = value;
-        return this;
     }
 
-    public SyncActionData setPadding(byte[] padding) {
+    public void setPadding(byte[] padding) {
         this.padding = padding;
-        return this;
     }
 
-    public SyncActionData setVersion(Integer version) {
+    public void setVersion(Integer version) {
         this.version = version;
-        return this;
     }
 }

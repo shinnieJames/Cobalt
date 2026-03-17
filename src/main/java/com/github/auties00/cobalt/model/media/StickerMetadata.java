@@ -288,153 +288,125 @@ public final class StickerMetadata {
      * Sets the CDN URL for the sticker file.
      *
      * @param url the CDN URL
-     * @return this instance for chaining
      */
-    public StickerMetadata setUrl(String url) {
+    public void setUrl(String url) {
         this.url = url;
-        return this;
     }
 
     /**
      * Sets the SHA-256 digest of the plaintext sticker file.
      *
      * @param fileSha256 the plaintext SHA-256 hash
-     * @return this instance for chaining
      */
-    public StickerMetadata setFileSha256(byte[] fileSha256) {
+    public void setFileSha256(byte[] fileSha256) {
         this.fileSha256 = fileSha256;
-        return this;
     }
 
     /**
      * Sets the SHA-256 digest of the encrypted sticker file.
      *
      * @param fileEncSha256 the encrypted SHA-256 hash
-     * @return this instance for chaining
      */
-    public StickerMetadata setFileEncSha256(byte[] fileEncSha256) {
+    public void setFileEncSha256(byte[] fileEncSha256) {
         this.fileEncSha256 = fileEncSha256;
-        return this;
     }
 
     /**
      * Sets the symmetric encryption key for the sticker file.
      *
      * @param mediaKey the encryption key
-     * @return this instance for chaining
      */
-    public StickerMetadata setMediaKey(byte[] mediaKey) {
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
     /**
      * Sets the MIME type of the sticker file.
      *
      * @param mimetype the MIME type
-     * @return this instance for chaining
      */
-    public StickerMetadata setMimetype(String mimetype) {
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
     /**
      * Sets the height of the sticker image in pixels.
      *
      * @param height the image height
-     * @return this instance for chaining
      */
-    public StickerMetadata setHeight(Integer height) {
+    public void setHeight(Integer height) {
         this.height = height;
-        return this;
     }
 
     /**
      * Sets the width of the sticker image in pixels.
      *
      * @param width the image width
-     * @return this instance for chaining
      */
-    public StickerMetadata setWidth(Integer width) {
+    public void setWidth(Integer width) {
         this.width = width;
-        return this;
     }
 
     /**
      * Sets the CDN direct path for the sticker file.
      *
      * @param directPath the direct path
-     * @return this instance for chaining
      */
-    public StickerMetadata setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
     /**
      * Sets the total file length in bytes.
      *
      * @param fileLength the file length
-     * @return this instance for chaining
      */
-    public StickerMetadata setFileLength(Long fileLength) {
+    public void setFileLength(Long fileLength) {
         this.fileLength = fileLength;
-        return this;
     }
 
     /**
      * Sets the ranking weight for sticker sorting.
      *
      * @param weight the ranking weight
-     * @return this instance for chaining
      */
-    public StickerMetadata setWeight(Float weight) {
+    public void setWeight(Float weight) {
         this.weight = weight;
-        return this;
     }
 
     /**
      * Sets the timestamp of when this sticker was last sent.
      *
      * @param lastStickerSentTs the last-sent instant, or {@code null} to clear
-     * @return this instance for chaining
      */
-    public StickerMetadata setLastStickerSentTs(Instant lastStickerSentTs) {
+    public void setLastStickerSentTs(Instant lastStickerSentTs) {
         this.lastStickerSentTs = lastStickerSentTs == null ? null : lastStickerSentTs.getEpochSecond();
-        return this;
     }
 
     /**
      * Sets whether this sticker uses the Lottie animation format.
      *
      * @param isLottie {@code true} for Lottie animated stickers
-     * @return this instance for chaining
      */
-    public StickerMetadata setLottie(Boolean isLottie) {
+    public void setLottie(Boolean isLottie) {
         this.isLottie = isLottie;
-        return this;
     }
 
     /**
      * Sets the perceptual hash of the sticker image.
      *
      * @param imageHash the image hash
-     * @return this instance for chaining
      */
-    public StickerMetadata setImageHash(String imageHash) {
+    public void setImageHash(String imageHash) {
         this.imageHash = imageHash;
-        return this;
     }
 
     /**
      * Sets whether this sticker is a personalized avatar sticker.
      *
      * @param isAvatarSticker {@code true} for avatar stickers
-     * @return this instance for chaining
      */
-    public StickerMetadata setAvatarSticker(Boolean isAvatarSticker) {
+    public void setAvatarSticker(Boolean isAvatarSticker) {
         this.isAvatarSticker = isAvatarSticker;
-        return this;
     }
 }

@@ -20,167 +20,167 @@ import java.util.*;
 @ProtobufMessage(name = "Conversation")
 public non-sealed abstract class Chat implements JidProvider {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    protected Jid jid;
+    private Jid jid;
 
     // Messages are not deserialized by defualt because it's up to the implementation class to decide how to do so
     // @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    // protected ... messages;
+    // private ... messages;
 
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
-    protected Jid newJid;
+    private Jid newJid;
 
     @ProtobufProperty(index = 4, type = ProtobufType.STRING)
-    protected Jid oldJid;
+    private Jid oldJid;
 
     @ProtobufProperty(index = 5, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
-    protected Instant lastMsgTimestamp;
+    private Instant lastMsgTimestamp;
 
     @ProtobufProperty(index = 6, type = ProtobufType.UINT32)
-    protected Integer unreadCount;
+    private Integer unreadCount;
 
     @ProtobufProperty(index = 7, type = ProtobufType.BOOL)
-    protected Boolean readOnly;
+    private Boolean readOnly;
 
     @ProtobufProperty(index = 8, type = ProtobufType.BOOL)
-    protected Boolean endOfHistoryTransfer;
+    private Boolean endOfHistoryTransfer;
 
     @ProtobufProperty(index = 9, type = ProtobufType.UINT32)
-    protected ChatEphemeralTimer ephemeralExpiration;
+    private ChatEphemeralTimer ephemeralExpiration;
 
     @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
-    protected Instant ephemeralSettingTimestamp;
+    private Instant ephemeralSettingTimestamp;
 
     @ProtobufProperty(index = 11, type = ProtobufType.ENUM)
-    protected EndOfHistoryTransferType endOfHistoryTransferType;
+    private EndOfHistoryTransferType endOfHistoryTransferType;
 
     @ProtobufProperty(index = 12, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
-    protected Instant conversationTimestamp;
+    private Instant conversationTimestamp;
 
     @ProtobufProperty(index = 13, type = ProtobufType.STRING)
-    protected String name;
+    private String name;
 
     @ProtobufProperty(index = 14, type = ProtobufType.STRING)
-    protected String pHash;
+    private String pHash;
 
     @ProtobufProperty(index = 15, type = ProtobufType.BOOL)
-    protected Boolean notSpam;
+    private Boolean notSpam;
 
     @ProtobufProperty(index = 16, type = ProtobufType.BOOL)
-    protected Boolean archived;
+    private Boolean archived;
 
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
-    protected ChatDisappearingMode disappearingMode;
+    private ChatDisappearingMode disappearingMode;
 
     @ProtobufProperty(index = 18, type = ProtobufType.UINT32)
-    protected Integer unreadMentionCount;
+    private Integer unreadMentionCount;
 
     @ProtobufProperty(index = 19, type = ProtobufType.BOOL)
-    protected Boolean markedAsUnread;
+    private Boolean markedAsUnread;
 
     @ProtobufProperty(index = 20, type = ProtobufType.MESSAGE)
-    protected List<GroupParticipant> participant;
+    private List<GroupParticipant> participant;
 
     @ProtobufProperty(index = 21, type = ProtobufType.BYTES)
-    protected byte[] tcToken;
+    private byte[] tcToken;
 
     @ProtobufProperty(index = 22, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
-    protected Instant tcTokenTimestamp;
+    private Instant tcTokenTimestamp;
 
     @ProtobufProperty(index = 23, type = ProtobufType.BYTES)
-    protected byte[] contactPrimaryIdentityKey;
+    private byte[] contactPrimaryIdentityKey;
 
     @ProtobufProperty(index = 24, type = ProtobufType.UINT32, mixins = InstantSecondsMixin.class)
-    protected Instant pinnedTimestamp;
+    private Instant pinnedTimestamp;
 
     @ProtobufProperty(index = 25, type = ProtobufType.UINT64)
-    protected ChatMute mute;
+    private ChatMute mute;
 
     @ProtobufProperty(index = 26, type = ProtobufType.MESSAGE)
-    protected WallpaperSettings wallpaper;
+    private WallpaperSettings wallpaper;
 
     @ProtobufProperty(index = 27, type = ProtobufType.ENUM)
-    protected MediaVisibility mediaVisibility;
+    private MediaVisibility mediaVisibility;
 
     @ProtobufProperty(index = 28, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
-    protected Instant tcTokenSenderTimestamp;
+    private Instant tcTokenSenderTimestamp;
 
     @ProtobufProperty(index = 29, type = ProtobufType.BOOL)
-    protected Boolean suspended;
+    private Boolean suspended;
 
     @ProtobufProperty(index = 30, type = ProtobufType.BOOL)
-    protected Boolean terminated;
+    private Boolean terminated;
 
     @ProtobufProperty(index = 31, type = ProtobufType.UINT64)
-    protected Long createdAt;
+    private Long createdAt;
 
     @ProtobufProperty(index = 32, type = ProtobufType.STRING)
-    protected String createdBy;
+    private String createdBy;
 
     @ProtobufProperty(index = 33, type = ProtobufType.STRING)
-    protected String description;
+    private String description;
 
     @ProtobufProperty(index = 34, type = ProtobufType.BOOL)
-    protected Boolean support;
+    private Boolean support;
 
     @ProtobufProperty(index = 35, type = ProtobufType.BOOL)
-    protected Boolean isParentGroup;
+    private Boolean isParentGroup;
 
     @ProtobufProperty(index = 37, type = ProtobufType.STRING)
-    protected String parentGroupId;
+    private String parentGroupId;
 
     @ProtobufProperty(index = 36, type = ProtobufType.BOOL)
-    protected Boolean isDefaultSubgroup;
+    private Boolean isDefaultSubgroup;
 
     @ProtobufProperty(index = 38, type = ProtobufType.STRING)
-    protected String displayName;
+    private String displayName;
 
     @ProtobufProperty(index = 39, type = ProtobufType.STRING)
-    protected Jid phoneNumberJid;
+    private Jid phoneNumberJid;
 
     @ProtobufProperty(index = 40, type = ProtobufType.BOOL)
-    protected Boolean shareOwnPhoneNumber;
+    private Boolean shareOwnPhoneNumber;
 
     @ProtobufProperty(index = 41, type = ProtobufType.BOOL)
-    protected Boolean phoneNumberhDuplicateLidThread;
+    private Boolean phoneNumberhDuplicateLidThread;
 
     @ProtobufProperty(index = 42, type = ProtobufType.STRING)
-    protected Jid lid;
+    private Jid lid;
 
     @ProtobufProperty(index = 43, type = ProtobufType.STRING)
-    protected String username;
+    private String username;
 
     @ProtobufProperty(index = 44, type = ProtobufType.STRING)
-    protected String lidOriginType;
+    private String lidOriginType;
 
     @ProtobufProperty(index = 45, type = ProtobufType.UINT32)
-    protected Integer commentsCount;
+    private Integer commentsCount;
 
     @ProtobufProperty(index = 46, type = ProtobufType.BOOL)
-    protected Boolean locked;
+    private Boolean locked;
 
     @ProtobufProperty(index = 47, type = ProtobufType.ENUM)
-    protected PrivacySystemMessage systemMessageToInsert;
+    private PrivacySystemMessage systemMessageToInsert;
 
     @ProtobufProperty(index = 48, type = ProtobufType.BOOL)
-    protected Boolean capiCreatedGroup;
+    private Boolean capiCreatedGroup;
 
     @ProtobufProperty(index = 49, type = ProtobufType.STRING)
-    protected Jid accountLid;
+    private Jid accountLid;
 
     @ProtobufProperty(index = 50, type = ProtobufType.BOOL)
-    protected Boolean limitSharing;
+    private Boolean limitSharing;
 
     @ProtobufProperty(index = 51, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
-    protected Instant limitSharingSettingTimestamp;
+    private Instant limitSharingSettingTimestamp;
 
     @ProtobufProperty(index = 52, type = ProtobufType.ENUM)
-    protected ChatLimitSharing.TriggerType limitSharingTrigger;
+    private ChatLimitSharing.TriggerType limitSharingTrigger;
 
     @ProtobufProperty(index = 53, type = ProtobufType.BOOL)
-    protected Boolean limitSharingInitiatedByMe;
+    private Boolean limitSharingInitiatedByMe;
 
     @ProtobufProperty(index = 54, type = ProtobufType.BOOL)
-    protected Boolean maibaAiThreadEnabled;
+    private Boolean maibaAiThreadEnabled;
 
     protected Chat(Jid jid, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Instant pinnedTimestamp, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, Jid accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled) {
         this.jid = Objects.requireNonNull(jid);
@@ -509,9 +509,8 @@ public non-sealed abstract class Chat implements JidProvider {
         return maibaAiThreadEnabled != null && maibaAiThreadEnabled;
     }
 
-    public Chat setJid(Jid jid) {
+    public void setJid(Jid jid) {
         this.jid = jid;
-        return this;
     }
 
     /**
@@ -531,264 +530,212 @@ public non-sealed abstract class Chat implements JidProvider {
         source.removeMessages();
     }
 
-    public Chat setNewJid(Jid newJid) {
+    public void setNewJid(Jid newJid) {
         this.newJid = newJid;
-        return this;
     }
 
-    public Chat setOldJid(Jid oldJid) {
+    public void setOldJid(Jid oldJid) {
         this.oldJid = oldJid;
-        return this;
     }
 
-    public Chat setLastMsgTimestamp(Instant lastMsgTimestamp) {
+    public void setLastMsgTimestamp(Instant lastMsgTimestamp) {
         this.lastMsgTimestamp = lastMsgTimestamp;
-        return this;
     }
 
-    public Chat setUnreadCount(Integer unreadCount) {
+    public void setUnreadCount(Integer unreadCount) {
         this.unreadCount = unreadCount;
-        return this;
     }
 
-    public Chat setReadOnly(Boolean readOnly) {
+    public void setReadOnly(Boolean readOnly) {
         this.readOnly = readOnly;
-        return this;
     }
 
-    public Chat setEndOfHistoryTransfer(Boolean endOfHistoryTransfer) {
+    public void setEndOfHistoryTransfer(Boolean endOfHistoryTransfer) {
         this.endOfHistoryTransfer = endOfHistoryTransfer;
-        return this;
     }
 
-    public Chat setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration) {
+    public void setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration) {
         this.ephemeralExpiration = ephemeralExpiration;
-        return this;
     }
 
-    public Chat setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
+    public void setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
         this.ephemeralSettingTimestamp = ephemeralSettingTimestamp;
-        return this;
     }
 
-    public Chat setEndOfHistoryTransferType(EndOfHistoryTransferType endOfHistoryTransferType) {
+    public void setEndOfHistoryTransferType(EndOfHistoryTransferType endOfHistoryTransferType) {
         this.endOfHistoryTransferType = endOfHistoryTransferType;
-        return this;
     }
 
-    public Chat setConversationTimestamp(Instant conversationTimestamp) {
+    public void setConversationTimestamp(Instant conversationTimestamp) {
         this.conversationTimestamp = conversationTimestamp;
-        return this;
     }
 
-    public Chat setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public Chat setPHash(String pHash) {
+    public void setPHash(String pHash) {
         this.pHash = pHash;
-        return this;
     }
 
-    public Chat setNotSpam(Boolean notSpam) {
+    public void setNotSpam(Boolean notSpam) {
         this.notSpam = notSpam;
-        return this;
     }
 
-    public Chat setArchived(Boolean archived) {
+    public void setArchived(Boolean archived) {
         this.archived = archived;
-        return this;
     }
 
-    public Chat setDisappearingMode(ChatDisappearingMode disappearingMode) {
+    public void setDisappearingMode(ChatDisappearingMode disappearingMode) {
         this.disappearingMode = disappearingMode;
-        return this;
     }
 
-    public Chat setUnreadMentionCount(Integer unreadMentionCount) {
+    public void setUnreadMentionCount(Integer unreadMentionCount) {
         this.unreadMentionCount = unreadMentionCount;
-        return this;
     }
 
-    public Chat setMarkedAsUnread(Boolean markedAsUnread) {
+    public void setMarkedAsUnread(Boolean markedAsUnread) {
         this.markedAsUnread = markedAsUnread;
-        return this;
     }
 
-    public Chat setParticipant(List<GroupParticipant> participant) {
+    public void setParticipant(List<GroupParticipant> participant) {
         this.participant = participant;
-        return this;
     }
 
-    public Chat setTcToken(byte[] tcToken) {
+    public void setTcToken(byte[] tcToken) {
         this.tcToken = tcToken;
-        return this;
     }
 
-    public Chat setTcTokenTimestamp(Instant tcTokenTimestamp) {
+    public void setTcTokenTimestamp(Instant tcTokenTimestamp) {
         this.tcTokenTimestamp = tcTokenTimestamp;
-        return this;
     }
 
-    public Chat setContactPrimaryIdentityKey(byte[] contactPrimaryIdentityKey) {
+    public void setContactPrimaryIdentityKey(byte[] contactPrimaryIdentityKey) {
         this.contactPrimaryIdentityKey = contactPrimaryIdentityKey;
-        return this;
     }
 
-    public Chat setPinnedTimestamp(Instant pinned) {
+    public void setPinnedTimestamp(Instant pinned) {
         this.pinnedTimestamp = pinned;
-        return this;
     }
 
-    public Chat setMute(ChatMute mute) {
+    public void setMute(ChatMute mute) {
         this.mute = mute;
-        return this;
     }
 
-    public Chat setWallpaper(WallpaperSettings wallpaper) {
+    public void setWallpaper(WallpaperSettings wallpaper) {
         this.wallpaper = wallpaper;
-        return this;
     }
 
-    public Chat setMediaVisibility(MediaVisibility mediaVisibility) {
+    public void setMediaVisibility(MediaVisibility mediaVisibility) {
         this.mediaVisibility = mediaVisibility;
-        return this;
     }
 
-    public Chat setTcTokenSenderTimestamp(Instant tcTokenSenderTimestamp) {
+    public void setTcTokenSenderTimestamp(Instant tcTokenSenderTimestamp) {
         this.tcTokenSenderTimestamp = tcTokenSenderTimestamp;
-        return this;
     }
 
-    public Chat setSuspended(Boolean suspended) {
+    public void setSuspended(Boolean suspended) {
         this.suspended = suspended;
-        return this;
     }
 
-    public Chat setTerminated(Boolean terminated) {
+    public void setTerminated(Boolean terminated) {
         this.terminated = terminated;
-        return this;
     }
 
-    public Chat setCreatedAt(Long createdAt) {
+    public void setCreatedAt(Long createdAt) {
         this.createdAt = createdAt;
-        return this;
     }
 
-    public Chat setCreatedBy(String createdBy) {
+    public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
-        return this;
     }
 
-    public Chat setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
-    public Chat setSupport(Boolean support) {
+    public void setSupport(Boolean support) {
         this.support = support;
-        return this;
     }
 
-    public Chat setParentGroup(Boolean isParentGroup) {
+    public void setParentGroup(Boolean isParentGroup) {
         this.isParentGroup = isParentGroup;
-        return this;
     }
 
-    public Chat setParentGroupId(String parentGroupId) {
+    public void setParentGroupId(String parentGroupId) {
         this.parentGroupId = parentGroupId;
-        return this;
     }
 
-    public Chat setDefaultSubgroup(Boolean isDefaultSubgroup) {
+    public void setDefaultSubgroup(Boolean isDefaultSubgroup) {
         this.isDefaultSubgroup = isDefaultSubgroup;
-        return this;
     }
 
-    public Chat setDisplayName(String displayName) {
+    public void setDisplayName(String displayName) {
         this.displayName = displayName;
-        return this;
     }
 
-    public Chat setPhoneNumberJid(Jid phoneNumberJid) {
+    public void setPhoneNumberJid(Jid phoneNumberJid) {
         this.phoneNumberJid = phoneNumberJid;
-        return this;
     }
 
-    public Chat setShareOwnPhoneNumber(Boolean shareOwnPn) {
+    public void setShareOwnPhoneNumber(Boolean shareOwnPn) {
         this.shareOwnPhoneNumber = shareOwnPn;
-        return this;
     }
 
-    public Chat setPhoneNumberDuplicateLidThread(Boolean phoneNumberhDuplicateLidThread) {
+    public void setPhoneNumberDuplicateLidThread(Boolean phoneNumberhDuplicateLidThread) {
         this.phoneNumberhDuplicateLidThread = phoneNumberhDuplicateLidThread;
-        return this;
     }
 
-    public Chat setLid(Jid lidJid) {
+    public void setLid(Jid lidJid) {
         this.lid = lidJid;
-        return this;
     }
 
-    public Chat setUsername(String username) {
+    public void setUsername(String username) {
         this.username = username;
-        return this;
     }
 
-    public Chat setLidOriginType(String lidOriginType) {
+    public void setLidOriginType(String lidOriginType) {
         this.lidOriginType = lidOriginType;
-        return this;
     }
 
-    public Chat setCommentsCount(Integer commentsCount) {
+    public void setCommentsCount(Integer commentsCount) {
         this.commentsCount = commentsCount;
-        return this;
     }
 
-    public Chat setLocked(Boolean locked) {
+    public void setLocked(Boolean locked) {
         this.locked = locked;
-        return this;
     }
 
-    public Chat setSystemMessageToInsert(PrivacySystemMessage systemMessageToInsert) {
+    public void setSystemMessageToInsert(PrivacySystemMessage systemMessageToInsert) {
         this.systemMessageToInsert = systemMessageToInsert;
-        return this;
     }
 
-    public Chat setCapiCreatedGroup(Boolean capiCreatedGroup) {
+    public void setCapiCreatedGroup(Boolean capiCreatedGroup) {
         this.capiCreatedGroup = capiCreatedGroup;
-        return this;
     }
 
-    public Chat setAccountLid(Jid accountLid) {
+    public void setAccountLid(Jid accountLid) {
         this.accountLid = accountLid;
-        return this;
     }
 
-    public Chat setLimitSharing(Boolean limitSharing) {
+    public void setLimitSharing(Boolean limitSharing) {
         this.limitSharing = limitSharing;
-        return this;
     }
 
-    public Chat setLimitSharingSettingTimestamp(Instant limitSharingSettingTimestamp) {
+    public void setLimitSharingSettingTimestamp(Instant limitSharingSettingTimestamp) {
         this.limitSharingSettingTimestamp = limitSharingSettingTimestamp;
-        return this;
     }
 
-    public Chat setLimitSharingTrigger(ChatLimitSharing.TriggerType limitSharingTrigger) {
+    public void setLimitSharingTrigger(ChatLimitSharing.TriggerType limitSharingTrigger) {
         this.limitSharingTrigger = limitSharingTrigger;
-        return this;
     }
 
-    public Chat setLimitSharingInitiatedByMe(Boolean limitSharingInitiatedByMe) {
+    public void setLimitSharingInitiatedByMe(Boolean limitSharingInitiatedByMe) {
         this.limitSharingInitiatedByMe = limitSharingInitiatedByMe;
-        return this;
     }
 
-    public Chat setMaibaAiThreadEnabled(Boolean maibaAiThreadEnabled) {
+    public void setMaibaAiThreadEnabled(Boolean maibaAiThreadEnabled) {
         this.maibaAiThreadEnabled = maibaAiThreadEnabled;
-        return this;
     }
 
     @ProtobufEnum(name = "Conversation.EndOfHistoryTransferType")

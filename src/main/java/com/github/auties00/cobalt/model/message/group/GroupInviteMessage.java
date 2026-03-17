@@ -79,44 +79,36 @@ public final class GroupInviteMessage implements ContextualMessage {
         return Optional.ofNullable(groupType);
     }
 
-    public GroupInviteMessage setGroupJid(Jid groupJid) {
+    public void setGroupJid(Jid groupJid) {
         this.groupJid = groupJid;
-        return this;
     }
 
-    public GroupInviteMessage setInviteCode(String inviteCode) {
+    public void setInviteCode(String inviteCode) {
         this.inviteCode = inviteCode;
-        return this;
     }
 
-    public GroupInviteMessage setInviteExpiration(Long inviteExpiration) {
+    public void setInviteExpiration(Long inviteExpiration) {
         this.inviteExpiration = inviteExpiration;
-        return this;
     }
 
-    public GroupInviteMessage setGroupName(String groupName) {
+    public void setGroupName(String groupName) {
         this.groupName = groupName;
-        return this;
     }
 
-    public GroupInviteMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public GroupInviteMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public GroupInviteMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public GroupInviteMessage setGroupType(GroupType groupType) {
+    public void setGroupType(GroupType groupType) {
         this.groupType = groupType;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.GroupInviteMessage.GroupType")

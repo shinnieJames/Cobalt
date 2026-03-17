@@ -26,13 +26,11 @@ public final class AvatarUserSettings {
         return Optional.ofNullable(password);
     }
 
-    public AvatarUserSettings setFbid(String fbid) {
+    public void setFbid(String fbid) {
         this.fbid = fbid;
-        return this;
     }
 
-    public AvatarUserSettings setPassword(String password) {
+    public void setPassword(String password) {
         this.password = password;
-        return this;
     }
 }

@@ -44,23 +44,19 @@ public final class MessageCitation {
         return imageUrl;
     }
 
-    public MessageCitation setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public MessageCitation setSubtitle(String subtitle) {
+    public void setSubtitle(String subtitle) {
         this.subtitle = subtitle;
-        return this;
     }
 
-    public MessageCitation setCmsId(String cmsId) {
+    public void setCmsId(String cmsId) {
         this.cmsId = cmsId;
-        return this;
     }
 
-    public MessageCitation setImageUrl(String imageUrl) {
+    public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
-        return this;
     }
 }

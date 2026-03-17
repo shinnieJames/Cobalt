@@ -34,19 +34,16 @@ public final class HandshakeMessage {
         return Optional.ofNullable(clientFinish);
     }
 
-    public HandshakeMessage setClientHello(ClientHello clientHello) {
+    public void setClientHello(ClientHello clientHello) {
         this.clientHello = clientHello;
-        return this;
     }
 
-    public HandshakeMessage setServerHello(ServerHello serverHello) {
+    public void setServerHello(ServerHello serverHello) {
         this.serverHello = serverHello;
-        return this;
     }
 
-    public HandshakeMessage setClientFinish(ClientFinish clientFinish) {
+    public void setClientFinish(ClientFinish clientFinish) {
         this.clientFinish = clientFinish;
-        return this;
     }
 
     @ProtobufMessage(name = "HandshakeMessage.ClientFinish")
@@ -79,20 +76,17 @@ public final class HandshakeMessage {
             return Optional.ofNullable(extendedCiphertext);
         }
 
-        public ClientFinish setStatic(byte[] _static) {
+        public void setStatic(byte[] _static) {
             this._static = _static;
-            return this;
-        }
+    }
 
-        public ClientFinish setPayload(byte[] payload) {
+        public void setPayload(byte[] payload) {
             this.payload = payload;
-            return this;
-        }
+    }
 
-        public ClientFinish setExtendedCiphertext(byte[] extendedCiphertext) {
+        public void setExtendedCiphertext(byte[] extendedCiphertext) {
             this.extendedCiphertext = extendedCiphertext;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "HandshakeMessage.ClientHello")
@@ -141,30 +135,25 @@ public final class HandshakeMessage {
             return Optional.ofNullable(extendedCiphertext);
         }
 
-        public ClientHello setEphemeral(byte[] ephemeral) {
+        public void setEphemeral(byte[] ephemeral) {
             this.ephemeral = ephemeral;
-            return this;
-        }
+    }
 
-        public ClientHello setStatic(byte[] _static) {
+        public void setStatic(byte[] _static) {
             this._static = _static;
-            return this;
-        }
+    }
 
-        public ClientHello setPayload(byte[] payload) {
+        public void setPayload(byte[] payload) {
             this.payload = payload;
-            return this;
-        }
+    }
 
-        public ClientHello setUseExtended(Boolean useExtended) {
+        public void setUseExtended(Boolean useExtended) {
             this.useExtended = useExtended;
-            return this;
-        }
+    }
 
-        public ClientHello setExtendedCiphertext(byte[] extendedCiphertext) {
+        public void setExtendedCiphertext(byte[] extendedCiphertext) {
             this.extendedCiphertext = extendedCiphertext;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "HandshakeMessage.ServerHello")
@@ -205,24 +194,20 @@ public final class HandshakeMessage {
             return Optional.ofNullable(extendedStatic);
         }
 
-        public ServerHello setEphemeral(byte[] ephemeral) {
+        public void setEphemeral(byte[] ephemeral) {
             this.ephemeral = ephemeral;
-            return this;
-        }
+    }
 
-        public ServerHello setStatic(byte[] _static) {
+        public void setStatic(byte[] _static) {
             this._static = _static;
-            return this;
-        }
+    }
 
-        public ServerHello setPayload(byte[] payload) {
+        public void setPayload(byte[] payload) {
             this.payload = payload;
-            return this;
-        }
+    }
 
-        public ServerHello setExtendedStatic(byte[] extendedStatic) {
+        public void setExtendedStatic(byte[] extendedStatic) {
             this.extendedStatic = extendedStatic;
-            return this;
-        }
+    }
     }
 }

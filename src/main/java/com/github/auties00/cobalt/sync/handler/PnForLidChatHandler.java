@@ -65,7 +65,7 @@ public final class PnForLidChatHandler implements WebAppStateActionHandler {
         }
 
         var pnJid = action.pnJid().orElse(null);
-        if (pnJid == null || !pnJid.hasServer()) {
+        if (pnJid == null) {
             return MutationApplicationResult.malformed();
         }
 

@@ -45,24 +45,20 @@ public final class StatusQuotedMessage implements Message {
         return Optional.ofNullable(originalStatusId);
     }
 
-    public StatusQuotedMessage setType(StatusQuotedMessageType type) {
+    public void setType(StatusQuotedMessageType type) {
         this.type = type;
-        return this;
     }
 
-    public StatusQuotedMessage setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
-    public StatusQuotedMessage setThumbnail(byte[] thumbnail) {
+    public void setThumbnail(byte[] thumbnail) {
         this.thumbnail = thumbnail;
-        return this;
     }
 
-    public StatusQuotedMessage setOriginalStatusId(MessageKey originalStatusId) {
+    public void setOriginalStatusId(MessageKey originalStatusId) {
         this.originalStatusId = originalStatusId;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.StatusQuotedMessage.StatusQuotedMessageType")

@@ -60,22 +60,18 @@ public final class AIRichResponseTableMetadata implements AIRichResponseSubMessa
      * Sets the ordered list of rows that compose this table.
      *
      * @param rows the table rows to set
-     * @return this instance for chaining
      */
-    public AIRichResponseTableMetadata setRows(List<AIRichResponseTableRow> rows) {
+    public void setRows(List<AIRichResponseTableRow> rows) {
         this.rows = rows;
-        return this;
     }
 
     /**
      * Sets the title displayed above the table.
      *
      * @param title the title to set
-     * @return this instance for chaining
      */
-    public AIRichResponseTableMetadata setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
     /**
@@ -133,22 +129,18 @@ public final class AIRichResponseTableMetadata implements AIRichResponseSubMessa
          * Sets the cell values for this row.
          *
          * @param items the cell strings to set
-         * @return this instance for chaining
          */
-        public AIRichResponseTableRow setItems(List<String> items) {
+        public void setItems(List<String> items) {
             this.items = items;
-            return this;
-        }
+    }
 
         /**
          * Sets whether this row is a heading row.
          *
          * @param isHeading {@code true} to mark this row as a heading
-         * @return this instance for chaining
          */
-        public AIRichResponseTableRow setHeading(Boolean isHeading) {
+        public void setHeading(Boolean isHeading) {
             this.isHeading = isHeading;
-            return this;
-        }
+    }
     }
 }

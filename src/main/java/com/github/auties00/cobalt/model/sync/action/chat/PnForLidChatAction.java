@@ -54,9 +54,8 @@ public final class PnForLidChatAction implements SyncAction<PnForLidChatActionAr
         return Optional.ofNullable(pnJid);
     }
 
-    public PnForLidChatAction setPnJid(Jid pnJid) {
+    public void setPnJid(Jid pnJid) {
         this.pnJid = pnJid;
-        return this;
     }
 
 

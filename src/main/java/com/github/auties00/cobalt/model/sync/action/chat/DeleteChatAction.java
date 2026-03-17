@@ -54,9 +54,8 @@ public final class DeleteChatAction implements SyncAction<DeleteChatActionArgs> 
         return Optional.ofNullable(messageRange);
     }
 
-    public DeleteChatAction setMessageRange(SyncActionMessageRange messageRange) {
+    public void setMessageRange(SyncActionMessageRange messageRange) {
         this.messageRange = messageRange;
-        return this;
     }
 
 

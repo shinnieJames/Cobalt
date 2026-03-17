@@ -54,10 +54,8 @@ public final class BotGroupMetadata {
      *
      * @param participantsMetadata the new list of bot participant metadata,
      *        or {@code null}
-     * @return this instance for chaining
      */
-    public BotGroupMetadata setParticipantsMetadata(List<BotGroupParticipantMetadata> participantsMetadata) {
+    public void setParticipantsMetadata(List<BotGroupParticipantMetadata> participantsMetadata) {
         this.participantsMetadata = participantsMetadata;
-        return this;
     }
 }

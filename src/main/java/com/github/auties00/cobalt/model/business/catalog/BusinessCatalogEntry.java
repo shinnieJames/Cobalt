@@ -295,88 +295,72 @@ public final class BusinessCatalogEntry {
      * Sets the unique identifier of this product.
      *
      * @param id the product identifier to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
      * Sets the URI of the product's primary encrypted image.
      *
      * @param encryptedImage the encrypted image URI to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setEncryptedImage(URI encryptedImage) {
+    public void setEncryptedImage(URI encryptedImage) {
         this.encryptedImage = encryptedImage;
-        return this;
     }
 
     /**
      * Sets the compliance review status of this product.
      *
      * @param reviewStatus the review status to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setReviewStatus(BusinessReviewStatus reviewStatus) {
+    public void setReviewStatus(BusinessReviewStatus reviewStatus) {
         this.reviewStatus = reviewStatus;
-        return this;
     }
 
     /**
      * Sets the stock availability of this product.
      *
      * @param availability the availability to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setAvailability(BusinessItemAvailability availability) {
+    public void setAvailability(BusinessItemAvailability availability) {
         this.availability = availability;
-        return this;
     }
 
     /**
      * Sets the display name of this product.
      *
      * @param name the product name to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the retailer-assigned identifier for this product.
      *
      * @param sellerId the seller identifier to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setSellerId(String sellerId) {
+    public void setSellerId(String sellerId) {
         this.sellerId = sellerId;
-        return this;
     }
 
     /**
      * Sets the shareable URI of this product's page.
      *
      * @param uri the product URI to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setUri(URI uri) {
+    public void setUri(URI uri) {
         this.uri = uri;
-        return this;
     }
 
     /**
      * Sets the description text of this product.
      *
      * @param description the product description to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
     /**
@@ -384,32 +368,26 @@ public final class BusinessCatalogEntry {
      * unit.
      *
      * @param price the price to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setPrice(long price) {
+    public void setPrice(long price) {
         this.price = price;
-        return this;
     }
 
     /**
      * Sets the ISO 4217 currency code for this product's price.
      *
      * @param currency the currency code to set
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setCurrency(String currency) {
+    public void setCurrency(String currency) {
         this.currency = currency;
-        return this;
     }
 
     /**
      * Sets whether this product is hidden from customers.
      *
      * @param hidden whether the product should be hidden
-     * @return this instance for method chaining
      */
-    public BusinessCatalogEntry setHidden(boolean hidden) {
+    public void setHidden(boolean hidden) {
         this.hidden = hidden;
-        return this;
     }
 }

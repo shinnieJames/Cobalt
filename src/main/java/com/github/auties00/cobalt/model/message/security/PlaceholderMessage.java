@@ -20,9 +20,8 @@ public final class PlaceholderMessage implements Message {
         return Optional.ofNullable(type);
     }
 
-    public PlaceholderMessage setType(PlaceholderType type) {
+    public void setType(PlaceholderType type) {
         this.type = type;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.PlaceholderMessage.PlaceholderType")

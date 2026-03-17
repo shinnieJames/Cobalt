@@ -55,8 +55,7 @@ public final class KeyExpirationAction implements SyncAction<SyncActionEmptyArgs
         return expiredKeyEpoch == null ? OptionalInt.empty() : OptionalInt.of(expiredKeyEpoch);
     }
 
-    public KeyExpirationAction setExpiredKeyEpoch(Integer expiredKeyEpoch) {
+    public void setExpiredKeyEpoch(Integer expiredKeyEpoch) {
         this.expiredKeyEpoch = expiredKeyEpoch;
-        return this;
     }
 }

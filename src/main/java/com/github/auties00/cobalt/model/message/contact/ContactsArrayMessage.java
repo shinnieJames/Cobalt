@@ -39,18 +39,15 @@ public final class ContactsArrayMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public ContactsArrayMessage setDisplayName(String displayName) {
+    public void setDisplayName(String displayName) {
         this.displayName = displayName;
-        return this;
     }
 
-    public ContactsArrayMessage setContacts(List<ContactMessage> contacts) {
+    public void setContacts(List<ContactMessage> contacts) {
         this.contacts = contacts;
-        return this;
     }
 
-    public ContactsArrayMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

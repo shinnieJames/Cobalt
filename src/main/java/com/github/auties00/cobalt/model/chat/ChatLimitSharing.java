@@ -48,24 +48,20 @@ public final class ChatLimitSharing {
         return initiatedByMe != null && initiatedByMe;
     }
 
-    public ChatLimitSharing setSharingLimited(Boolean sharingLimited) {
+    public void setSharingLimited(Boolean sharingLimited) {
         this.sharingLimited = sharingLimited;
-        return this;
     }
 
-    public ChatLimitSharing setTrigger(TriggerType trigger) {
+    public void setTrigger(TriggerType trigger) {
         this.trigger = trigger;
-        return this;
     }
 
-    public ChatLimitSharing setLimitSharingSettingTimestamp(Instant limitSharingSettingTimestamp) {
+    public void setLimitSharingSettingTimestamp(Instant limitSharingSettingTimestamp) {
         this.limitSharingSettingTimestamp = limitSharingSettingTimestamp;
-        return this;
     }
 
-    public ChatLimitSharing setInitiatedByMe(Boolean initiatedByMe) {
+    public void setInitiatedByMe(Boolean initiatedByMe) {
         this.initiatedByMe = initiatedByMe;
-        return this;
     }
 
     @ProtobufEnum(name = "LimitSharing.TriggerType")

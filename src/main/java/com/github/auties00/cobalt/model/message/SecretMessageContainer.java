@@ -35,18 +35,15 @@ public final class SecretMessageContainer {
         return Optional.ofNullable(encPayload);
     }
 
-    public SecretMessageContainer setVersion(Integer version) {
+    public void setVersion(Integer version) {
         this.version = version;
-        return this;
     }
 
-    public SecretMessageContainer setEncIv(byte[] encIv) {
+    public void setEncIv(byte[] encIv) {
         this.encIv = encIv;
-        return this;
     }
 
-    public SecretMessageContainer setEncPayload(byte[] encPayload) {
+    public void setEncPayload(byte[] encPayload) {
         this.encPayload = encPayload;
-        return this;
     }
 }

@@ -65,33 +65,27 @@ public final class MessageReceipt {
         return deliveredDeviceJid == null ? List.of() : Collections.unmodifiableList(deliveredDeviceJid);
     }
 
-    public MessageReceipt setUserJid(Jid userJid) {
+    public void setUserJid(Jid userJid) {
         this.userJid = userJid;
-        return this;
     }
 
-    public MessageReceipt setReceiptTimestamp(Instant receiptTimestamp) {
+    public void setReceiptTimestamp(Instant receiptTimestamp) {
         this.receiptTimestamp = receiptTimestamp;
-        return this;
     }
 
-    public MessageReceipt setReadTimestamp(Instant readTimestamp) {
+    public void setReadTimestamp(Instant readTimestamp) {
         this.readTimestamp = readTimestamp;
-        return this;
     }
 
-    public MessageReceipt setPlayedTimestamp(Instant playedTimestamp) {
+    public void setPlayedTimestamp(Instant playedTimestamp) {
         this.playedTimestamp = playedTimestamp;
-        return this;
     }
 
-    public MessageReceipt setPendingDeviceJid(List<Jid> pendingDeviceJid) {
+    public void setPendingDeviceJid(List<Jid> pendingDeviceJid) {
         this.pendingDeviceJid = pendingDeviceJid;
-        return this;
     }
 
-    public MessageReceipt setDeliveredDeviceJid(List<Jid> deliveredDeviceJid) {
+    public void setDeliveredDeviceJid(List<Jid> deliveredDeviceJid) {
         this.deliveredDeviceJid = deliveredDeviceJid;
-        return this;
     }
 }

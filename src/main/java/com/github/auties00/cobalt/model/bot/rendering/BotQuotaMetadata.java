@@ -56,11 +56,9 @@ public final class BotQuotaMetadata {
      * Sets the per-feature quota entries.
      *
      * @param botFeatureQuotaMetadata the new list of quota entries, or {@code null}
-     * @return this instance for chaining
      */
-    public BotQuotaMetadata setBotFeatureQuotaMetadata(List<BotFeatureQuotaMetadata> botFeatureQuotaMetadata) {
+    public void setBotFeatureQuotaMetadata(List<BotFeatureQuotaMetadata> botFeatureQuotaMetadata) {
         this.botFeatureQuotaMetadata = botFeatureQuotaMetadata;
-        return this;
     }
 
     /**
@@ -137,34 +135,28 @@ public final class BotQuotaMetadata {
          * Sets the type of bot feature this quota applies to.
          *
          * @param featureType the new feature type, or {@code null}
-         * @return this instance for chaining
          */
-        public BotFeatureQuotaMetadata setFeatureType(BotFeatureType featureType) {
+        public void setFeatureType(BotFeatureType featureType) {
             this.featureType = featureType;
-            return this;
-        }
+    }
 
         /**
          * Sets the number of remaining uses for this feature.
          *
          * @param remainingQuota the new remaining quota, or {@code null}
-         * @return this instance for chaining
          */
-        public BotFeatureQuotaMetadata setRemainingQuota(Integer remainingQuota) {
+        public void setRemainingQuota(Integer remainingQuota) {
             this.remainingQuota = remainingQuota;
-            return this;
-        }
+    }
 
         /**
          * Sets the timestamp at which the quota resets.
          *
          * @param expirationTimestamp the new expiration timestamp, or {@code null}
-         * @return this instance for chaining
          */
-        public BotFeatureQuotaMetadata setExpirationTimestamp(Instant expirationTimestamp) {
+        public void setExpirationTimestamp(Instant expirationTimestamp) {
             this.expirationTimestamp = expirationTimestamp;
-            return this;
-        }
+    }
 
         /**
          * The type of premium bot feature that has a usage quota.

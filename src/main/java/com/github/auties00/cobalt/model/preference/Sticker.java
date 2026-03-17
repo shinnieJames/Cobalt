@@ -6,6 +6,7 @@ import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
+import java.time.Instant;
 import java.util.*;
 
 @ProtobufMessage
@@ -14,7 +15,7 @@ public final class Sticker implements MediaProvider {
     String mediaUrl;
 
     @ProtobufProperty(index = 2, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
     byte[] mediaKey;
@@ -43,9 +44,9 @@ public final class Sticker implements MediaProvider {
     @ProtobufProperty(index = 11, type = ProtobufType.UINT64)
     Long timestamp;
 
-    Sticker(String mediaUrl, byte[] fileEncSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String mediaDirectPath, Long mediaSize, boolean favorite, Integer deviceIdHint, Long timestamp) {
+    Sticker(String mediaUrl, byte[] mediaEncryptedSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String mediaDirectPath, Long mediaSize, boolean favorite, Integer deviceIdHint, Long timestamp) {
         this.mediaUrl = mediaUrl;
-        this.fileEncSha256 = fileEncSha256;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
         this.mediaKey = mediaKey;
         this.mimetype = mimetype;
         this.height = height;
@@ -58,36 +59,18 @@ public final class Sticker implements MediaProvider {
     }
 
     @Override
-    public Optional<byte[]> mediaKey() {
-        return Optional.ofNullable(mediaKey);
-    }
-
-    @Override
-    public void setMediaKey(byte[] mediaKey) {
-        this.mediaKey = mediaKey;
-    }
-
-    @Override
-    public void setMediaKeyTimestamp(Long timestamp) {
-    }
-
-    @Override
-    public Optional<byte[]> mediaSha256() {
-        return Optional.empty();
-    }
-
-    @Override
-    public void setMediaSha256(byte[] bytes) {
+    public Optional<String> mediaUrl() {
+        return Optional.ofNullable(mediaUrl);
     }
 
     @Override
     public Optional<byte[]> mediaEncryptedSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     @Override
-    public void setMediaEncryptedSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
+    public Optional<byte[]> mediaKey() {
+        return Optional.ofNullable(mediaKey);
     }
 
     public Optional<String> mimetype() {
@@ -103,38 +86,13 @@ public final class Sticker implements MediaProvider {
     }
 
     @Override
-    public Optional<String> mediaUrl() {
-        return Optional.ofNullable(mediaUrl);
-    }
-
-    @Override
-    public void setMediaUrl(String mediaUrl) {
-        this.mediaUrl = mediaUrl;
-    }
-
-    @Override
     public Optional<String> mediaDirectPath() {
         return Optional.ofNullable(mediaDirectPath);
     }
 
     @Override
-    public void setMediaDirectPath(String mediaDirectPath) {
-        this.mediaDirectPath = mediaDirectPath;
-    }
-
-    @Override
     public OptionalLong mediaSize() {
         return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
-    }
-
-    @Override
-    public void setMediaSize(long mediaSize) {
-        this.mediaSize = mediaSize;
-    }
-
-    @Override
-    public MediaPath mediaPath() {
-        return MediaPath.STICKER;
     }
 
     public boolean favorite() {
@@ -149,8 +107,51 @@ public final class Sticker implements MediaProvider {
         return timestamp == null ? OptionalLong.empty() : OptionalLong.of(timestamp);
     }
 
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.empty();
+    }
+
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.STICKER;
+    }
+
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+    }
+
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
+        this.mediaKey = mediaKey;
+    }
+
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
+    }
+
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
+    }
+
     public void setTimestamp(Long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    @Override
+    public void setMediaSha256(byte[] bytes) {
+    }
+
+    @Override
+    public void setMediaKeyTimestamp(Instant timestamp) {
     }
 
     @Override
@@ -161,7 +162,7 @@ public final class Sticker implements MediaProvider {
                && Objects.equals(mediaSize, that.mediaSize)
                && favorite == that.favorite
                && Objects.equals(mediaUrl, that.mediaUrl)
-               && Objects.deepEquals(fileEncSha256, that.fileEncSha256)
+               && Objects.deepEquals(mediaEncryptedSha256, that.mediaEncryptedSha256)
                && Objects.deepEquals(mediaKey, that.mediaKey)
                && Objects.equals(mimetype, that.mimetype)
                && Objects.equals(mediaDirectPath, that.mediaDirectPath)
@@ -171,14 +172,14 @@ public final class Sticker implements MediaProvider {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mediaUrl, Arrays.hashCode(fileEncSha256), Arrays.hashCode(mediaKey), mimetype, height, width, mediaDirectPath, mediaSize, favorite, deviceIdHint, timestamp);
+        return Objects.hash(mediaUrl, Arrays.hashCode(mediaEncryptedSha256), Arrays.hashCode(mediaKey), mimetype, height, width, mediaDirectPath, mediaSize, favorite, deviceIdHint, timestamp);
     }
 
     @Override
     public String toString() {
         return "Sticker[" +
                "url=" + mediaUrl + ", " +
-               "fileEncSha256=" + Arrays.toString(fileEncSha256) + ", " +
+               "fileEncSha256=" + Arrays.toString(mediaEncryptedSha256) + ", " +
                "mediaKey=" + Arrays.toString(mediaKey) + ", " +
                "mimetype=" + mimetype + ", " +
                "height=" + height + ", " +

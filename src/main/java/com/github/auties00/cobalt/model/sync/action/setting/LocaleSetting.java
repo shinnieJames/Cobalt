@@ -53,8 +53,7 @@ public final class LocaleSetting implements SyncAction<SyncActionEmptyArgs> {
         return Optional.ofNullable(locale);
     }
 
-    public LocaleSetting setLocale(String locale) {
+    public void setLocale(String locale) {
         this.locale = locale;
-        return this;
     }
 }

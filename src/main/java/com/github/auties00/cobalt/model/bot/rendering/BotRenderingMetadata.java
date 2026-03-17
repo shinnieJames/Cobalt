@@ -50,11 +50,9 @@ public final class BotRenderingMetadata {
      * Sets the list of interactive keywords.
      *
      * @param keywords the new list of keywords, or {@code null}
-     * @return this instance for chaining
      */
-    public BotRenderingMetadata setKeywords(List<Keyword> keywords) {
+    public void setKeywords(List<Keyword> keywords) {
         this.keywords = keywords;
-        return this;
     }
 
     /**
@@ -113,22 +111,18 @@ public final class BotRenderingMetadata {
          * Sets the display text of the keyword.
          *
          * @param value the new keyword value, or {@code null}
-         * @return this instance for chaining
          */
-        public Keyword setValue(String value) {
+        public void setValue(String value) {
             this.value = value;
-            return this;
-        }
+    }
 
         /**
          * Sets the follow-up prompts associated with this keyword.
          *
          * @param associatedPrompts the new list of prompts, or {@code null}
-         * @return this instance for chaining
          */
-        public Keyword setAssociatedPrompts(List<String> associatedPrompts) {
+        public void setAssociatedPrompts(List<String> associatedPrompts) {
             this.associatedPrompts = associatedPrompts;
-            return this;
-        }
+    }
     }
 }

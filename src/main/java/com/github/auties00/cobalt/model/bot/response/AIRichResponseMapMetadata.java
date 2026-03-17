@@ -141,55 +141,45 @@ public final class AIRichResponseMapMetadata implements AIRichResponseSubMessage
      * Sets the latitude of the map centre, in degrees.
      *
      * @param centerLatitude the latitude to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMapMetadata setCenterLatitude(Double centerLatitude) {
+    public void setCenterLatitude(Double centerLatitude) {
         this.centerLatitude = centerLatitude;
-        return this;
     }
 
     /**
      * Sets the longitude of the map centre, in degrees.
      *
      * @param centerLongitude the longitude to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMapMetadata setCenterLongitude(Double centerLongitude) {
+    public void setCenterLongitude(Double centerLongitude) {
         this.centerLongitude = centerLongitude;
-        return this;
     }
 
     /**
      * Sets the latitude span of the visible map region.
      *
      * @param latitudeDelta the latitude delta to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMapMetadata setLatitudeDelta(Double latitudeDelta) {
+    public void setLatitudeDelta(Double latitudeDelta) {
         this.latitudeDelta = latitudeDelta;
-        return this;
     }
 
     /**
      * Sets the longitude span of the visible map region.
      *
      * @param longitudeDelta the longitude delta to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMapMetadata setLongitudeDelta(Double longitudeDelta) {
+    public void setLongitudeDelta(Double longitudeDelta) {
         this.longitudeDelta = longitudeDelta;
-        return this;
     }
 
     /**
      * Sets the list of pin annotations placed on the map.
      *
      * @param annotations the annotations to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMapMetadata setAnnotations(List<AIRichResponseMapAnnotation> annotations) {
+    public void setAnnotations(List<AIRichResponseMapAnnotation> annotations) {
         this.annotations = annotations;
-        return this;
     }
 
     /**
@@ -197,11 +187,9 @@ public final class AIRichResponseMapMetadata implements AIRichResponseSubMessage
      * alongside the map.
      *
      * @param showInfoList {@code true} to show the info list
-     * @return this instance for chaining
      */
-    public AIRichResponseMapMetadata setShowInfoList(Boolean showInfoList) {
+    public void setShowInfoList(Boolean showInfoList) {
         this.showInfoList = showInfoList;
-        return this;
     }
 
     /**
@@ -318,55 +306,45 @@ public final class AIRichResponseMapMetadata implements AIRichResponseSubMessage
          * Sets the ordinal number displayed on the map pin marker.
          *
          * @param annotationNumber the annotation number to set
-         * @return this instance for chaining
          */
-        public AIRichResponseMapAnnotation setAnnotationNumber(Integer annotationNumber) {
+        public void setAnnotationNumber(Integer annotationNumber) {
             this.annotationNumber = annotationNumber;
-            return this;
-        }
+    }
 
         /**
          * Sets the latitude of this annotation, in degrees.
          *
          * @param latitude the latitude to set
-         * @return this instance for chaining
          */
-        public AIRichResponseMapAnnotation setLatitude(Double latitude) {
+        public void setLatitude(Double latitude) {
             this.latitude = latitude;
-            return this;
-        }
+    }
 
         /**
          * Sets the longitude of this annotation, in degrees.
          *
          * @param longitude the longitude to set
-         * @return this instance for chaining
          */
-        public AIRichResponseMapAnnotation setLongitude(Double longitude) {
+        public void setLongitude(Double longitude) {
             this.longitude = longitude;
-            return this;
-        }
+    }
 
         /**
          * Sets the title of this annotation.
          *
          * @param title the title to set
-         * @return this instance for chaining
          */
-        public AIRichResponseMapAnnotation setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
         /**
          * Sets the descriptive body of this annotation.
          *
          * @param body the body text to set
-         * @return this instance for chaining
          */
-        public AIRichResponseMapAnnotation setBody(String body) {
+        public void setBody(String body) {
             this.body = body;
-            return this;
-        }
+    }
     }
 }

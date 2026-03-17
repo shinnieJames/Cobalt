@@ -58,13 +58,11 @@ public final class MusicUserIdAction implements SyncAction<SyncActionEmptyArgs> 
         return musicUserIdMap == null ? Map.of() : Collections.unmodifiableMap(musicUserIdMap);
     }
 
-    public MusicUserIdAction setMusicUserId(String musicUserId) {
+    public void setMusicUserId(String musicUserId) {
         this.musicUserId = musicUserId;
-        return this;
     }
 
-    public MusicUserIdAction setMusicUserIdMap(Map<String, String> musicUserIdMap) {
+    public void setMusicUserIdMap(Map<String, String> musicUserIdMap) {
         this.musicUserIdMap = musicUserIdMap;
-        return this;
     }
 }

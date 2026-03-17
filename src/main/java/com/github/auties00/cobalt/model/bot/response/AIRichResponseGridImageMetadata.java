@@ -61,21 +61,17 @@ public final class AIRichResponseGridImageMetadata implements AIRichResponseSubM
      * Sets the URL set for the composite grid image.
      *
      * @param gridImageUrl the grid image URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseGridImageMetadata setGridImageUrl(AIRichResponseImageURL gridImageUrl) {
+    public void setGridImageUrl(AIRichResponseImageURL gridImageUrl) {
         this.gridImageUrl = gridImageUrl;
-        return this;
     }
 
     /**
      * Sets the list of individual image URLs that compose the grid.
      *
      * @param imageUrls the image URLs to set
-     * @return this instance for chaining
      */
-    public AIRichResponseGridImageMetadata setImageUrls(List<AIRichResponseImageURL> imageUrls) {
+    public void setImageUrls(List<AIRichResponseImageURL> imageUrls) {
         this.imageUrls = imageUrls;
-        return this;
     }
 }

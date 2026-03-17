@@ -40,19 +40,16 @@ public final class EventResponseMessage implements Message {
         return extraGuestCount == null ? OptionalInt.empty() : OptionalInt.of(extraGuestCount);
     }
 
-    public EventResponseMessage setResponse(EventResponseType response) {
+    public void setResponse(EventResponseType response) {
         this.response = response;
-        return this;
     }
 
-    public EventResponseMessage setTimestampMs(Instant timestampMs) {
+    public void setTimestampMs(Instant timestampMs) {
         this.timestampMs = timestampMs;
-        return this;
     }
 
-    public EventResponseMessage setExtraGuestCount(Integer extraGuestCount) {
+    public void setExtraGuestCount(Integer extraGuestCount) {
         this.extraGuestCount = extraGuestCount;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.EventResponseMessage.EventResponseType")

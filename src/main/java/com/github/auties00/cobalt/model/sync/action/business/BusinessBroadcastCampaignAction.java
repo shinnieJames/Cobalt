@@ -122,49 +122,40 @@ public final class BusinessBroadcastCampaignAction implements SyncAction<Busines
         return Optional.ofNullable(status);
     }
 
-    public BusinessBroadcastCampaignAction setDeviceId(Integer deviceId) {
+    public void setDeviceId(Integer deviceId) {
         this.deviceId = deviceId;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setAdId(String adId) {
+    public void setAdId(String adId) {
         this.adId = adId;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setMsgId(String msgId) {
+    public void setMsgId(String msgId) {
         this.msgId = msgId;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setBroadcastJid(String broadcastJid) {
+    public void setBroadcastJid(String broadcastJid) {
         this.broadcastJid = broadcastJid;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setReservedQuota(Integer reservedQuota) {
+    public void setReservedQuota(Integer reservedQuota) {
         this.reservedQuota = reservedQuota;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setScheduledTimestamp(Long scheduledTimestamp) {
+    public void setScheduledTimestamp(Long scheduledTimestamp) {
         this.scheduledTimestamp = scheduledTimestamp;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setCreateTimestamp(Long createTimestamp) {
+    public void setCreateTimestamp(Long createTimestamp) {
         this.createTimestamp = createTimestamp;
-        return this;
     }
 
-    public BusinessBroadcastCampaignAction setStatus(Status status) {
+    public void setStatus(Status status) {
         this.status = status;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.BusinessBroadcastCampaignAction.Status")

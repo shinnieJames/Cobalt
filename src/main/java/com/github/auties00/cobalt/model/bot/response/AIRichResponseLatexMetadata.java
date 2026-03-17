@@ -66,22 +66,18 @@ public final class AIRichResponseLatexMetadata implements AIRichResponseSubMessa
      * Sets the text content that surrounds the LaTeX expressions.
      *
      * @param text the text to set
-     * @return this instance for chaining
      */
-    public AIRichResponseLatexMetadata setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
     /**
      * Sets the list of LaTeX expressions in this fragment.
      *
      * @param expressions the expressions to set
-     * @return this instance for chaining
      */
-    public AIRichResponseLatexMetadata setExpressions(List<AIRichResponseLatexExpression> expressions) {
+    public void setExpressions(List<AIRichResponseLatexExpression> expressions) {
         this.expressions = expressions;
-        return this;
     }
 
     /**
@@ -270,102 +266,84 @@ public final class AIRichResponseLatexMetadata implements AIRichResponseSubMessa
          * Sets the raw LaTeX source of this expression.
          *
          * @param latexExpression the LaTeX source to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setLatexExpression(String latexExpression) {
+        public void setLatexExpression(String latexExpression) {
             this.latexExpression = latexExpression;
-            return this;
-        }
+    }
 
         /**
          * Sets the URL of the pre-rendered image for this expression.
          *
          * @param url the image URL to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setUrl(String url) {
+        public void setUrl(String url) {
             this.url = url;
-            return this;
-        }
+    }
 
         /**
          * Sets the width of the rendered image in logical pixels.
          *
          * @param width the width to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setWidth(Double width) {
+        public void setWidth(Double width) {
             this.width = width;
-            return this;
-        }
+    }
 
         /**
          * Sets the height of the rendered image in logical pixels.
          *
          * @param height the height to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setHeight(Double height) {
+        public void setHeight(Double height) {
             this.height = height;
-            return this;
-        }
+    }
 
         /**
          * Sets the font height used when rendering the expression.
          *
          * @param fontHeight the font height to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setFontHeight(Double fontHeight) {
+        public void setFontHeight(Double fontHeight) {
             this.fontHeight = fontHeight;
-            return this;
-        }
+    }
 
         /**
          * Sets the top padding of the rendered image in logical pixels.
          *
          * @param imageTopPadding the top padding to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setImageTopPadding(Double imageTopPadding) {
+        public void setImageTopPadding(Double imageTopPadding) {
             this.imageTopPadding = imageTopPadding;
-            return this;
-        }
+    }
 
         /**
          * Sets the leading padding of the rendered image in logical
          * pixels.
          *
          * @param imageLeadingPadding the leading padding to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setImageLeadingPadding(Double imageLeadingPadding) {
+        public void setImageLeadingPadding(Double imageLeadingPadding) {
             this.imageLeadingPadding = imageLeadingPadding;
-            return this;
-        }
+    }
 
         /**
          * Sets the bottom padding of the rendered image in logical
          * pixels.
          *
          * @param imageBottomPadding the bottom padding to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setImageBottomPadding(Double imageBottomPadding) {
+        public void setImageBottomPadding(Double imageBottomPadding) {
             this.imageBottomPadding = imageBottomPadding;
-            return this;
-        }
+    }
 
         /**
          * Sets the trailing padding of the rendered image in logical
          * pixels.
          *
          * @param imageTrailingPadding the trailing padding to set
-         * @return this instance for chaining
          */
-        public AIRichResponseLatexExpression setImageTrailingPadding(Double imageTrailingPadding) {
+        public void setImageTrailingPadding(Double imageTrailingPadding) {
             this.imageTrailingPadding = imageTrailingPadding;
-            return this;
-        }
+    }
     }
 }

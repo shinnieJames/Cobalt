@@ -84,32 +84,26 @@ public final class MediaNotifyMessage {
      * Sets the express path URL for optimized download.
      *
      * @param expressPathUrl the express path URL
-     * @return this instance for chaining
      */
-    public MediaNotifyMessage setExpressPathUrl(String expressPathUrl) {
+    public void setExpressPathUrl(String expressPathUrl) {
         this.expressPathUrl = expressPathUrl;
-        return this;
     }
 
     /**
      * Sets the SHA-256 digest of the encrypted file.
      *
      * @param fileEncSha256 the encrypted file hash
-     * @return this instance for chaining
      */
-    public MediaNotifyMessage setFileEncSha256(byte[] fileEncSha256) {
+    public void setFileEncSha256(byte[] fileEncSha256) {
         this.fileEncSha256 = fileEncSha256;
-        return this;
     }
 
     /**
      * Sets the total file length in bytes.
      *
      * @param fileLength the file length
-     * @return this instance for chaining
      */
-    public MediaNotifyMessage setFileLength(Long fileLength) {
+    public void setFileLength(Long fileLength) {
         this.fileLength = fileLength;
-        return this;
     }
 }

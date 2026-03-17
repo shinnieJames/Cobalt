@@ -38,24 +38,20 @@ public final class HydratedTemplateButton {
         return Optional.empty();
     }
 
-    public HydratedTemplateButton setIndex(Integer index) {
+    public void setIndex(Integer index) {
         this.index = index;
-        return this;
     }
 
-    public HydratedTemplateButton setQuickReplyButton(HydratedQuickReplyButton quickReplyButton) {
+    public void setQuickReplyButton(HydratedQuickReplyButton quickReplyButton) {
         this.quickReplyButton = quickReplyButton;
-        return this;
     }
 
-    public HydratedTemplateButton setUrlButton(HydratedURLButton urlButton) {
+    public void setUrlButton(HydratedURLButton urlButton) {
         this.urlButton = urlButton;
-        return this;
     }
 
-    public HydratedTemplateButton setCallButton(HydratedCallButton callButton) {
+    public void setCallButton(HydratedCallButton callButton) {
         this.callButton = callButton;
-        return this;
     }
 
     @ProtobufMessage(name = "HydratedTemplateButton.HydratedCallButton")
@@ -80,15 +76,13 @@ public final class HydratedTemplateButton {
             return Optional.ofNullable(phoneNumber);
         }
 
-        public HydratedCallButton setDisplayText(String displayText) {
+        public void setDisplayText(String displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
 
-        public HydratedCallButton setPhoneNumber(String phoneNumber) {
+        public void setPhoneNumber(String phoneNumber) {
             this.phoneNumber = phoneNumber;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "HydratedTemplateButton.HydratedQuickReplyButton")
@@ -113,15 +107,13 @@ public final class HydratedTemplateButton {
             return Optional.ofNullable(id);
         }
 
-        public HydratedQuickReplyButton setDisplayText(String displayText) {
+        public void setDisplayText(String displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
 
-        public HydratedQuickReplyButton setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "HydratedTemplateButton.HydratedURLButton")
@@ -162,25 +154,21 @@ public final class HydratedTemplateButton {
             return Optional.ofNullable(webviewPresentation);
         }
 
-        public HydratedURLButton setDisplayText(String displayText) {
+        public void setDisplayText(String displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
 
-        public HydratedURLButton setUrl(String url) {
+        public void setUrl(String url) {
             this.url = url;
-            return this;
-        }
+    }
 
-        public HydratedURLButton setConsentedUsersUrl(String consentedUsersUrl) {
+        public void setConsentedUsersUrl(String consentedUsersUrl) {
             this.consentedUsersUrl = consentedUsersUrl;
-            return this;
-        }
+    }
 
-        public HydratedURLButton setWebviewPresentation(WebviewPresentationType webviewPresentation) {
+        public void setWebviewPresentation(WebviewPresentationType webviewPresentation) {
             this.webviewPresentation = webviewPresentation;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "HydratedTemplateButton.HydratedURLButton.WebviewPresentationType")
         public static enum WebviewPresentationType {

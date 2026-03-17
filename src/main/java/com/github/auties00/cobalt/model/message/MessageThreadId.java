@@ -30,14 +30,12 @@ public final class MessageThreadId {
         return Optional.ofNullable(threadKey);
     }
 
-    public MessageThreadId setThreadType(ThreadType threadType) {
+    public void setThreadType(ThreadType threadType) {
         this.threadType = threadType;
-        return this;
     }
 
-    public MessageThreadId setThreadKey(MessageKey threadKey) {
+    public void setThreadKey(MessageKey threadKey) {
         this.threadKey = threadKey;
-        return this;
     }
 
     @ProtobufEnum(name = "ThreadID.ThreadType")

@@ -56,9 +56,8 @@ public final class FavoritesAction implements SyncAction<SyncActionEmptyArgs> {
         return favorites == null ? List.of() : Collections.unmodifiableList(favorites);
     }
 
-    public FavoritesAction setFavorites(List<Favorite> favorites) {
+    public void setFavorites(List<Favorite> favorites) {
         this.favorites = favorites;
-        return this;
     }
 
     @ProtobufMessage(name = "SyncActionValue.FavoritesAction.Favorite")
@@ -75,9 +74,8 @@ public final class FavoritesAction implements SyncAction<SyncActionEmptyArgs> {
             return Optional.ofNullable(id);
         }
 
-        public Favorite setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
     }
 }

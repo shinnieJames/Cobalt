@@ -103,33 +103,27 @@ public final class BotProgressIndicatorMetadata {
      * Sets the human-readable description of the current bot activity.
      *
      * @param progressDescription the new progress description, or {@code null}
-     * @return this instance for chaining
      */
-    public BotProgressIndicatorMetadata setProgressDescription(String progressDescription) {
+    public void setProgressDescription(String progressDescription) {
         this.progressDescription = progressDescription;
-        return this;
     }
 
     /**
      * Sets the list of planning steps.
      *
      * @param stepsMetadata the new list of planning steps, or {@code null}
-     * @return this instance for chaining
      */
-    public BotProgressIndicatorMetadata setStepsMetadata(List<BotPlanningStepMetadata> stepsMetadata) {
+    public void setStepsMetadata(List<BotPlanningStepMetadata> stepsMetadata) {
         this.stepsMetadata = stepsMetadata;
-        return this;
     }
 
     /**
      * Sets the estimated time at which the bot will complete its response.
      *
      * @param estimatedCompletionTime the new estimated completion time, or {@code null}
-     * @return this instance for chaining
      */
-    public BotProgressIndicatorMetadata setEstimatedCompletionTime(Instant estimatedCompletionTime) {
+    public void setEstimatedCompletionTime(Instant estimatedCompletionTime) {
         this.estimatedCompletionTime = estimatedCompletionTime;
-        return this;
     }
 
     /**
@@ -286,78 +280,64 @@ public final class BotProgressIndicatorMetadata {
          * Sets the title of this planning step.
          *
          * @param statusTitle the new step title, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setStatusTitle(String statusTitle) {
+        public void setStatusTitle(String statusTitle) {
             this.statusTitle = statusTitle;
-            return this;
-        }
+    }
 
         /**
          * Sets the body text of this planning step.
          *
          * @param statusBody the new step body, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setStatusBody(String statusBody) {
+        public void setStatusBody(String statusBody) {
             this.statusBody = statusBody;
-            return this;
-        }
+    }
 
         /**
          * Sets the list of search sources consulted during this step.
          *
          * @param sourcesMetadata the new search sources list, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setSourcesMetadata(List<BotPlanningSearchSourcesMetadata> sourcesMetadata) {
+        public void setSourcesMetadata(List<BotPlanningSearchSourcesMetadata> sourcesMetadata) {
             this.sourcesMetadata = sourcesMetadata;
-            return this;
-        }
+    }
 
         /**
          * Sets the lifecycle status of this planning step.
          *
          * @param status the new step status, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setStatus(PlanningStepStatus status) {
+        public void setStatus(PlanningStepStatus status) {
             this.status = status;
-            return this;
-        }
+    }
 
         /**
          * Sets whether this step involves AI reasoning mode.
          *
          * @param isReasoning whether reasoning mode is active, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setReasoning(Boolean isReasoning) {
+        public void setReasoning(Boolean isReasoning) {
             this.isReasoning = isReasoning;
-            return this;
-        }
+    }
 
         /**
          * Sets whether this step uses enhanced web search.
          *
          * @param isEnhancedSearch whether enhanced search is active, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setEnhancedSearch(Boolean isEnhancedSearch) {
+        public void setEnhancedSearch(Boolean isEnhancedSearch) {
             this.isEnhancedSearch = isEnhancedSearch;
-            return this;
-        }
+    }
 
         /**
          * Sets the sub-sections within this step.
          *
          * @param sections the new list of step sections, or {@code null}
-         * @return this instance for chaining
          */
-        public BotPlanningStepMetadata setSections(List<BotPlanningStepSectionMetadata> sections) {
+        public void setSections(List<BotPlanningStepSectionMetadata> sections) {
             this.sections = sections;
-            return this;
-        }
+    }
 
         /**
          * The search engine provider that supplied a search source result
@@ -538,45 +518,37 @@ public final class BotProgressIndicatorMetadata {
              * Sets the title of the search source.
              *
              * @param title the new source title, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourceMetadata setTitle(String title) {
+            public void setTitle(String title) {
                 this.title = title;
-                return this;
-            }
+    }
 
             /**
              * Sets the search engine provider.
              *
              * @param provider the new provider, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourceMetadata setProvider(BotSearchSourceProvider provider) {
+            public void setProvider(BotSearchSourceProvider provider) {
                 this.provider = provider;
-                return this;
-            }
+    }
 
             /**
              * Sets the URL of the search source.
              *
              * @param sourceUrl the new source URL, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourceMetadata setSourceUrl(URI sourceUrl) {
+            public void setSourceUrl(URI sourceUrl) {
                 this.sourceUrl = sourceUrl;
-                return this;
-            }
+    }
 
             /**
              * Sets the URL of the source's favicon image.
              *
              * @param favIconUrl the new favicon URL, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourceMetadata setFavIconUrl(URI favIconUrl) {
+            public void setFavIconUrl(URI favIconUrl) {
                 this.favIconUrl = favIconUrl;
-                return this;
-            }
+    }
         }
 
         /**
@@ -659,34 +631,28 @@ public final class BotProgressIndicatorMetadata {
              * Sets the title of the search source.
              *
              * @param sourceTitle the new source title, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourcesMetadata setSourceTitle(String sourceTitle) {
+            public void setSourceTitle(String sourceTitle) {
                 this.sourceTitle = sourceTitle;
-                return this;
-            }
+    }
 
             /**
              * Sets the search engine provider.
              *
              * @param provider the new provider, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourcesMetadata setProvider(BotPlanningSearchSourceProvider provider) {
+            public void setProvider(BotPlanningSearchSourceProvider provider) {
                 this.provider = provider;
-                return this;
-            }
+    }
 
             /**
              * Sets the URL of the search source.
              *
              * @param sourceUrl the new source URL, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningSearchSourcesMetadata setSourceUrl(URI sourceUrl) {
+            public void setSourceUrl(URI sourceUrl) {
                 this.sourceUrl = sourceUrl;
-                return this;
-            }
+    }
 
             /**
              * The search engine provider that supplied a search source result
@@ -806,34 +772,28 @@ public final class BotProgressIndicatorMetadata {
              * Sets the title of this section.
              *
              * @param sectionTitle the new section title, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningStepSectionMetadata setSectionTitle(String sectionTitle) {
+            public void setSectionTitle(String sectionTitle) {
                 this.sectionTitle = sectionTitle;
-                return this;
-            }
+    }
 
             /**
              * Sets the body text of this section.
              *
              * @param sectionBody the new section body, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningStepSectionMetadata setSectionBody(String sectionBody) {
+            public void setSectionBody(String sectionBody) {
                 this.sectionBody = sectionBody;
-                return this;
-            }
+    }
 
             /**
              * Sets the search sources referenced in this section.
              *
              * @param sourcesMetadata the new list of search sources, or {@code null}
-             * @return this instance for chaining
              */
-            public BotPlanningStepSectionMetadata setSourcesMetadata(List<BotPlanningSearchSourceMetadata> sourcesMetadata) {
+            public void setSourcesMetadata(List<BotPlanningSearchSourceMetadata> sourcesMetadata) {
                 this.sourcesMetadata = sourcesMetadata;
-                return this;
-            }
+    }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.message.media;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveAnnotation;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveHeader;
@@ -18,7 +19,7 @@ import java.util.*;
 @ProtobufMessage(name = "Message.ImageMessage")
 public final class ImageMessage implements InteractiveHeader, InteractiveMessage.MediaSpec, TemplateMessage.Title, TemplateMessage.TitleSpec, MediaMessage {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    String url;
+    String mediaUrl;
 
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
     String mimetype;
@@ -27,10 +28,10 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     String caption;
 
     @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
-    byte[] fileSha256;
+    byte[] mediaSha256;
 
     @ProtobufProperty(index = 5, type = ProtobufType.UINT64)
-    Long fileLength;
+    Long mediaSize;
 
     @ProtobufProperty(index = 6, type = ProtobufType.UINT32)
     Integer height;
@@ -42,13 +43,13 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     byte[] mediaKey;
 
     @ProtobufProperty(index = 9, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 10, type = ProtobufType.MESSAGE)
     List<InteractiveAnnotation> interactiveAnnotations;
 
     @ProtobufProperty(index = 11, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
     @ProtobufProperty(index = 12, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
@@ -111,18 +112,18 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     String qrUrl;
 
 
-    ImageMessage(String url, String mimetype, String caption, byte[] fileSha256, Long fileLength, Integer height, Integer width, byte[] mediaKey, byte[] fileEncSha256, List<InteractiveAnnotation> interactiveAnnotations, String directPath, Instant mediaKeyTimestamp, byte[] jpegThumbnail, ContextInfo contextInfo, byte[] firstScanSidecar, Integer firstScanLength, Integer experimentGroupId, byte[] scansSidecar, List<Integer> scanLengths, byte[] midQualityFileSha256, byte[] midQualityFileEncSha256, Boolean viewOnce, String thumbnailDirectPath, byte[] thumbnailSha256, byte[] thumbnailEncSha256, String staticUrl, List<InteractiveAnnotation> annotations, ImageSourceType imageSourceType, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain, String qrUrl) {
-        this.url = url;
+    ImageMessage(String mediaUrl, String mimetype, String caption, byte[] mediaSha256, Long mediaSize, Integer height, Integer width, byte[] mediaKey, byte[] mediaEncryptedSha256, List<InteractiveAnnotation> interactiveAnnotations, String mediaDirectPath, Instant mediaKeyTimestamp, byte[] jpegThumbnail, ContextInfo contextInfo, byte[] firstScanSidecar, Integer firstScanLength, Integer experimentGroupId, byte[] scansSidecar, List<Integer> scanLengths, byte[] midQualityFileSha256, byte[] midQualityFileEncSha256, Boolean viewOnce, String thumbnailDirectPath, byte[] thumbnailSha256, byte[] thumbnailEncSha256, String staticUrl, List<InteractiveAnnotation> annotations, ImageSourceType imageSourceType, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain, String qrUrl) {
+        this.mediaUrl = mediaUrl;
         this.mimetype = mimetype;
         this.caption = caption;
-        this.fileSha256 = fileSha256;
-        this.fileLength = fileLength;
+        this.mediaSha256 = mediaSha256;
+        this.mediaSize = mediaSize;
         this.height = height;
         this.width = width;
         this.mediaKey = mediaKey;
-        this.fileEncSha256 = fileEncSha256;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
         this.interactiveAnnotations = interactiveAnnotations;
-        this.directPath = directPath;
+        this.mediaDirectPath = mediaDirectPath;
         this.mediaKeyTimestamp = mediaKeyTimestamp;
         this.jpegThumbnail = jpegThumbnail;
         this.contextInfo = contextInfo;
@@ -146,7 +147,12 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     }
 
     public Optional<String> url() {
-        return Optional.ofNullable(url);
+        return Optional.ofNullable(mediaUrl);
+    }
+
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.ofNullable(mediaUrl);
     }
 
     public Optional<String> mimetype() {
@@ -158,11 +164,21 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     }
 
     public Optional<byte[]> fileSha256() {
-        return Optional.ofNullable(fileSha256);
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(mediaSha256);
     }
 
     public OptionalLong fileLength() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     public OptionalInt height() {
@@ -178,7 +194,12 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     }
 
     public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaEncryptedSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     public List<InteractiveAnnotation> interactiveAnnotations() {
@@ -186,7 +207,12 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
     }
 
     public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
     }
 
     public Optional<Instant> mediaKeyTimestamp() {
@@ -269,159 +295,140 @@ public final class ImageMessage implements InteractiveHeader, InteractiveMessage
         return Optional.ofNullable(qrUrl);
     }
 
-    public ImageMessage setUrl(String url) {
-        this.url = url;
-        return this;
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.IMAGE;
     }
 
-    public ImageMessage setMimetype(String mimetype) {
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
-    public ImageMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public ImageMessage setFileSha256(byte[] fileSha256) {
-        this.fileSha256 = fileSha256;
-        return this;
+    @Override
+    public void setMediaSha256(byte[] mediaSha256) {
+        this.mediaSha256 = mediaSha256;
     }
 
-    public ImageMessage setFileLength(Long fileLength) {
-        this.fileLength = fileLength;
-        return this;
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
     }
 
-    public ImageMessage setHeight(Integer height) {
+    public void setHeight(Integer height) {
         this.height = height;
-        return this;
     }
 
-    public ImageMessage setWidth(Integer width) {
+    public void setWidth(Integer width) {
         this.width = width;
-        return this;
     }
 
-    public ImageMessage setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public ImageMessage setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
     }
 
-    public ImageMessage setInteractiveAnnotations(List<InteractiveAnnotation> interactiveAnnotations) {
+    public void setInteractiveAnnotations(List<InteractiveAnnotation> interactiveAnnotations) {
         this.interactiveAnnotations = interactiveAnnotations;
-        return this;
     }
 
-    public ImageMessage setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    public ImageMessage setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    @Override
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public ImageMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public ImageMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public ImageMessage setFirstScanSidecar(byte[] firstScanSidecar) {
+    public void setFirstScanSidecar(byte[] firstScanSidecar) {
         this.firstScanSidecar = firstScanSidecar;
-        return this;
     }
 
-    public ImageMessage setFirstScanLength(Integer firstScanLength) {
+    public void setFirstScanLength(Integer firstScanLength) {
         this.firstScanLength = firstScanLength;
-        return this;
     }
 
-    public ImageMessage setExperimentGroupId(Integer experimentGroupId) {
+    public void setExperimentGroupId(Integer experimentGroupId) {
         this.experimentGroupId = experimentGroupId;
-        return this;
     }
 
-    public ImageMessage setScansSidecar(byte[] scansSidecar) {
+    public void setScansSidecar(byte[] scansSidecar) {
         this.scansSidecar = scansSidecar;
-        return this;
     }
 
-    public ImageMessage setScanLengths(List<Integer> scanLengths) {
+    public void setScanLengths(List<Integer> scanLengths) {
         this.scanLengths = scanLengths;
-        return this;
     }
 
-    public ImageMessage setMidQualityFileSha256(byte[] midQualityFileSha256) {
+    public void setMidQualityFileSha256(byte[] midQualityFileSha256) {
         this.midQualityFileSha256 = midQualityFileSha256;
-        return this;
     }
 
-    public ImageMessage setMidQualityFileEncSha256(byte[] midQualityFileEncSha256) {
+    public void setMidQualityFileEncSha256(byte[] midQualityFileEncSha256) {
         this.midQualityFileEncSha256 = midQualityFileEncSha256;
-        return this;
     }
 
-    public ImageMessage setViewOnce(Boolean viewOnce) {
+    public void setViewOnce(Boolean viewOnce) {
         this.viewOnce = viewOnce;
-        return this;
     }
 
-    public ImageMessage setThumbnailDirectPath(String thumbnailDirectPath) {
+    public void setThumbnailDirectPath(String thumbnailDirectPath) {
         this.thumbnailDirectPath = thumbnailDirectPath;
-        return this;
     }
 
-    public ImageMessage setThumbnailSha256(byte[] thumbnailSha256) {
+    public void setThumbnailSha256(byte[] thumbnailSha256) {
         this.thumbnailSha256 = thumbnailSha256;
-        return this;
     }
 
-    public ImageMessage setThumbnailEncSha256(byte[] thumbnailEncSha256) {
+    public void setThumbnailEncSha256(byte[] thumbnailEncSha256) {
         this.thumbnailEncSha256 = thumbnailEncSha256;
-        return this;
     }
 
-    public ImageMessage setStaticUrl(String staticUrl) {
+    public void setStaticUrl(String staticUrl) {
         this.staticUrl = staticUrl;
-        return this;
     }
 
-    public ImageMessage setAnnotations(List<InteractiveAnnotation> annotations) {
+    public void setAnnotations(List<InteractiveAnnotation> annotations) {
         this.annotations = annotations;
-        return this;
     }
 
-    public ImageMessage setImageSourceType(ImageSourceType imageSourceType) {
+    public void setImageSourceType(ImageSourceType imageSourceType) {
         this.imageSourceType = imageSourceType;
-        return this;
     }
 
-    public ImageMessage setAccessibilityLabel(String accessibilityLabel) {
+    public void setAccessibilityLabel(String accessibilityLabel) {
         this.accessibilityLabel = accessibilityLabel;
-        return this;
     }
 
-    public ImageMessage setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
+    public void setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
         this.mediaKeyDomain = mediaKeyDomain;
-        return this;
     }
 
-    public ImageMessage setQrUrl(String qrUrl) {
+    public void setQrUrl(String qrUrl) {
         this.qrUrl = qrUrl;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ImageMessage.ImageSourceType")

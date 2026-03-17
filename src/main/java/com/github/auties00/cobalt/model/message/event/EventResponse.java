@@ -47,23 +47,19 @@ public final class EventResponse {
         return unread != null && unread;
     }
 
-    public EventResponse setEventResponseMessageKey(MessageKey eventResponseMessageKey) {
+    public void setEventResponseMessageKey(MessageKey eventResponseMessageKey) {
         this.eventResponseMessageKey = eventResponseMessageKey;
-        return this;
     }
 
-    public EventResponse setTimestampMs(Instant timestampMs) {
+    public void setTimestampMs(Instant timestampMs) {
         this.timestampMs = timestampMs;
-        return this;
     }
 
-    public EventResponse setEventResponseMessage(EventResponseMessage eventResponseMessage) {
+    public void setEventResponseMessage(EventResponseMessage eventResponseMessage) {
         this.eventResponseMessage = eventResponseMessage;
-        return this;
     }
 
-    public EventResponse setUnread(Boolean unread) {
+    public void setUnread(Boolean unread) {
         this.unread = unread;
-        return this;
     }
 }

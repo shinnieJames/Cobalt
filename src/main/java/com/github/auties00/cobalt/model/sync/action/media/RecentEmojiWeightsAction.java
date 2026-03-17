@@ -56,8 +56,7 @@ public final class RecentEmojiWeightsAction implements SyncAction<SyncActionEmpt
         return weights == null ? List.of() : Collections.unmodifiableList(weights);
     }
 
-    public RecentEmojiWeightsAction setWeights(List<RecentEmojiWeight> weights) {
+    public void setWeights(List<RecentEmojiWeight> weights) {
         this.weights = weights;
-        return this;
     }
 }

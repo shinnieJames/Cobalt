@@ -4,11 +4,11 @@ import com.github.auties00.cobalt.message.send.bot.BotMessageSecret;
 import com.github.auties00.cobalt.message.send.bot.BotProtobufTransform;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.device.DeviceListMetadata;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -73,8 +73,8 @@ public final class BotStanza {
         var container = messageInfo.message();
 
         // Derive bot message secret from the message secret
-        var messageSecret = container.deviceInfo()
-                .flatMap(DeviceContextInfo::messageSecret)
+        var messageSecret = container.messageContextInfo()
+                .flatMap(ChatMessageContextInfo::messageSecret)
                 .orElse(null);
         byte[] botSecret = null;
         if (messageSecret != null) {
@@ -179,8 +179,8 @@ public final class BotStanza {
         var botJid = Jid.metaAiBotAccount();
         var container = messageInfo.message();
 
-        var messageSecret = container.deviceInfo()
-                .flatMap(DeviceContextInfo::messageSecret)
+        var messageSecret = container.messageContextInfo()
+                .flatMap(ChatMessageContextInfo::messageSecret)
                 .orElse(null);
         byte[] botSecret = null;
         if (messageSecret != null) {
@@ -256,7 +256,7 @@ public final class BotStanza {
      */
     private static boolean isBotFeedback(ChatMessageInfo messageInfo) {
         return messageInfo.message().content() instanceof ProtocolMessage pm
-                && pm.protocolType() == ProtocolMessage.Type.BOT_FEEDBACK_MESSAGE;
+                && pm.type().orElse(null) == ProtocolMessage.Type.BOT_FEEDBACK_MESSAGE;
     }
 
     /**

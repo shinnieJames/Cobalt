@@ -154,10 +154,15 @@ public final class MessageSendingService {
     public AckResult send(MessageInfo messageInfo) {
         Objects.requireNonNull(messageInfo, "messageInfo");
 
-        var parentId = messageInfo.key().parentJid();
+        var messageId = messageInfo
+                .key()
+                .id()
+                .orElseThrow(() -> new IllegalArgumentException("messageId is required for outgoing messages"));
+        var parentJid = messageInfo.key()
+                .parentJid()
+                .orElseThrow(() -> new IllegalArgumentException("parentJid is required for outgoing messages"));
 
         // WAWebMessageDedupUtils: check if this message ID is already in flight
-        var messageId = messageInfo.key().id();
         if (messageDedup.isPending(messageId)) {
             throw new WhatsAppMessageException.Send.Unknown(
                     "Duplicate send for message ID: " + messageId, null);
@@ -166,21 +171,21 @@ public final class MessageSendingService {
         messageDedup.add(messageId);
         try {
             return switch (messageInfo) {
-                case ChatMessageInfo chatMessage when parentId.hasUserServer() || parentId.hasLidServer() ->
+                case ChatMessageInfo chatMessage when parentJid.hasUserServer() || parentJid.hasLidServer() ->
                     // WAWebSendMsgJob: to.isUser() → encryptAndSendUserMsg
-                    userSender.send(parentId, chatMessage);
-                case ChatMessageInfo chatMessage when parentId.hasGroupOrCommunityServer() ->
+                    userSender.send(parentJid, chatMessage);
+                case ChatMessageInfo chatMessage when parentJid.hasGroupOrCommunityServer() ->
                     // WAWebSendMsgJob: to.isGroup() → encryptAndSendGroupMsg
-                    groupSender.send(parentId, chatMessage);
-                case ChatMessageInfo chatMessage when parentId.isStatusBroadcastAccount() ->
+                    groupSender.send(parentJid, chatMessage);
+                case ChatMessageInfo chatMessage when parentJid.isStatusBroadcastAccount() ->
                     // WAWebEncryptAndSendStatusMsg: status@broadcast → encryptAndSendStatusMsg
-                    statusSender.send(parentId, chatMessage);
-                case NewsletterMessageInfo newsletterMessage when parentId.hasNewsletterServer() ->
+                    statusSender.send(parentJid, chatMessage);
+                case NewsletterMessageInfo newsletterMessage when parentJid.hasNewsletterServer() ->
                     // WAWebNewsletterSendMessageQueryJob: newsletter → querySendNewsletterMessage
-                    newsletterSender.send(parentId, newsletterMessage);
+                    newsletterSender.send(parentJid, newsletterMessage);
                 default -> throw new WhatsAppMessageException.Send.InvalidRecipient(
-                    parentId, "Unsupported combination: " + messageInfo.getClass().getSimpleName()
-                            + " with JID type " + parentId.server());
+                    parentJid, "Unsupported combination: " + messageInfo.getClass().getSimpleName()
+                            + " with JID type " + parentJid.server());
             };
         } finally {
             messageDedup.remove(messageId);

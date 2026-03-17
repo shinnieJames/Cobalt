@@ -74,33 +74,27 @@ public final class NewsletterPicture {
      * Sets the picture identifier.
      *
      * @param id the picture id
-     * @return this instance for chaining
      */
-    public NewsletterPicture setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
      * Sets the picture type.
      *
      * @param type the picture type
-     * @return this instance for chaining
      */
-    public NewsletterPicture setType(String type) {
+    public void setType(String type) {
         this.type = type;
-        return this;
     }
 
     /**
      * Sets the direct path to the picture.
      *
      * @param directPath the direct path
-     * @return this instance for chaining
      */
-    public NewsletterPicture setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
     @Override

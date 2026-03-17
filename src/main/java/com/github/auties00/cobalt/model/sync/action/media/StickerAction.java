@@ -2,11 +2,15 @@ package com.github.auties00.cobalt.model.sync.action.media;
 
 import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.media.MediaProvider;
+import com.github.auties00.cobalt.model.preference.Sticker;
+import com.github.auties00.cobalt.model.preference.StickerBuilder;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -46,10 +50,10 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
 
 
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    String url;
+    String mediaUrl;
 
     @ProtobufProperty(index = 2, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
     byte[] mediaKey;
@@ -64,10 +68,10 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
     Integer width;
 
     @ProtobufProperty(index = 7, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
     @ProtobufProperty(index = 8, type = ProtobufType.UINT64)
-    Long fileLength;
+    Long mediaSize;
 
     @ProtobufProperty(index = 9, type = ProtobufType.BOOL)
     Boolean isFavorite;
@@ -85,15 +89,15 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
     Boolean isAvatarSticker;
 
 
-    StickerAction(String url, byte[] fileEncSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String directPath, Long fileLength, Boolean isFavorite, Integer deviceIdHint, Boolean isLottie, String imageHash, Boolean isAvatarSticker) {
-        this.url = url;
-        this.fileEncSha256 = fileEncSha256;
+    StickerAction(String mediaUrl, byte[] mediaEncryptedSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String mediaDirectPath, Long mediaSize, Boolean isFavorite, Integer deviceIdHint, Boolean isLottie, String imageHash, Boolean isAvatarSticker) {
+        this.mediaUrl = mediaUrl;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
         this.mediaKey = mediaKey;
         this.mimetype = mimetype;
         this.height = height;
         this.width = width;
-        this.directPath = directPath;
-        this.fileLength = fileLength;
+        this.mediaDirectPath = mediaDirectPath;
+        this.mediaSize = mediaSize;
         this.isFavorite = isFavorite;
         this.deviceIdHint = deviceIdHint;
         this.isLottie = isLottie;
@@ -102,31 +106,21 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
     }
 
     public Optional<String> url() {
-        return Optional.ofNullable(url);
-    }
-
-    public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaUrl);
     }
 
     @Override
     public Optional<String> mediaUrl() {
-        return Optional.of(url);
+        return Optional.ofNullable(mediaUrl);
+    }
+
+    public Optional<byte[]> fileEncSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     @Override
-    public void setMediaUrl(String mediaUrl) {
-        this.url = mediaUrl;
-    }
-
-    @Override
-    public Optional<String> mediaDirectPath() {
-        return Optional.empty();
-    }
-
-    @Override
-    public void setMediaDirectPath(String mediaDirectPath) {
-
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     public Optional<byte[]> mediaKey() {
@@ -146,11 +140,21 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
     }
 
     public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
     }
 
     public OptionalLong fileLength() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     public boolean isFavorite() {
@@ -173,55 +177,9 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
         return isAvatarSticker != null && isAvatarSticker;
     }
 
-    public StickerAction setUrl(String url) {
-        this.url = url;
-        return this;
-    }
-
-    public StickerAction setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
-    }
-
-    @Override
-    public void setMediaKey(byte[] mediaKey) {
-        this.mediaKey = mediaKey;
-    }
-
-    @Override
-    public void setMediaKeyTimestamp(Long timestamp) {
-
-    }
-
     @Override
     public Optional<byte[]> mediaSha256() {
         return Optional.empty();
-    }
-
-    @Override
-    public void setMediaSha256(byte[] bytes) {
-
-    }
-
-    @Override
-    public Optional<byte[]> mediaEncryptedSha256() {
-        return Optional.ofNullable(fileEncSha256);
-    }
-
-    @Override
-    public void setMediaEncryptedSha256(byte[] bytes) {
-        this.fileEncSha256= bytes;
-    }
-
-
-    @Override
-    public OptionalLong mediaSize() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
-    }
-
-    @Override
-    public void setMediaSize(long mediaSize) {
-        this.fileLength = mediaSize;
     }
 
     @Override
@@ -229,55 +187,83 @@ public final class StickerAction implements SyncAction<StickerActionArgs>, Media
         return MediaPath.STICKER;
     }
 
-    public StickerAction setMimetype(String mimetype) {
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
+    }
+
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+    }
+
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
+        this.mediaKey = mediaKey;
+    }
+
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
-    public StickerAction setHeight(Integer height) {
+    public void setHeight(Integer height) {
         this.height = height;
-        return this;
     }
 
-    public StickerAction setWidth(Integer width) {
+    public void setWidth(Integer width) {
         this.width = width;
-        return this;
     }
 
-    public StickerAction setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    public StickerAction setFileLength(Long fileLength) {
-        this.fileLength = fileLength;
-        return this;
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
     }
 
-    public StickerAction setFavorite(Boolean isFavorite) {
+    public void setFavorite(Boolean isFavorite) {
         this.isFavorite = isFavorite;
-        return this;
     }
 
-    public StickerAction setDeviceIdHint(Integer deviceIdHint) {
+    public void setDeviceIdHint(Integer deviceIdHint) {
         this.deviceIdHint = deviceIdHint;
-        return this;
     }
 
-    public StickerAction setLottie(Boolean isLottie) {
+    public void setLottie(Boolean isLottie) {
         this.isLottie = isLottie;
-        return this;
     }
 
-    public StickerAction setImageHash(String imageHash) {
+    public void setImageHash(String imageHash) {
         this.imageHash = imageHash;
-        return this;
     }
 
-    public StickerAction setAvatarSticker(Boolean isAvatarSticker) {
+    public void setAvatarSticker(Boolean isAvatarSticker) {
         this.isAvatarSticker = isAvatarSticker;
-        return this;
     }
 
+    @Override
+    public void setMediaSha256(byte[] bytes) {
+    }
 
+    @Override
+    public void setMediaKeyTimestamp(Instant timestamp) {
+    }
+
+    public Sticker toSticker() {
+        return new StickerBuilder()
+                .mediaUrl(mediaUrl)
+                .mediaEncryptedSha256(mediaEncryptedSha256)
+                .mediaKey(mediaKey)
+                .mimetype(mimetype)
+                .height(height)
+                .width(width)
+                .mediaDirectPath(mediaDirectPath)
+                .mediaSize(mediaSize)
+                .favorite(isFavorite())
+                .deviceIdHint(deviceIdHint)
+                .build();
+    }
 }

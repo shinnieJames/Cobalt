@@ -73,44 +73,36 @@ public final class InteractiveAnnotation {
         return Optional.empty();
     }
 
-    public InteractiveAnnotation setPolygonVertices(List<Point> polygonVertices) {
+    public void setPolygonVertices(List<Point> polygonVertices) {
         this.polygonVertices = polygonVertices;
-        return this;
     }
 
-    public InteractiveAnnotation setShouldSkipConfirmation(Boolean shouldSkipConfirmation) {
+    public void setShouldSkipConfirmation(Boolean shouldSkipConfirmation) {
         this.shouldSkipConfirmation = shouldSkipConfirmation;
-        return this;
     }
 
-    public InteractiveAnnotation setEmbeddedContent(EmbeddedContent embeddedContent) {
+    public void setEmbeddedContent(EmbeddedContent embeddedContent) {
         this.embeddedContent = embeddedContent;
-        return this;
     }
 
-    public InteractiveAnnotation setStatusLinkType(StatusLinkType statusLinkType) {
+    public void setStatusLinkType(StatusLinkType statusLinkType) {
         this.statusLinkType = statusLinkType;
-        return this;
     }
 
-    public InteractiveAnnotation setLocation(Location location) {
+    public void setLocation(Location location) {
         this.location = location;
-        return this;
     }
 
-    public InteractiveAnnotation setNewsletter(ContextInfo.ForwardedNewsletterMessageInfo newsletter) {
+    public void setNewsletter(ContextInfo.ForwardedNewsletterMessageInfo newsletter) {
         this.newsletter = newsletter;
-        return this;
     }
 
-    public InteractiveAnnotation setEmbeddedAction(Boolean embeddedAction) {
+    public void setEmbeddedAction(Boolean embeddedAction) {
         this.embeddedAction = embeddedAction;
-        return this;
     }
 
-    public InteractiveAnnotation setTapAction(TapLinkAction tapAction) {
+    public void setTapAction(TapLinkAction tapAction) {
         this.tapAction = tapAction;
-        return this;
     }
 
     @ProtobufEnum(name = "InteractiveAnnotation.StatusLinkType")

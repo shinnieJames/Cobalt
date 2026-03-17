@@ -18,8 +18,7 @@ public final class InteractiveMessageAdditionalMetadata {
         return isGalaxyFlowCompleted != null && isGalaxyFlowCompleted;
     }
 
-    public InteractiveMessageAdditionalMetadata setGalaxyFlowCompleted(Boolean isGalaxyFlowCompleted) {
+    public void setGalaxyFlowCompleted(Boolean isGalaxyFlowCompleted) {
         this.isGalaxyFlowCompleted = isGalaxyFlowCompleted;
-        return this;
     }
 }

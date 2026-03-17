@@ -418,18 +418,15 @@ public final class SyncActionValue {
         return Optional.empty();
     }
 
-    public SyncActionValue setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
-    public SyncActionValue setChatLockSettings(ChatLockSettings chatLockSettings) {
+    public void setChatLockSettings(ChatLockSettings chatLockSettings) {
         this.chatLockSettings = chatLockSettings;
-        return this;
     }
 
-    public SyncActionValue setDeviceCapabilities(DeviceCapabilities deviceCapabilities) {
+    public void setDeviceCapabilities(DeviceCapabilities deviceCapabilities) {
         this.deviceCapabilities = deviceCapabilities;
-        return this;
     }
 }

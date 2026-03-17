@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.model.contact;
 
 
+import com.github.auties00.cobalt.model.chat.Chat;
 import it.auties.protobuf.annotation.ProtobufEnum;
 import it.auties.protobuf.annotation.ProtobufEnumIndex;
 
@@ -27,7 +28,7 @@ import java.util.Optional;
  *
  * <p>This enum represents presence at the individual contact level. For group-level
  * presence (e.g. a participant typing in a group), use
- * {@link com.github.auties00.cobalt.model.chat.Chat#getPresence(com.github.auties00.cobalt.model.jid.JidProvider)}
+ * {@link Chat#getPresence(com.github.auties00.cobalt.model.jid.JidProvider)}
  * instead.
  *
  * @see Contact#lastKnownPresence()

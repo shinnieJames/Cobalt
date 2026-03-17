@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.message.send.stanza;
 
+import com.github.auties00.cobalt.model.business.BusinessVerifiedName;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -57,10 +59,10 @@ public final class BizStanza {
         }
 
         var hostStorage = verifiedName.hostStorage()
-                .map(VerifiedBusinessName.HostStorageType::index)
+                .map(BusinessVerifiedName.HostStorageType::index)
                 .orElse(null);
         var actualActors = verifiedName.actualActors()
-                .map(VerifiedBusinessName.ActualActorsType::index)
+                .map(BusinessVerifiedName.ActualActorsType::index)
                 .orElse(null);
         var privacyModeTs = verifiedName.privacyModeTimestamp()
                 .map(Instant::getEpochSecond)
@@ -93,8 +95,8 @@ public final class BizStanza {
             return null;
         }
 
-        var nativeFlow = im.contentNativeFlow().orElse(null);
-        if (nativeFlow == null) {
+        var imc = im.content();
+        if(imc.isEmpty() || !(imc.get() instanceof InteractiveMessage.NativeFlowMessage nativeFlow)) {
             return null;
         }
 
@@ -104,13 +106,13 @@ public final class BizStanza {
         }
 
         var nativeFlowName = buttons.getFirst().name();
-        if (!"payment_info".equals(nativeFlowName)) {
+        if (nativeFlowName.isEmpty() || !"payment_info".equals(nativeFlowName.get())) {
             return null;
         }
 
         var nativeFlowNode = new NodeBuilder()
                 .description("native_flow")
-                .attribute("name", nativeFlowName)
+                .attribute("name", nativeFlowName.get())
                 .build();
         var interactiveNode = new NodeBuilder()
                 .description("interactive")

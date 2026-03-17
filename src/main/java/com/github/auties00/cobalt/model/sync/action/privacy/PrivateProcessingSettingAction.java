@@ -48,9 +48,8 @@ public final class PrivateProcessingSettingAction implements SyncAction<SyncActi
         return Optional.ofNullable(privateProcessingStatus);
     }
 
-    public PrivateProcessingSettingAction setPrivateProcessingStatus(PrivateProcessingStatus privateProcessingStatus) {
+    public void setPrivateProcessingStatus(PrivateProcessingStatus privateProcessingStatus) {
         this.privateProcessingStatus = privateProcessingStatus;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.PrivateProcessingSettingAction.PrivateProcessingStatus")

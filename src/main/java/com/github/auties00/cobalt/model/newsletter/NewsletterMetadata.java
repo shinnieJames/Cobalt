@@ -271,187 +271,153 @@ public final class NewsletterMetadata {
      * Sets the newsletter name.
      *
      * @param name the newsletter name
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setName(NewsletterName name) {
+    public void setName(NewsletterName name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the newsletter description.
      *
      * @param description the newsletter description
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setDescription(NewsletterDescription description) {
+    public void setDescription(NewsletterDescription description) {
         this.description = description;
-        return this;
     }
 
     /**
      * Sets the full-resolution newsletter picture.
      *
      * @param picture the newsletter picture
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setPicture(NewsletterPicture picture) {
+    public void setPicture(NewsletterPicture picture) {
         this.picture = picture;
-        return this;
     }
 
     /**
      * Sets the preview-resolution newsletter picture.
      *
      * @param previewPicture the preview picture
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setPreviewPicture(NewsletterPicture previewPicture) {
+    public void setPreviewPicture(NewsletterPicture previewPicture) {
         this.previewPicture = previewPicture;
-        return this;
     }
 
     /**
      * Sets the newsletter handle.
      *
      * @param handle the handle
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setHandle(String handle) {
+    public void setHandle(String handle) {
         this.handle = handle;
-        return this;
     }
 
     /**
      * Sets the newsletter settings.
      *
      * @param settings the settings
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setSettings(NewsletterSettings settings) {
+    public void setSettings(NewsletterSettings settings) {
         this.settings = settings;
-        return this;
     }
 
     /**
      * Sets the invite code.
      *
      * @param invite the invite code
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setInvite(String invite) {
+    public void setInvite(String invite) {
         this.invite = invite;
-        return this;
     }
 
     /**
      * Sets the verification status.
      *
      * @param verification the verification status
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setVerification(NewsletterVerification verification) {
+    public void setVerification(NewsletterVerification verification) {
         this.verification = verification;
-        return this;
     }
 
     /**
      * Sets the creation timestamp.
      *
      * @param creationTimestamp the creation timestamp
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setCreationTimestamp(Instant creationTimestamp) {
+    public void setCreationTimestamp(Instant creationTimestamp) {
         this.creationTimestamp = creationTimestamp;
-        return this;
     }
 
     /**
      * Sets the subscriber count.
      *
      * @param subscribersCount the subscriber count
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setSubscribersCount(Long subscribersCount) {
+    public void setSubscribersCount(Long subscribersCount) {
         this.subscribersCount = subscribersCount;
-        return this;
     }
 
     /**
      * Sets the privacy setting.
      *
      * @param privacy the privacy setting
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setPrivacy(NewsletterPrivacy privacy) {
+    public void setPrivacy(NewsletterPrivacy privacy) {
         this.privacy = privacy;
-        return this;
     }
 
     /**
      * Sets whether the newsletter has linked accounts.
      *
      * @param hasLinkedAccounts {@code true} if the newsletter has linked accounts
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setHasLinkedAccounts(boolean hasLinkedAccounts) {
+    public void setHasLinkedAccounts(boolean hasLinkedAccounts) {
         this.hasLinkedAccounts = hasLinkedAccounts;
-        return this;
     }
 
     /**
      * Sets the admin count.
      *
      * @param adminCount the admin count
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setAdminCount(Long adminCount) {
+    public void setAdminCount(Long adminCount) {
         this.adminCount = adminCount;
-        return this;
     }
 
     /**
      * Sets whether the newsletter is terminated.
      *
      * @param terminated {@code true} if the newsletter is terminated
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setTerminated(boolean terminated) {
+    public void setTerminated(boolean terminated) {
         this.terminated = terminated;
-        return this;
     }
 
     /**
      * Sets the list of countries where the newsletter is geo-suspended.
      *
      * @param geosuspendedCountries the list of country codes
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setGeosuspendedCountries(List<String> geosuspendedCountries) {
+    public void setGeosuspendedCountries(List<String> geosuspendedCountries) {
         this.geosuspendedCountries = Objects.requireNonNullElseGet(geosuspendedCountries, ArrayList::new);
-        return this;
     }
 
     /**
      * Sets the list of enabled capabilities.
      *
      * @param capabilities the list of capabilities
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setCapabilities(List<NewsletterCapability> capabilities) {
+    public void setCapabilities(List<NewsletterCapability> capabilities) {
         this.capabilities = Objects.requireNonNullElseGet(capabilities, ArrayList::new);
-        return this;
     }
 
     /**
      * Sets the WAMO subscription plan identifier.
      *
      * @param wamoSubPlanId the plan id
-     * @return this instance for chaining
      */
-    public NewsletterMetadata setWamoSubPlanId(String wamoSubPlanId) {
+    public void setWamoSubPlanId(String wamoSubPlanId) {
         this.wamoSubPlanId = wamoSubPlanId;
-        return this;
     }
 
     @Override

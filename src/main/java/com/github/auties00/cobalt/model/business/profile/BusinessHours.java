@@ -63,9 +63,8 @@ public final class BusinessHours {
      * @param timeZone the time zone identifier
      * @return this instance
      */
-    public BusinessHours setTimeZone(String timeZone) {
+    public void setTimeZone(String timeZone) {
         this.timeZone = timeZone;
-        return this;
     }
 
     /**
@@ -86,8 +85,7 @@ public final class BusinessHours {
      * @param entries the list of daily operating hour entries, or {@code null} for an empty list
      * @return this instance
      */
-    public BusinessHours setEntries(List<BusinessHoursEntry> entries) {
+    public void setEntries(List<BusinessHoursEntry> entries) {
         this.entries = entries;
-        return this;
     }
 }

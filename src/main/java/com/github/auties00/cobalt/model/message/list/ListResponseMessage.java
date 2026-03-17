@@ -53,29 +53,24 @@ public final class ListResponseMessage implements ContextualMessage {
         return Optional.ofNullable(description);
     }
 
-    public ListResponseMessage setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public ListResponseMessage setListType(ListType listType) {
+    public void setListType(ListType listType) {
         this.listType = listType;
-        return this;
     }
 
-    public ListResponseMessage setSingleSelectReply(SingleSelectReply singleSelectReply) {
+    public void setSingleSelectReply(SingleSelectReply singleSelectReply) {
         this.singleSelectReply = singleSelectReply;
-        return this;
     }
 
-    public ListResponseMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public ListResponseMessage setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ListResponseMessage.ListType")
@@ -108,9 +103,8 @@ public final class ListResponseMessage implements ContextualMessage {
             return Optional.ofNullable(selectedRowId);
         }
 
-        public SingleSelectReply setSelectedRowId(String selectedRowId) {
+        public void setSelectedRowId(String selectedRowId) {
             this.selectedRowId = selectedRowId;
-            return this;
-        }
+    }
     }
 }

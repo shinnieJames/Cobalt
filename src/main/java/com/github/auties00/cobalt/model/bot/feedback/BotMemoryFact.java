@@ -63,21 +63,17 @@ public final class BotMemoryFact {
      * Sets the human-readable text of the memorized fact.
      *
      * @param fact the new fact text, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMemoryFact setFact(String fact) {
+    public void setFact(String fact) {
         this.fact = fact;
-        return this;
     }
 
     /**
      * Sets the unique identifier for this fact.
      *
      * @param factId the new fact identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMemoryFact setFactId(String factId) {
+    public void setFactId(String factId) {
         this.factId = factId;
-        return this;
     }
 }

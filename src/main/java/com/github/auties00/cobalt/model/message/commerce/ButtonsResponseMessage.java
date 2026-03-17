@@ -50,24 +50,20 @@ public final class ButtonsResponseMessage implements ContextualMessage {
         return Optional.empty();
     }
 
-    public ButtonsResponseMessage setSelectedButtonId(String selectedButtonId) {
+    public void setSelectedButtonId(String selectedButtonId) {
         this.selectedButtonId = selectedButtonId;
-        return this;
     }
 
-    public ButtonsResponseMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public ButtonsResponseMessage setType(Type type) {
+    public void setType(Type type) {
         this.type = type;
-        return this;
     }
 
-    public ButtonsResponseMessage setSelectedDisplayText(String selectedDisplayText) {
+    public void setSelectedDisplayText(String selectedDisplayText) {
         this.selectedDisplayText = selectedDisplayText;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ButtonsResponseMessage.Type")

@@ -293,159 +293,128 @@ public final class SettingsSyncAction implements SyncAction<SettingsSyncActionAr
         return shouldPlaySoundForCallNotification != null && shouldPlaySoundForCallNotification;
     }
 
-    public SettingsSyncAction setStartAtLogin(Boolean startAtLogin) {
+    public void setStartAtLogin(Boolean startAtLogin) {
         this.startAtLogin = startAtLogin;
-        return this;
     }
 
-    public SettingsSyncAction setMinimizeToTray(Boolean minimizeToTray) {
+    public void setMinimizeToTray(Boolean minimizeToTray) {
         this.minimizeToTray = minimizeToTray;
-        return this;
     }
 
-    public SettingsSyncAction setLanguage(String language) {
+    public void setLanguage(String language) {
         this.language = language;
-        return this;
     }
 
-    public SettingsSyncAction setReplaceTextWithEmoji(Boolean replaceTextWithEmoji) {
+    public void setReplaceTextWithEmoji(Boolean replaceTextWithEmoji) {
         this.replaceTextWithEmoji = replaceTextWithEmoji;
-        return this;
     }
 
-    public SettingsSyncAction setBannerNotificationDisplayMode(DisplayMode bannerNotificationDisplayMode) {
+    public void setBannerNotificationDisplayMode(DisplayMode bannerNotificationDisplayMode) {
         this.bannerNotificationDisplayMode = bannerNotificationDisplayMode;
-        return this;
     }
 
-    public SettingsSyncAction setUnreadCounterBadgeDisplayMode(DisplayMode unreadCounterBadgeDisplayMode) {
+    public void setUnreadCounterBadgeDisplayMode(DisplayMode unreadCounterBadgeDisplayMode) {
         this.unreadCounterBadgeDisplayMode = unreadCounterBadgeDisplayMode;
-        return this;
     }
 
-    public SettingsSyncAction setMessagesNotificationEnabled(Boolean isMessagesNotificationEnabled) {
+    public void setMessagesNotificationEnabled(Boolean isMessagesNotificationEnabled) {
         this.isMessagesNotificationEnabled = isMessagesNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setCallsNotificationEnabled(Boolean isCallsNotificationEnabled) {
+    public void setCallsNotificationEnabled(Boolean isCallsNotificationEnabled) {
         this.isCallsNotificationEnabled = isCallsNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setReactionsNotificationEnabled(Boolean isReactionsNotificationEnabled) {
+    public void setReactionsNotificationEnabled(Boolean isReactionsNotificationEnabled) {
         this.isReactionsNotificationEnabled = isReactionsNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setStatusReactionsNotificationEnabled(Boolean isStatusReactionsNotificationEnabled) {
+    public void setStatusReactionsNotificationEnabled(Boolean isStatusReactionsNotificationEnabled) {
         this.isStatusReactionsNotificationEnabled = isStatusReactionsNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setTextPreviewForNotificationEnabled(Boolean isTextPreviewForNotificationEnabled) {
+    public void setTextPreviewForNotificationEnabled(Boolean isTextPreviewForNotificationEnabled) {
         this.isTextPreviewForNotificationEnabled = isTextPreviewForNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setDefaultNotificationToneId(Integer defaultNotificationToneId) {
+    public void setDefaultNotificationToneId(Integer defaultNotificationToneId) {
         this.defaultNotificationToneId = defaultNotificationToneId;
-        return this;
     }
 
-    public SettingsSyncAction setGroupDefaultNotificationToneId(Integer groupDefaultNotificationToneId) {
+    public void setGroupDefaultNotificationToneId(Integer groupDefaultNotificationToneId) {
         this.groupDefaultNotificationToneId = groupDefaultNotificationToneId;
-        return this;
     }
 
-    public SettingsSyncAction setAppTheme(Integer appTheme) {
+    public void setAppTheme(Integer appTheme) {
         this.appTheme = appTheme;
-        return this;
     }
 
-    public SettingsSyncAction setWallpaperId(Integer wallpaperId) {
+    public void setWallpaperId(Integer wallpaperId) {
         this.wallpaperId = wallpaperId;
-        return this;
     }
 
-    public SettingsSyncAction setDoodleWallpaperEnabled(Boolean isDoodleWallpaperEnabled) {
+    public void setDoodleWallpaperEnabled(Boolean isDoodleWallpaperEnabled) {
         this.isDoodleWallpaperEnabled = isDoodleWallpaperEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setFontSize(Integer fontSize) {
+    public void setFontSize(Integer fontSize) {
         this.fontSize = fontSize;
-        return this;
     }
 
-    public SettingsSyncAction setPhotosAutodownloadEnabled(Boolean isPhotosAutodownloadEnabled) {
+    public void setPhotosAutodownloadEnabled(Boolean isPhotosAutodownloadEnabled) {
         this.isPhotosAutodownloadEnabled = isPhotosAutodownloadEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setAudiosAutodownloadEnabled(Boolean isAudiosAutodownloadEnabled) {
+    public void setAudiosAutodownloadEnabled(Boolean isAudiosAutodownloadEnabled) {
         this.isAudiosAutodownloadEnabled = isAudiosAutodownloadEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setVideosAutodownloadEnabled(Boolean isVideosAutodownloadEnabled) {
+    public void setVideosAutodownloadEnabled(Boolean isVideosAutodownloadEnabled) {
         this.isVideosAutodownloadEnabled = isVideosAutodownloadEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setDocumentsAutodownloadEnabled(Boolean isDocumentsAutodownloadEnabled) {
+    public void setDocumentsAutodownloadEnabled(Boolean isDocumentsAutodownloadEnabled) {
         this.isDocumentsAutodownloadEnabled = isDocumentsAutodownloadEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setDisableLinkPreviews(Boolean disableLinkPreviews) {
+    public void setDisableLinkPreviews(Boolean disableLinkPreviews) {
         this.disableLinkPreviews = disableLinkPreviews;
-        return this;
     }
 
-    public SettingsSyncAction setNotificationToneId(Integer notificationToneId) {
+    public void setNotificationToneId(Integer notificationToneId) {
         this.notificationToneId = notificationToneId;
-        return this;
     }
 
-    public SettingsSyncAction setMediaUploadQuality(MediaQualitySetting mediaUploadQuality) {
+    public void setMediaUploadQuality(MediaQualitySetting mediaUploadQuality) {
         this.mediaUploadQuality = mediaUploadQuality;
-        return this;
     }
 
-    public SettingsSyncAction setSpellCheckEnabled(Boolean isSpellCheckEnabled) {
+    public void setSpellCheckEnabled(Boolean isSpellCheckEnabled) {
         this.isSpellCheckEnabled = isSpellCheckEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setEnterToSendEnabled(Boolean isEnterToSendEnabled) {
+    public void setEnterToSendEnabled(Boolean isEnterToSendEnabled) {
         this.isEnterToSendEnabled = isEnterToSendEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setGroupMessageNotificationEnabled(Boolean isGroupMessageNotificationEnabled) {
+    public void setGroupMessageNotificationEnabled(Boolean isGroupMessageNotificationEnabled) {
         this.isGroupMessageNotificationEnabled = isGroupMessageNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setGroupReactionsNotificationEnabled(Boolean isGroupReactionsNotificationEnabled) {
+    public void setGroupReactionsNotificationEnabled(Boolean isGroupReactionsNotificationEnabled) {
         this.isGroupReactionsNotificationEnabled = isGroupReactionsNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setStatusNotificationEnabled(Boolean isStatusNotificationEnabled) {
+    public void setStatusNotificationEnabled(Boolean isStatusNotificationEnabled) {
         this.isStatusNotificationEnabled = isStatusNotificationEnabled;
-        return this;
     }
 
-    public SettingsSyncAction setStatusNotificationToneId(Integer statusNotificationToneId) {
+    public void setStatusNotificationToneId(Integer statusNotificationToneId) {
         this.statusNotificationToneId = statusNotificationToneId;
-        return this;
     }
 
-    public SettingsSyncAction setShouldPlaySoundForCallNotification(Boolean shouldPlaySoundForCallNotification) {
+    public void setShouldPlaySoundForCallNotification(Boolean shouldPlaySoundForCallNotification) {
         this.shouldPlaySoundForCallNotification = shouldPlaySoundForCallNotification;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.SettingsSyncAction.DisplayMode")

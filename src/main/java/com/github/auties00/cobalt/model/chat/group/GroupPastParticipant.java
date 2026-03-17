@@ -49,19 +49,16 @@ public final class GroupPastParticipant {
         return Optional.ofNullable(timestamp);
     }
 
-    public GroupPastParticipant setUserJid(Jid userJid) {
+    public void setUserJid(Jid userJid) {
         this.userJid = userJid;
-        return this;
     }
 
-    public GroupPastParticipant setLeaveReason(LeaveReason leaveReason) {
+    public void setLeaveReason(LeaveReason leaveReason) {
         this.leaveReason = leaveReason;
-        return this;
     }
 
-    public GroupPastParticipant setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
     /**

@@ -52,9 +52,8 @@ public final class PinAction implements SyncAction<PinActionArgs> {
         return pinned != null && pinned;
     }
 
-    public PinAction setPinned(Boolean pinned) {
+    public void setPinned(Boolean pinned) {
         this.pinned = pinned;
-        return this;
     }
 
 

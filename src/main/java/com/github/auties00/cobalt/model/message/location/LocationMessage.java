@@ -115,63 +115,51 @@ public final class LocationMessage implements InteractiveHeader, InteractiveMess
         return Optional.ofNullable(contextInfo);
     }
 
-    public LocationMessage setDegreesLatitude(Double degreesLatitude) {
+    public void setDegreesLatitude(Double degreesLatitude) {
         this.degreesLatitude = degreesLatitude;
-        return this;
     }
 
-    public LocationMessage setDegreesLongitude(Double degreesLongitude) {
+    public void setDegreesLongitude(Double degreesLongitude) {
         this.degreesLongitude = degreesLongitude;
-        return this;
     }
 
-    public LocationMessage setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public LocationMessage setAddress(String address) {
+    public void setAddress(String address) {
         this.address = address;
-        return this;
     }
 
-    public LocationMessage setUrl(String url) {
+    public void setUrl(String url) {
         this.url = url;
-        return this;
     }
 
-    public LocationMessage setLive(Boolean isLive) {
+    public void setLive(Boolean isLive) {
         this.isLive = isLive;
-        return this;
     }
 
-    public LocationMessage setAccuracyInMeters(Integer accuracyInMeters) {
+    public void setAccuracyInMeters(Integer accuracyInMeters) {
         this.accuracyInMeters = accuracyInMeters;
-        return this;
     }
 
-    public LocationMessage setSpeedInMps(Float speedInMps) {
+    public void setSpeedInMps(Float speedInMps) {
         this.speedInMps = speedInMps;
-        return this;
     }
 
-    public LocationMessage setDegreesClockwiseFromMagneticNorth(Integer degreesClockwiseFromMagneticNorth) {
+    public void setDegreesClockwiseFromMagneticNorth(Integer degreesClockwiseFromMagneticNorth) {
         this.degreesClockwiseFromMagneticNorth = degreesClockwiseFromMagneticNorth;
-        return this;
     }
 
-    public LocationMessage setComment(String comment) {
+    public void setComment(String comment) {
         this.comment = comment;
-        return this;
     }
 
-    public LocationMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public LocationMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

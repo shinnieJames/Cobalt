@@ -28,13 +28,11 @@ public final class PollEncValue implements Message {
         return Optional.ofNullable(encIv);
     }
 
-    public PollEncValue setEncPayload(byte[] encPayload) {
+    public void setEncPayload(byte[] encPayload) {
         this.encPayload = encPayload;
-        return this;
     }
 
-    public PollEncValue setEncIv(byte[] encIv) {
+    public void setEncIv(byte[] encIv) {
         this.encIv = encIv;
-        return this;
     }
 }

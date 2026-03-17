@@ -80,44 +80,36 @@ public final class PollCreationMessage implements ContextualMessage {
         return Optional.ofNullable(correctAnswer);
     }
 
-    public PollCreationMessage setEncKey(byte[] encKey) {
+    public void setEncKey(byte[] encKey) {
         this.encKey = encKey;
-        return this;
     }
 
-    public PollCreationMessage setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public PollCreationMessage setOptions(List<Option> options) {
+    public void setOptions(List<Option> options) {
         this.options = options;
-        return this;
     }
 
-    public PollCreationMessage setSelectableOptionsCount(Integer selectableOptionsCount) {
+    public void setSelectableOptionsCount(Integer selectableOptionsCount) {
         this.selectableOptionsCount = selectableOptionsCount;
-        return this;
     }
 
-    public PollCreationMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public PollCreationMessage setPollContentType(PollContentType pollContentType) {
+    public void setPollContentType(PollContentType pollContentType) {
         this.pollContentType = pollContentType;
-        return this;
     }
 
-    public PollCreationMessage setPollType(PollType pollType) {
+    public void setPollType(PollType pollType) {
         this.pollType = pollType;
-        return this;
     }
 
-    public PollCreationMessage setCorrectAnswer(Option correctAnswer) {
+    public void setCorrectAnswer(Option correctAnswer) {
         this.correctAnswer = correctAnswer;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.PollCreationMessage.Option")
@@ -142,14 +134,12 @@ public final class PollCreationMessage implements ContextualMessage {
             return Optional.ofNullable(optionHash);
         }
 
-        public Option setOptionName(String optionName) {
+        public void setOptionName(String optionName) {
             this.optionName = optionName;
-            return this;
-        }
+    }
 
-        public Option setOptionHash(String optionHash) {
+        public void setOptionHash(String optionHash) {
             this.optionHash = optionHash;
-            return this;
-        }
+    }
     }
 }

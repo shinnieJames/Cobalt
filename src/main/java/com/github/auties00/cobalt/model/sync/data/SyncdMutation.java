@@ -26,13 +26,11 @@ public final class SyncdMutation {
         return Optional.ofNullable(record);
     }
 
-    public SyncdMutation setOperation(SyncdOperation operation) {
+    public void setOperation(SyncdOperation operation) {
         this.operation = operation;
-        return this;
     }
 
-    public SyncdMutation setRecord(SyncdRecord record) {
+    public void setRecord(SyncdRecord record) {
         this.record = record;
-        return this;
     }
 }

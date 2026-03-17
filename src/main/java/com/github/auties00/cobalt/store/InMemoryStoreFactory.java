@@ -1,9 +1,7 @@
-package com.github.auties00.cobalt.store.inMemory;
+package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.client.WhatsAppClientType;
 import com.github.auties00.cobalt.model.jid.JidDevice;
-import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 import com.github.auties00.cobalt.util.StorePathUtils;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
@@ -14,16 +12,16 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-public final class InMemoryStoreFactory implements WhatsAppStoreFactory {
+final class InMemoryStoreFactory implements WhatsAppStoreFactory {
     private static final Path DEFAULT_DIRECTORY = Path.of(System.getProperty("user.home"), ".cobalt", "proto");
 
     private final Path directory;
 
-    public InMemoryStoreFactory() {
+    InMemoryStoreFactory() {
         this(DEFAULT_DIRECTORY);
     }
 
-    public InMemoryStoreFactory(Path directory) {
+    InMemoryStoreFactory(Path directory) {
         this.directory = Objects.requireNonNull(directory, "directory cannot be null");
     }
 
@@ -57,7 +55,7 @@ public final class InMemoryStoreFactory implements WhatsAppStoreFactory {
         Objects.requireNonNull(clientType, "clientType cannot be null");
 
         var latest = StorePathUtils.getLatestSessionDirectory(clientType, directory);
-        if(latest.isEmpty()) {
+        if (latest.isEmpty()) {
             return Optional.empty();
         } else {
             return load(latest.get());

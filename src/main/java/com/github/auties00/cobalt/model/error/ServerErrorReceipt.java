@@ -59,10 +59,8 @@ public final class ServerErrorReceipt {
      * Sets the identifier of the message stanza whose media download failed.
      *
      * @param stanzaId the stanza identifier, or {@code null} to clear
-     * @return this instance for chaining
      */
-    public ServerErrorReceipt setStanzaId(String stanzaId) {
+    public void setStanzaId(String stanzaId) {
         this.stanzaId = stanzaId;
-        return this;
     }
 }

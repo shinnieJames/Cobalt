@@ -34,18 +34,15 @@ public final class ADVSignedDeviceIdentityHMAC {
         return Optional.ofNullable(accountType);
     }
 
-    public ADVSignedDeviceIdentityHMAC setDetails(byte[] details) {
+    public void setDetails(byte[] details) {
         this.details = details;
-        return this;
     }
 
-    public ADVSignedDeviceIdentityHMAC setHmac(byte[] hmac) {
+    public void setHmac(byte[] hmac) {
         this.hmac = hmac;
-        return this;
     }
 
-    public ADVSignedDeviceIdentityHMAC setAccountType(ADVEncryptionType accountType) {
+    public void setAccountType(ADVEncryptionType accountType) {
         this.accountType = accountType;
-        return this;
     }
 }

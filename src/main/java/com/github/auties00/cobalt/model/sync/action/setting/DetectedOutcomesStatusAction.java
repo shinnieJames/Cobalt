@@ -52,8 +52,7 @@ public final class DetectedOutcomesStatusAction implements SyncAction<SyncAction
         return isEnabled != null && isEnabled;
     }
 
-    public DetectedOutcomesStatusAction setEnabled(Boolean isEnabled) {
+    public void setEnabled(Boolean isEnabled) {
         this.isEnabled = isEnabled;
-        return this;
     }
 }

@@ -31,13 +31,11 @@ public final class GroupPastParticipants {
         return pastParticipants == null ? List.of() : Collections.unmodifiableList(pastParticipants);
     }
 
-    public GroupPastParticipants setGroupJid(Jid groupJid) {
+    public void setGroupJid(Jid groupJid) {
         this.groupJid = groupJid;
-        return this;
     }
 
-    public GroupPastParticipants setPastParticipants(List<GroupPastParticipant> pastParticipants) {
+    public void setPastParticipants(List<GroupPastParticipant> pastParticipants) {
         this.pastParticipants = pastParticipants;
-        return this;
     }
 }

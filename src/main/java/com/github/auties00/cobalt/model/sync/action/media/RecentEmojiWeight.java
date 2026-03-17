@@ -27,13 +27,11 @@ public final class RecentEmojiWeight {
         return weight == null ? OptionalDouble.empty() : OptionalDouble.of(weight);
     }
 
-    public RecentEmojiWeight setEmoji(String emoji) {
+    public void setEmoji(String emoji) {
         this.emoji = emoji;
-        return this;
     }
 
-    public RecentEmojiWeight setWeight(Float weight) {
+    public void setWeight(Float weight) {
         this.weight = weight;
-        return this;
     }
 }

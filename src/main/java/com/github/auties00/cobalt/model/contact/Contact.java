@@ -244,11 +244,9 @@ public final class Contact implements JidProvider {
      * Sets the push name for this contact.
      *
      * @param chosenName the chosen name to set, or {@code null} to clear
-     * @return this contact instance
      */
-    public Contact setChosenName(String chosenName) {
+    public void setChosenName(String chosenName) {
         this.chosenName = chosenName;
-        return this;
     }
 
     /**
@@ -265,11 +263,9 @@ public final class Contact implements JidProvider {
      * Sets the address-book full name for this contact.
      *
      * @param fullName the full name to set, or {@code null} to clear
-     * @return this contact instance
      */
-    public Contact setFullName(String fullName) {
+    public void setFullName(String fullName) {
         this.fullName = fullName;
-        return this;
     }
 
     /**
@@ -285,11 +281,9 @@ public final class Contact implements JidProvider {
      * Sets the address-book short name for this contact.
      *
      * @param shortName the short name to set, or {@code null} to clear
-     * @return this contact instance
      */
-    public Contact setShortName(String shortName) {
+    public void setShortName(String shortName) {
         this.shortName = shortName;
-        return this;
     }
 
     /**
@@ -306,11 +300,9 @@ public final class Contact implements JidProvider {
      * Sets the last known presence state for this contact.
      *
      * @param lastKnownPresence the presence state to set
-     * @return this contact instance
      */
-    public Contact setLastKnownPresence(ContactStatus lastKnownPresence) {
+    public void setLastKnownPresence(ContactStatus lastKnownPresence) {
         this.lastKnownPresence = lastKnownPresence;
-        return this;
     }
 
     /**
@@ -333,11 +325,9 @@ public final class Contact implements JidProvider {
      * Sets the last-seen timestamp for this contact.
      *
      * @param lastSeen the instant when the contact was last seen online
-     * @return this contact instance
      */
-    public Contact setLastSeen(Instant lastSeen) {
+    public void setLastSeen(Instant lastSeen) {
         this.lastSeenSeconds = lastSeen.getEpochSecond();
-        return this;
     }
 
     /**
@@ -353,11 +343,9 @@ public final class Contact implements JidProvider {
      * Sets whether this contact is blocked.
      *
      * @param blocked {@code true} to mark as blocked, {@code false} to unblock
-     * @return this contact instance
      */
-    public Contact setBlocked(boolean blocked) {
+    public void setBlocked(boolean blocked) {
         this.blocked = blocked;
-        return this;
     }
 
     /**
@@ -373,11 +361,9 @@ public final class Contact implements JidProvider {
      * Sets whether this contact's status updates are muted.
      *
      * @param statusMuted {@code true} to mute status updates, {@code false} to unmute
-     * @return this contact instance
      */
-    public Contact setStatusMuted(boolean statusMuted) {
+    public void setStatusMuted(boolean statusMuted) {
         this.statusMuted = statusMuted;
-        return this;
     }
 
     /**
@@ -394,11 +380,9 @@ public final class Contact implements JidProvider {
      * Sets the LID (Linked Identifier) for this contact.
      *
      * @param lid the LID to set, or {@code null} to clear
-     * @return this contact instance
      */
-    public Contact setLid(Jid lid) {
+    public void setLid(Jid lid) {
         this.lid = lid;
-        return this;
     }
 
     /**
@@ -424,11 +408,9 @@ public final class Contact implements JidProvider {
      * Sets the username for this contact.
      *
      * @param username the username to set, or {@code null} to clear
-     * @return this contact instance
      */
-    public Contact setUsername(String username) {
+    public void setUsername(String username) {
         this.username = username;
-        return this;
     }
 
     /**
@@ -454,11 +436,9 @@ public final class Contact implements JidProvider {
      * Sets the ADV encryption type for this contact.
      *
      * @param encryptionType the encryption type to set, or {@code null} to clear
-     * @return this contact instance
      */
-    public Contact setEncryptionType(ADVEncryptionType encryptionType) {
+    public void setEncryptionType(ADVEncryptionType encryptionType) {
         this.encryptionType = encryptionType;
-        return this;
     }
 
     /**
@@ -474,11 +454,9 @@ public final class Contact implements JidProvider {
      * Sets whether the local user has shared their phone number with this contact.
      *
      * @param phoneNumberShared {@code true} if the phone number is shared
-     * @return this contact instance
      */
-    public Contact setPhoneNumberShared(boolean phoneNumberShared) {
+    public void setPhoneNumberShared(boolean phoneNumberShared) {
         this.phoneNumberShared = phoneNumberShared;
-        return this;
     }
 
     /**
@@ -494,11 +472,9 @@ public final class Contact implements JidProvider {
      * Sets whether this contact was added through username-based discovery.
      *
      * @param addedByUsername {@code true} if added by username
-     * @return this contact instance
      */
-    public Contact setAddedByUsername(boolean addedByUsername) {
+    public void setAddedByUsername(boolean addedByUsername) {
         this.addedByUsername = addedByUsername;
-        return this;
     }
 
     /**

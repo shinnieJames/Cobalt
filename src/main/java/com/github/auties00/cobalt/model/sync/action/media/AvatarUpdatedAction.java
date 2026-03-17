@@ -64,14 +64,12 @@ public final class AvatarUpdatedAction implements SyncAction<SyncActionEmptyArgs
         return recentAvatarStickers == null ? List.of() : Collections.unmodifiableList(recentAvatarStickers);
     }
 
-    public AvatarUpdatedAction setEventType(AvatarEventType eventType) {
+    public void setEventType(AvatarEventType eventType) {
         this.eventType = eventType;
-        return this;
     }
 
-    public AvatarUpdatedAction setRecentAvatarStickers(List<StickerAction> recentAvatarStickers) {
+    public void setRecentAvatarStickers(List<StickerAction> recentAvatarStickers) {
         this.recentAvatarStickers = recentAvatarStickers;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.AvatarUpdatedAction.AvatarEventType")

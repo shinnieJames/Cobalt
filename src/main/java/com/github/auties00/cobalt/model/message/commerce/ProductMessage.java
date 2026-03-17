@@ -66,34 +66,28 @@ public final class ProductMessage implements ContextualMessage, InteractiveMessa
         return Optional.ofNullable(contextInfo);
     }
 
-    public ProductMessage setProduct(ProductSnapshot product) {
+    public void setProduct(ProductSnapshot product) {
         this.product = product;
-        return this;
     }
 
-    public ProductMessage setBusinessOwnerJid(Jid businessOwnerJid) {
+    public void setBusinessOwnerJid(Jid businessOwnerJid) {
         this.businessOwnerJid = businessOwnerJid;
-        return this;
     }
 
-    public ProductMessage setCatalog(CatalogSnapshot catalog) {
+    public void setCatalog(CatalogSnapshot catalog) {
         this.catalog = catalog;
-        return this;
     }
 
-    public ProductMessage setBody(String body) {
+    public void setBody(String body) {
         this.body = body;
-        return this;
     }
 
-    public ProductMessage setFooter(String footer) {
+    public void setFooter(String footer) {
         this.footer = footer;
-        return this;
     }
 
-    public ProductMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.ProductMessage.CatalogSnapshot")
@@ -126,20 +120,17 @@ public final class ProductMessage implements ContextualMessage, InteractiveMessa
             return Optional.ofNullable(description);
         }
 
-        public CatalogSnapshot setCatalogImage(ImageMessage catalogImage) {
+        public void setCatalogImage(ImageMessage catalogImage) {
             this.catalogImage = catalogImage;
-            return this;
-        }
+    }
 
-        public CatalogSnapshot setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public CatalogSnapshot setDescription(String description) {
+        public void setDescription(String description) {
             this.description = description;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.ProductMessage.ProductSnapshot")
@@ -244,64 +235,52 @@ public final class ProductMessage implements ContextualMessage, InteractiveMessa
             return Optional.ofNullable(signedUrl);
         }
 
-        public ProductSnapshot setProductImage(ImageMessage productImage) {
+        public void setProductImage(ImageMessage productImage) {
             this.productImage = productImage;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setProductId(String productId) {
+        public void setProductId(String productId) {
             this.productId = productId;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setDescription(String description) {
+        public void setDescription(String description) {
             this.description = description;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setCurrencyCode(String currencyCode) {
+        public void setCurrencyCode(String currencyCode) {
             this.currencyCode = currencyCode;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setPriceAmount1000(Long priceAmount1000) {
+        public void setPriceAmount1000(Long priceAmount1000) {
             this.priceAmount1000 = priceAmount1000;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setRetailerId(String retailerId) {
+        public void setRetailerId(String retailerId) {
             this.retailerId = retailerId;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setUrl(String url) {
+        public void setUrl(String url) {
             this.url = url;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setProductImageCount(Integer productImageCount) {
+        public void setProductImageCount(Integer productImageCount) {
             this.productImageCount = productImageCount;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setFirstImageId(String firstImageId) {
+        public void setFirstImageId(String firstImageId) {
             this.firstImageId = firstImageId;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setSalePriceAmount1000(Long salePriceAmount1000) {
+        public void setSalePriceAmount1000(Long salePriceAmount1000) {
             this.salePriceAmount1000 = salePriceAmount1000;
-            return this;
-        }
+    }
 
-        public ProductSnapshot setSignedUrl(String signedUrl) {
+        public void setSignedUrl(String signedUrl) {
             this.signedUrl = signedUrl;
-            return this;
-        }
+    }
     }
 }

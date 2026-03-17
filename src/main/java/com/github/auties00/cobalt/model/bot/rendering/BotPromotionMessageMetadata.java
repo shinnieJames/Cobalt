@@ -64,22 +64,18 @@ public final class BotPromotionMessageMetadata {
      * Sets the type of promotion campaign.
      *
      * @param promotionType the new promotion type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPromotionMessageMetadata setPromotionType(BotPromotionType promotionType) {
+    public void setPromotionType(BotPromotionType promotionType) {
         this.promotionType = promotionType;
-        return this;
     }
 
     /**
      * Sets the display text on the promotional button.
      *
      * @param buttonTitle the new button title, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPromotionMessageMetadata setButtonTitle(String buttonTitle) {
+    public void setButtonTitle(String buttonTitle) {
         this.buttonTitle = buttonTitle;
-        return this;
     }
 
     /**

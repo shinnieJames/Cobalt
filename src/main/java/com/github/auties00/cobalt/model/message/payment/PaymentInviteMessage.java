@@ -39,19 +39,16 @@ public final class PaymentInviteMessage implements Message {
         return incentiveEligible != null && incentiveEligible;
     }
 
-    public PaymentInviteMessage setServiceType(ServiceType serviceType) {
+    public void setServiceType(ServiceType serviceType) {
         this.serviceType = serviceType;
-        return this;
     }
 
-    public PaymentInviteMessage setExpiryTimestamp(Instant expiryTimestamp) {
+    public void setExpiryTimestamp(Instant expiryTimestamp) {
         this.expiryTimestamp = expiryTimestamp;
-        return this;
     }
 
-    public PaymentInviteMessage setIncentiveEligible(Boolean incentiveEligible) {
+    public void setIncentiveEligible(Boolean incentiveEligible) {
         this.incentiveEligible = incentiveEligible;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.PaymentInviteMessage.ServiceType")

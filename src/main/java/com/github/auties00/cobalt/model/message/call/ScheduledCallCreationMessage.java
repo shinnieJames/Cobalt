@@ -39,19 +39,16 @@ public final class ScheduledCallCreationMessage implements Message {
         return Optional.ofNullable(title);
     }
 
-    public ScheduledCallCreationMessage setScheduledTimestampMs(Instant scheduledTimestampMs) {
+    public void setScheduledTimestampMs(Instant scheduledTimestampMs) {
         this.scheduledTimestampMs = scheduledTimestampMs;
-        return this;
     }
 
-    public ScheduledCallCreationMessage setCallType(CallType callType) {
+    public void setCallType(CallType callType) {
         this.callType = callType;
-        return this;
     }
 
-    public ScheduledCallCreationMessage setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ScheduledCallCreationMessage.CallType")

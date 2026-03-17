@@ -266,133 +266,109 @@ public final class BotPluginMetadata {
      * Sets the search provider that fulfilled this plugin request.
      *
      * @param provider the new search provider, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setProvider(SearchProvider provider) {
+    public void setProvider(SearchProvider provider) {
         this.provider = provider;
-        return this;
     }
 
     /**
      * Sets the type of plugin that generated this response.
      *
      * @param pluginType the new plugin type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setPluginType(PluginType pluginType) {
+    public void setPluginType(PluginType pluginType) {
         this.pluginType = pluginType;
-        return this;
     }
 
     /**
      * Sets the CDN URL of the thumbnail image.
      *
      * @param thumbnailCdnUrl the new thumbnail URL, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setThumbnailCdnUrl(URI thumbnailCdnUrl) {
+    public void setThumbnailCdnUrl(URI thumbnailCdnUrl) {
         this.thumbnailCdnUrl = thumbnailCdnUrl;
-        return this;
     }
 
     /**
      * Sets the CDN URL of the search provider's profile photo.
      *
      * @param profilePhotoCdnUrl the new profile photo URL, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setProfilePhotoCdnUrl(URI profilePhotoCdnUrl) {
+    public void setProfilePhotoCdnUrl(URI profilePhotoCdnUrl) {
         this.profilePhotoCdnUrl = profilePhotoCdnUrl;
-        return this;
     }
 
     /**
      * Sets the URL of the search provider's result page.
      *
      * @param searchProviderUrl the new search provider URL, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setSearchProviderUrl(URI searchProviderUrl) {
+    public void setSearchProviderUrl(URI searchProviderUrl) {
         this.searchProviderUrl = searchProviderUrl;
-        return this;
     }
 
     /**
      * Sets the zero-based index of this plugin result.
      *
      * @param referenceIndex the new reference index, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setReferenceIndex(Integer referenceIndex) {
+    public void setReferenceIndex(Integer referenceIndex) {
         this.referenceIndex = referenceIndex;
-        return this;
     }
 
     /**
      * Sets the expected number of citation links.
      *
      * @param expectedLinksCount the new links count, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setExpectedLinksCount(Integer expectedLinksCount) {
+    public void setExpectedLinksCount(Integer expectedLinksCount) {
         this.expectedLinksCount = expectedLinksCount;
-        return this;
     }
 
     /**
      * Sets the search query string.
      *
      * @param searchQuery the new search query, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setSearchQuery(String searchQuery) {
+    public void setSearchQuery(String searchQuery) {
         this.searchQuery = searchQuery;
-        return this;
     }
 
     /**
      * Sets the message key of the parent plugin message.
      *
      * @param parentPluginMessageKey the new parent message key, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setParentPluginMessageKey(MessageKey parentPluginMessageKey) {
+    public void setParentPluginMessageKey(MessageKey parentPluginMessageKey) {
         this.parentPluginMessageKey = parentPluginMessageKey;
-        return this;
     }
 
     /**
      * Sets the deprecated plugin type field.
      *
      * @param deprecatedField the new deprecated plugin type, or {@code null}
-     * @return this instance for chaining
      * @deprecated superseded by {@link #setPluginType(PluginType)}
      */
-    public BotPluginMetadata setDeprecatedField(PluginType deprecatedField) {
+    public void setDeprecatedField(PluginType deprecatedField) {
         this.deprecatedField = deprecatedField;
-        return this;
     }
 
     /**
      * Sets the plugin type of the parent message.
      *
      * @param parentPluginType the new parent plugin type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setParentPluginType(PluginType parentPluginType) {
+    public void setParentPluginType(PluginType parentPluginType) {
         this.parentPluginType = parentPluginType;
-        return this;
     }
 
     /**
      * Sets the CDN URL of the search provider's favicon.
      *
      * @param faviconCdnUrl the new favicon URL, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPluginMetadata setFaviconCdnUrl(URI faviconCdnUrl) {
+    public void setFaviconCdnUrl(URI faviconCdnUrl) {
         this.faviconCdnUrl = faviconCdnUrl;
-        return this;
     }
 
     /**

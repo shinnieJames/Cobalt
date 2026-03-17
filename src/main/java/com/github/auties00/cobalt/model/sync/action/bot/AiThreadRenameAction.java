@@ -54,9 +54,8 @@ public final class AiThreadRenameAction implements SyncAction<AiThreadRenameActi
         return Optional.ofNullable(newTitle);
     }
 
-    public AiThreadRenameAction setNewTitle(String newTitle) {
+    public void setNewTitle(String newTitle) {
         this.newTitle = newTitle;
-        return this;
     }
 
 

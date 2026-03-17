@@ -125,9 +125,8 @@ public final class BusinessProfile {
      * @param jid the business account JID
      * @return this instance
      */
-    public BusinessProfile setJid(Jid jid) {
+    public void setJid(Jid jid) {
         this.jid = jid;
-        return this;
     }
 
     /**
@@ -150,9 +149,8 @@ public final class BusinessProfile {
      * @param description the description text, or {@code null} to clear
      * @return this instance
      */
-    public BusinessProfile setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
     /**
@@ -174,9 +172,8 @@ public final class BusinessProfile {
      * @param address the physical address, or {@code null} to clear
      * @return this instance
      */
-    public BusinessProfile setAddress(String address) {
+    public void setAddress(String address) {
         this.address = address;
-        return this;
     }
 
     /**
@@ -198,9 +195,8 @@ public final class BusinessProfile {
      * @param email the email address, or {@code null} to clear
      * @return this instance
      */
-    public BusinessProfile setEmail(String email) {
+    public void setEmail(String email) {
         this.email = email;
-        return this;
     }
 
     /**
@@ -219,9 +215,8 @@ public final class BusinessProfile {
      * @param hours the operating hours schedule, or {@code null} to clear
      * @return this instance
      */
-    public BusinessProfile setHours(BusinessHours hours) {
+    public void setHours(BusinessHours hours) {
         this.hours = hours;
-        return this;
     }
 
     /**
@@ -242,9 +237,8 @@ public final class BusinessProfile {
      * @param cartEnabled {@code true} to enable the cart feature, {@code false} to disable it
      * @return this instance
      */
-    public BusinessProfile setCartEnabled(boolean cartEnabled) {
+    public void setCartEnabled(boolean cartEnabled) {
         this.cartEnabled = cartEnabled;
-        return this;
     }
 
     /**
@@ -265,9 +259,8 @@ public final class BusinessProfile {
      * @param websites the list of website URLs, or {@code null} for an empty list
      * @return this instance
      */
-    public BusinessProfile setWebsites(List<URI> websites) {
+    public void setWebsites(List<URI> websites) {
         this.websites = websites;
-        return this;
     }
 
     /**
@@ -288,9 +281,8 @@ public final class BusinessProfile {
      * @param categories the list of categories, or {@code null} for an empty list
      * @return this instance
      */
-    public BusinessProfile setCategories(List<BusinessCategory> categories) {
+    public void setCategories(List<BusinessCategory> categories) {
         this.categories = categories;
-        return this;
     }
 
     /**
@@ -312,8 +304,7 @@ public final class BusinessProfile {
      * @param automatedType the automation type, or {@code null} to clear
      * @return this instance
      */
-    public BusinessProfile setAutomatedType(BusinessAutomatedType automatedType) {
+    public void setAutomatedType(BusinessAutomatedType automatedType) {
         this.automatedType = automatedType;
-        return this;
     }
 }

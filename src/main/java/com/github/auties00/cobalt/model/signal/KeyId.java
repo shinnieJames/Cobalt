@@ -18,8 +18,7 @@ public final class KeyId {
         return Optional.ofNullable(id);
     }
 
-    public KeyId setId(byte[] id) {
+    public void setId(byte[] id) {
         this.id = id;
-        return this;
     }
 }

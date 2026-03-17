@@ -44,23 +44,19 @@ public final class ReportingConstraint {
         return never != null && never;
     }
 
-    public ReportingConstraint setMinVersion(Integer minVersion) {
+    public void setMinVersion(Integer minVersion) {
         this.minVersion = minVersion;
-        return this;
     }
 
-    public ReportingConstraint setMaxVersion(Integer maxVersion) {
+    public void setMaxVersion(Integer maxVersion) {
         this.maxVersion = maxVersion;
-        return this;
     }
 
-    public ReportingConstraint setNotReportableMinVersion(Integer notReportableMinVersion) {
+    public void setNotReportableMinVersion(Integer notReportableMinVersion) {
         this.notReportableMinVersion = notReportableMinVersion;
-        return this;
     }
 
-    public ReportingConstraint setNever(Boolean never) {
+    public void setNever(Boolean never) {
         this.never = never;
-        return this;
     }
 }

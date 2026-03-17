@@ -76,9 +76,8 @@ public final class SyncdPlainTextRecord {
      * @param value the action data to set
      * @return this record for chaining
      */
-    public SyncdPlainTextRecord setValue(SyncActionData value) {
+    public void setValue(SyncActionData value) {
         this.value = value;
-        return this;
     }
 
     /**
@@ -87,9 +86,8 @@ public final class SyncdPlainTextRecord {
      * @param keyId the key ID bytes to set
      * @return this record for chaining
      */
-    public SyncdPlainTextRecord setKeyId(byte[] keyId) {
+    public void setKeyId(byte[] keyId) {
         this.keyId = keyId;
-        return this;
     }
 
     /**
@@ -98,8 +96,7 @@ public final class SyncdPlainTextRecord {
      * @param mac the value MAC bytes to set
      * @return this record for chaining
      */
-    public SyncdPlainTextRecord setMac(byte[] mac) {
+    public void setMac(byte[] mac) {
         this.mac = mac;
-        return this;
     }
 }

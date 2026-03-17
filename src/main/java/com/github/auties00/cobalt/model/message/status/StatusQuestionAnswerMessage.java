@@ -29,13 +29,11 @@ public final class StatusQuestionAnswerMessage implements Message {
         return Optional.ofNullable(text);
     }
 
-    public StatusQuestionAnswerMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public StatusQuestionAnswerMessage setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 }

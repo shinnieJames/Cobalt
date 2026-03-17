@@ -18,8 +18,7 @@ public final class MessageReportingTokenInfo {
         return Optional.ofNullable(reportingTag);
     }
 
-    public MessageReportingTokenInfo setReportingTag(byte[] reportingTag) {
+    public void setReportingTag(byte[] reportingTag) {
         this.reportingTag = reportingTag;
-        return this;
     }
 }

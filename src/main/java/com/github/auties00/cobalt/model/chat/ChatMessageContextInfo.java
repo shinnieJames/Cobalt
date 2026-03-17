@@ -149,84 +149,68 @@ public final class ChatMessageContextInfo {
         return Optional.ofNullable(weblinkRenderConfig);
     }
 
-    public ChatMessageContextInfo setDeviceListMetadata(DeviceListMetadata deviceListMetadata) {
+    public void setDeviceListMetadata(DeviceListMetadata deviceListMetadata) {
         this.deviceListMetadata = deviceListMetadata;
-        return this;
     }
 
-    public ChatMessageContextInfo setDeviceListMetadataVersion(Integer deviceListMetadataVersion) {
+    public void setDeviceListMetadataVersion(Integer deviceListMetadataVersion) {
         this.deviceListMetadataVersion = deviceListMetadataVersion;
-        return this;
     }
 
-    public ChatMessageContextInfo setMessageSecret(byte[] messageSecret) {
+    public void setMessageSecret(byte[] messageSecret) {
         this.messageSecret = messageSecret;
-        return this;
     }
 
-    public ChatMessageContextInfo setPaddingBytes(byte[] paddingBytes) {
+    public void setPaddingBytes(byte[] paddingBytes) {
         this.paddingBytes = paddingBytes;
-        return this;
     }
 
-    public ChatMessageContextInfo setMessageAddOnDurationInSecs(Integer messageAddOnDurationInSecs) {
+    public void setMessageAddOnDurationInSecs(Integer messageAddOnDurationInSecs) {
         this.messageAddOnDurationInSecs = messageAddOnDurationInSecs;
-        return this;
     }
 
-    public ChatMessageContextInfo setBotMessageSecret(byte[] botMessageSecret) {
+    public void setBotMessageSecret(byte[] botMessageSecret) {
         this.botMessageSecret = botMessageSecret;
-        return this;
     }
 
-    public ChatMessageContextInfo setBotMetadata(BotMetadata botMetadata) {
+    public void setBotMetadata(BotMetadata botMetadata) {
         this.botMetadata = botMetadata;
-        return this;
     }
 
-    public ChatMessageContextInfo setReportingTokenVersion(Integer reportingTokenVersion) {
+    public void setReportingTokenVersion(Integer reportingTokenVersion) {
         this.reportingTokenVersion = reportingTokenVersion;
-        return this;
     }
 
-    public ChatMessageContextInfo setMessageAddOnExpiryType(MessageAddOnContextInfo.ExpiryType messageAddOnExpiryType) {
+    public void setMessageAddOnExpiryType(MessageAddOnContextInfo.ExpiryType messageAddOnExpiryType) {
         this.messageAddOnExpiryType = messageAddOnExpiryType;
-        return this;
     }
 
-    public ChatMessageContextInfo setMessageAssociation(MessageAssociation messageAssociation) {
+    public void setMessageAssociation(MessageAssociation messageAssociation) {
         this.messageAssociation = messageAssociation;
-        return this;
     }
 
-    public ChatMessageContextInfo setCapiCreatedGroup(Boolean capiCreatedGroup) {
+    public void setCapiCreatedGroup(Boolean capiCreatedGroup) {
         this.capiCreatedGroup = capiCreatedGroup;
-        return this;
     }
 
-    public ChatMessageContextInfo setSupportPayload(String supportPayload) {
+    public void setSupportPayload(String supportPayload) {
         this.supportPayload = supportPayload;
-        return this;
     }
 
-    public ChatMessageContextInfo setLimitSharing(ChatLimitSharing limitSharing) {
+    public void setLimitSharing(ChatLimitSharing limitSharing) {
         this.limitSharing = limitSharing;
-        return this;
     }
 
-    public ChatMessageContextInfo setLimitSharingV2(ChatLimitSharing limitSharingV2) {
+    public void setLimitSharingV2(ChatLimitSharing limitSharingV2) {
         this.limitSharingV2 = limitSharingV2;
-        return this;
     }
 
-    public ChatMessageContextInfo setThreadId(List<MessageThreadId> threadId) {
+    public void setThreadId(List<MessageThreadId> threadId) {
         this.threadId = threadId;
-        return this;
     }
 
-    public ChatMessageContextInfo setWeblinkRenderConfig(MessageLinkRender weblinkRenderConfig) {
+    public void setWeblinkRenderConfig(MessageLinkRender weblinkRenderConfig) {
         this.weblinkRenderConfig = weblinkRenderConfig;
-        return this;
     }
 
 }

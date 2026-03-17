@@ -42,23 +42,19 @@ public final class ADVSignedDeviceIdentity {
         return Optional.ofNullable(deviceSignature);
     }
 
-    public ADVSignedDeviceIdentity setDetails(byte[] details) {
+    public void setDetails(byte[] details) {
         this.details = details;
-        return this;
     }
 
-    public ADVSignedDeviceIdentity setAccountSignatureKey(byte[] accountSignatureKey) {
+    public void setAccountSignatureKey(byte[] accountSignatureKey) {
         this.accountSignatureKey = accountSignatureKey;
-        return this;
     }
 
-    public ADVSignedDeviceIdentity setAccountSignature(byte[] accountSignature) {
+    public void setAccountSignature(byte[] accountSignature) {
         this.accountSignature = accountSignature;
-        return this;
     }
 
-    public ADVSignedDeviceIdentity setDeviceSignature(byte[] deviceSignature) {
+    public void setDeviceSignature(byte[] deviceSignature) {
         this.deviceSignature = deviceSignature;
-        return this;
     }
 }

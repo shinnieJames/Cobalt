@@ -44,24 +44,20 @@ public final class UserPassword {
         return Optional.ofNullable(transformedData);
     }
 
-    public UserPassword setEncoding(Encoding encoding) {
+    public void setEncoding(Encoding encoding) {
         this.encoding = encoding;
-        return this;
     }
 
-    public UserPassword setTransformer(Transformer transformer) {
+    public void setTransformer(Transformer transformer) {
         this.transformer = transformer;
-        return this;
     }
 
-    public UserPassword setTransformerArg(List<TransformerArg> transformerArg) {
+    public void setTransformerArg(List<TransformerArg> transformerArg) {
         this.transformerArg = transformerArg;
-        return this;
     }
 
-    public UserPassword setTransformedData(byte[] transformedData) {
+    public void setTransformedData(byte[] transformedData) {
         this.transformedData = transformedData;
-        return this;
     }
 
     @ProtobufEnum(name = "UserPassword.Encoding")
@@ -119,15 +115,13 @@ public final class UserPassword {
             return Optional.ofNullable(value);
         }
 
-        public TransformerArg setKey(String key) {
+        public void setKey(String key) {
             this.key = key;
-            return this;
-        }
+    }
 
-        public TransformerArg setValue(Value value) {
+        public void setValue(Value value) {
             this.value = value;
-            return this;
-        }
+    }
 
         public sealed interface ValueSpec permits ValueSpec.AsBlob, ValueSpec.AsUnsignedInteger {
 
@@ -188,15 +182,13 @@ public final class UserPassword {
                 return Optional.empty();
             }
 
-            public Value setAsBlob(byte[] asBlob) {
+            public void setAsBlob(byte[] asBlob) {
                 this.asBlob = asBlob;
-                return this;
-            }
+    }
 
-            public Value setAsUnsignedInteger(Integer asUnsignedInteger) {
+            public void setAsUnsignedInteger(Integer asUnsignedInteger) {
                 this.asUnsignedInteger = asUnsignedInteger;
-                return this;
-            }
+    }
         }
     }
 }

@@ -51,11 +51,9 @@ public final class BotCapabilityMetadata {
      * Sets the list of capabilities the client supports.
      *
      * @param capabilities the new list of capabilities, or {@code null}
-     * @return this instance for chaining
      */
-    public BotCapabilityMetadata setCapabilities(List<BotCapabilityType> capabilities) {
+    public void setCapabilities(List<BotCapabilityType> capabilities) {
         this.capabilities = capabilities;
-        return this;
     }
 
     /**

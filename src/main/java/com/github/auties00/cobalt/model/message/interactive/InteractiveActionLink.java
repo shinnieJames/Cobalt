@@ -26,13 +26,11 @@ public final class InteractiveActionLink {
         return Optional.ofNullable(buttonTitle);
     }
 
-    public InteractiveActionLink setUrl(String url) {
+    public void setUrl(String url) {
         this.url = url;
-        return this;
     }
 
-    public InteractiveActionLink setButtonTitle(String buttonTitle) {
+    public void setButtonTitle(String buttonTitle) {
         this.buttonTitle = buttonTitle;
-        return this;
     }
 }

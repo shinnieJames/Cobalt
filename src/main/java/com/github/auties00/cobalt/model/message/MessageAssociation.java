@@ -35,19 +35,16 @@ public final class MessageAssociation {
         return messageIndex == null ? OptionalInt.empty() : OptionalInt.of(messageIndex);
     }
 
-    public MessageAssociation setAssociationType(AssociationType associationType) {
+    public void setAssociationType(AssociationType associationType) {
         this.associationType = associationType;
-        return this;
     }
 
-    public MessageAssociation setParentMessageKey(MessageKey parentMessageKey) {
+    public void setParentMessageKey(MessageKey parentMessageKey) {
         this.parentMessageKey = parentMessageKey;
-        return this;
     }
 
-    public MessageAssociation setMessageIndex(Integer messageIndex) {
+    public void setMessageIndex(Integer messageIndex) {
         this.messageIndex = messageIndex;
-        return this;
     }
 
     @ProtobufEnum(name = "MessageAssociation.AssociationType")

@@ -49,10 +49,8 @@ public final class BotPromptSuggestions {
      * Sets the list of prompt suggestions.
      *
      * @param suggestions the new list of suggestions, or {@code null}
-     * @return this instance for chaining
      */
-    public BotPromptSuggestions setSuggestions(List<BotPromptSuggestion> suggestions) {
+    public void setSuggestions(List<BotPromptSuggestion> suggestions) {
         this.suggestions = suggestions;
-        return this;
     }
 }

@@ -57,10 +57,8 @@ public final class LIDMigrationMappingSyncMessage {
      * Sets the gzip-compressed, protobuf-encoded mapping payload.
      *
      * @param encodedMappingPayload the new encoded payload bytes, or {@code null}
-     * @return this instance for chaining
      */
-    public LIDMigrationMappingSyncMessage setEncodedMappingPayload(byte[] encodedMappingPayload) {
+    public void setEncodedMappingPayload(byte[] encodedMappingPayload) {
         this.encodedMappingPayload = encodedMappingPayload;
-        return this;
     }
 }

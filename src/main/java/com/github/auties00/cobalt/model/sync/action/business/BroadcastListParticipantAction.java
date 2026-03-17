@@ -63,13 +63,11 @@ public final class BroadcastListParticipantAction implements SyncAction<SyncActi
         return Optional.ofNullable(pnJid);
     }
 
-    public BroadcastListParticipantAction setLidJid(Jid lidJid) {
+    public void setLidJid(Jid lidJid) {
         this.lidJid = lidJid;
-        return this;
     }
 
-    public BroadcastListParticipantAction setPnJid(Jid pnJid) {
+    public void setPnJid(Jid pnJid) {
         this.pnJid = pnJid;
-        return this;
     }
 }

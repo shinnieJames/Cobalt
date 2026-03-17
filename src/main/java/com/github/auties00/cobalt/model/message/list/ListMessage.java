@@ -80,44 +80,36 @@ public final class ListMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public ListMessage setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public ListMessage setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
-    public ListMessage setButtonText(String buttonText) {
+    public void setButtonText(String buttonText) {
         this.buttonText = buttonText;
-        return this;
     }
 
-    public ListMessage setListType(ListType listType) {
+    public void setListType(ListType listType) {
         this.listType = listType;
-        return this;
     }
 
-    public ListMessage setSections(List<Section> sections) {
+    public void setSections(List<Section> sections) {
         this.sections = sections;
-        return this;
     }
 
-    public ListMessage setProductListInfo(ProductListInfo productListInfo) {
+    public void setProductListInfo(ProductListInfo productListInfo) {
         this.productListInfo = productListInfo;
-        return this;
     }
 
-    public ListMessage setFooterText(String footerText) {
+    public void setFooterText(String footerText) {
         this.footerText = footerText;
-        return this;
     }
 
-    public ListMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ListMessage.ListType")
@@ -151,10 +143,9 @@ public final class ListMessage implements ContextualMessage {
             return Optional.ofNullable(productId);
         }
 
-        public Product setProductId(String productId) {
+        public void setProductId(String productId) {
             this.productId = productId;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.ListMessage.ProductListHeaderImage")
@@ -179,15 +170,13 @@ public final class ListMessage implements ContextualMessage {
             return Optional.ofNullable(jpegThumbnail);
         }
 
-        public ProductListHeaderImage setProductId(String productId) {
+        public void setProductId(String productId) {
             this.productId = productId;
-            return this;
-        }
+    }
 
-        public ProductListHeaderImage setJpegThumbnail(byte[] jpegThumbnail) {
+        public void setJpegThumbnail(byte[] jpegThumbnail) {
             this.jpegThumbnail = jpegThumbnail;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.ListMessage.ProductListInfo")
@@ -220,20 +209,17 @@ public final class ListMessage implements ContextualMessage {
             return Optional.ofNullable(businessOwnerJid);
         }
 
-        public ProductListInfo setProductSections(List<ProductSection> productSections) {
+        public void setProductSections(List<ProductSection> productSections) {
             this.productSections = productSections;
-            return this;
-        }
+    }
 
-        public ProductListInfo setHeaderImage(ProductListHeaderImage headerImage) {
+        public void setHeaderImage(ProductListHeaderImage headerImage) {
             this.headerImage = headerImage;
-            return this;
-        }
+    }
 
-        public ProductListInfo setBusinessOwnerJid(Jid businessOwnerJid) {
+        public void setBusinessOwnerJid(Jid businessOwnerJid) {
             this.businessOwnerJid = businessOwnerJid;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.ListMessage.ProductSection")
@@ -258,15 +244,13 @@ public final class ListMessage implements ContextualMessage {
             return products == null ? List.of() : Collections.unmodifiableList(products);
         }
 
-        public ProductSection setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public ProductSection setProducts(List<Product> products) {
+        public void setProducts(List<Product> products) {
             this.products = products;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.ListMessage.Row")
@@ -299,20 +283,17 @@ public final class ListMessage implements ContextualMessage {
             return Optional.ofNullable(rowId);
         }
 
-        public Row setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public Row setDescription(String description) {
+        public void setDescription(String description) {
             this.description = description;
-            return this;
-        }
+    }
 
-        public Row setRowId(String rowId) {
+        public void setRowId(String rowId) {
             this.rowId = rowId;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.ListMessage.Section")
@@ -337,14 +318,12 @@ public final class ListMessage implements ContextualMessage {
             return rows == null ? List.of() : Collections.unmodifiableList(rows);
         }
 
-        public Section setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public Section setRows(List<Row> rows) {
+        public void setRows(List<Row> rows) {
             this.rows = rows;
-            return this;
-        }
+    }
     }
 }

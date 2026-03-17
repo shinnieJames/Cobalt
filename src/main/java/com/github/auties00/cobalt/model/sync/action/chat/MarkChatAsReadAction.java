@@ -62,14 +62,12 @@ public final class MarkChatAsReadAction implements SyncAction<MarkChatAsReadActi
         return Optional.ofNullable(messageRange);
     }
 
-    public MarkChatAsReadAction setRead(Boolean read) {
+    public void setRead(Boolean read) {
         this.read = read;
-        return this;
     }
 
-    public MarkChatAsReadAction setMessageRange(SyncActionMessageRange messageRange) {
+    public void setMessageRange(SyncActionMessageRange messageRange) {
         this.messageRange = messageRange;
-        return this;
     }
 
 

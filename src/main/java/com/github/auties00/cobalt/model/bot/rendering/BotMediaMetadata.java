@@ -169,77 +169,63 @@ public final class BotMediaMetadata {
      * Sets the base64-encoded SHA-256 hash of the decrypted media file.
      *
      * @param fileSha256 the new file hash, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setFileSha256(String fileSha256) {
+    public void setFileSha256(String fileSha256) {
         this.fileSha256 = fileSha256;
-        return this;
     }
 
     /**
      * Sets the base64-encoded encryption key for the media file.
      *
      * @param mediaKey the new media key, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setMediaKey(String mediaKey) {
+    public void setMediaKey(String mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
     /**
      * Sets the base64-encoded SHA-256 hash of the encrypted media file.
      *
      * @param fileEncSha256 the new encrypted file hash, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setFileEncSha256(String fileEncSha256) {
+    public void setFileEncSha256(String fileEncSha256) {
         this.fileEncSha256 = fileEncSha256;
-        return this;
     }
 
     /**
      * Sets the CDN path for downloading the encrypted media file.
      *
      * @param directPath the new direct path, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
     /**
      * Sets the timestamp at which the media key was generated.
      *
      * @param mediaKeyTimestamp the new timestamp, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
     /**
      * Sets the MIME type of the media file.
      *
      * @param mimetype the new MIME type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setMimetype(String mimetype) {
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
     /**
      * Sets the orientation hint for this media's layout.
      *
      * @param orientationType the new orientation type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMediaMetadata setOrientationType(OrientationType orientationType) {
+    public void setOrientationType(OrientationType orientationType) {
         this.orientationType = orientationType;
-        return this;
     }
 
     /**

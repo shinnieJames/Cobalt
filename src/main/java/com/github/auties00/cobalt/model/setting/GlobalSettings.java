@@ -176,103 +176,83 @@ public final class GlobalSettings {
         return Optional.ofNullable(chatDbLidMigrationTimestamp);
     }
 
-    public GlobalSettings setLightThemeWallpaper(WallpaperSettings lightThemeWallpaper) {
+    public void setLightThemeWallpaper(WallpaperSettings lightThemeWallpaper) {
         this.lightThemeWallpaper = lightThemeWallpaper;
-        return this;
     }
 
-    public GlobalSettings setMediaVisibility(MediaVisibility mediaVisibility) {
+    public void setMediaVisibility(MediaVisibility mediaVisibility) {
         this.mediaVisibility = mediaVisibility;
-        return this;
     }
 
-    public GlobalSettings setDarkThemeWallpaper(WallpaperSettings darkThemeWallpaper) {
+    public void setDarkThemeWallpaper(WallpaperSettings darkThemeWallpaper) {
         this.darkThemeWallpaper = darkThemeWallpaper;
-        return this;
     }
 
-    public GlobalSettings setAutoDownloadWiFi(AutoDownloadSettings autoDownloadWiFi) {
+    public void setAutoDownloadWiFi(AutoDownloadSettings autoDownloadWiFi) {
         this.autoDownloadWiFi = autoDownloadWiFi;
-        return this;
     }
 
-    public GlobalSettings setAutoDownloadCellular(AutoDownloadSettings autoDownloadCellular) {
+    public void setAutoDownloadCellular(AutoDownloadSettings autoDownloadCellular) {
         this.autoDownloadCellular = autoDownloadCellular;
-        return this;
     }
 
-    public GlobalSettings setAutoDownloadRoaming(AutoDownloadSettings autoDownloadRoaming) {
+    public void setAutoDownloadRoaming(AutoDownloadSettings autoDownloadRoaming) {
         this.autoDownloadRoaming = autoDownloadRoaming;
-        return this;
     }
 
-    public GlobalSettings setShowIndividualNotificationsPreview(Boolean showIndividualNotificationsPreview) {
+    public void setShowIndividualNotificationsPreview(Boolean showIndividualNotificationsPreview) {
         this.showIndividualNotificationsPreview = showIndividualNotificationsPreview;
-        return this;
     }
 
-    public GlobalSettings setShowGroupNotificationsPreview(Boolean showGroupNotificationsPreview) {
+    public void setShowGroupNotificationsPreview(Boolean showGroupNotificationsPreview) {
         this.showGroupNotificationsPreview = showGroupNotificationsPreview;
-        return this;
     }
 
-    public GlobalSettings setDisappearingModeDuration(Integer disappearingModeDuration) {
+    public void setDisappearingModeDuration(Integer disappearingModeDuration) {
         this.disappearingModeDuration = disappearingModeDuration;
-        return this;
     }
 
-    public GlobalSettings setDisappearingModeTimestamp(Instant disappearingModeTimestamp) {
+    public void setDisappearingModeTimestamp(Instant disappearingModeTimestamp) {
         this.disappearingModeTimestamp = disappearingModeTimestamp;
-        return this;
     }
 
-    public GlobalSettings setAvatarUserSettings(AvatarUserSettings avatarUserSettings) {
+    public void setAvatarUserSettings(AvatarUserSettings avatarUserSettings) {
         this.avatarUserSettings = avatarUserSettings;
-        return this;
     }
 
-    public GlobalSettings setFontSize(Integer fontSize) {
+    public void setFontSize(Integer fontSize) {
         this.fontSize = fontSize;
-        return this;
     }
 
-    public GlobalSettings setSecurityNotifications(Boolean securityNotifications) {
+    public void setSecurityNotifications(Boolean securityNotifications) {
         this.securityNotifications = securityNotifications;
-        return this;
     }
 
-    public GlobalSettings setAutoUnarchiveChats(Boolean autoUnarchiveChats) {
+    public void setAutoUnarchiveChats(Boolean autoUnarchiveChats) {
         this.autoUnarchiveChats = autoUnarchiveChats;
-        return this;
     }
 
-    public GlobalSettings setVideoQualityMode(Integer videoQualityMode) {
+    public void setVideoQualityMode(Integer videoQualityMode) {
         this.videoQualityMode = videoQualityMode;
-        return this;
     }
 
-    public GlobalSettings setPhotoQualityMode(Integer photoQualityMode) {
+    public void setPhotoQualityMode(Integer photoQualityMode) {
         this.photoQualityMode = photoQualityMode;
-        return this;
     }
 
-    public GlobalSettings setIndividualNotificationSettings(NotificationSettings individualNotificationSettings) {
+    public void setIndividualNotificationSettings(NotificationSettings individualNotificationSettings) {
         this.individualNotificationSettings = individualNotificationSettings;
-        return this;
     }
 
-    public GlobalSettings setGroupNotificationSettings(NotificationSettings groupNotificationSettings) {
+    public void setGroupNotificationSettings(NotificationSettings groupNotificationSettings) {
         this.groupNotificationSettings = groupNotificationSettings;
-        return this;
     }
 
-    public GlobalSettings setChatLockSettings(ChatLockSettings chatLockSettings) {
+    public void setChatLockSettings(ChatLockSettings chatLockSettings) {
         this.chatLockSettings = chatLockSettings;
-        return this;
     }
 
-    public GlobalSettings setChatDbLidMigrationTimestamp(Instant chatDbLidMigrationTimestamp) {
+    public void setChatDbLidMigrationTimestamp(Instant chatDbLidMigrationTimestamp) {
         this.chatDbLidMigrationTimestamp = chatDbLidMigrationTimestamp;
-        return this;
     }
 }

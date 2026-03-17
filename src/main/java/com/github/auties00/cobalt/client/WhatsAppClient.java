@@ -5,9 +5,12 @@ import com.github.auties00.cobalt.exception.*;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
+import com.github.auties00.cobalt.model.bot.profile.*;
 import com.github.auties00.cobalt.model.business.*;
+import com.github.auties00.cobalt.model.business.profile.*;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.chat.community.CommunityLinkedGroup;
 import com.github.auties00.cobalt.model.chat.community.CommunityLinkedGroupBuilder;
@@ -19,7 +22,9 @@ import com.github.auties00.cobalt.model.chat.group.GroupPartipantRole;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.JidServer;
+import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
+import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.node.Node;
@@ -36,6 +41,7 @@ import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.util.FastRandomUtils;
+import com.github.auties00.cobalt.util.RandomIdUtils;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.SignalSessionCipher;
@@ -44,7 +50,11 @@ import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 import com.github.auties00.libsignal.key.SignalPreKeyPair;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -173,7 +183,7 @@ public final class WhatsAppClient {
                     disconnect(WhatsAppClientDisconnectReason.RECONNECTING);
                 }
             });
-        } catch (IOException | InterruptedException throwable) {
+        } catch (IOException throwable) {
             if (reason == WhatsAppClientDisconnectReason.RECONNECTING) {
                 // TODO: Add attempts count
                 handleFailure(new WhatsAppReconnectionException(throwable.getMessage(), 0, throwable));
@@ -856,17 +866,338 @@ public final class WhatsAppClient {
         return Stream.of(result);
     }
 
-    // TODO: Stuff to fix
+    public Optional<BusinessProfile> queryBusinessProfile(JidProvider contact) {
+        var profileNode = new NodeBuilder()
+                .description("profile")
+                .attribute("value", contact)
+                .build();
+        var businessProfileNode = new NodeBuilder()
+                .description("business_profile")
+                .attribute("v", 116)
+                .content(profileNode)
+                .build();
+        var iqNode = new NodeBuilder()
+                .description("iq")
+                .attribute("xmlns", "w:biz")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
+                .content(businessProfileNode);
+        var result = sendNode(iqNode);
+        return result.getChild("business_profile")
+                .flatMap(entry -> entry.getChild("profile"))
+                .map(this::parseBusinessProfile);
+    }
+
+    private BusinessProfile parseBusinessProfile(Node node) {
+        var jid = node.getRequiredAttributeAsJid("value");
+        var address = node.getChild("address")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var description = node.getChild("description")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var websites = node.streamChildren("website")
+                .flatMap(Node::streamContentString)
+                .map(URI::create)
+                .toList();
+        var email = node.getChild("email")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var categories = node.streamChildren("categories")
+                .flatMap(entry -> entry.streamChild("category"))
+                .map(this::parseBusinessCategory)
+                .toList();
+        var cartEnabled = node.getChild("profile_options")
+                .flatMap(entry -> entry.getChild("cart_enabled"))
+                .flatMap(Node::toContentBool)
+                .orElse(!node.hasChild("profile_options"));
+        var hours = node.getChild("business_hours")
+                .flatMap(attributes -> attributes.getAttributeAsString("timezone"))
+                .map(timezone -> parseBusinessHours(node, timezone))
+                .orElse(null);
+        var automatedType = node.getChild("automated_type")
+                .flatMap(Node::toContentString)
+                .map(BusinessAutomatedType::of)
+                .orElse(null);
+        return new BusinessProfileBuilder()
+                .jid(jid)
+                .description(description)
+                .address(address)
+                .email(email)
+                .hours(hours)
+                .cartEnabled(cartEnabled)
+                .websites(websites)
+                .categories(categories)
+                .automatedType(automatedType)
+                .build();
+    }
+
+    public BusinessCategory parseBusinessCategory(Node node) {
+        var id = node.getRequiredAttributeAsString("id");
+        var name = node.toContentString()
+                .map(content -> URLDecoder.decode(content, StandardCharsets.UTF_8))
+                .orElseThrow(() -> new NoSuchElementException("Missing business category content"));
+        return new BusinessCategoryBuilder()
+                .id(id)
+                .name(name)
+                .build();
+    }
+
+    private BusinessHours parseBusinessHours(Node node, String timezone) {
+        var entries = node.streamChild("business_hours")
+                .flatMap(entry -> entry.streamChildren("business_hours_config"))
+                .map(this::parseBusinessHoursEntry)
+                .toList();
+        return new BusinessHoursBuilder()
+                .timeZone(timezone)
+                .entries(entries)
+                .build();
+    }
+
+    private BusinessHoursEntry parseBusinessHoursEntry(Node node) {
+        var dayOfWeek = node.getRequiredAttributeAsString("day_of_week");
+        var mode = node.getRequiredAttributeAsString("mode");
+        var openTime = node.getAttributeAsLong("open_time", 0);
+        var closeTime = node.getAttributeAsLong("close_time", 0);
+        return new BusinessHoursEntryBuilder()
+                .day(BusinessHoursDay.of(dayOfWeek))
+                .mode(BusinessHoursMode.of(mode))
+                .openTime(LocalTime.ofSecondOfDay(openTime))
+                .closeTime(LocalTime.ofSecondOfDay(closeTime))
+                .build();
+    }
+
+    /**
+     * Queries the bot profile for the given bot JID with the default persona.
+     *
+     * @param botJid the bot JID to query
+     * @return the bot profile, or empty if not found or on error
+     */
+    public Optional<BotProfile> queryBotProfile(JidProvider botJid) {
+        return queryBotProfile(botJid, null);
+    }
+
+    /**
+     * Queries the bot profile for the given bot JID.
+     *
+     * <p>Bot profiles contain the bot's display name, description,
+     * registered commands, suggested prompts, and classification flags.
+     * The query is executed via the usync protocol with the bot profile
+     * protocol element.
+     *
+     * @param botJid    the bot JID to query
+     * @param personaId the persona ID, or {@code null} for the default persona
+     * @return the bot profile, or empty if not found or on error
+     *
+     * @apiNote WAWebRequestBotProfiles.requestBotProfiles: uses usync
+     * with context "interactive" and WAWebUsyncBotProfile protocol.
+     * WAWebBotProfileCollection: caches results in memory and IndexedDB.
+     */
+    public Optional<BotProfile> queryBotProfile(JidProvider botJid, String personaId) {
+        var profileQueryNode = new NodeBuilder()
+                .description("profile")
+                .attribute("v", "1")
+                .build();
+        var botQueryNode = new NodeBuilder()
+                .description("bot")
+                .content(profileQueryNode)
+                .build();
+        var queryNode = new NodeBuilder()
+                .description("query")
+                .content(botQueryNode)
+                .build();
+
+        var userProfileNode = new NodeBuilder()
+                .description("profile")
+                .attribute("persona_id", personaId)
+                .build();
+        var userBotNode = new NodeBuilder()
+                .description("bot")
+                .content(userProfileNode)
+                .build();
+        var userNode = new NodeBuilder()
+                .description("user")
+                .attribute("jid", botJid.toJid().toUserJid())
+                .content(userBotNode)
+                .build();
+        var listNode = new NodeBuilder()
+                .description("list")
+                .content(userNode)
+                .build();
+
+        var usyncNode = new NodeBuilder()
+                .description("usync")
+                .attribute("sid", RandomIdUtils.generateSid())
+                .attribute("mode", "query")
+                .attribute("last", "true")
+                .attribute("index", "0")
+                .attribute("context", "interactive")
+                .content(queryNode, listNode)
+                .build();
+        var iqNode = new NodeBuilder()
+                .description("iq")
+                .attribute("xmlns", "usync")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
+                .content(usyncNode);
+        var result = sendNode(iqNode);
+
+        return result.streamChildren("usync")
+                .flatMap(node -> node.streamChild("list"))
+                .flatMap(node -> node.streamChildren("user"))
+                .flatMap(user -> user.streamChild("bot"))
+                .filter(bot -> bot.getChild("error").isEmpty())
+                .flatMap(bot -> bot.streamChild("profile"))
+                .map(profile -> parseBotProfile(botJid.toJid().toUserJid(), profile))
+                .findFirst();
+    }
+
+    private BotProfile parseBotProfile(Jid botJid, Node profile) {
+        var name = profile.getChild("name")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var attributes = profile.getChild("attributes")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var description = profile.getChild("description")
+                .flatMap(Node::toContentString).orElse(null);
+        var category = profile.getChild("category")
+                .flatMap(Node::toContentString)
+                .map(BotProfileCategory::of)
+                .orElse(null);
+        var isDefault = profile.getChild("default")
+                .flatMap(Node::toContentBool)
+                .orElse(false);
+        var personaId = profile.getAttributeAsString("persona_id", null);
+
+        var prompts = profile.streamChild("prompts")
+                .flatMap(promptsNode -> promptsNode.streamChildren("prompt"))
+                .map(WhatsAppClient::parseBotPrompt)
+                .toList();
+
+        var commandsDescription = profile.getChild("commands")
+                .flatMap(commandsNode -> commandsNode.getChild("description"))
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var commands = profile.streamChild("commands")
+                .flatMap(commandsNode -> commandsNode.streamChildren("command"))
+                .map(WhatsAppClient::parseBotCommand)
+                .toList();
+
+        var isMetaCreated = profile.getChild("is_meta_created")
+                .flatMap(Node::toContentBool)
+                .orElse(false);
+
+        var creatorNode = profile.getChild("creator").orElse(null);
+        var creatorName = creatorNode != null
+                ? creatorNode.getChild("name").flatMap(Node::toContentString).orElse(null)
+                : null;
+        var creatorProfileUrl = creatorNode != null
+                ? creatorNode.getChild("profile_url").flatMap(Node::toContentString).map(URI::create).orElse(null)
+                : null;
+
+        var professionalStatus = profile.getChild("posing_as_professional")
+                .flatMap(node -> node.getAttributeAsString("type"))
+                .map(BotProfessionalStatus::of)
+                .orElse(null);
+
+        return new BotProfileBuilder()
+                .jid(botJid)
+                .name(name)
+                .attributes(attributes)
+                .description(description)
+                .category(category)
+                .isDefault(isDefault)
+                .prompts(prompts)
+                .personaId(personaId)
+                .commands(commands)
+                .commandsDescription(commandsDescription)
+                .isMetaCreated(isMetaCreated)
+                .creatorName(creatorName)
+                .creatorProfileUrl(creatorProfileUrl)
+                .professionalStatus(professionalStatus)
+                .build();
+    }
+
+    private static BotProfileCommand parseBotCommand(Node command) {
+        var commandName = command.getChild("name")
+                .flatMap(Node::toContentString)
+                .orElse("");
+        var commandDescription = command.getChild("description")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        return new BotProfileCommandBuilder()
+                .name(commandName)
+                .description(commandDescription)
+                .build();
+    }
+
+    private static BotProfilePrompt parseBotPrompt(Node prompt) {
+        var emoji = prompt.getChild("emoji")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        var text = prompt.getChild("text")
+                .flatMap(Node::toContentString)
+                .orElse(null);
+        return new BotProfilePromptBuilder()
+                .emoji(emoji)
+                .text(text)
+                .build();
+    }
 
     private Node createCall(JidProvider jid) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public SequencedCollection<Newsletter> queryNewsletters() {
-        return List.of();
+        throw new UnsupportedOperationException();
     }
 
     public SequencedCollection<Chat> queryGroups() {
-        return List.of();
+        throw new UnsupportedOperationException();
+    }
+
+    public void sendPeerMessage(Jid chatJid, ChatMessageInfo response) {
+        throw new UnsupportedOperationException();
+    }
+
+    public Optional<String> queryName(Jid receiver) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void queryNewsletterMessages(Jid newsletterJid, int i) {
+        throw new UnsupportedOperationException();
+    }
+
+    public Optional<Newsletter> queryNewsletter(Jid newsletterJid, NewsletterViewerRole role) {
+        throw new UnsupportedOperationException();
+    }
+
+    public Optional<String> queryAbout(Jid jid) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void queryBusinessCatalog(Jid targetJid) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void queryBusinessCollections(Jid targetJid) {
+        throw new UnsupportedOperationException();
+    }
+
+    public SequencedCollection<Jid> queryBlockList() {
+        throw new UnsupportedOperationException();
+    }
+
+    public Optional<URI> queryPicture(Jid self) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void subscribeToPresence(Jid jid) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void sendMessage(Jid jid, MessageContainer container) {
+        throw new UnsupportedOperationException();
     }
 }

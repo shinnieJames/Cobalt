@@ -18,8 +18,7 @@ public final class EventAdditionalMetadata {
         return isStale != null && isStale;
     }
 
-    public EventAdditionalMetadata setStale(Boolean isStale) {
+    public void setStale(Boolean isStale) {
         this.isStale = isStale;
-        return this;
     }
 }

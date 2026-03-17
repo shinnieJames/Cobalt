@@ -33,13 +33,11 @@ public final class AppStateFatalExceptionNotification implements Message {
         return Optional.ofNullable(timestamp);
     }
 
-    public AppStateFatalExceptionNotification setCollectionNames(List<String> collectionNames) {
+    public void setCollectionNames(List<String> collectionNames) {
         this.collectionNames = collectionNames;
-        return this;
     }
 
-    public AppStateFatalExceptionNotification setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 }

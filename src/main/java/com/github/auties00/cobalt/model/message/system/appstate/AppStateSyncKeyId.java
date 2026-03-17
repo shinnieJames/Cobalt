@@ -20,8 +20,7 @@ public final class AppStateSyncKeyId implements Message {
         return Optional.ofNullable(keyId);
     }
 
-    public AppStateSyncKeyId setKeyId(byte[] keyId) {
+    public void setKeyId(byte[] keyId) {
         this.keyId = keyId;
-        return this;
     }
 }

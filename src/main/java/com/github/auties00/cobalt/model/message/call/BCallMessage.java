@@ -44,24 +44,20 @@ public final class BCallMessage implements Message {
         return Optional.ofNullable(caption);
     }
 
-    public BCallMessage setSessionId(String sessionId) {
+    public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
-        return this;
     }
 
-    public BCallMessage setMediaType(MediaType mediaType) {
+    public void setMediaType(MediaType mediaType) {
         this.mediaType = mediaType;
-        return this;
     }
 
-    public BCallMessage setMasterKey(byte[] masterKey) {
+    public void setMasterKey(byte[] masterKey) {
         this.masterKey = masterKey;
-        return this;
     }
 
-    public BCallMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.BCallMessage.MediaType")

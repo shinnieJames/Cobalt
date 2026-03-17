@@ -52,9 +52,8 @@ public final class LockChatAction implements SyncAction<LockChatActionArgs> {
         return locked != null && locked;
     }
 
-    public LockChatAction setLocked(Boolean locked) {
+    public void setLocked(Boolean locked) {
         this.locked = locked;
-        return this;
     }
 
 

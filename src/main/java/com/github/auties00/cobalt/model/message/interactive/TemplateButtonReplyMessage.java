@@ -54,28 +54,23 @@ public final class TemplateButtonReplyMessage implements ContextualMessage {
         return selectedCarouselCardIndex == null ? OptionalInt.empty() : OptionalInt.of(selectedCarouselCardIndex);
     }
 
-    public TemplateButtonReplyMessage setSelectedId(String selectedId) {
+    public void setSelectedId(String selectedId) {
         this.selectedId = selectedId;
-        return this;
     }
 
-    public TemplateButtonReplyMessage setSelectedDisplayText(String selectedDisplayText) {
+    public void setSelectedDisplayText(String selectedDisplayText) {
         this.selectedDisplayText = selectedDisplayText;
-        return this;
     }
 
-    public TemplateButtonReplyMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public TemplateButtonReplyMessage setSelectedIndex(Integer selectedIndex) {
+    public void setSelectedIndex(Integer selectedIndex) {
         this.selectedIndex = selectedIndex;
-        return this;
     }
 
-    public TemplateButtonReplyMessage setSelectedCarouselCardIndex(Integer selectedCarouselCardIndex) {
+    public void setSelectedCarouselCardIndex(Integer selectedCarouselCardIndex) {
         this.selectedCarouselCardIndex = selectedCarouselCardIndex;
-        return this;
     }
 }

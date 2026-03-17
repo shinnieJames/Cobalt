@@ -84,32 +84,26 @@ public final class SessionTransparencyMetadata {
      * Sets the disclaimer text shown to the user.
      *
      * @param disclaimerText the new disclaimer text, or {@code null}
-     * @return this instance for chaining
      */
-    public SessionTransparencyMetadata setDisclaimerText(String disclaimerText) {
+    public void setDisclaimerText(String disclaimerText) {
         this.disclaimerText = disclaimerText;
-        return this;
     }
 
     /**
      * Sets the identifier of the human content analyst reviewing this session.
      *
      * @param hcaId the new analyst identifier, or {@code null}
-     * @return this instance for chaining
      */
-    public SessionTransparencyMetadata setHcaId(String hcaId) {
+    public void setHcaId(String hcaId) {
         this.hcaId = hcaId;
-        return this;
     }
 
     /**
      * Sets the type of session transparency notice being displayed.
      *
      * @param sessionTransparencyType the new transparency type, or {@code null}
-     * @return this instance for chaining
      */
-    public SessionTransparencyMetadata setSessionTransparencyType(SessionTransparencyType sessionTransparencyType) {
+    public void setSessionTransparencyType(SessionTransparencyType sessionTransparencyType) {
         this.sessionTransparencyType = sessionTransparencyType;
-        return this;
     }
 }

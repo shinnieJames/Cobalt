@@ -18,8 +18,7 @@ public final class SyncdValue {
         return Optional.ofNullable(blob);
     }
 
-    public SyncdValue setBlob(byte[] blob) {
+    public void setBlob(byte[] blob) {
         this.blob = blob;
-        return this;
     }
 }

@@ -63,14 +63,12 @@ public final class DeleteMessageForMeAction implements SyncAction<DeleteMessageF
         return Optional.ofNullable(messageTimestamp);
     }
 
-    public DeleteMessageForMeAction setDeleteMedia(Boolean deleteMedia) {
+    public void setDeleteMedia(Boolean deleteMedia) {
         this.deleteMedia = deleteMedia;
-        return this;
     }
 
-    public DeleteMessageForMeAction setMessageTimestamp(Instant messageTimestamp) {
+    public void setMessageTimestamp(Instant messageTimestamp) {
         this.messageTimestamp = messageTimestamp;
-        return this;
     }
 
 

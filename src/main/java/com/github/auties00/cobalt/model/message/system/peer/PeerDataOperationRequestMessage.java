@@ -98,49 +98,40 @@ public final class PeerDataOperationRequestMessage implements Message {
         return Optional.ofNullable(galaxyFlowAction);
     }
 
-    public PeerDataOperationRequestMessage setPeerDataOperationRequestType(PeerDataOperationRequestType peerDataOperationRequestType) {
+    public void setPeerDataOperationRequestType(PeerDataOperationRequestType peerDataOperationRequestType) {
         this.peerDataOperationRequestType = peerDataOperationRequestType;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setRequestStickerReupload(List<RequestStickerReupload> requestStickerReupload) {
+    public void setRequestStickerReupload(List<RequestStickerReupload> requestStickerReupload) {
         this.requestStickerReupload = requestStickerReupload;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setRequestUrlPreview(List<RequestUrlPreview> requestUrlPreview) {
+    public void setRequestUrlPreview(List<RequestUrlPreview> requestUrlPreview) {
         this.requestUrlPreview = requestUrlPreview;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setHistorySyncOnDemandRequest(HistorySyncOnDemandRequest historySyncOnDemandRequest) {
+    public void setHistorySyncOnDemandRequest(HistorySyncOnDemandRequest historySyncOnDemandRequest) {
         this.historySyncOnDemandRequest = historySyncOnDemandRequest;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setPlaceholderMessageResendRequest(List<PlaceholderMessageResendRequest> placeholderMessageResendRequest) {
+    public void setPlaceholderMessageResendRequest(List<PlaceholderMessageResendRequest> placeholderMessageResendRequest) {
         this.placeholderMessageResendRequest = placeholderMessageResendRequest;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setFullHistorySyncOnDemandRequest(FullHistorySyncOnDemandRequest fullHistorySyncOnDemandRequest) {
+    public void setFullHistorySyncOnDemandRequest(FullHistorySyncOnDemandRequest fullHistorySyncOnDemandRequest) {
         this.fullHistorySyncOnDemandRequest = fullHistorySyncOnDemandRequest;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setSyncdCollectionFatalRecoveryRequest(SyncDCollectionFatalRecoveryRequest syncdCollectionFatalRecoveryRequest) {
+    public void setSyncdCollectionFatalRecoveryRequest(SyncDCollectionFatalRecoveryRequest syncdCollectionFatalRecoveryRequest) {
         this.syncdCollectionFatalRecoveryRequest = syncdCollectionFatalRecoveryRequest;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setHistorySyncChunkRetryRequest(HistorySyncChunkRetryRequest historySyncChunkRetryRequest) {
+    public void setHistorySyncChunkRetryRequest(HistorySyncChunkRetryRequest historySyncChunkRetryRequest) {
         this.historySyncChunkRetryRequest = historySyncChunkRetryRequest;
-        return this;
     }
 
-    public PeerDataOperationRequestMessage setGalaxyFlowAction(GalaxyFlowAction galaxyFlowAction) {
+    public void setGalaxyFlowAction(GalaxyFlowAction galaxyFlowAction) {
         this.galaxyFlowAction = galaxyFlowAction;
-        return this;
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.FullHistorySyncOnDemandRequest")
@@ -165,15 +156,13 @@ public final class PeerDataOperationRequestMessage implements Message {
             return Optional.ofNullable(historySyncConfig);
         }
 
-        public FullHistorySyncOnDemandRequest setRequestMetadata(FullHistorySyncOnDemandRequestMetadata requestMetadata) {
+        public void setRequestMetadata(FullHistorySyncOnDemandRequestMetadata requestMetadata) {
             this.requestMetadata = requestMetadata;
-            return this;
-        }
+    }
 
-        public FullHistorySyncOnDemandRequest setHistorySyncConfig(DeviceProps.HistorySyncConfig historySyncConfig) {
+        public void setHistorySyncConfig(DeviceProps.HistorySyncConfig historySyncConfig) {
             this.historySyncConfig = historySyncConfig;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.GalaxyFlowAction")
@@ -206,20 +195,17 @@ public final class PeerDataOperationRequestMessage implements Message {
             return Optional.ofNullable(stanzaId);
         }
 
-        public GalaxyFlowAction setType(GalaxyFlowActionType type) {
+        public void setType(GalaxyFlowActionType type) {
             this.type = type;
-            return this;
-        }
+    }
 
-        public GalaxyFlowAction setFlowId(String flowId) {
+        public void setFlowId(String flowId) {
             this.flowId = flowId;
-            return this;
-        }
+    }
 
-        public GalaxyFlowAction setStanzaId(String stanzaId) {
+        public void setStanzaId(String stanzaId) {
             this.stanzaId = stanzaId;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "Message.PeerDataOperationRequestMessage.GalaxyFlowAction.GalaxyFlowActionType")
         public static enum GalaxyFlowActionType {
@@ -275,25 +261,21 @@ public final class PeerDataOperationRequestMessage implements Message {
             return regenerateChunk != null && regenerateChunk;
         }
 
-        public HistorySyncChunkRetryRequest setSyncType(HistorySyncType syncType) {
+        public void setSyncType(HistorySyncType syncType) {
             this.syncType = syncType;
-            return this;
-        }
+    }
 
-        public HistorySyncChunkRetryRequest setChunkOrder(Integer chunkOrder) {
+        public void setChunkOrder(Integer chunkOrder) {
             this.chunkOrder = chunkOrder;
-            return this;
-        }
+    }
 
-        public HistorySyncChunkRetryRequest setChunkNotificationId(String chunkNotificationId) {
+        public void setChunkNotificationId(String chunkNotificationId) {
             this.chunkNotificationId = chunkNotificationId;
-            return this;
-        }
+    }
 
-        public HistorySyncChunkRetryRequest setRegenerateChunk(Boolean regenerateChunk) {
+        public void setRegenerateChunk(Boolean regenerateChunk) {
             this.regenerateChunk = regenerateChunk;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest")
@@ -350,35 +332,29 @@ public final class PeerDataOperationRequestMessage implements Message {
             return Optional.ofNullable(accountLid);
         }
 
-        public HistorySyncOnDemandRequest setChatJid(Jid chatJid) {
+        public void setChatJid(Jid chatJid) {
             this.chatJid = chatJid;
-            return this;
-        }
+    }
 
-        public HistorySyncOnDemandRequest setOldestMsgId(String oldestMsgId) {
+        public void setOldestMsgId(String oldestMsgId) {
             this.oldestMsgId = oldestMsgId;
-            return this;
-        }
+    }
 
-        public HistorySyncOnDemandRequest setOldestMsgFromMe(Boolean oldestMsgFromMe) {
+        public void setOldestMsgFromMe(Boolean oldestMsgFromMe) {
             this.oldestMsgFromMe = oldestMsgFromMe;
-            return this;
-        }
+    }
 
-        public HistorySyncOnDemandRequest setOnDemandMsgCount(Integer onDemandMsgCount) {
+        public void setOnDemandMsgCount(Integer onDemandMsgCount) {
             this.onDemandMsgCount = onDemandMsgCount;
-            return this;
-        }
+    }
 
-        public HistorySyncOnDemandRequest setOldestMsgTimestampMs(Instant oldestMsgTimestampMs) {
+        public void setOldestMsgTimestampMs(Instant oldestMsgTimestampMs) {
             this.oldestMsgTimestampMs = oldestMsgTimestampMs;
-            return this;
-        }
+    }
 
-        public HistorySyncOnDemandRequest setAccountLid(String accountLid) {
+        public void setAccountLid(String accountLid) {
             this.accountLid = accountLid;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.PlaceholderMessageResendRequest")
@@ -395,10 +371,9 @@ public final class PeerDataOperationRequestMessage implements Message {
             return Optional.ofNullable(messageKey);
         }
 
-        public PlaceholderMessageResendRequest setMessageKey(MessageKey messageKey) {
+        public void setMessageKey(MessageKey messageKey) {
             this.messageKey = messageKey;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.RequestStickerReupload")
@@ -415,10 +390,9 @@ public final class PeerDataOperationRequestMessage implements Message {
             return Optional.ofNullable(fileSha256);
         }
 
-        public RequestStickerReupload setFileSha256(String fileSha256) {
+        public void setFileSha256(String fileSha256) {
             this.fileSha256 = fileSha256;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.RequestUrlPreview")
@@ -443,15 +417,13 @@ public final class PeerDataOperationRequestMessage implements Message {
             return includeHqThumbnail != null && includeHqThumbnail;
         }
 
-        public RequestUrlPreview setUrl(String url) {
+        public void setUrl(String url) {
             this.url = url;
-            return this;
-        }
+    }
 
-        public RequestUrlPreview setIncludeHqThumbnail(Boolean includeHqThumbnail) {
+        public void setIncludeHqThumbnail(Boolean includeHqThumbnail) {
             this.includeHqThumbnail = includeHqThumbnail;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.PeerDataOperationRequestMessage.SyncDCollectionFatalRecoveryRequest")
@@ -476,14 +448,12 @@ public final class PeerDataOperationRequestMessage implements Message {
             return Optional.ofNullable(timestamp);
         }
 
-        public SyncDCollectionFatalRecoveryRequest setCollectionName(String collectionName) {
+        public void setCollectionName(String collectionName) {
             this.collectionName = collectionName;
-            return this;
-        }
+    }
 
-        public SyncDCollectionFatalRecoveryRequest setTimestamp(Instant timestamp) {
+        public void setTimestamp(Instant timestamp) {
             this.timestamp = timestamp;
-            return this;
-        }
+    }
     }
 }

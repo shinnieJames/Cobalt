@@ -587,9 +587,8 @@ public final class JidDevice {
      * @param model the new model name
      * @return this instance
      */
-    public JidDevice setModel(String model) {
+    public void setModel(String model) {
         this.model = model;
-        return this;
     }
 
     /**
@@ -598,9 +597,8 @@ public final class JidDevice {
      * @param manufacturer the new manufacturer name
      * @return this instance
      */
-    public JidDevice setManufacturer(String manufacturer) {
+    public void setManufacturer(String manufacturer) {
         this.manufacturer = manufacturer;
-        return this;
     }
 
     /**
@@ -609,9 +607,8 @@ public final class JidDevice {
      * @param platform the new platform type
      * @return this instance
      */
-    public JidDevice setPlatform(ClientPlatformType platform) {
+    public void setPlatform(ClientPlatformType platform) {
         this.platform = platform;
-        return this;
     }
 
     /**
@@ -620,9 +617,8 @@ public final class JidDevice {
      * @param osDeviceAppVersion the new OS version
      * @return this instance
      */
-    public JidDevice setOsDeviceAppVersion(ClientAppVersion osDeviceAppVersion) {
+    public void setOsDeviceAppVersion(ClientAppVersion osDeviceAppVersion) {
         this.osDeviceAppVersion = osDeviceAppVersion;
-        return this;
     }
 
     /**
@@ -631,9 +627,8 @@ public final class JidDevice {
      * @param osBuildNumber the new OS build number, or {@code null}
      * @return this instance
      */
-    public JidDevice setOsBuildNumber(String osBuildNumber) {
+    public void setOsBuildNumber(String osBuildNumber) {
         this.osBuildNumber = osBuildNumber;
-        return this;
     }
 
     /**
@@ -642,9 +637,8 @@ public final class JidDevice {
      * @param modelId the new model identifier, or {@code null}
      * @return this instance
      */
-    public JidDevice setModelId(String modelId) {
+    public void setModelId(String modelId) {
         this.modelId = modelId;
-        return this;
     }
 
     /**
@@ -653,9 +647,8 @@ public final class JidDevice {
      * @param clientType the new client type
      * @return this instance
      */
-    public JidDevice setClientType(WhatsAppClientType clientType) {
+    public void setClientType(WhatsAppClientType clientType) {
         this.clientType = clientType;
-        return this;
     }
 
     /**

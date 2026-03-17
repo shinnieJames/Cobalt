@@ -79,24 +79,20 @@ public final class MuteAction implements SyncAction<MuteActionArgs> {
         return Optional.ofNullable(muteEveryoneMentionEndTimestamp);
     }
 
-    public MuteAction setMuted(Boolean muted) {
+    public void setMuted(Boolean muted) {
         this.muted = muted;
-        return this;
     }
 
-    public MuteAction setMuteEndTimestamp(Instant muteEndTimestamp) {
+    public void setMuteEndTimestamp(Instant muteEndTimestamp) {
         this.muteEndTimestamp = muteEndTimestamp;
-        return this;
     }
 
-    public MuteAction setAutoMuted(Boolean autoMuted) {
+    public void setAutoMuted(Boolean autoMuted) {
         this.autoMuted = autoMuted;
-        return this;
     }
 
-    public MuteAction setMuteEveryoneMentionEndTimestamp(Instant muteEveryoneMentionEndTimestamp) {
+    public void setMuteEveryoneMentionEndTimestamp(Instant muteEveryoneMentionEndTimestamp) {
         this.muteEveryoneMentionEndTimestamp = muteEveryoneMentionEndTimestamp;
-        return this;
     }
 
 

@@ -66,11 +66,9 @@ public final class BotInfrastructureDiagnostics {
      * Sets the backend system that processed this bot interaction.
      *
      * @param botBackend the new bot backend, or {@code null}
-     * @return this instance for chaining
      */
-    public BotInfrastructureDiagnostics setBotBackend(BotBackend botBackend) {
+    public void setBotBackend(BotBackend botBackend) {
         this.botBackend = botBackend;
-        return this;
     }
 
     /**
@@ -78,11 +76,9 @@ public final class BotInfrastructureDiagnostics {
      * this bot interaction.
      *
      * @param toolsUsed the new list of tool names, or {@code null}
-     * @return this instance for chaining
      */
-    public BotInfrastructureDiagnostics setToolsUsed(List<String> toolsUsed) {
+    public void setToolsUsed(List<String> toolsUsed) {
         this.toolsUsed = toolsUsed;
-        return this;
     }
 
     /**

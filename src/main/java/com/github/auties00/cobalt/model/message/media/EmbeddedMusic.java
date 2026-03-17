@@ -123,73 +123,59 @@ public final class EmbeddedMusic implements EmbeddedContentVariant {
         return overlapDurationInMs == null ? OptionalLong.empty() : OptionalLong.of(overlapDurationInMs);
     }
 
-    public EmbeddedMusic setMusicContentMediaId(String musicContentMediaId) {
+    public void setMusicContentMediaId(String musicContentMediaId) {
         this.musicContentMediaId = musicContentMediaId;
-        return this;
     }
 
-    public EmbeddedMusic setSongId(String songId) {
+    public void setSongId(String songId) {
         this.songId = songId;
-        return this;
     }
 
-    public EmbeddedMusic setAuthor(String author) {
+    public void setAuthor(String author) {
         this.author = author;
-        return this;
     }
 
-    public EmbeddedMusic setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public EmbeddedMusic setArtworkDirectPath(String artworkDirectPath) {
+    public void setArtworkDirectPath(String artworkDirectPath) {
         this.artworkDirectPath = artworkDirectPath;
-        return this;
     }
 
-    public EmbeddedMusic setArtworkSha256(byte[] artworkSha256) {
+    public void setArtworkSha256(byte[] artworkSha256) {
         this.artworkSha256 = artworkSha256;
-        return this;
     }
 
-    public EmbeddedMusic setArtworkEncSha256(byte[] artworkEncSha256) {
+    public void setArtworkEncSha256(byte[] artworkEncSha256) {
         this.artworkEncSha256 = artworkEncSha256;
-        return this;
     }
 
-    public EmbeddedMusic setArtistAttribution(String artistAttribution) {
+    public void setArtistAttribution(String artistAttribution) {
         this.artistAttribution = artistAttribution;
-        return this;
     }
 
-    public EmbeddedMusic setCountryBlocklist(byte[] countryBlocklist) {
+    public void setCountryBlocklist(byte[] countryBlocklist) {
         this.countryBlocklist = countryBlocklist;
-        return this;
     }
 
-    public EmbeddedMusic setExplicit(Boolean isExplicit) {
+    public void setExplicit(Boolean isExplicit) {
         this.isExplicit = isExplicit;
-        return this;
     }
 
-    public EmbeddedMusic setArtworkMediaKey(byte[] artworkMediaKey) {
+    public void setArtworkMediaKey(byte[] artworkMediaKey) {
         this.artworkMediaKey = artworkMediaKey;
-        return this;
     }
 
-    public EmbeddedMusic setMusicSongStartTimeInMs(Long musicSongStartTimeInMs) {
+    public void setMusicSongStartTimeInMs(Long musicSongStartTimeInMs) {
         this.musicSongStartTimeInMs = musicSongStartTimeInMs;
-        return this;
     }
 
-    public EmbeddedMusic setDerivedContentStartTimeInMs(Long derivedContentStartTimeInMs) {
+    public void setDerivedContentStartTimeInMs(Long derivedContentStartTimeInMs) {
         this.derivedContentStartTimeInMs = derivedContentStartTimeInMs;
-        return this;
     }
 
-    public EmbeddedMusic setOverlapDurationInMs(Long overlapDurationInMs) {
+    public void setOverlapDurationInMs(Long overlapDurationInMs) {
         this.overlapDurationInMs = overlapDurationInMs;
-        return this;
     }
 }

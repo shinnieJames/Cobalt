@@ -25,19 +25,19 @@ import java.util.*;
 @ProtobufMessage(name = "ContextInfo")
 public final class ContextInfo {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    String stanzaId;
+    String quotedMessageId;
 
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
-    String participant;
+    Jid quotedMessageSenderJid;
 
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
-    MessageContainer quotedMessageContainer;
+    MessageContainer quotedMessageContent;
 
     @ProtobufProperty(index = 4, type = ProtobufType.STRING)
-    Jid remoteJid;
+    Jid quotedMessageParentJid;
 
     @ProtobufProperty(index = 15, type = ProtobufType.STRING)
-    List<Jid> mentionedJid;
+    List<Jid> mentionedJids;
 
     @ProtobufProperty(index = 18, type = ProtobufType.STRING)
     String conversionSource;
@@ -55,13 +55,13 @@ public final class ContextInfo {
     Boolean isForwarded;
 
     @ProtobufProperty(index = 23, type = ProtobufType.MESSAGE)
-    AdReplyInfo quotedAd;
+    AdReplyInfo quotedAdReply;
 
     @ProtobufProperty(index = 24, type = ProtobufType.MESSAGE)
     MessageKey placeholderKey;
 
     @ProtobufProperty(index = 25, type = ProtobufType.UINT32)
-    Integer expiration;
+    Integer ephemeralDuration;
 
     @ProtobufProperty(index = 26, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant ephemeralSettingTimestamp;
@@ -88,10 +88,10 @@ public final class ContextInfo {
     InteractiveActionLink actionLink;
 
     @ProtobufProperty(index = 34, type = ProtobufType.STRING)
-    String groupSubject;
+    String quotedGroupSubject;
 
     @ProtobufProperty(index = 35, type = ProtobufType.STRING)
-    Jid parentGroupJid;
+    Jid quotedParentGroupJid;
 
     @ProtobufProperty(index = 37, type = ProtobufType.STRING)
     String trustBannerType;
@@ -157,7 +157,7 @@ public final class ContextInfo {
     Integer rankingVersion;
 
     @ProtobufProperty(index = 62, type = ProtobufType.MESSAGE)
-    GroupParticipantLabel participantLabel;
+    GroupParticipantLabel memberLabel;
 
     @ProtobufProperty(index = 63, type = ProtobufType.BOOL)
     Boolean isQuestion;
@@ -190,20 +190,20 @@ public final class ContextInfo {
     BotMessageSharingInfo botMessageSharingInfo;
 
 
-    ContextInfo(String stanzaId, String participant, MessageContainer quotedMessageContainer, Jid remoteJid, List<Jid> mentionedJid, String conversionSource, byte[] conversionData, Integer conversionDelaySeconds, Integer forwardingScore, Boolean isForwarded, AdReplyInfo quotedAd, MessageKey placeholderKey, Integer expiration, Instant ephemeralSettingTimestamp, byte[] ephemeralSharedSecret, ExternalAdReplyInfo externalAdReply, String entryPointConversionSource, String entryPointConversionApp, Integer entryPointConversionDelaySeconds, ChatDisappearingMode disappearingMode, InteractiveActionLink actionLink, String groupSubject, Jid parentGroupJid, String trustBannerType, Integer trustBannerAction, Boolean isSampled, List<GroupMention> groupMentions, UTMInfo utm, ForwardedNewsletterMessageInfo forwardedNewsletterMessageInfo, BusinessMessageForwardInfo businessMessageForwardInfo, String smbClientCampaignId, String smbServerCampaignId, DataSharingContext dataSharingContext, Boolean alwaysShowAdAttribution, FeatureEligibilities featureEligibilities, String entryPointConversionExternalSource, String entryPointConversionExternalMedium, String ctwaSignals, byte[] ctwaPayload, ForwardedAIBotMessageInfo forwardedAiBotMessageInfo, StatusAttributionType statusAttributionType, UrlTrackingMap urlTrackingMap, PairedMediaType pairedMediaType, Integer rankingVersion, GroupParticipantLabel participantLabel, Boolean isQuestion, StatusSourceType statusSourceType, List<StatusAttribution> statusAttributions, Boolean isGroupStatus, ForwardOrigin forwardOrigin, QuestionReplyQuotedMessage questionReplyQuotedMessage, StatusAudienceMetadata statusAudienceMetadata, Integer nonJidMentions, QuotedType quotedType, BotMessageSharingInfo botMessageSharingInfo) {
-        this.stanzaId = stanzaId;
-        this.participant = participant;
-        this.quotedMessageContainer = quotedMessageContainer;
-        this.remoteJid = remoteJid;
-        this.mentionedJid = mentionedJid;
+    ContextInfo(String quotedMessageId, Jid quotedMessageSenderJid, MessageContainer quotedMessageContent, Jid quotedMessageParentJid, List<Jid> mentionedJids, String conversionSource, byte[] conversionData, Integer conversionDelaySeconds, Integer forwardingScore, Boolean isForwarded, AdReplyInfo quotedAdReply, MessageKey placeholderKey, Integer ephemeralDuration, Instant ephemeralSettingTimestamp, byte[] ephemeralSharedSecret, ExternalAdReplyInfo externalAdReply, String entryPointConversionSource, String entryPointConversionApp, Integer entryPointConversionDelaySeconds, ChatDisappearingMode disappearingMode, InteractiveActionLink actionLink, String quotedGroupSubject, Jid quotedParentGroupJid, String trustBannerType, Integer trustBannerAction, Boolean isSampled, List<GroupMention> groupMentions, UTMInfo utm, ForwardedNewsletterMessageInfo forwardedNewsletterMessageInfo, BusinessMessageForwardInfo businessMessageForwardInfo, String smbClientCampaignId, String smbServerCampaignId, DataSharingContext dataSharingContext, Boolean alwaysShowAdAttribution, FeatureEligibilities featureEligibilities, String entryPointConversionExternalSource, String entryPointConversionExternalMedium, String ctwaSignals, byte[] ctwaPayload, ForwardedAIBotMessageInfo forwardedAiBotMessageInfo, StatusAttributionType statusAttributionType, UrlTrackingMap urlTrackingMap, PairedMediaType pairedMediaType, Integer rankingVersion, GroupParticipantLabel memberLabel, Boolean isQuestion, StatusSourceType statusSourceType, List<StatusAttribution> statusAttributions, Boolean isGroupStatus, ForwardOrigin forwardOrigin, QuestionReplyQuotedMessage questionReplyQuotedMessage, StatusAudienceMetadata statusAudienceMetadata, Integer nonJidMentions, QuotedType quotedType, BotMessageSharingInfo botMessageSharingInfo) {
+        this.quotedMessageId = quotedMessageId;
+        this.quotedMessageSenderJid = quotedMessageSenderJid;
+        this.quotedMessageContent = quotedMessageContent;
+        this.quotedMessageParentJid = quotedMessageParentJid;
+        this.mentionedJids = mentionedJids;
         this.conversionSource = conversionSource;
         this.conversionData = conversionData;
         this.conversionDelaySeconds = conversionDelaySeconds;
         this.forwardingScore = forwardingScore;
         this.isForwarded = isForwarded;
-        this.quotedAd = quotedAd;
+        this.quotedAdReply = quotedAdReply;
         this.placeholderKey = placeholderKey;
-        this.expiration = expiration;
+        this.ephemeralDuration = ephemeralDuration;
         this.ephemeralSettingTimestamp = ephemeralSettingTimestamp;
         this.ephemeralSharedSecret = ephemeralSharedSecret;
         this.externalAdReply = externalAdReply;
@@ -212,8 +212,8 @@ public final class ContextInfo {
         this.entryPointConversionDelaySeconds = entryPointConversionDelaySeconds;
         this.disappearingMode = disappearingMode;
         this.actionLink = actionLink;
-        this.groupSubject = groupSubject;
-        this.parentGroupJid = parentGroupJid;
+        this.quotedGroupSubject = quotedGroupSubject;
+        this.quotedParentGroupJid = quotedParentGroupJid;
         this.trustBannerType = trustBannerType;
         this.trustBannerAction = trustBannerAction;
         this.isSampled = isSampled;
@@ -235,7 +235,7 @@ public final class ContextInfo {
         this.urlTrackingMap = urlTrackingMap;
         this.pairedMediaType = pairedMediaType;
         this.rankingVersion = rankingVersion;
-        this.participantLabel = participantLabel;
+        this.memberLabel = memberLabel;
         this.isQuestion = isQuestion;
         this.statusSourceType = statusSourceType;
         this.statusAttributions = statusAttributions;
@@ -248,24 +248,24 @@ public final class ContextInfo {
         this.botMessageSharingInfo = botMessageSharingInfo;
     }
 
-    public Optional<String> stanzaId() {
-        return Optional.ofNullable(stanzaId);
+    public Optional<String> quotedMessageId() {
+        return Optional.ofNullable(quotedMessageId);
     }
 
-    public Optional<String> participant() {
-        return Optional.ofNullable(participant);
+    public Optional<Jid> quotedMessageSenderJid() {
+        return Optional.ofNullable(quotedMessageSenderJid);
     }
 
-    public Optional<MessageContainer> quotedMessage() {
-        return Optional.ofNullable(quotedMessageContainer);
+    public Optional<MessageContainer> quotedMessageContent() {
+        return Optional.ofNullable(quotedMessageContent);
     }
 
-    public Optional<Jid> remoteJid() {
-        return Optional.ofNullable(remoteJid);
+    public Optional<Jid> quotedMessageParentJid() {
+        return Optional.ofNullable(quotedMessageParentJid);
     }
 
-    public List<Jid> mentionedJid() {
-        return mentionedJid == null ? List.of() : Collections.unmodifiableList(mentionedJid);
+    public List<Jid> mentionedJids() {
+        return mentionedJids == null ? List.of() : Collections.unmodifiableList(mentionedJids);
     }
 
     public Optional<String> conversionSource() {
@@ -288,16 +288,16 @@ public final class ContextInfo {
         return isForwarded != null && isForwarded;
     }
 
-    public Optional<AdReplyInfo> quotedAd() {
-        return Optional.ofNullable(quotedAd);
+    public Optional<AdReplyInfo> quotedAdReply() {
+        return Optional.ofNullable(quotedAdReply);
     }
 
     public Optional<MessageKey> placeholderKey() {
         return Optional.ofNullable(placeholderKey);
     }
 
-    public OptionalInt expiration() {
-        return expiration == null ? OptionalInt.empty() : OptionalInt.of(expiration);
+    public OptionalInt ephemeralDuration() {
+        return ephemeralDuration == null ? OptionalInt.empty() : OptionalInt.of(ephemeralDuration);
     }
 
     public Optional<Instant> ephemeralSettingTimestamp() {
@@ -332,12 +332,12 @@ public final class ContextInfo {
         return Optional.ofNullable(actionLink);
     }
 
-    public Optional<String> groupSubject() {
-        return Optional.ofNullable(groupSubject);
+    public Optional<String> quotedGroupSubject() {
+        return Optional.ofNullable(quotedGroupSubject);
     }
 
-    public Optional<Jid> parentGroupJid() {
-        return Optional.ofNullable(parentGroupJid);
+    public Optional<Jid> quotedParentGroupJid() {
+        return Optional.ofNullable(quotedParentGroupJid);
     }
 
     public Optional<String> trustBannerType() {
@@ -425,7 +425,7 @@ public final class ContextInfo {
     }
 
     public Optional<GroupParticipantLabel> memberLabel() {
-        return Optional.ofNullable(participantLabel);
+        return Optional.ofNullable(memberLabel);
     }
 
     public boolean isQuestion() {
@@ -468,279 +468,231 @@ public final class ContextInfo {
         return Optional.ofNullable(botMessageSharingInfo);
     }
 
-    public ContextInfo setStanzaId(String stanzaId) {
-        this.stanzaId = stanzaId;
-        return this;
+    public void setQuotedMessageId(String quotedMessageId) {
+        this.quotedMessageId = quotedMessageId;
     }
 
-    public ContextInfo setParticipant(String participant) {
-        this.participant = participant;
-        return this;
+    public void setQuotedMessageSenderJid(Jid quotedMessageSenderJid) {
+        this.quotedMessageSenderJid = quotedMessageSenderJid;
     }
 
-    public ContextInfo setQuotedMessage(MessageContainer quotedMessageContainer) {
-        this.quotedMessageContainer = quotedMessageContainer;
-        return this;
+    public void setQuotedMessageContent(MessageContainer quotedMessageContent) {
+        this.quotedMessageContent = quotedMessageContent;
     }
 
-    public ContextInfo setRemoteJid(Jid remoteJid) {
-        this.remoteJid = remoteJid;
-        return this;
+    public void setQuotedMessageParentJid(Jid quotedMessageParentJid) {
+        this.quotedMessageParentJid = quotedMessageParentJid;
     }
 
-    public ContextInfo setMentionedJid(List<Jid> mentionedJid) {
-        this.mentionedJid = mentionedJid;
-        return this;
+    public void setMentionedJids(List<Jid> mentionedJids) {
+        this.mentionedJids = mentionedJids;
     }
 
-    public ContextInfo setConversionSource(String conversionSource) {
+    public void setConversionSource(String conversionSource) {
         this.conversionSource = conversionSource;
-        return this;
     }
 
-    public ContextInfo setConversionData(byte[] conversionData) {
+    public void setConversionData(byte[] conversionData) {
         this.conversionData = conversionData;
-        return this;
     }
 
-    public ContextInfo setConversionDelaySeconds(Integer conversionDelaySeconds) {
+    public void setConversionDelaySeconds(Integer conversionDelaySeconds) {
         this.conversionDelaySeconds = conversionDelaySeconds;
-        return this;
     }
 
-    public ContextInfo setForwardingScore(Integer forwardingScore) {
+    public void setForwardingScore(Integer forwardingScore) {
         this.forwardingScore = forwardingScore;
-        return this;
     }
 
-    public ContextInfo setForwarded(Boolean isForwarded) {
+    public void setForwarded(Boolean isForwarded) {
         this.isForwarded = isForwarded;
-        return this;
     }
 
-    public ContextInfo setQuotedAd(AdReplyInfo quotedAd) {
-        this.quotedAd = quotedAd;
-        return this;
+    public void setQuotedAdReply(AdReplyInfo quotedAdReply) {
+        this.quotedAdReply = quotedAdReply;
     }
 
-    public ContextInfo setPlaceholderKey(MessageKey placeholderKey) {
+    public void setPlaceholderKey(MessageKey placeholderKey) {
         this.placeholderKey = placeholderKey;
-        return this;
     }
 
-    public ContextInfo setExpiration(Integer expiration) {
-        this.expiration = expiration;
-        return this;
+    public void setEphemeralDuration(Integer ephemeralDuration) {
+        this.ephemeralDuration = ephemeralDuration;
     }
 
-    public ContextInfo setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
+    public void setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
         this.ephemeralSettingTimestamp = ephemeralSettingTimestamp;
-        return this;
     }
 
-    public ContextInfo setEphemeralSharedSecret(byte[] ephemeralSharedSecret) {
+    public void setEphemeralSharedSecret(byte[] ephemeralSharedSecret) {
         this.ephemeralSharedSecret = ephemeralSharedSecret;
-        return this;
     }
 
-    public ContextInfo setExternalAdReply(ExternalAdReplyInfo externalAdReply) {
+    public void setExternalAdReply(ExternalAdReplyInfo externalAdReply) {
         this.externalAdReply = externalAdReply;
-        return this;
     }
 
-    public ContextInfo setEntryPointConversionSource(String entryPointConversionSource) {
+    public void setEntryPointConversionSource(String entryPointConversionSource) {
         this.entryPointConversionSource = entryPointConversionSource;
-        return this;
     }
 
-    public ContextInfo setEntryPointConversionApp(String entryPointConversionApp) {
+    public void setEntryPointConversionApp(String entryPointConversionApp) {
         this.entryPointConversionApp = entryPointConversionApp;
-        return this;
     }
 
-    public ContextInfo setEntryPointConversionDelaySeconds(Integer entryPointConversionDelaySeconds) {
+    public void setEntryPointConversionDelaySeconds(Integer entryPointConversionDelaySeconds) {
         this.entryPointConversionDelaySeconds = entryPointConversionDelaySeconds;
-        return this;
     }
 
-    public ContextInfo setDisappearingMode(ChatDisappearingMode disappearingMode) {
+    public void setDisappearingMode(ChatDisappearingMode disappearingMode) {
         this.disappearingMode = disappearingMode;
-        return this;
     }
 
-    public ContextInfo setActionLink(InteractiveActionLink actionLink) {
+    public void setActionLink(InteractiveActionLink actionLink) {
         this.actionLink = actionLink;
-        return this;
     }
 
-    public ContextInfo setGroupSubject(String groupSubject) {
-        this.groupSubject = groupSubject;
-        return this;
+    public void setQuotedGroupSubject(String quotedGroupSubject) {
+        this.quotedGroupSubject = quotedGroupSubject;
     }
 
-    public ContextInfo setParentGroupJid(Jid parentGroupJid) {
-        this.parentGroupJid = parentGroupJid;
-        return this;
+    public void setQuotedParentGroupJid(Jid quotedParentGroupJid) {
+        this.quotedParentGroupJid = quotedParentGroupJid;
     }
 
-    public ContextInfo setTrustBannerType(String trustBannerType) {
+    public void setTrustBannerType(String trustBannerType) {
         this.trustBannerType = trustBannerType;
-        return this;
     }
 
-    public ContextInfo setTrustBannerAction(Integer trustBannerAction) {
+    public void setTrustBannerAction(Integer trustBannerAction) {
         this.trustBannerAction = trustBannerAction;
-        return this;
     }
 
-    public ContextInfo setSampled(Boolean isSampled) {
+    public void setSampled(Boolean isSampled) {
         this.isSampled = isSampled;
-        return this;
     }
 
-    public ContextInfo setGroupMentions(List<GroupMention> groupMentions) {
+    public void setGroupMentions(List<GroupMention> groupMentions) {
         this.groupMentions = groupMentions;
-        return this;
     }
 
-    public ContextInfo setUtm(UTMInfo utm) {
+    public void setUtm(UTMInfo utm) {
         this.utm = utm;
-        return this;
     }
 
-    public ContextInfo setForwardedNewsletterMessageInfo(ForwardedNewsletterMessageInfo forwardedNewsletterMessageInfo) {
+    public void setForwardedNewsletterMessageInfo(ForwardedNewsletterMessageInfo forwardedNewsletterMessageInfo) {
         this.forwardedNewsletterMessageInfo = forwardedNewsletterMessageInfo;
-        return this;
     }
 
-    public ContextInfo setBusinessMessageForwardInfo(BusinessMessageForwardInfo businessMessageForwardInfo) {
+    public void setBusinessMessageForwardInfo(BusinessMessageForwardInfo businessMessageForwardInfo) {
         this.businessMessageForwardInfo = businessMessageForwardInfo;
-        return this;
     }
 
-    public ContextInfo setSmbClientCampaignId(String smbClientCampaignId) {
+    public void setSmbClientCampaignId(String smbClientCampaignId) {
         this.smbClientCampaignId = smbClientCampaignId;
-        return this;
     }
 
-    public ContextInfo setSmbServerCampaignId(String smbServerCampaignId) {
+    public void setSmbServerCampaignId(String smbServerCampaignId) {
         this.smbServerCampaignId = smbServerCampaignId;
-        return this;
     }
 
-    public ContextInfo setDataSharingContext(DataSharingContext dataSharingContext) {
+    public void setDataSharingContext(DataSharingContext dataSharingContext) {
         this.dataSharingContext = dataSharingContext;
-        return this;
     }
 
-    public ContextInfo setAlwaysShowAdAttribution(Boolean alwaysShowAdAttribution) {
+    public void setAlwaysShowAdAttribution(Boolean alwaysShowAdAttribution) {
         this.alwaysShowAdAttribution = alwaysShowAdAttribution;
-        return this;
     }
 
-    public ContextInfo setFeatureEligibilities(FeatureEligibilities featureEligibilities) {
+    public void setFeatureEligibilities(FeatureEligibilities featureEligibilities) {
         this.featureEligibilities = featureEligibilities;
-        return this;
     }
 
-    public ContextInfo setEntryPointConversionExternalSource(String entryPointConversionExternalSource) {
+    public void setEntryPointConversionExternalSource(String entryPointConversionExternalSource) {
         this.entryPointConversionExternalSource = entryPointConversionExternalSource;
-        return this;
     }
 
-    public ContextInfo setEntryPointConversionExternalMedium(String entryPointConversionExternalMedium) {
+    public void setEntryPointConversionExternalMedium(String entryPointConversionExternalMedium) {
         this.entryPointConversionExternalMedium = entryPointConversionExternalMedium;
-        return this;
     }
 
-    public ContextInfo setCtwaSignals(String ctwaSignals) {
+    public void setCtwaSignals(String ctwaSignals) {
         this.ctwaSignals = ctwaSignals;
-        return this;
     }
 
-    public ContextInfo setCtwaPayload(byte[] ctwaPayload) {
+    public void setCtwaPayload(byte[] ctwaPayload) {
         this.ctwaPayload = ctwaPayload;
-        return this;
     }
 
-    public ContextInfo setForwardedAiBotMessageInfo(ForwardedAIBotMessageInfo forwardedAiBotMessageInfo) {
+    public void setForwardedAiBotMessageInfo(ForwardedAIBotMessageInfo forwardedAiBotMessageInfo) {
         this.forwardedAiBotMessageInfo = forwardedAiBotMessageInfo;
-        return this;
     }
 
-    public ContextInfo setStatusAttributionType(StatusAttributionType statusAttributionType) {
+    public void setStatusAttributionType(StatusAttributionType statusAttributionType) {
         this.statusAttributionType = statusAttributionType;
-        return this;
     }
 
-    public ContextInfo setUrlTrackingMap(UrlTrackingMap urlTrackingMap) {
+    public void setUrlTrackingMap(UrlTrackingMap urlTrackingMap) {
         this.urlTrackingMap = urlTrackingMap;
-        return this;
     }
 
-    public ContextInfo setPairedMediaType(PairedMediaType pairedMediaType) {
+    public void setPairedMediaType(PairedMediaType pairedMediaType) {
         this.pairedMediaType = pairedMediaType;
-        return this;
     }
 
-    public ContextInfo setRankingVersion(Integer rankingVersion) {
+    public void setRankingVersion(Integer rankingVersion) {
         this.rankingVersion = rankingVersion;
-        return this;
     }
 
-    public ContextInfo setParticipantLabel(GroupParticipantLabel participantLabel) {
-        this.participantLabel = participantLabel;
-        return this;
+    public void setMemberLabel(GroupParticipantLabel memberLabel) {
+        this.memberLabel = memberLabel;
     }
 
-    public ContextInfo setQuestion(Boolean isQuestion) {
+    public void setQuestion(Boolean isQuestion) {
         this.isQuestion = isQuestion;
-        return this;
     }
 
-    public ContextInfo setStatusSourceType(StatusSourceType statusSourceType) {
+    public void setStatusSourceType(StatusSourceType statusSourceType) {
         this.statusSourceType = statusSourceType;
-        return this;
     }
 
-    public ContextInfo setStatusAttributions(List<StatusAttribution> statusAttributions) {
+    public void setStatusAttributions(List<StatusAttribution> statusAttributions) {
         this.statusAttributions = statusAttributions;
-        return this;
     }
 
-    public ContextInfo setGroupStatus(Boolean isGroupStatus) {
+    public void setGroupStatus(Boolean isGroupStatus) {
         this.isGroupStatus = isGroupStatus;
-        return this;
     }
 
-    public ContextInfo setForwardOrigin(ForwardOrigin forwardOrigin) {
+    public void setForwardOrigin(ForwardOrigin forwardOrigin) {
         this.forwardOrigin = forwardOrigin;
-        return this;
     }
 
-    public ContextInfo setQuestionReplyQuotedMessage(QuestionReplyQuotedMessage questionReplyQuotedMessage) {
+    public void setQuestionReplyQuotedMessage(QuestionReplyQuotedMessage questionReplyQuotedMessage) {
         this.questionReplyQuotedMessage = questionReplyQuotedMessage;
-        return this;
     }
 
-    public ContextInfo setStatusAudienceMetadata(StatusAudienceMetadata statusAudienceMetadata) {
+    public void setStatusAudienceMetadata(StatusAudienceMetadata statusAudienceMetadata) {
         this.statusAudienceMetadata = statusAudienceMetadata;
-        return this;
     }
 
-    public ContextInfo setNonJidMentions(Integer nonJidMentions) {
+    public void setNonJidMentions(Integer nonJidMentions) {
         this.nonJidMentions = nonJidMentions;
-        return this;
     }
 
-    public ContextInfo setQuotedType(QuotedType quotedType) {
+    public void setQuotedType(QuotedType quotedType) {
         this.quotedType = quotedType;
-        return this;
     }
 
-    public ContextInfo setBotMessageSharingInfo(BotMessageSharingInfo botMessageSharingInfo) {
+    public void setBotMessageSharingInfo(BotMessageSharingInfo botMessageSharingInfo) {
         this.botMessageSharingInfo = botMessageSharingInfo;
-        return this;
+    }
+
+    public void clearQuotedMessage() {
+        this.quotedMessageId = null;
+        this.quotedMessageSenderJid = null;
+        this.quotedMessageContent = null;
+        this.quotedMessageParentJid = null;
     }
 
     @ProtobufEnum(name = "ContextInfo.ForwardOrigin")
@@ -879,25 +831,21 @@ public final class ContextInfo {
             return Optional.ofNullable(caption);
         }
 
-        public AdReplyInfo setAdvertiserName(String advertiserName) {
+        public void setAdvertiserName(String advertiserName) {
             this.advertiserName = advertiserName;
-            return this;
-        }
+    }
 
-        public AdReplyInfo setMediaType(MediaType mediaType) {
+        public void setMediaType(MediaType mediaType) {
             this.mediaType = mediaType;
-            return this;
-        }
+    }
 
-        public AdReplyInfo setJpegThumbnail(byte[] jpegThumbnail) {
+        public void setJpegThumbnail(byte[] jpegThumbnail) {
             this.jpegThumbnail = jpegThumbnail;
-            return this;
-        }
+    }
 
-        public AdReplyInfo setCaption(String caption) {
+        public void setCaption(String caption) {
             this.caption = caption;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ContextInfo.AdReplyInfo.MediaType")
         public static enum MediaType {
@@ -931,10 +879,9 @@ public final class ContextInfo {
             return Optional.ofNullable(businessOwnerJid);
         }
 
-        public BusinessMessageForwardInfo setBusinessOwnerJid(Jid businessOwnerJid) {
+        public void setBusinessOwnerJid(Jid businessOwnerJid) {
             this.businessOwnerJid = businessOwnerJid;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "ContextInfo.DataSharingContext")
@@ -975,25 +922,21 @@ public final class ContextInfo {
             return dataSharingFlags == null ? OptionalInt.empty() : OptionalInt.of(dataSharingFlags);
         }
 
-        public DataSharingContext setShowMmDisclosure(Boolean showMmDisclosure) {
+        public void setShowMmDisclosure(Boolean showMmDisclosure) {
             this.showMmDisclosure = showMmDisclosure;
-            return this;
-        }
+    }
 
-        public DataSharingContext setEncryptedSignalTokenConsented(String encryptedSignalTokenConsented) {
+        public void setEncryptedSignalTokenConsented(String encryptedSignalTokenConsented) {
             this.encryptedSignalTokenConsented = encryptedSignalTokenConsented;
-            return this;
-        }
+    }
 
-        public DataSharingContext setParameters(List<Parameters> parameters) {
+        public void setParameters(List<Parameters> parameters) {
             this.parameters = parameters;
-            return this;
-        }
+    }
 
-        public DataSharingContext setDataSharingFlags(Integer dataSharingFlags) {
+        public void setDataSharingFlags(Integer dataSharingFlags) {
             this.dataSharingFlags = dataSharingFlags;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ContextInfo.DataSharingContext.DataSharingFlags")
         public static enum DataSharingFlags {
@@ -1057,30 +1000,25 @@ public final class ContextInfo {
                 return Optional.ofNullable(contents);
             }
 
-            public Parameters setKey(String key) {
+            public void setKey(String key) {
                 this.key = key;
-                return this;
-            }
+    }
 
-            public Parameters setStringData(String stringData) {
+            public void setStringData(String stringData) {
                 this.stringData = stringData;
-                return this;
-            }
+    }
 
-            public Parameters setIntData(Long intData) {
+            public void setIntData(Long intData) {
                 this.intData = intData;
-                return this;
-            }
+    }
 
-            public Parameters setFloatData(Float floatData) {
+            public void setFloatData(Float floatData) {
                 this.floatData = floatData;
-                return this;
-            }
+    }
 
-            public Parameters setContents(Parameters contents) {
+            public void setContents(Parameters contents) {
                 this.contents = contents;
-                return this;
-            }
+    }
         }
     }
 
@@ -1306,140 +1244,113 @@ public final class ContextInfo {
             return Optional.ofNullable(adPreviewUrl);
         }
 
-        public ExternalAdReplyInfo setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setBody(String body) {
+        public void setBody(String body) {
             this.body = body;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setMediaType(MediaType mediaType) {
+        public void setMediaType(MediaType mediaType) {
             this.mediaType = mediaType;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setThumbnailUrl(String thumbnailUrl) {
+        public void setThumbnailUrl(String thumbnailUrl) {
             this.thumbnailUrl = thumbnailUrl;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setMediaUrl(String mediaUrl) {
+        public void setMediaUrl(String mediaUrl) {
             this.mediaUrl = mediaUrl;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setThumbnail(byte[] thumbnail) {
+        public void setThumbnail(byte[] thumbnail) {
             this.thumbnail = thumbnail;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setSourceType(String sourceType) {
+        public void setSourceType(String sourceType) {
             this.sourceType = sourceType;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setSourceId(String sourceId) {
+        public void setSourceId(String sourceId) {
             this.sourceId = sourceId;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setSourceUrl(String sourceUrl) {
+        public void setSourceUrl(String sourceUrl) {
             this.sourceUrl = sourceUrl;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setContainsAutoReply(Boolean containsAutoReply) {
+        public void setContainsAutoReply(Boolean containsAutoReply) {
             this.containsAutoReply = containsAutoReply;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setRenderLargerThumbnail(Boolean renderLargerThumbnail) {
+        public void setRenderLargerThumbnail(Boolean renderLargerThumbnail) {
             this.renderLargerThumbnail = renderLargerThumbnail;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setShowAdAttribution(Boolean showAdAttribution) {
+        public void setShowAdAttribution(Boolean showAdAttribution) {
             this.showAdAttribution = showAdAttribution;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setCtwaClid(String ctwaClid) {
+        public void setCtwaClid(String ctwaClid) {
             this.ctwaClid = ctwaClid;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setRef(String ref) {
+        public void setRef(String ref) {
             this.ref = ref;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setClickToWhatsappCall(Boolean clickToWhatsappCall) {
+        public void setClickToWhatsappCall(Boolean clickToWhatsappCall) {
             this.clickToWhatsappCall = clickToWhatsappCall;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setAdContextPreviewDismissed(Boolean adContextPreviewDismissed) {
+        public void setAdContextPreviewDismissed(Boolean adContextPreviewDismissed) {
             this.adContextPreviewDismissed = adContextPreviewDismissed;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setSourceApp(String sourceApp) {
+        public void setSourceApp(String sourceApp) {
             this.sourceApp = sourceApp;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setAutomatedGreetingMessageShown(Boolean automatedGreetingMessageShown) {
+        public void setAutomatedGreetingMessageShown(Boolean automatedGreetingMessageShown) {
             this.automatedGreetingMessageShown = automatedGreetingMessageShown;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setGreetingMessageBody(String greetingMessageBody) {
+        public void setGreetingMessageBody(String greetingMessageBody) {
             this.greetingMessageBody = greetingMessageBody;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setCtaPayload(String ctaPayload) {
+        public void setCtaPayload(String ctaPayload) {
             this.ctaPayload = ctaPayload;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setDisableNudge(Boolean disableNudge) {
+        public void setDisableNudge(Boolean disableNudge) {
             this.disableNudge = disableNudge;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setOriginalImageUrl(String originalImageUrl) {
+        public void setOriginalImageUrl(String originalImageUrl) {
             this.originalImageUrl = originalImageUrl;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setAutomatedGreetingMessageCtaType(String automatedGreetingMessageCtaType) {
+        public void setAutomatedGreetingMessageCtaType(String automatedGreetingMessageCtaType) {
             this.automatedGreetingMessageCtaType = automatedGreetingMessageCtaType;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setWtwaAdFormat(Boolean wtwaAdFormat) {
+        public void setWtwaAdFormat(Boolean wtwaAdFormat) {
             this.wtwaAdFormat = wtwaAdFormat;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setAdType(AdType adType) {
+        public void setAdType(AdType adType) {
             this.adType = adType;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setWtwaWebsiteUrl(String wtwaWebsiteUrl) {
+        public void setWtwaWebsiteUrl(String wtwaWebsiteUrl) {
             this.wtwaWebsiteUrl = wtwaWebsiteUrl;
-            return this;
-        }
+    }
 
-        public ExternalAdReplyInfo setAdPreviewUrl(String adPreviewUrl) {
+        public void setAdPreviewUrl(String adPreviewUrl) {
             this.adPreviewUrl = adPreviewUrl;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ContextInfo.ExternalAdReplyInfo.AdType")
         public static enum AdType {
@@ -1521,30 +1432,25 @@ public final class ContextInfo {
             return canReceiveMultiReact != null && canReceiveMultiReact;
         }
 
-        public FeatureEligibilities setCannotBeReactedTo(Boolean cannotBeReactedTo) {
+        public void setCannotBeReactedTo(Boolean cannotBeReactedTo) {
             this.cannotBeReactedTo = cannotBeReactedTo;
-            return this;
-        }
+    }
 
-        public FeatureEligibilities setCannotBeRanked(Boolean cannotBeRanked) {
+        public void setCannotBeRanked(Boolean cannotBeRanked) {
             this.cannotBeRanked = cannotBeRanked;
-            return this;
-        }
+    }
 
-        public FeatureEligibilities setCanRequestFeedback(Boolean canRequestFeedback) {
+        public void setCanRequestFeedback(Boolean canRequestFeedback) {
             this.canRequestFeedback = canRequestFeedback;
-            return this;
-        }
+    }
 
-        public FeatureEligibilities setCanBeReshared(Boolean canBeReshared) {
+        public void setCanBeReshared(Boolean canBeReshared) {
             this.canBeReshared = canBeReshared;
-            return this;
-        }
+    }
 
-        public FeatureEligibilities setCanReceiveMultiReact(Boolean canReceiveMultiReact) {
+        public void setCanReceiveMultiReact(Boolean canReceiveMultiReact) {
             this.canReceiveMultiReact = canReceiveMultiReact;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "ContextInfo.ForwardedNewsletterMessageInfo")
@@ -1601,35 +1507,29 @@ public final class ContextInfo {
             return Optional.ofNullable(profileName);
         }
 
-        public ForwardedNewsletterMessageInfo setNewsletterJid(Jid newsletterJid) {
+        public void setNewsletterJid(Jid newsletterJid) {
             this.newsletterJid = newsletterJid;
-            return this;
-        }
+    }
 
-        public ForwardedNewsletterMessageInfo setServerMessageId(Integer serverMessageId) {
+        public void setServerMessageId(Integer serverMessageId) {
             this.serverMessageId = serverMessageId;
-            return this;
-        }
+    }
 
-        public ForwardedNewsletterMessageInfo setNewsletterName(String newsletterName) {
+        public void setNewsletterName(String newsletterName) {
             this.newsletterName = newsletterName;
-            return this;
-        }
+    }
 
-        public ForwardedNewsletterMessageInfo setContentType(ContentType contentType) {
+        public void setContentType(ContentType contentType) {
             this.contentType = contentType;
-            return this;
-        }
+    }
 
-        public ForwardedNewsletterMessageInfo setAccessibilityText(String accessibilityText) {
+        public void setAccessibilityText(String accessibilityText) {
             this.accessibilityText = accessibilityText;
-            return this;
-        }
+    }
 
-        public ForwardedNewsletterMessageInfo setProfileName(String profileName) {
+        public void setProfileName(String profileName) {
             this.profileName = profileName;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ContextInfo.ForwardedNewsletterMessageInfo.ContentType")
         public static enum ContentType {
@@ -1679,20 +1579,17 @@ public final class ContextInfo {
             return Optional.ofNullable(quotedResponse);
         }
 
-        public QuestionReplyQuotedMessage setServerQuestionId(Integer serverQuestionId) {
+        public void setServerQuestionId(Integer serverQuestionId) {
             this.serverQuestionId = serverQuestionId;
-            return this;
-        }
+    }
 
-        public QuestionReplyQuotedMessage setQuotedQuestion(MessageContainer quotedQuestion) {
+        public void setQuotedQuestion(MessageContainer quotedQuestion) {
             this.quotedQuestion = quotedQuestion;
-            return this;
-        }
+    }
 
-        public QuestionReplyQuotedMessage setQuotedResponse(MessageContainer quotedResponse) {
+        public void setQuotedResponse(MessageContainer quotedResponse) {
             this.quotedResponse = quotedResponse;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "ContextInfo.StatusAudienceMetadata")
@@ -1725,20 +1622,17 @@ public final class ContextInfo {
             return Optional.ofNullable(listEmoji);
         }
 
-        public StatusAudienceMetadata setAudienceType(AudienceType audienceType) {
+        public void setAudienceType(AudienceType audienceType) {
             this.audienceType = audienceType;
-            return this;
-        }
+    }
 
-        public StatusAudienceMetadata setListName(String listName) {
+        public void setListName(String listName) {
             this.listName = listName;
-            return this;
-        }
+    }
 
-        public StatusAudienceMetadata setListEmoji(String listEmoji) {
+        public void setListEmoji(String listEmoji) {
             this.listEmoji = listEmoji;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ContextInfo.StatusAudienceMetadata.AudienceType")
         public static enum AudienceType {
@@ -1779,14 +1673,12 @@ public final class ContextInfo {
             return Optional.ofNullable(utmCampaign);
         }
 
-        public UTMInfo setUtmSource(String utmSource) {
+        public void setUtmSource(String utmSource) {
             this.utmSource = utmSource;
-            return this;
-        }
+    }
 
-        public UTMInfo setUtmCampaign(String utmCampaign) {
+        public void setUtmCampaign(String utmCampaign) {
             this.utmCampaign = utmCampaign;
-            return this;
-        }
+    }
     }
 }

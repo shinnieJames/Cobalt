@@ -1,10 +1,11 @@
 package com.github.auties00.cobalt.sync.key;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
@@ -21,10 +22,13 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.util.SchedulerUtils;
 
 import java.security.SecureRandom;
-import java.util.concurrent.CompletableFuture;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
 /**
@@ -390,8 +394,8 @@ public final class SyncKeyRotationService {
         for (var device : companionDevices) {
             try {
                 var messageKey = new MessageKeyBuilder()
-                        .id(MessageKey.randomId(whatsapp.store().clientType()))
-                        .chatJid(myJid)
+                        .id(MessageIdGenerator.generate(MessageIdVersion.V2, myJid))
+                        .parentJid(myJid)
                         .fromMe(true)
                         .senderJid(myJid)
                         .build();

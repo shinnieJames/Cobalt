@@ -2,8 +2,13 @@ package com.github.auties00.cobalt.message.send.stanza;
 
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.Message;
-import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.*;
+import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
+import com.github.auties00.cobalt.model.message.event.EventMessage;
+import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
+import com.github.auties00.cobalt.model.message.poll.PollResultSnapshotMessage;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
+import com.github.auties00.cobalt.model.message.security.SecretEncMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -68,7 +73,7 @@ public final class MetaStanza {
         var eventType = resolveEventType(message);
 
         // WAWebSendMsgMetaNode: determine view_once
-        var viewOnce = container.type() == Message.Type.VIEW_ONCE ? "true" : null;
+        var viewOnce = container.futureProofContentType() == FutureProofMessageType.VIEW_ONCE ? "true" : null;
 
         // WAWebSendMsgMetaNode.getOriginAttribute: origin = lidOriginType when PNH_CTWA
         var origin = resolveOrigin(chatJid);
@@ -80,7 +85,7 @@ public final class MetaStanza {
         // "default" for peer messages, "member_tag" for group member label changes
         String appdata = null;
         if (message instanceof ProtocolMessage pm
-                && pm.protocolType() == ProtocolMessage.Type.GROUP_MEMBER_LABEL_CHANGE) {
+                && pm.type().orElse(null) == ProtocolMessage.Type.GROUP_MEMBER_LABEL_CHANGE) {
             appdata = "member_tag";
         }
 
@@ -90,20 +95,23 @@ public final class MetaStanza {
         String threadMsgId = null;
         Jid threadMsgSenderJid = null;
         String hashedAiThreadId = null;
-        var deviceInfo = container.deviceInfo().orElse(null);
+        var deviceInfo = container.messageContextInfo().orElse(null);
         if (deviceInfo != null) {
             var threads = deviceInfo.threadId();
             if (threads != null) {
                 for (var thread : threads) {
-                    var key = thread.threadKey().orElse(null);
-                    if (key == null || key.id() == null || key.id().isEmpty()) {
+                    var threadKey = thread.threadKey();
+                    var keyId = threadKey.flatMap(MessageKey::id)
+                            .filter(entry -> !entry.isEmpty());
+                    if (keyId.isEmpty()) {
                         continue;
                     }
-                    if (thread.isAiThread()) {
-                        hashedAiThreadId = key.id();
+                    if (thread.threadType().orElse(null) == MessageThreadId.ThreadType.AI_THREAD) {
+                        hashedAiThreadId = keyId.get();
                     } else {
-                        threadMsgId = key.id();
-                        threadMsgSenderJid = key.senderJid().orElse(null);
+                        threadMsgId = keyId.get();
+                        threadMsgSenderJid = threadKey.flatMap(MessageKey::senderJid)
+                                .orElse(null);
                     }
                     break;
                 }
@@ -174,9 +182,9 @@ public final class MetaStanza {
     private static String resolveEventType(Message message) {
         return switch (message) {
             case EventMessage _ -> "creation";
-            case SecretEncryptedMessage s
-                    when s.secretEncType() == SecretEncryptedMessage.SecretEncType.EVENT_EDIT -> "edit";
-            case EncryptedEventResponseMessage _ -> "response";
+            case SecretEncMessage s
+                    when s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.EVENT_EDIT -> "edit";
+            case EncEventResponseMessage _ -> "response";
             default -> null;
         };
     }

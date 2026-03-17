@@ -53,8 +53,7 @@ public final class PrivacySettingDisableLinkPreviewsAction implements SyncAction
         return isPreviewsDisabled != null && isPreviewsDisabled;
     }
 
-    public PrivacySettingDisableLinkPreviewsAction setPreviewsDisabled(Boolean isPreviewsDisabled) {
+    public void setPreviewsDisabled(Boolean isPreviewsDisabled) {
         this.isPreviewsDisabled = isPreviewsDisabled;
-        return this;
     }
 }

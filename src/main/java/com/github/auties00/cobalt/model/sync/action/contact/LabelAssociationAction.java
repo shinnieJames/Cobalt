@@ -52,9 +52,8 @@ public final class LabelAssociationAction implements SyncAction<LabelAssociation
         return labeled != null && labeled;
     }
 
-    public LabelAssociationAction setLabeled(Boolean labeled) {
+    public void setLabeled(Boolean labeled) {
         this.labeled = labeled;
-        return this;
     }
 
 

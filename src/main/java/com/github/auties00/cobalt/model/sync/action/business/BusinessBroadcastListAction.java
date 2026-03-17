@@ -80,24 +80,20 @@ public final class BusinessBroadcastListAction implements SyncAction<BusinessBro
         return labelIds == null ? List.of() : Collections.unmodifiableList(labelIds);
     }
 
-    public BusinessBroadcastListAction setDeleted(Boolean deleted) {
+    public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
-        return this;
     }
 
-    public BusinessBroadcastListAction setParticipants(List<BroadcastListParticipantAction> participants) {
+    public void setParticipants(List<BroadcastListParticipantAction> participants) {
         this.participants = participants;
-        return this;
     }
 
-    public BusinessBroadcastListAction setListName(String listName) {
+    public void setListName(String listName) {
         this.listName = listName;
-        return this;
     }
 
-    public BusinessBroadcastListAction setLabelIds(List<String> labelIds) {
+    public void setLabelIds(List<String> labelIds) {
         this.labelIds = labelIds;
-        return this;
     }
 
 

@@ -99,59 +99,48 @@ public final class PatchDebugData {
         return isSenderPrimary != null && isSenderPrimary;
     }
 
-    public PatchDebugData setCurrentLthash(byte[] currentLthash) {
+    public void setCurrentLthash(byte[] currentLthash) {
         this.currentLthash = currentLthash;
-        return this;
     }
 
-    public PatchDebugData setNewLthash(byte[] newLthash) {
+    public void setNewLthash(byte[] newLthash) {
         this.newLthash = newLthash;
-        return this;
     }
 
-    public PatchDebugData setPatchVersion(byte[] patchVersion) {
+    public void setPatchVersion(byte[] patchVersion) {
         this.patchVersion = patchVersion;
-        return this;
     }
 
-    public PatchDebugData setCollectionName(byte[] collectionName) {
+    public void setCollectionName(byte[] collectionName) {
         this.collectionName = collectionName;
-        return this;
     }
 
-    public PatchDebugData setFirstFourBytesFromAHashOfSnapshotMacKey(byte[] firstFourBytesFromAHashOfSnapshotMacKey) {
+    public void setFirstFourBytesFromAHashOfSnapshotMacKey(byte[] firstFourBytesFromAHashOfSnapshotMacKey) {
         this.firstFourBytesFromAHashOfSnapshotMacKey = firstFourBytesFromAHashOfSnapshotMacKey;
-        return this;
     }
 
-    public PatchDebugData setNewLthashSubtract(byte[] newLthashSubtract) {
+    public void setNewLthashSubtract(byte[] newLthashSubtract) {
         this.newLthashSubtract = newLthashSubtract;
-        return this;
     }
 
-    public PatchDebugData setNumberAdd(Integer numberAdd) {
+    public void setNumberAdd(Integer numberAdd) {
         this.numberAdd = numberAdd;
-        return this;
     }
 
-    public PatchDebugData setNumberRemove(Integer numberRemove) {
+    public void setNumberRemove(Integer numberRemove) {
         this.numberRemove = numberRemove;
-        return this;
     }
 
-    public PatchDebugData setNumberOverride(Integer numberOverride) {
+    public void setNumberOverride(Integer numberOverride) {
         this.numberOverride = numberOverride;
-        return this;
     }
 
-    public PatchDebugData setSenderPlatform(Platform senderPlatform) {
+    public void setSenderPlatform(Platform senderPlatform) {
         this.senderPlatform = senderPlatform;
-        return this;
     }
 
-    public PatchDebugData setSenderPrimary(Boolean isSenderPrimary) {
+    public void setSenderPrimary(Boolean isSenderPrimary) {
         this.isSenderPrimary = isSenderPrimary;
-        return this;
     }
 
     @ProtobufEnum(name = "PatchDebugData.Platform")

@@ -54,28 +54,23 @@ public final class NewsletterFollowerInviteMessage implements ContextualMessage 
         return Optional.ofNullable(contextInfo);
     }
 
-    public NewsletterFollowerInviteMessage setNewsletterJid(Jid newsletterJid) {
+    public void setNewsletterJid(Jid newsletterJid) {
         this.newsletterJid = newsletterJid;
-        return this;
     }
 
-    public NewsletterFollowerInviteMessage setNewsletterName(String newsletterName) {
+    public void setNewsletterName(String newsletterName) {
         this.newsletterName = newsletterName;
-        return this;
     }
 
-    public NewsletterFollowerInviteMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public NewsletterFollowerInviteMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public NewsletterFollowerInviteMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

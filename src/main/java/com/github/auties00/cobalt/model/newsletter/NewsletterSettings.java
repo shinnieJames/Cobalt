@@ -39,11 +39,9 @@ public final class NewsletterSettings {
      * Sets the reaction codes settings.
      *
      * @param reactionCodes the reaction codes settings
-     * @return this instance for chaining
      */
-    public NewsletterSettings setReactionCodes(NewsletterReactionSettings reactionCodes) {
+    public void setReactionCodes(NewsletterReactionSettings reactionCodes) {
         this.reactionCodes = reactionCodes;
-        return this;
     }
 
     @Override

@@ -11,12 +11,13 @@ import com.github.auties00.cobalt.message.send.stanza.*;
 import com.github.auties00.cobalt.model.business.profile.BusinessAutomatedType;
 import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.chat.Chat;
-import com.github.auties00.cobalt.model.contact.Contact;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.device.DeviceListMetadata;
+import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.FutureProofMessageType;
 import com.github.auties00.cobalt.model.message.Message;
+import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageThreadId;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
@@ -91,7 +92,7 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
         var fanoutDevices = deviceService.getUserFanout(chatJid, null);
 
         // WAWebSendMsgCreateFanoutStanza: create receipt records for all devices
-        store.createOrMergeReceiptRecords(messageInfo.key().id(), fanoutDevices);
+        store.createOrMergeReceiptRecords(messageInfo.key().id().orElseThrow(), fanoutDevices);
 
         var ack = encryptBuildAndSend(chatJid, messageInfo, fanoutDevices, false);
 
@@ -168,7 +169,7 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
         var botMetadataNode = resolveBotMetadataNode(chatJid, messageInfo);
 
         return ChatFanoutStanza.build(
-                messageInfo.key().id(),
+                messageInfo.key().id().orElseThrow(),
                 chatJid,
                 resolveStanzaType(container),
                 payloads,
@@ -280,21 +281,21 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
         // WAWebSendMsgCreateFanoutStanza: resolve bot message body type
         String botMsgBodyType = null;
         if (content instanceof ProtocolMessage pm
-                && pm.protocolType() == ProtocolMessage.Type.REQUEST_WELCOME_MESSAGE) {
+                && pm.type().orElse(null) == ProtocolMessage.Type.REQUEST_WELCOME_MESSAGE) {
             botMsgBodyType = "request_welcome";
-        } else if (chatJid.hasBotServer() || container.type() == Message.Type.BOT_INVOKE) {
+        } else if (chatJid.hasBotServer() || container.futureProofContentType() == FutureProofMessageType.BOT_INVOKE) {
             botMsgBodyType = resolveBotMsgBodyType(chatJid, content);
         }
 
         // WAWebSendMsgCreateFanoutStanza: resolve AI thread ID
-        var clientThreadId = container.deviceInfo()
-                .map(DeviceContextInfo::threadId)
+        var clientThreadId = container.messageContextInfo()
+                .map(ChatMessageContextInfo::threadId)
                 .stream()
                 .flatMap(Collection::stream)
-                .filter(MessageThreadId::isAiThread)
+                .filter(thread -> thread.threadType().orElse(null) == MessageThreadId.ThreadType.AI_THREAD)
                 .findFirst()
                 .flatMap(MessageThreadId::threadKey)
-                .map(MessageKey::id)
+                .flatMap(MessageKey::id)
                 .filter(id -> !id.isEmpty())
                 .orElse(null);
 
@@ -324,11 +325,11 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
      * WAWebSendTextMsgChatAction: sets botMsgBodyType from caller options.
      */
     private String resolveBotMsgBodyType(Jid botJid, Message content) {
-        if (!(content instanceof TextMessage text) || text.text() == null) {
+        if (!(content instanceof ExtendedTextMessage textMessage) || textMessage.text().isEmpty()) {
             return "prompt";
         } else {
             var isCommand = client.queryBotProfile(botJid)
-                    .map(profile -> profile.isCommand(text.text()))
+                    .map(profile -> profile.isCommand(textMessage.text().get()))
                     .orElse(false);
             return isCommand ? "command" : "prompt";
         }

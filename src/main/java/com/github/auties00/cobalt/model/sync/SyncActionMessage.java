@@ -57,13 +57,11 @@ public final class SyncActionMessage implements SyncAction<SyncActionEmptyArgs> 
         return Optional.ofNullable(timestamp);
     }
 
-    public SyncActionMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public SyncActionMessage setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 }

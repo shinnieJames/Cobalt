@@ -54,8 +54,7 @@ public final class PaymentInfoAction implements SyncAction<SyncActionEmptyArgs> 
         return Optional.ofNullable(cpi);
     }
 
-    public PaymentInfoAction setCpi(String cpi) {
+    public void setCpi(String cpi) {
         this.cpi = cpi;
-        return this;
     }
 }

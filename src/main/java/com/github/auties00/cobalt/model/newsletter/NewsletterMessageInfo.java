@@ -129,12 +129,10 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the message key.
      *
      * @param key the message key, must not be {@code null}
-     * @return this instance for chaining
      * @throws NullPointerException if {@code key} is {@code null}
      */
-    public NewsletterMessageInfo setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = Objects.requireNonNull(key, "key cannot be null");
-        return this;
     }
 
     /**
@@ -150,11 +148,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the server-assigned message identifier.
      *
      * @param serverId the server id
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setServerId(int serverId) {
+    public void setServerId(int serverId) {
         this.serverId = serverId;
-        return this;
     }
 
     /**
@@ -169,11 +165,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the message timestamp.
      *
      * @param timestamp the timestamp
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
     /**
@@ -190,20 +184,17 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the view count.
      *
      * @param views the view count
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setViews(Long views) {
+    public void setViews(Long views) {
         this.views = views;
-        return this;
     }
 
     /**
      * Sets the reactions from a collection, merging duplicates.
      *
      * @param reactions the collection of reactions, may be {@code null}
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setReactions(Collection<NewsletterReaction> reactions) {
+    public void setReactions(Collection<NewsletterReaction> reactions) {
         if (reactions == null) {
             this.reactions = new HashMap<>();
         } else {
@@ -226,7 +217,6 @@ public final class NewsletterMessageInfo implements MessageInfo {
                 }
             }));
         }
-        return this;
     }
 
     /**
@@ -241,11 +231,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the message content container.
      *
      * @param message the message container
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setMessage(MessageContainer message) {
+    public void setMessage(MessageContainer message) {
         this.message = message;
-        return this;
     }
 
     /**
@@ -260,22 +248,18 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the message delivery status.
      *
      * @param status the delivery status
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setStatus(MessageStatus status) {
+    public void setStatus(MessageStatus status) {
         this.status = status;
-        return this;
     }
 
     /**
      * Sets the message receipts.
      *
      * @param receipts the receipt
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setReceipts(List<MessageReceipt> receipts) {
+    public void setReceipts(List<MessageReceipt> receipts) {
         this.receipts = receipts;
-        return this;
     }
 
     /**
@@ -283,19 +267,17 @@ public final class NewsletterMessageInfo implements MessageInfo {
      *
      * @return the media handle, may be {@code null}
      */
-    public String mediaHandle() {
-        return mediaHandle;
+    public Optional<String> mediaHandle() {
+        return Optional.ofNullable(mediaHandle);
     }
 
     /**
      * Sets the media handle.
      *
      * @param mediaHandle the media handle
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setMediaHandle(String mediaHandle) {
+    public void setMediaHandle(String mediaHandle) {
         this.mediaHandle = mediaHandle;
-        return this;
     }
 
     /**
@@ -387,9 +369,8 @@ public final class NewsletterMessageInfo implements MessageInfo {
      *
      * @param starred {@code true} to star the message
      */
-    public NewsletterMessageInfo setStarred(boolean starred) {
+    public void setStarred(boolean starred) {
         this.starred = starred;
-        return this;
     }
 
     /**
@@ -414,11 +395,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the forwards count.
      *
      * @param forwardsCount the forwards count
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setForwardsCount(Long forwardsCount) {
+    public void setForwardsCount(Long forwardsCount) {
         this.forwardsCount = forwardsCount;
-        return this;
     }
 
     /**
@@ -435,11 +414,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the question responses count.
      *
      * @param questionResponsesCount the question responses count
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setQuestionResponsesCount(Long questionResponsesCount) {
+    public void setQuestionResponsesCount(Long questionResponsesCount) {
         this.questionResponsesCount = questionResponsesCount;
-        return this;
     }
 
     /**
@@ -456,11 +433,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the timestamp of the last server update.
      *
      * @param lastUpdateFromServerTimestamp the last update timestamp
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setLastUpdateFromServerTimestamp(Instant lastUpdateFromServerTimestamp) {
+    public void setLastUpdateFromServerTimestamp(Instant lastUpdateFromServerTimestamp) {
         this.lastUpdateFromServerTimestamp = lastUpdateFromServerTimestamp;
-        return this;
     }
 
     /**
@@ -478,11 +453,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the latest edit sender timestamp in milliseconds.
      *
      * @param latestEditSenderTimestampMs the edit timestamp in milliseconds
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setLatestEditSenderTimestampMs(Long latestEditSenderTimestampMs) {
+    public void setLatestEditSenderTimestampMs(Long latestEditSenderTimestampMs) {
         this.latestEditSenderTimestampMs = latestEditSenderTimestampMs;
-        return this;
     }
 
     /**
@@ -500,11 +473,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the original timestamp before edits.
      *
      * @param originalTimestamp the original timestamp
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setOriginalTimestamp(Instant originalTimestamp) {
+    public void setOriginalTimestamp(Instant originalTimestamp) {
         this.originalTimestamp = originalTimestamp;
-        return this;
     }
 
     /**
@@ -520,11 +491,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets whether this is a WAMO subscription message.
      *
      * @param wamoSub {@code true} if this is a WAMO sub message
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setWamoSub(boolean wamoSub) {
+    public void setWamoSub(boolean wamoSub) {
         this.wamoSub = wamoSub;
-        return this;
     }
 
     /**
@@ -541,11 +510,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the admin profile of the message sender.
      *
      * @param adminProfile the admin profile
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setAdminProfile(NewsletterAdminProfile adminProfile) {
+    public void setAdminProfile(NewsletterAdminProfile adminProfile) {
         this.adminProfile = adminProfile;
-        return this;
     }
 
     /**
@@ -561,11 +528,9 @@ public final class NewsletterMessageInfo implements MessageInfo {
      * Sets the poll vote data.
      *
      * @param pollVotes the list of poll votes
-     * @return this instance for chaining
      */
-    public NewsletterMessageInfo setPollVotes(List<NewsletterPollVote> pollVotes) {
+    public void setPollVotes(List<NewsletterPollVote> pollVotes) {
         this.pollVotes = Objects.requireNonNullElseGet(pollVotes, ArrayList::new);
-        return this;
     }
 
     @Override

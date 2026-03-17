@@ -102,39 +102,32 @@ public final class MarketingMessageAction implements SyncAction<MarketingMessage
         return Optional.ofNullable(mediaId);
     }
 
-    public MarketingMessageAction setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public MarketingMessageAction setMessage(String message) {
+    public void setMessage(String message) {
         this.message = message;
-        return this;
     }
 
-    public MarketingMessageAction setType(MarketingMessagePrototypeType type) {
+    public void setType(MarketingMessagePrototypeType type) {
         this.type = type;
-        return this;
     }
 
-    public MarketingMessageAction setCreatedAt(Long createdAt) {
+    public void setCreatedAt(Long createdAt) {
         this.createdAt = createdAt;
-        return this;
     }
 
-    public MarketingMessageAction setLastSentAt(Long lastSentAt) {
+    public void setLastSentAt(Long lastSentAt) {
         this.lastSentAt = lastSentAt;
-        return this;
     }
 
-    public MarketingMessageAction setDeleted(Boolean isDeleted) {
+    public void setDeleted(Boolean isDeleted) {
         this.isDeleted = isDeleted;
-        return this;
     }
 
-    public MarketingMessageAction setMediaId(String mediaId) {
+    public void setMediaId(String mediaId) {
         this.mediaId = mediaId;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.MarketingMessageAction.MarketingMessagePrototypeType")

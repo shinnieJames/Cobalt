@@ -20,8 +20,7 @@ public final class SyncdVersion {
         return version == null ? OptionalLong.empty() : OptionalLong.of(version);
     }
 
-    public SyncdVersion setVersion(Long version) {
+    public void setVersion(Long version) {
         this.version = version;
-        return this;
     }
 }

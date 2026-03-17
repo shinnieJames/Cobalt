@@ -37,18 +37,15 @@ public final class EncEventResponseMessage implements Message {
         return Optional.ofNullable(encIv);
     }
 
-    public EncEventResponseMessage setEventCreationMessageKey(MessageKey eventCreationMessageKey) {
+    public void setEventCreationMessageKey(MessageKey eventCreationMessageKey) {
         this.eventCreationMessageKey = eventCreationMessageKey;
-        return this;
     }
 
-    public EncEventResponseMessage setEncPayload(byte[] encPayload) {
+    public void setEncPayload(byte[] encPayload) {
         this.encPayload = encPayload;
-        return this;
     }
 
-    public EncEventResponseMessage setEncIv(byte[] encIv) {
+    public void setEncIv(byte[] encIv) {
         this.encIv = encIv;
-        return this;
     }
 }

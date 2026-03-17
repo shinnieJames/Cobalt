@@ -74,38 +74,31 @@ public final class RequestPaymentMessage implements Message {
         return Optional.ofNullable(background);
     }
 
-    public RequestPaymentMessage setNoteMessage(MessageContainer noteMessageContainer) {
+    public void setNoteMessage(MessageContainer noteMessageContainer) {
         this.noteMessageContainer = noteMessageContainer;
-        return this;
     }
 
-    public RequestPaymentMessage setCurrencyCodeIso4217(String currencyCodeIso4217) {
+    public void setCurrencyCodeIso4217(String currencyCodeIso4217) {
         this.currencyCodeIso4217 = currencyCodeIso4217;
-        return this;
     }
 
-    public RequestPaymentMessage setAmount1000(Long amount1000) {
+    public void setAmount1000(Long amount1000) {
         this.amount1000 = amount1000;
-        return this;
     }
 
-    public RequestPaymentMessage setRequestFrom(String requestFrom) {
+    public void setRequestFrom(String requestFrom) {
         this.requestFrom = requestFrom;
-        return this;
     }
 
-    public RequestPaymentMessage setExpiryTimestamp(Instant expiryTimestamp) {
+    public void setExpiryTimestamp(Instant expiryTimestamp) {
         this.expiryTimestamp = expiryTimestamp;
-        return this;
     }
 
-    public RequestPaymentMessage setAmount(Money amount) {
+    public void setAmount(Money amount) {
         this.amount = amount;
-        return this;
     }
 
-    public RequestPaymentMessage setBackground(PaymentBackground background) {
+    public void setBackground(PaymentBackground background) {
         this.background = background;
-        return this;
     }
 }

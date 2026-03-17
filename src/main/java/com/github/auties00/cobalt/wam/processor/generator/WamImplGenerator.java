@@ -9,11 +9,11 @@ import com.github.auties00.cobalt.wam.type.WamType;
 import com.palantir.javapoet.*;
 
 import javax.lang.model.element.Modifier;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
-import java.util.OptionalLong;
 
 /**
  * Generates the companion {@code *Impl} class for a {@code @WamEvent}-annotated
@@ -30,8 +30,12 @@ public final class WamImplGenerator {
     private static final ClassName WAM_CHANNEL = ClassName.get(WamChannel.class);
     private static final ClassName OPTIONAL = ClassName.get(Optional.class);
     private static final ClassName OPTIONAL_INT = ClassName.get(OptionalInt.class);
-    private static final ClassName OPTIONAL_LONG = ClassName.get(OptionalLong.class);
     private static final ClassName OPTIONAL_DOUBLE = ClassName.get(OptionalDouble.class);
+    private static final ClassName INTEGER = ClassName.get(Integer.class);
+    private static final ClassName BOOLEAN = ClassName.get(Boolean.class);
+    private static final ClassName STRING = ClassName.get(String.class);
+    private static final ClassName DOUBLE = ClassName.get(Double.class);
+    private static final ClassName INSTANT = ClassName.get(Instant.class);
 
     private WamImplGenerator() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
@@ -155,9 +159,6 @@ public final class WamImplGenerator {
             case INTEGER -> method.addStatement(
                     "return this.$N != null ? $T.of(this.$N) : $T.empty()",
                     prop.fieldName(), OPTIONAL_INT, prop.fieldName(), OPTIONAL_INT);
-            case TIMER -> method.addStatement(
-                    "return this.$N != null ? $T.of(this.$N) : $T.empty()",
-                    prop.fieldName(), OPTIONAL_LONG, prop.fieldName(), OPTIONAL_LONG);
             case FLOAT -> method.addStatement(
                     "return this.$N != null ? $T.of(this.$N) : $T.empty()",
                     prop.fieldName(), OPTIONAL_DOUBLE, prop.fieldName(), OPTIONAL_DOUBLE);
@@ -198,8 +199,8 @@ public final class WamImplGenerator {
             case FLOAT -> method.addStatement("size += $T.floatFieldSize($L)",
                     WAM_EVENT_ENCODER, prop.index());
             case TIMER -> {
-                method.beginControlFlow("if (this.$N <= $L)", prop.fieldName(), Integer.MAX_VALUE);
-                method.addStatement("size += $T.intFieldSize($L, this.$N)",
+                method.beginControlFlow("if (this.$N.toEpochMilli() <= $L)", prop.fieldName(), Integer.MAX_VALUE);
+                method.addStatement("size += $T.intFieldSize($L, this.$N.toEpochMilli())",
                         WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
                 method.endControlFlow();
             }
@@ -227,14 +228,14 @@ public final class WamImplGenerator {
             var prop = properties.get(i);
             if (i == properties.size() - 1) {
                 if (prop.wamType() == WamType.TIMER) {
-                    method.beginControlFlow("if (this.$N != null && this.$N <= $L)",
+                    method.beginControlFlow("if (this.$N != null && this.$N.toEpochMilli() <= $L)",
                             prop.fieldName(), prop.fieldName(), Integer.MAX_VALUE);
                 } else {
                     method.beginControlFlow("if (this.$N != null)", prop.fieldName());
                 }
             } else {
                 if (prop.wamType() == WamType.TIMER) {
-                    method.nextControlFlow("else if (this.$N != null && this.$N <= $L)",
+                    method.nextControlFlow("else if (this.$N != null && this.$N.toEpochMilli() <= $L)",
                             prop.fieldName(), prop.fieldName(), Integer.MAX_VALUE);
                 } else {
                     method.nextControlFlow("else if (this.$N != null)", prop.fieldName());
@@ -280,8 +281,8 @@ public final class WamImplGenerator {
                     "offset = $T.writeFloatField($L, this.$N, hasMore, output, offset)",
                     WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
             case TIMER -> {
-                method.beginControlFlow("if (this.$N <= $L)", prop.fieldName(), Integer.MAX_VALUE);
-                method.addStatement("offset = $T.writeIntField($L, this.$N, hasMore, output, offset)",
+                method.beginControlFlow("if (this.$N.toEpochMilli() <= $L)", prop.fieldName(), Integer.MAX_VALUE);
+                method.addStatement("offset = $T.writeIntField($L, this.$N.toEpochMilli(), hasMore, output, offset)",
                         WAM_EVENT_ENCODER, prop.index(), prop.fieldName());
                 method.endControlFlow();
             }
@@ -324,11 +325,11 @@ public final class WamImplGenerator {
 
     private static TypeName rawFieldType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
-            case INTEGER -> ClassName.get(Integer.class);
-            case BOOLEAN -> ClassName.get(Boolean.class);
-            case STRING -> ClassName.get(String.class);
-            case FLOAT -> ClassName.get(Double.class);
-            case TIMER -> ClassName.get(Long.class);
+            case INTEGER -> INTEGER;
+            case BOOLEAN -> BOOLEAN;
+            case STRING -> STRING;
+            case FLOAT -> DOUBLE;
+            case TIMER -> INSTANT;
             case ENUM -> {
                 var enumElement = prop.enumElement();
                 if (enumElement == null) {
@@ -342,7 +343,6 @@ public final class WamImplGenerator {
     private static TypeName optionalReturnType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
             case INTEGER -> OPTIONAL_INT;
-            case TIMER -> OPTIONAL_LONG;
             case FLOAT -> OPTIONAL_DOUBLE;
             default -> ParameterizedTypeName.get(OPTIONAL, rawFieldType(prop));
         };

@@ -69,19 +69,16 @@ public final class LidContactAction implements SyncAction<LidContactActionArgs> 
         return Optional.ofNullable(username);
     }
 
-    public LidContactAction setFullName(String fullName) {
+    public void setFullName(String fullName) {
         this.fullName = fullName;
-        return this;
     }
 
-    public LidContactAction setFirstName(String firstName) {
+    public void setFirstName(String firstName) {
         this.firstName = firstName;
-        return this;
     }
 
-    public LidContactAction setUsername(String username) {
+    public void setUsername(String username) {
         this.username = username;
-        return this;
     }
 
 

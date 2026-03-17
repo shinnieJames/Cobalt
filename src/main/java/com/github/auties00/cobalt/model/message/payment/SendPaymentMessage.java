@@ -47,23 +47,19 @@ public final class SendPaymentMessage implements Message {
         return Optional.ofNullable(transactionData);
     }
 
-    public SendPaymentMessage setNoteMessage(MessageContainer noteMessageContainer) {
+    public void setNoteMessage(MessageContainer noteMessageContainer) {
         this.noteMessageContainer = noteMessageContainer;
-        return this;
     }
 
-    public SendPaymentMessage setRequestMessageKey(MessageKey requestMessageKey) {
+    public void setRequestMessageKey(MessageKey requestMessageKey) {
         this.requestMessageKey = requestMessageKey;
-        return this;
     }
 
-    public SendPaymentMessage setBackground(PaymentBackground background) {
+    public void setBackground(PaymentBackground background) {
         this.background = background;
-        return this;
     }
 
-    public SendPaymentMessage setTransactionData(String transactionData) {
+    public void setTransactionData(String transactionData) {
         this.transactionData = transactionData;
-        return this;
     }
 }

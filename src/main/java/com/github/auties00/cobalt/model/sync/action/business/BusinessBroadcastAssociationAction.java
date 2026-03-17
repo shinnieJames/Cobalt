@@ -52,9 +52,8 @@ public final class BusinessBroadcastAssociationAction implements SyncAction<Busi
         return deleted != null && deleted;
     }
 
-    public BusinessBroadcastAssociationAction setDeleted(Boolean deleted) {
+    public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
-        return this;
     }
 
 

@@ -38,18 +38,15 @@ public final class DeviceSentMessage implements Message {
         return Optional.ofNullable(phash);
     }
 
-    public DeviceSentMessage setDestinationJid(Jid destinationJid) {
+    public void setDestinationJid(Jid destinationJid) {
         this.destinationJid = destinationJid;
-        return this;
     }
 
-    public DeviceSentMessage setMessage(MessageContainer messageContainer) {
+    public void setMessage(MessageContainer messageContainer) {
         this.messageContainer = messageContainer;
-        return this;
     }
 
-    public DeviceSentMessage setPhash(String phash) {
+    public void setPhash(String phash) {
         this.phash = phash;
-        return this;
     }
 }

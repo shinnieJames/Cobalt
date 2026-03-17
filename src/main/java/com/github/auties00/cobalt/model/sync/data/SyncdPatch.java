@@ -89,48 +89,39 @@ public final class SyncdPatch {
         return Optional.ofNullable(clientDebugData);
     }
 
-    public SyncdPatch setVersion(SyncdVersion version) {
+    public void setVersion(SyncdVersion version) {
         this.version = version;
-        return this;
     }
 
-    public SyncdPatch setMutations(List<SyncdMutation> mutations) {
+    public void setMutations(List<SyncdMutation> mutations) {
         this.mutations = mutations;
-        return this;
     }
 
-    public SyncdPatch setExternalMutations(ExternalBlobReference externalMutations) {
+    public void setExternalMutations(ExternalBlobReference externalMutations) {
         this.externalMutations = externalMutations;
-        return this;
     }
 
-    public SyncdPatch setSnapshotMac(byte[] snapshotMac) {
+    public void setSnapshotMac(byte[] snapshotMac) {
         this.snapshotMac = snapshotMac;
-        return this;
     }
 
-    public SyncdPatch setPatchMac(byte[] patchMac) {
+    public void setPatchMac(byte[] patchMac) {
         this.patchMac = patchMac;
-        return this;
     }
 
-    public SyncdPatch setKeyId(KeyId keyId) {
+    public void setKeyId(KeyId keyId) {
         this.keyId = keyId;
-        return this;
     }
 
-    public SyncdPatch setExitCode(DisconnectReason exitCode) {
+    public void setExitCode(DisconnectReason exitCode) {
         this.exitCode = exitCode;
-        return this;
     }
 
-    public SyncdPatch setDeviceIndex(Integer deviceIndex) {
+    public void setDeviceIndex(Integer deviceIndex) {
         this.deviceIndex = deviceIndex;
-        return this;
     }
 
-    public SyncdPatch setClientDebugData(byte[] clientDebugData) {
+    public void setClientDebugData(byte[] clientDebugData) {
         this.clientDebugData = clientDebugData;
-        return this;
     }
 }

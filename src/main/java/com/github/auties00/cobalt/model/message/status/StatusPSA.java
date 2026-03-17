@@ -30,13 +30,11 @@ public final class StatusPSA {
         return Optional.ofNullable(campaignExpirationTimestamp);
     }
 
-    public StatusPSA setCampaignId(Long campaignId) {
+    public void setCampaignId(Long campaignId) {
         this.campaignId = campaignId;
-        return this;
     }
 
-    public StatusPSA setCampaignExpirationTimestamp(Instant campaignExpirationTimestamp) {
+    public void setCampaignExpirationTimestamp(Instant campaignExpirationTimestamp) {
         this.campaignExpirationTimestamp = campaignExpirationTimestamp;
-        return this;
     }
 }

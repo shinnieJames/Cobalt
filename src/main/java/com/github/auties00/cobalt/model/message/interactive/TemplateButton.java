@@ -40,24 +40,20 @@ public final class TemplateButton {
         return Optional.empty();
     }
 
-    public TemplateButton setIndex(Integer index) {
+    public void setIndex(Integer index) {
         this.index = index;
-        return this;
     }
 
-    public TemplateButton setQuickReplyButton(QuickReplyButton quickReplyButton) {
+    public void setQuickReplyButton(QuickReplyButton quickReplyButton) {
         this.quickReplyButton = quickReplyButton;
-        return this;
     }
 
-    public TemplateButton setUrlButton(URLButton urlButton) {
+    public void setUrlButton(URLButton urlButton) {
         this.urlButton = urlButton;
-        return this;
     }
 
-    public TemplateButton setCallButton(CallButton callButton) {
+    public void setCallButton(CallButton callButton) {
         this.callButton = callButton;
-        return this;
     }
 
     @ProtobufMessage(name = "TemplateButton.CallButton")
@@ -82,15 +78,13 @@ public final class TemplateButton {
             return Optional.ofNullable(phoneNumber);
         }
 
-        public CallButton setDisplayText(HighlyStructuredMessage displayText) {
+        public void setDisplayText(HighlyStructuredMessage displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
 
-        public CallButton setPhoneNumber(HighlyStructuredMessage phoneNumber) {
+        public void setPhoneNumber(HighlyStructuredMessage phoneNumber) {
             this.phoneNumber = phoneNumber;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "TemplateButton.QuickReplyButton")
@@ -115,15 +109,13 @@ public final class TemplateButton {
             return Optional.ofNullable(id);
         }
 
-        public QuickReplyButton setDisplayText(HighlyStructuredMessage displayText) {
+        public void setDisplayText(HighlyStructuredMessage displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
 
-        public QuickReplyButton setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "TemplateButton.URLButton")
@@ -148,14 +140,12 @@ public final class TemplateButton {
             return Optional.ofNullable(url);
         }
 
-        public URLButton setDisplayText(HighlyStructuredMessage displayText) {
+        public void setDisplayText(HighlyStructuredMessage displayText) {
             this.displayText = displayText;
-            return this;
-        }
+    }
 
-        public URLButton setUrl(HighlyStructuredMessage url) {
+        public void setUrl(HighlyStructuredMessage url) {
             this.url = url;
-            return this;
-        }
+    }
     }
 }

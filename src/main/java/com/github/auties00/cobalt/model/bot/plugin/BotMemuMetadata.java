@@ -50,10 +50,8 @@ public final class BotMemuMetadata {
      * generation.
      *
      * @param faceImages the new list of face images, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMemuMetadata setFaceImages(List<BotMediaMetadata> faceImages) {
+    public void setFaceImages(List<BotMediaMetadata> faceImages) {
         this.faceImages = faceImages;
-        return this;
     }
 }

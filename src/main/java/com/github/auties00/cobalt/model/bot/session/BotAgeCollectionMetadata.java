@@ -85,11 +85,9 @@ public final class BotAgeCollectionMetadata {
      * Sets whether the user is eligible for age collection.
      *
      * @param ageCollectionEligible the new eligibility flag, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAgeCollectionMetadata setAgeCollectionEligible(Boolean ageCollectionEligible) {
+    public void setAgeCollectionEligible(Boolean ageCollectionEligible) {
         this.ageCollectionEligible = ageCollectionEligible;
-        return this;
     }
 
     /**
@@ -97,22 +95,18 @@ public final class BotAgeCollectionMetadata {
      *
      * @param shouldTriggerAgeCollectionOnClient the new trigger flag, or
      *        {@code null}
-     * @return this instance for chaining
      */
-    public BotAgeCollectionMetadata setShouldTriggerAgeCollectionOnClient(Boolean shouldTriggerAgeCollectionOnClient) {
+    public void setShouldTriggerAgeCollectionOnClient(Boolean shouldTriggerAgeCollectionOnClient) {
         this.shouldTriggerAgeCollectionOnClient = shouldTriggerAgeCollectionOnClient;
-        return this;
     }
 
     /**
      * Sets the type of age-collection mechanism to use.
      *
      * @param ageCollectionType the new collection type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAgeCollectionMetadata setAgeCollectionType(AgeCollectionType ageCollectionType) {
+    public void setAgeCollectionType(AgeCollectionType ageCollectionType) {
         this.ageCollectionType = ageCollectionType;
-        return this;
     }
 
     /**

@@ -56,8 +56,7 @@ public final class LabelReorderingAction implements SyncAction<SyncActionEmptyAr
         return sortedLabelIds == null ? List.of() : Collections.unmodifiableList(sortedLabelIds);
     }
 
-    public LabelReorderingAction setSortedLabelIds(List<Integer> sortedLabelIds) {
+    public void setSortedLabelIds(List<Integer> sortedLabelIds) {
         this.sortedLabelIds = sortedLabelIds;
-        return this;
     }
 }

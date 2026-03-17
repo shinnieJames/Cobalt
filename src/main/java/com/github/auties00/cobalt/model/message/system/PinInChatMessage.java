@@ -40,19 +40,16 @@ public final class PinInChatMessage implements Message {
         return Optional.ofNullable(senderTimestampMs);
     }
 
-    public PinInChatMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public PinInChatMessage setType(Type type) {
+    public void setType(Type type) {
         this.type = type;
-        return this;
     }
 
-    public PinInChatMessage setSenderTimestampMs(Instant senderTimestampMs) {
+    public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.PinInChatMessage.Type")

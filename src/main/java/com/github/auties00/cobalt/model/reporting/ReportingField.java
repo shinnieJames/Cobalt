@@ -54,28 +54,23 @@ public final class ReportingField {
         return subfield == null ? Map.of() : Collections.unmodifiableMap(subfield);
     }
 
-    public ReportingField setMinVersion(Integer minVersion) {
+    public void setMinVersion(Integer minVersion) {
         this.minVersion = minVersion;
-        return this;
     }
 
-    public ReportingField setMaxVersion(Integer maxVersion) {
+    public void setMaxVersion(Integer maxVersion) {
         this.maxVersion = maxVersion;
-        return this;
     }
 
-    public ReportingField setNotReportableMinVersion(Integer notReportableMinVersion) {
+    public void setNotReportableMinVersion(Integer notReportableMinVersion) {
         this.notReportableMinVersion = notReportableMinVersion;
-        return this;
     }
 
-    public ReportingField setMessage(Boolean isMessage) {
+    public void setMessage(Boolean isMessage) {
         this.isMessage = isMessage;
-        return this;
     }
 
-    public ReportingField setSubfield(Map<Integer, ReportingField> subfield) {
+    public void setSubfield(Map<Integer, ReportingField> subfield) {
         this.subfield = subfield;
-        return this;
     }
 }

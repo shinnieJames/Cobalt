@@ -45,23 +45,19 @@ public final class MessageVideoEndCard implements Message {
         return profilePictureUrl;
     }
 
-    public MessageVideoEndCard setUsername(String username) {
+    public void setUsername(String username) {
         this.username = username;
-        return this;
     }
 
-    public MessageVideoEndCard setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public MessageVideoEndCard setThumbnailImageUrl(String thumbnailImageUrl) {
+    public void setThumbnailImageUrl(String thumbnailImageUrl) {
         this.thumbnailImageUrl = thumbnailImageUrl;
-        return this;
     }
 
-    public MessageVideoEndCard setProfilePictureUrl(String profilePictureUrl) {
+    public void setProfilePictureUrl(String profilePictureUrl) {
         this.profilePictureUrl = profilePictureUrl;
-        return this;
     }
 }

@@ -81,44 +81,36 @@ public final class NewsletterAdminProfile {
      * Sets the admin profile identifier.
      *
      * @param id the admin id
-     * @return this instance for chaining
      */
-    public NewsletterAdminProfile setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
      * Sets the admin display name.
      *
      * @param name the admin name
-     * @return this instance for chaining
      */
-    public NewsletterAdminProfile setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the profile picture identifier.
      *
      * @param pictureId the picture id
-     * @return this instance for chaining
      */
-    public NewsletterAdminProfile setPictureId(String pictureId) {
+    public void setPictureId(String pictureId) {
         this.pictureId = pictureId;
-        return this;
     }
 
     /**
      * Sets the direct path to the admin's profile picture.
      *
      * @param pictureDirectPath the direct path
-     * @return this instance for chaining
      */
-    public NewsletterAdminProfile setPictureDirectPath(String pictureDirectPath) {
+    public void setPictureDirectPath(String pictureDirectPath) {
         this.pictureDirectPath = pictureDirectPath;
-        return this;
     }
 
     @Override

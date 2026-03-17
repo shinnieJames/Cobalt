@@ -94,14 +94,14 @@ public final class CallStreamHandler implements SocketStream.Handler {
 
         var existing = whatsapp.store().findCallById(callId).orElse(null);
         if (existing != null) {
-            existing.setChatJid(chatJid)
-                    .setCallerJid(callCreator)
-                    .setVideo(payload.hasChild("video"))
-                    .setOfflineOffer(offline)
-                    .setGroup(groupJid != null)
-                    .setGroupJid(groupJid)
-                    .setOutgoing(outgoing)
-                    .setStatus(status);
+            existing.setChatJid(chatJid);
+            existing.setCallerJid(callCreator);
+            existing.setVideo(payload.hasChild("video"));
+            existing.setOfflineOffer(offline);
+            existing.setGroup(groupJid != null);
+            existing.setGroupJid(groupJid);
+            existing.setOutgoing(outgoing);
+            existing.setStatus(status);
             whatsapp.store().addCall(existing);
             return existing;
         }

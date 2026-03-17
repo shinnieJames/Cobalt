@@ -127,54 +127,44 @@ public final class BotAvatarMetadata {
      * Sets the emotional sentiment code for the avatar expression.
      *
      * @param sentiment the new sentiment code, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAvatarMetadata setSentiment(Integer sentiment) {
+    public void setSentiment(Integer sentiment) {
         this.sentiment = sentiment;
-        return this;
     }
 
     /**
      * Sets the name of the behaviour graph driving the avatar animation.
      *
      * @param behaviorGraph the new behaviour graph name, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAvatarMetadata setBehaviorGraph(String behaviorGraph) {
+    public void setBehaviorGraph(String behaviorGraph) {
         this.behaviorGraph = behaviorGraph;
-        return this;
     }
 
     /**
      * Sets the action code for the avatar animation.
      *
      * @param action the new action code, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAvatarMetadata setAction(Integer action) {
+    public void setAction(Integer action) {
         this.action = action;
-        return this;
     }
 
     /**
      * Sets the intensity of the avatar animation.
      *
      * @param intensity the new intensity, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAvatarMetadata setIntensity(Integer intensity) {
+    public void setIntensity(Integer intensity) {
         this.intensity = intensity;
-        return this;
     }
 
     /**
      * Sets the word count of the bot response text.
      *
      * @param wordCount the new word count, or {@code null}
-     * @return this instance for chaining
      */
-    public BotAvatarMetadata setWordCount(Integer wordCount) {
+    public void setWordCount(Integer wordCount) {
         this.wordCount = wordCount;
-        return this;
     }
 }

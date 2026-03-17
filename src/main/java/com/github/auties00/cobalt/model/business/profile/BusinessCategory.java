@@ -59,9 +59,8 @@ public final class BusinessCategory {
      * @param id the category identifier
      * @return this instance
      */
-    public BusinessCategory setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
@@ -84,8 +83,7 @@ public final class BusinessCategory {
      * @param name the localized display name, or {@code null} to clear
      * @return this instance
      */
-    public BusinessCategory setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 }

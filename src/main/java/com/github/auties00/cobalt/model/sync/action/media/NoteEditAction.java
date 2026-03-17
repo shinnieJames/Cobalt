@@ -87,29 +87,24 @@ public final class NoteEditAction implements SyncAction<NoteEditActionArgs> {
         return Optional.ofNullable(unstructuredContent);
     }
 
-    public NoteEditAction setType(NoteType type) {
+    public void setType(NoteType type) {
         this.type = type;
-        return this;
     }
 
-    public NoteEditAction setChatJid(Jid chatJid) {
+    public void setChatJid(Jid chatJid) {
         this.chatJid = chatJid;
-        return this;
     }
 
-    public NoteEditAction setCreatedAt(Long createdAt) {
+    public void setCreatedAt(Long createdAt) {
         this.createdAt = createdAt;
-        return this;
     }
 
-    public NoteEditAction setDeleted(Boolean deleted) {
+    public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
-        return this;
     }
 
-    public NoteEditAction setUnstructuredContent(String unstructuredContent) {
+    public void setUnstructuredContent(String unstructuredContent) {
         this.unstructuredContent = unstructuredContent;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.NoteEditAction.NoteType")

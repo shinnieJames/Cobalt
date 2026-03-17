@@ -80,43 +80,35 @@ public final class MessageHistoryBundle implements ContextualMessage {
         return Optional.ofNullable(messageHistoryMetadata);
     }
 
-    public MessageHistoryBundle setMimetype(String mimetype) {
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
-    public MessageHistoryBundle setFileSha256(byte[] fileSha256) {
+    public void setFileSha256(byte[] fileSha256) {
         this.fileSha256 = fileSha256;
-        return this;
     }
 
-    public MessageHistoryBundle setMediaKey(byte[] mediaKey) {
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public MessageHistoryBundle setFileEncSha256(byte[] fileEncSha256) {
+    public void setFileEncSha256(byte[] fileEncSha256) {
         this.fileEncSha256 = fileEncSha256;
-        return this;
     }
 
-    public MessageHistoryBundle setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
-    public MessageHistoryBundle setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public MessageHistoryBundle setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public MessageHistoryBundle setMessageHistoryMetadata(MessageHistoryMetadata messageHistoryMetadata) {
+    public void setMessageHistoryMetadata(MessageHistoryMetadata messageHistoryMetadata) {
         this.messageHistoryMetadata = messageHistoryMetadata;
-        return this;
     }
 }

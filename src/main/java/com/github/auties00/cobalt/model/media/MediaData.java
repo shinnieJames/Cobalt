@@ -44,10 +44,8 @@ public final class MediaData {
      * Sets the local filesystem path to the media file.
      *
      * @param localPath the local path
-     * @return this instance for chaining
      */
-    public MediaData setLocalPath(String localPath) {
+    public void setLocalPath(String localPath) {
         this.localPath = localPath;
-        return this;
     }
 }

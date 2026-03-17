@@ -73,21 +73,17 @@ public final class BotMessageSharingInfo {
      * initiated.
      *
      * @param botEntryPointOrigin the new entry point, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMessageSharingInfo setBotEntryPointOrigin(BotMetricsEntryPoint botEntryPointOrigin) {
+    public void setBotEntryPointOrigin(BotMetricsEntryPoint botEntryPointOrigin) {
         this.botEntryPointOrigin = botEntryPointOrigin;
-        return this;
     }
 
     /**
      * Sets the number of times this bot message has been forwarded.
      *
      * @param forwardScore the new forward score, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMessageSharingInfo setForwardScore(Integer forwardScore) {
+    public void setForwardScore(Integer forwardScore) {
         this.forwardScore = forwardScore;
-        return this;
     }
 }

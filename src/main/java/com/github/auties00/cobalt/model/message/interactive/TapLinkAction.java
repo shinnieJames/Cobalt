@@ -26,13 +26,11 @@ public final class TapLinkAction implements InteractiveAction {
         return Optional.ofNullable(tapUrl);
     }
 
-    public TapLinkAction setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public TapLinkAction setTapUrl(String tapUrl) {
+    public void setTapUrl(String tapUrl) {
         this.tapUrl = tapUrl;
-        return this;
     }
 }

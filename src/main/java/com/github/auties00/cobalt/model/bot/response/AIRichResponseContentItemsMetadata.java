@@ -1,9 +1,6 @@
 package com.github.auties00.cobalt.model.bot.response;
 
-import it.auties.protobuf.annotation.ProtobufEnum;
-import it.auties.protobuf.annotation.ProtobufEnumIndex;
-import it.auties.protobuf.annotation.ProtobufMessage;
-import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.ProtobufType;
 
 import java.net.URI;
@@ -65,22 +62,18 @@ public final class AIRichResponseContentItemsMetadata implements AIRichResponseS
      * Sets the list of content item wrappers in this collection.
      *
      * @param itemsMetadata the item metadata to set
-     * @return this instance for chaining
      */
-    public AIRichResponseContentItemsMetadata setItemsMetadata(List<AIRichResponseContentItemMetadata> itemsMetadata) {
+    public void setItemsMetadata(List<AIRichResponseContentItemMetadata> itemsMetadata) {
         this.itemsMetadata = itemsMetadata;
-        return this;
     }
 
     /**
      * Sets the layout type that determines how the items are rendered.
      *
      * @param contentType the content type to set
-     * @return this instance for chaining
      */
-    public AIRichResponseContentItemsMetadata setContentType(ContentType contentType) {
+    public void setContentType(ContentType contentType) {
         this.contentType = contentType;
-        return this;
     }
 
     /**
@@ -277,44 +270,36 @@ public final class AIRichResponseContentItemsMetadata implements AIRichResponseS
          * Sets the title or caption of this reel.
          *
          * @param title the title to set
-         * @return this instance for chaining
          */
-        public AIRichResponseReelItem setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
         /**
          * Sets the URL of the reel creator's profile icon.
          *
          * @param profileIconUrl the profile icon URL to set
-         * @return this instance for chaining
          */
-        public AIRichResponseReelItem setProfileIconUrl(URI profileIconUrl) {
+        public void setProfileIconUrl(URI profileIconUrl) {
             this.profileIconUrl = profileIconUrl;
-            return this;
-        }
+    }
 
         /**
          * Sets the URL of the reel's thumbnail image.
          *
          * @param thumbnailUrl the thumbnail URL to set
-         * @return this instance for chaining
          */
-        public AIRichResponseReelItem setThumbnailUrl(URI thumbnailUrl) {
+        public void setThumbnailUrl(URI thumbnailUrl) {
             this.thumbnailUrl = thumbnailUrl;
-            return this;
-        }
+    }
 
         /**
          * Sets the URL of the reel's video content.
          *
          * @param videoUrl the video URL to set
-         * @return this instance for chaining
          */
-        public AIRichResponseReelItem setVideoUrl(URI videoUrl) {
+        public void setVideoUrl(URI videoUrl) {
             this.videoUrl = videoUrl;
-            return this;
-        }
+    }
     }
 }

@@ -48,9 +48,8 @@ public final class MaibaAIFeaturesControlAction implements SyncAction<SyncAction
         return Optional.ofNullable(aiFeatureStatus);
     }
 
-    public MaibaAIFeaturesControlAction setAiFeatureStatus(MaibaAIFeatureStatus aiFeatureStatus) {
+    public void setAiFeatureStatus(MaibaAIFeatureStatus aiFeatureStatus) {
         this.aiFeatureStatus = aiFeatureStatus;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.MaibaAIFeaturesControlAction.MaibaAIFeatureStatus")

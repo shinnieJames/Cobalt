@@ -80,21 +80,17 @@ public final class BotProfileCommand {
      * Sets the command name.
      *
      * @param name the command name, must be non-{@code null}
-     * @return this instance for chaining
      */
-    public BotProfileCommand setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the command description.
      *
      * @param description the description, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfileCommand setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 }

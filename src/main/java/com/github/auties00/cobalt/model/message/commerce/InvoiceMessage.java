@@ -95,54 +95,44 @@ public final class InvoiceMessage implements Message {
         return Optional.ofNullable(attachmentJpegThumbnail);
     }
 
-    public InvoiceMessage setNote(String note) {
+    public void setNote(String note) {
         this.note = note;
-        return this;
     }
 
-    public InvoiceMessage setToken(String token) {
+    public void setToken(String token) {
         this.token = token;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentType(AttachmentType attachmentType) {
+    public void setAttachmentType(AttachmentType attachmentType) {
         this.attachmentType = attachmentType;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentMimetype(String attachmentMimetype) {
+    public void setAttachmentMimetype(String attachmentMimetype) {
         this.attachmentMimetype = attachmentMimetype;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentMediaKey(byte[] attachmentMediaKey) {
+    public void setAttachmentMediaKey(byte[] attachmentMediaKey) {
         this.attachmentMediaKey = attachmentMediaKey;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentMediaKeyTimestamp(Instant attachmentMediaKeyTimestamp) {
+    public void setAttachmentMediaKeyTimestamp(Instant attachmentMediaKeyTimestamp) {
         this.attachmentMediaKeyTimestamp = attachmentMediaKeyTimestamp;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentFileSha256(byte[] attachmentFileSha256) {
+    public void setAttachmentFileSha256(byte[] attachmentFileSha256) {
         this.attachmentFileSha256 = attachmentFileSha256;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentFileEncSha256(byte[] attachmentFileEncSha256) {
+    public void setAttachmentFileEncSha256(byte[] attachmentFileEncSha256) {
         this.attachmentFileEncSha256 = attachmentFileEncSha256;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentDirectPath(String attachmentDirectPath) {
+    public void setAttachmentDirectPath(String attachmentDirectPath) {
         this.attachmentDirectPath = attachmentDirectPath;
-        return this;
     }
 
-    public InvoiceMessage setAttachmentJpegThumbnail(byte[] attachmentJpegThumbnail) {
+    public void setAttachmentJpegThumbnail(byte[] attachmentJpegThumbnail) {
         this.attachmentJpegThumbnail = attachmentJpegThumbnail;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.InvoiceMessage.AttachmentType")

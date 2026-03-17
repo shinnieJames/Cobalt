@@ -88,32 +88,26 @@ public final class AIQueryFanout {
      * Sets the key that uniquely identifies the original AI query message.
      *
      * @param messageKey the new message key, or {@code null}
-     * @return this instance for chaining
      */
-    public AIQueryFanout setMessageKey(MessageKey messageKey) {
+    public void setMessageKey(MessageKey messageKey) {
         this.messageKey = messageKey;
-        return this;
     }
 
     /**
      * Sets the content of the AI query message that was fanned out.
      *
      * @param messageContainer the new message content, or {@code null}
-     * @return this instance for chaining
      */
-    public AIQueryFanout setMessage(MessageContainer messageContainer) {
+    public void setMessage(MessageContainer messageContainer) {
         this.messageContainer = messageContainer;
-        return this;
     }
 
     /**
      * Sets the timestamp at which the fanout occurred.
      *
      * @param timestamp the new fanout timestamp, or {@code null}
-     * @return this instance for chaining
      */
-    public AIQueryFanout setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 }

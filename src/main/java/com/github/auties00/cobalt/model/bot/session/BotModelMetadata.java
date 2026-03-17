@@ -83,33 +83,27 @@ public final class BotModelMetadata {
      * Sets the type of AI model used to generate the response.
      *
      * @param modelType the new model type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotModelMetadata setModelType(ModelType modelType) {
+    public void setModelType(ModelType modelType) {
         this.modelType = modelType;
-        return this;
     }
 
     /**
      * Sets the availability status of the premium model tier.
      *
      * @param premiumModelStatus the new premium model status, or {@code null}
-     * @return this instance for chaining
      */
-    public BotModelMetadata setPremiumModelStatus(PremiumModelStatus premiumModelStatus) {
+    public void setPremiumModelStatus(PremiumModelStatus premiumModelStatus) {
         this.premiumModelStatus = premiumModelStatus;
-        return this;
     }
 
     /**
      * Sets the display-name override for the model branding.
      *
      * @param modelNameOverride the new name override, or {@code null}
-     * @return this instance for chaining
      */
-    public BotModelMetadata setModelNameOverride(String modelNameOverride) {
+    public void setModelNameOverride(String modelNameOverride) {
         this.modelNameOverride = modelNameOverride;
-        return this;
     }
 
     /**

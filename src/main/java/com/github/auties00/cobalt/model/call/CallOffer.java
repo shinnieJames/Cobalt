@@ -279,66 +279,54 @@ public final class CallOffer {
      * Sets the JID of the chat where this call's log entry appears.
      *
      * @param chatJid the chat JID to set
-     * @return this instance for method chaining
      */
-    public CallOffer setChatJid(Jid chatJid) {
+    public void setChatJid(Jid chatJid) {
         this.chatJid = chatJid;
-        return this;
     }
 
     /**
      * Sets the JID of the user who initiated this call.
      *
      * @param callerJid the caller JID to set
-     * @return this instance for method chaining
      */
-    public CallOffer setCallerJid(Jid callerJid) {
+    public void setCallerJid(Jid callerJid) {
         this.callerJid = callerJid;
-        return this;
     }
 
     /**
      * Sets the unique identifier for this call.
      *
      * @param callId the call identifier to set
-     * @return this instance for method chaining
      */
-    public CallOffer setCallId(String callId) {
+    public void setCallId(String callId) {
         this.callId = callId;
-        return this;
     }
 
     /**
      * Sets the instant at which the call offer was sent or received.
      *
      * @param timestamp the call timestamp to set
-     * @return this instance for method chaining
      */
-    public CallOffer setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
     /**
      * Sets whether this is a video call.
      *
      * @param video whether this is a video call
-     * @return this instance for method chaining
      */
-    public CallOffer setVideo(boolean video) {
+    public void setVideo(boolean video) {
         this.video = video;
-        return this;
     }
 
     /**
      * Sets the current lifecycle status of this call.
      *
      * @param status the call status to set
-     * @return this instance for method chaining
      */
-    public CallOffer setStatus(Status status) {
+    public void setStatus(Status status) {
         this.status = status;
-        return this;
     }
 
     /**
@@ -346,44 +334,36 @@ public final class CallOffer {
      *
      * @param offlineOffer whether the offer arrived while the device was
      *        disconnected
-     * @return this instance for method chaining
      */
-    public CallOffer setOfflineOffer(boolean offlineOffer) {
+    public void setOfflineOffer(boolean offlineOffer) {
         this.offlineOffer = offlineOffer;
-        return this;
     }
 
     /**
      * Sets whether this is a group call.
      *
      * @param group whether this is a group call
-     * @return this instance for method chaining
      */
-    public CallOffer setGroup(boolean group) {
+    public void setGroup(boolean group) {
         this.group = group;
-        return this;
     }
 
     /**
      * Sets the JID of the group for group calls.
      *
      * @param groupJid the group JID to set
-     * @return this instance for method chaining
      */
-    public CallOffer setGroupJid(Jid groupJid) {
+    public void setGroupJid(Jid groupJid) {
         this.groupJid = groupJid;
-        return this;
     }
 
     /**
      * Sets whether this call was initiated by the local user.
      *
      * @param outgoing whether the local user initiated the call
-     * @return this instance for method chaining
      */
-    public CallOffer setOutgoing(boolean outgoing) {
+    public void setOutgoing(boolean outgoing) {
         this.outgoing = outgoing;
-        return this;
     }
 
     /** {@inheritDoc} */

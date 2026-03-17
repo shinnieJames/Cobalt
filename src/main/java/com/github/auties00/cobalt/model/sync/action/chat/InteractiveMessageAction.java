@@ -63,14 +63,12 @@ public final class InteractiveMessageAction implements SyncAction<InteractiveMes
         return java.util.Optional.ofNullable(agmId);
     }
 
-    public InteractiveMessageAction setType(InteractiveMessageActionMode type) {
+    public void setType(InteractiveMessageActionMode type) {
         this.type = type;
-        return this;
     }
 
-    public InteractiveMessageAction setAgmId(String agmId) {
+    public void setAgmId(String agmId) {
         this.agmId = agmId;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.InteractiveMessageAction.InteractiveMessageActionMode")

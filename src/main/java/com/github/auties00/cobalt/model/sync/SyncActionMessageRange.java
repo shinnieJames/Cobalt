@@ -65,18 +65,15 @@ public final class SyncActionMessageRange implements SyncAction<SyncActionEmptyA
         return messages == null ? List.of() : Collections.unmodifiableList(messages);
     }
 
-    public SyncActionMessageRange setLastMessageTimestamp(Instant lastMessageTimestamp) {
+    public void setLastMessageTimestamp(Instant lastMessageTimestamp) {
         this.lastMessageTimestamp = lastMessageTimestamp;
-        return this;
     }
 
-    public SyncActionMessageRange setLastSystemMessageTimestamp(Instant lastSystemMessageTimestamp) {
+    public void setLastSystemMessageTimestamp(Instant lastSystemMessageTimestamp) {
         this.lastSystemMessageTimestamp = lastSystemMessageTimestamp;
-        return this;
     }
 
-    public SyncActionMessageRange setMessages(List<SyncActionMessage> messages) {
+    public void setMessages(List<SyncActionMessage> messages) {
         this.messages = messages;
-        return this;
     }
 }

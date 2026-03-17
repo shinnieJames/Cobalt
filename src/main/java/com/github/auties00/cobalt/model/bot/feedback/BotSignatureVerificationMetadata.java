@@ -46,10 +46,8 @@ public final class BotSignatureVerificationMetadata {
      * Sets the list of use-case-specific cryptographic proofs.
      *
      * @param proofs the new proofs list, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSignatureVerificationMetadata setProofs(List<BotSignatureVerificationUseCaseProof> proofs) {
+    public void setProofs(List<BotSignatureVerificationUseCaseProof> proofs) {
         this.proofs = proofs;
-        return this;
     }
 }

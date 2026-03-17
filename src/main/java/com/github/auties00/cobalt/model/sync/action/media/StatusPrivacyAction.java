@@ -65,14 +65,12 @@ public final class StatusPrivacyAction implements SyncAction<SyncActionEmptyArgs
         return userJid == null ? List.of() : Collections.unmodifiableList(userJid);
     }
 
-    public StatusPrivacyAction setMode(StatusDistributionMode mode) {
+    public void setMode(StatusDistributionMode mode) {
         this.mode = mode;
-        return this;
     }
 
-    public StatusPrivacyAction setUserJid(List<Jid> userJid) {
+    public void setUserJid(List<Jid> userJid) {
         this.userJid = userJid;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.StatusPrivacyAction.StatusDistributionMode")

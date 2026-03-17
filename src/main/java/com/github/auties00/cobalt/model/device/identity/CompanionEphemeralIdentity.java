@@ -37,18 +37,15 @@ public final class CompanionEphemeralIdentity {
         return Optional.ofNullable(ref);
     }
 
-    public CompanionEphemeralIdentity setPublicKey(byte[] publicKey) {
+    public void setPublicKey(byte[] publicKey) {
         this.publicKey = publicKey;
-        return this;
     }
 
-    public CompanionEphemeralIdentity setDeviceType(DevicePlatformType deviceType) {
+    public void setDeviceType(DevicePlatformType deviceType) {
         this.deviceType = deviceType;
-        return this;
     }
 
-    public CompanionEphemeralIdentity setRef(String ref) {
+    public void setRef(String ref) {
         this.ref = ref;
-        return this;
     }
 }

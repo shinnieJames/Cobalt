@@ -63,33 +63,27 @@ public final class NewsletterAdminInviteMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public NewsletterAdminInviteMessage setNewsletterJid(Jid newsletterJid) {
+    public void setNewsletterJid(Jid newsletterJid) {
         this.newsletterJid = newsletterJid;
-        return this;
     }
 
-    public NewsletterAdminInviteMessage setNewsletterName(String newsletterName) {
+    public void setNewsletterName(String newsletterName) {
         this.newsletterName = newsletterName;
-        return this;
     }
 
-    public NewsletterAdminInviteMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public NewsletterAdminInviteMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public NewsletterAdminInviteMessage setInviteExpiration(Long inviteExpiration) {
+    public void setInviteExpiration(Long inviteExpiration) {
         this.inviteExpiration = inviteExpiration;
-        return this;
     }
 
-    public NewsletterAdminInviteMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

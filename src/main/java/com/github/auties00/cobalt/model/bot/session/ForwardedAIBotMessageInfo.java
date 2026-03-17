@@ -87,32 +87,26 @@ public final class ForwardedAIBotMessageInfo {
      * Sets the display name of the bot that generated the message.
      *
      * @param botName the new bot name, or {@code null}
-     * @return this instance for chaining
      */
-    public ForwardedAIBotMessageInfo setBotName(String botName) {
+    public void setBotName(String botName) {
         this.botName = botName;
-        return this;
     }
 
     /**
      * Sets the JID of the bot that generated the message.
      *
      * @param botJid the new bot JID, or {@code null}
-     * @return this instance for chaining
      */
-    public ForwardedAIBotMessageInfo setBotJid(Jid botJid) {
+    public void setBotJid(Jid botJid) {
         this.botJid = botJid;
-        return this;
     }
 
     /**
      * Sets the display name of the user who created the bot.
      *
      * @param creatorName the new creator name, or {@code null}
-     * @return this instance for chaining
      */
-    public ForwardedAIBotMessageInfo setCreatorName(String creatorName) {
+    public void setCreatorName(String creatorName) {
         this.creatorName = creatorName;
-        return this;
     }
 }

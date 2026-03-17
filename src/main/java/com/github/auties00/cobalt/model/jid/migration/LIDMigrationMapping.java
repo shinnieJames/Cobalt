@@ -106,22 +106,18 @@ public final class LIDMigrationMapping {
      * Sets the numeric user part of the phone number JID being migrated.
      *
      * @param pn the new phone number numeric identifier
-     * @return this instance for chaining
      */
-    public LIDMigrationMapping setPn(long pn) {
+    public void setPn(long pn) {
         this.pn = pn;
-        return this;
     }
 
     /**
      * Sets the numeric user part of the LID assigned by the primary device.
      *
      * @param assignedLid the new assigned LID numeric identifier
-     * @return this instance for chaining
      */
-    public LIDMigrationMapping setAssignedLid(long assignedLid) {
+    public void setAssignedLid(long assignedLid) {
         this.assignedLid = assignedLid;
-        return this;
     }
 
     /**
@@ -129,10 +125,8 @@ public final class LIDMigrationMapping {
      * device.
      *
      * @param latestLid the new latest LID, or {@code null} to clear
-     * @return this instance for chaining
      */
-    public LIDMigrationMapping setLatestLid(Long latestLid) {
+    public void setLatestLid(Long latestLid) {
         this.latestLid = latestLid;
-        return this;
     }
 }

@@ -577,339 +577,272 @@ public final class ChatMessageInfo implements MessageInfo {
         return nonJidMentions == null ? OptionalInt.empty() : OptionalInt.of(nonJidMentions);
     }
 
-    public ChatMessageInfo setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public ChatMessageInfo setMessage(MessageContainer messageContainer) {
+    public void setMessage(MessageContainer messageContainer) {
         this.message = messageContainer;
-        return this;
     }
 
-    public ChatMessageInfo setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
-    public ChatMessageInfo setStatus(MessageStatus status) {
+    public void setStatus(MessageStatus status) {
         this.status = status;
-        return this;
     }
 
-    public ChatMessageInfo setSenderJid(String senderJid) {
+    public void setSenderJid(Jid senderJid) {
         this.senderJid = senderJid;
-        return this;
     }
 
-    public ChatMessageInfo setC2STimestamp(Instant c2STimestamp) {
+    public void setC2STimestamp(Instant c2STimestamp) {
         this.c2STimestamp = c2STimestamp;
-        return this;
     }
 
-    public ChatMessageInfo setIgnore(Boolean ignore) {
+    public void setIgnore(Boolean ignore) {
         this.ignore = ignore;
-        return this;
     }
 
-    public ChatMessageInfo setStarred(Boolean starred) {
+    public void setStarred(Boolean starred) {
         this.starred = starred;
-        return this;
     }
 
-    public ChatMessageInfo setBroadcast(Boolean broadcast) {
+    public void setBroadcast(Boolean broadcast) {
         this.broadcast = broadcast;
-        return this;
     }
 
-    public ChatMessageInfo setPushName(String pushName) {
+    public void setPushName(String pushName) {
         this.pushName = pushName;
-        return this;
     }
 
-    public ChatMessageInfo setMediaCiphertextSha256(byte[] mediaCiphertextSha256) {
+    public void setMediaCiphertextSha256(byte[] mediaCiphertextSha256) {
         this.mediaCiphertextSha256 = mediaCiphertextSha256;
-        return this;
     }
 
-    public ChatMessageInfo setMulticast(Boolean multicast) {
+    public void setMulticast(Boolean multicast) {
         this.multicast = multicast;
-        return this;
     }
 
-    public ChatMessageInfo setUrlText(Boolean urlText) {
+    public void setUrlText(Boolean urlText) {
         this.urlText = urlText;
-        return this;
     }
 
-    public ChatMessageInfo setUrlNumber(Boolean urlNumber) {
+    public void setUrlNumber(Boolean urlNumber) {
         this.urlNumber = urlNumber;
-        return this;
     }
 
-    public ChatMessageInfo setStubType(StubType stubType) {
+    public void setStubType(StubType stubType) {
         this.stubType = stubType;
-        return this;
     }
 
-    public ChatMessageInfo setClearMedia(Boolean clearMedia) {
+    public void setClearMedia(Boolean clearMedia) {
         this.clearMedia = clearMedia;
-        return this;
     }
 
-    public ChatMessageInfo setStubParameters(List<String> stubParameters) {
+    public void setStubParameters(List<String> stubParameters) {
         this.stubParameters = stubParameters;
-        return this;
     }
 
-    public ChatMessageInfo setDuration(Integer duration) {
+    public void setDuration(Integer duration) {
         this.duration = duration;
-        return this;
     }
 
-    public ChatMessageInfo setLabels(List<String> labels) {
+    public void setLabels(List<String> labels) {
         this.labels = labels;
-        return this;
     }
 
-    public ChatMessageInfo setPaymentInfo(PaymentInfo paymentInfo) {
+    public void setPaymentInfo(PaymentInfo paymentInfo) {
         this.paymentInfo = paymentInfo;
-        return this;
     }
 
-    public ChatMessageInfo setFinalLiveLocation(LiveLocationMessage finalLiveLocation) {
+    public void setFinalLiveLocation(LiveLocationMessage finalLiveLocation) {
         this.finalLiveLocation = finalLiveLocation;
-        return this;
     }
 
-    public ChatMessageInfo setQuotedPaymentInfo(PaymentInfo quotedPaymentInfo) {
+    public void setQuotedPaymentInfo(PaymentInfo quotedPaymentInfo) {
         this.quotedPaymentInfo = quotedPaymentInfo;
-        return this;
     }
 
-    public ChatMessageInfo setEphemeralStartTimestamp(Instant ephemeralStartTimestamp) {
+    public void setEphemeralStartTimestamp(Instant ephemeralStartTimestamp) {
         this.ephemeralStartTimestamp = ephemeralStartTimestamp;
-        return this;
     }
 
-    public ChatMessageInfo setEphemeralDuration(Integer ephemeralDuration) {
+    public void setEphemeralDuration(Integer ephemeralDuration) {
         this.ephemeralDuration = ephemeralDuration;
-        return this;
     }
 
-    public ChatMessageInfo setEphemeralOffToOn(Boolean ephemeralOffToOn) {
+    public void setEphemeralOffToOn(Boolean ephemeralOffToOn) {
         this.ephemeralOffToOn = ephemeralOffToOn;
-        return this;
     }
 
-    public ChatMessageInfo setEphemeralOutOfSync(Boolean ephemeralOutOfSync) {
+    public void setEphemeralOutOfSync(Boolean ephemeralOutOfSync) {
         this.ephemeralOutOfSync = ephemeralOutOfSync;
-        return this;
     }
 
-    public ChatMessageInfo setBizPrivacyStatus(BizPrivacyStatus bizPrivacyStatus) {
+    public void setBizPrivacyStatus(BizPrivacyStatus bizPrivacyStatus) {
         this.bizPrivacyStatus = bizPrivacyStatus;
-        return this;
     }
 
-    public ChatMessageInfo setVerifiedBizName(String verifiedBizName) {
+    public void setVerifiedBizName(String verifiedBizName) {
         this.verifiedBizName = verifiedBizName;
-        return this;
     }
 
-    public ChatMessageInfo setMediaData(MediaData mediaData) {
+    public void setMediaData(MediaData mediaData) {
         this.mediaData = mediaData;
-        return this;
     }
 
-    public ChatMessageInfo setPhotoChange(PhotoChange photoChange) {
+    public void setPhotoChange(PhotoChange photoChange) {
         this.photoChange = photoChange;
-        return this;
     }
 
-    public ChatMessageInfo setReceipts(List<MessageReceipt> messageReceipt) {
+    public void setReceipts(List<MessageReceipt> messageReceipt) {
         this.receipts = messageReceipt;
-        return this;
     }
 
-    public ChatMessageInfo setReactions(List<Reaction> reactions) {
+    public void setReactions(List<Reaction> reactions) {
         this.reactions = reactions;
-        return this;
     }
 
-    public ChatMessageInfo setQuotedStickerData(MediaData quotedStickerData) {
+    public void setQuotedStickerData(MediaData quotedStickerData) {
         this.quotedStickerData = quotedStickerData;
-        return this;
     }
 
-    public ChatMessageInfo setFutureproofData(byte[] futureproofData) {
+    public void setFutureproofData(byte[] futureproofData) {
         this.futureproofData = futureproofData;
-        return this;
     }
 
-    public ChatMessageInfo setStatusPsa(StatusPSA statusPsa) {
+    public void setStatusPsa(StatusPSA statusPsa) {
         this.statusPsa = statusPsa;
-        return this;
     }
 
-    public ChatMessageInfo setPollUpdates(List<PollVoteRecord> pollUpdates) {
+    public void setPollUpdates(List<PollVoteRecord> pollUpdates) {
         this.pollUpdates = pollUpdates;
-        return this;
     }
 
-    public ChatMessageInfo setPollAdditionalMetadata(PollAdditionalMetadata pollAdditionalMetadata) {
+    public void setPollAdditionalMetadata(PollAdditionalMetadata pollAdditionalMetadata) {
         this.pollAdditionalMetadata = pollAdditionalMetadata;
-        return this;
     }
 
-    public ChatMessageInfo setAgentId(String agentId) {
+    public void setAgentId(String agentId) {
         this.agentId = agentId;
-        return this;
     }
 
-    public ChatMessageInfo setStatusAlreadyViewed(Boolean statusAlreadyViewed) {
+    public void setStatusAlreadyViewed(Boolean statusAlreadyViewed) {
         this.statusAlreadyViewed = statusAlreadyViewed;
-        return this;
     }
 
-    public ChatMessageInfo setMessageSecret(byte[] messageSecret) {
+    public void setMessageSecret(byte[] messageSecret) {
         this.messageSecret = messageSecret;
-        return this;
     }
 
-    public ChatMessageInfo setKeepInChat(KeepInChat keepInChat) {
+    public void setKeepInChat(KeepInChat keepInChat) {
         this.keepInChat = keepInChat;
-        return this;
     }
 
-    public ChatMessageInfo setOriginalSelfAuthorUserJidString(Jid originalSelfAuthorUserJidString) {
+    public void setOriginalSelfAuthorUserJidString(Jid originalSelfAuthorUserJidString) {
         this.originalSelfAuthorUserJidString = originalSelfAuthorUserJidString;
-        return this;
     }
 
-    public ChatMessageInfo setRevokeMessageTimestamp(Instant revokeMessageTimestamp) {
+    public void setRevokeMessageTimestamp(Instant revokeMessageTimestamp) {
         this.revokeMessageTimestamp = revokeMessageTimestamp;
-        return this;
     }
 
-    public ChatMessageInfo setPinInChat(PinInChat pinInChat) {
+    public void setPinInChat(PinInChat pinInChat) {
         this.pinInChat = pinInChat;
-        return this;
     }
 
-    public ChatMessageInfo setPremiumMessageInfo(PremiumMessageInfo premiumMessageInfo) {
+    public void setPremiumMessageInfo(PremiumMessageInfo premiumMessageInfo) {
         this.premiumMessageInfo = premiumMessageInfo;
-        return this;
     }
 
-    public ChatMessageInfo set1PBizBotMessage(Boolean is1PBizBotMessage) {
+    public void set1PBizBotMessage(Boolean is1PBizBotMessage) {
         this.is1PBizBotMessage = is1PBizBotMessage;
-        return this;
     }
 
-    public ChatMessageInfo setGroupHistoryMessage(Boolean isGroupHistoryMessage) {
+    public void setGroupHistoryMessage(Boolean isGroupHistoryMessage) {
         this.isGroupHistoryMessage = isGroupHistoryMessage;
-        return this;
     }
 
-    public ChatMessageInfo setBotMessageInvokerJid(Jid botMessageInvokerJid) {
+    public void setBotMessageInvokerJid(Jid botMessageInvokerJid) {
         this.botMessageInvokerJid = botMessageInvokerJid;
-        return this;
     }
 
-    public ChatMessageInfo setCommentMetadata(ChatCommentMetadata commentMetadata) {
+    public void setCommentMetadata(ChatCommentMetadata commentMetadata) {
         this.commentMetadata = commentMetadata;
-        return this;
     }
 
-    public ChatMessageInfo setEventResponses(List<EventResponse> eventResponses) {
+    public void setEventResponses(List<EventResponse> eventResponses) {
         this.eventResponses = eventResponses;
-        return this;
     }
 
-    public ChatMessageInfo setReportingTokenInfo(MessageReportingTokenInfo reportingTokenInfo) {
+    public void setReportingTokenInfo(MessageReportingTokenInfo reportingTokenInfo) {
         this.reportingTokenInfo = reportingTokenInfo;
-        return this;
     }
 
-    public ChatMessageInfo setNewsletterServerId(Long newsletterServerId) {
+    public void setNewsletterServerId(Long newsletterServerId) {
         this.newsletterServerId = newsletterServerId;
-        return this;
     }
 
-    public ChatMessageInfo setEventAdditionalMetadata(EventAdditionalMetadata eventAdditionalMetadata) {
+    public void setEventAdditionalMetadata(EventAdditionalMetadata eventAdditionalMetadata) {
         this.eventAdditionalMetadata = eventAdditionalMetadata;
-        return this;
     }
 
-    public ChatMessageInfo setMentionedInStatus(Boolean isMentionedInStatus) {
+    public void setMentionedInStatus(Boolean isMentionedInStatus) {
         this.isMentionedInStatus = isMentionedInStatus;
-        return this;
     }
 
-    public ChatMessageInfo setStatusMentions(List<String> statusMentions) {
+    public void setStatusMentions(List<String> statusMentions) {
         this.statusMentions = statusMentions;
-        return this;
     }
 
-    public ChatMessageInfo setTargetMessageId(MessageKey targetMessageId) {
+    public void setTargetMessageId(MessageKey targetMessageId) {
         this.targetMessageId = targetMessageId;
-        return this;
     }
 
-    public ChatMessageInfo setMessageAddOns(List<MessageAddOn> messageAddOns) {
+    public void setMessageAddOns(List<MessageAddOn> messageAddOns) {
         this.messageAddOns = messageAddOns;
-        return this;
     }
 
-    public ChatMessageInfo setStatusMentionMessageInfo(StatusMentionMessage statusMentionMessageInfo) {
+    public void setStatusMentionMessageInfo(StatusMentionMessage statusMentionMessageInfo) {
         this.statusMentionMessageInfo = statusMentionMessageInfo;
-        return this;
     }
 
-    public ChatMessageInfo setSupportAiMessage(Boolean isSupportAiMessage) {
+    public void setSupportAiMessage(Boolean isSupportAiMessage) {
         this.isSupportAiMessage = isSupportAiMessage;
-        return this;
     }
 
-    public ChatMessageInfo setStatusMentionSources(List<String> statusMentionSources) {
+    public void setStatusMentionSources(List<String> statusMentionSources) {
         this.statusMentionSources = statusMentionSources;
-        return this;
     }
 
-    public ChatMessageInfo setSupportAiCitations(List<MessageCitation> supportAiCitations) {
+    public void setSupportAiCitations(List<MessageCitation> supportAiCitations) {
         this.supportAiCitations = supportAiCitations;
-        return this;
     }
 
-    public ChatMessageInfo setBotTargetId(String botTargetId) {
+    public void setBotTargetId(String botTargetId) {
         this.botTargetId = botTargetId;
-        return this;
     }
 
-    public ChatMessageInfo setGroupHistoryIndividualMessageInfo(GroupHistoryIndividualMessageInfo groupHistoryIndividualMessageInfo) {
+    public void setGroupHistoryIndividualMessageInfo(GroupHistoryIndividualMessageInfo groupHistoryIndividualMessageInfo) {
         this.groupHistoryIndividualMessageInfo = groupHistoryIndividualMessageInfo;
-        return this;
     }
 
-    public ChatMessageInfo setGroupHistoryBundleInfo(GroupHistoryBundleInfo groupHistoryBundleInfo) {
+    public void setGroupHistoryBundleInfo(GroupHistoryBundleInfo groupHistoryBundleInfo) {
         this.groupHistoryBundleInfo = groupHistoryBundleInfo;
-        return this;
     }
 
-    public ChatMessageInfo setInteractiveMessageAdditionalMetadata(InteractiveMessageAdditionalMetadata interactiveMessageAdditionalMetadata) {
+    public void setInteractiveMessageAdditionalMetadata(InteractiveMessageAdditionalMetadata interactiveMessageAdditionalMetadata) {
         this.interactiveMessageAdditionalMetadata = interactiveMessageAdditionalMetadata;
-        return this;
     }
 
-    public ChatMessageInfo setQuarantinedMessage(QuarantinedMessage quarantinedMessage) {
+    public void setQuarantinedMessage(QuarantinedMessage quarantinedMessage) {
         this.quarantinedMessage = quarantinedMessage;
-        return this;
     }
 
-    public ChatMessageInfo setNonJidMentions(Integer nonJidMentions) {
+    public void setNonJidMentions(Integer nonJidMentions) {
         this.nonJidMentions = nonJidMentions;
-        return this;
     }
 
     @ProtobufEnum(name = "WebMessageInfo.BizPrivacyStatus")
@@ -1222,35 +1155,29 @@ public final class ChatMessageInfo implements MessageInfo {
             return Optional.ofNullable(serverTimestampMs);
         }
 
-        public KeepInChat setKeepType(ChatKeepType keepType) {
+        public void setKeepType(ChatKeepType keepType) {
             this.keepType = keepType;
-            return this;
-        }
+    }
 
-        public KeepInChat setServerTimestamp(Instant serverTimestamp) {
+        public void setServerTimestamp(Instant serverTimestamp) {
             this.serverTimestamp = serverTimestamp;
-            return this;
-        }
+    }
 
-        public KeepInChat setKey(MessageKey key) {
+        public void setKey(MessageKey key) {
             this.key = key;
-            return this;
-        }
+    }
 
-        public KeepInChat setDeviceJid(Jid deviceJid) {
+        public void setDeviceJid(Jid deviceJid) {
             this.deviceJid = deviceJid;
-            return this;
-        }
+    }
 
-        public KeepInChat setClientTimestampMs(Instant clientTimestampMs) {
+        public void setClientTimestampMs(Instant clientTimestampMs) {
             this.clientTimestampMs = clientTimestampMs;
-            return this;
-        }
+    }
 
-        public KeepInChat setServerTimestampMs(Instant serverTimestampMs) {
+        public void setServerTimestampMs(Instant serverTimestampMs) {
             this.serverTimestampMs = serverTimestampMs;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "PhotoChange")
@@ -1283,20 +1210,17 @@ public final class ChatMessageInfo implements MessageInfo {
             return newPhotoId == null ? OptionalInt.empty() : OptionalInt.of(newPhotoId);
         }
 
-        public PhotoChange setOldPhoto(byte[] oldPhoto) {
+        public void setOldPhoto(byte[] oldPhoto) {
             this.oldPhoto = oldPhoto;
-            return this;
-        }
+    }
 
-        public PhotoChange setNewPhoto(byte[] newPhoto) {
+        public void setNewPhoto(byte[] newPhoto) {
             this.newPhoto = newPhoto;
-            return this;
-        }
+    }
 
-        public PhotoChange setNewPhotoId(Integer newPhotoId) {
+        public void setNewPhotoId(Integer newPhotoId) {
             this.newPhotoId = newPhotoId;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "PinInChat")
@@ -1345,30 +1269,25 @@ public final class ChatMessageInfo implements MessageInfo {
             return Optional.ofNullable(messageAddOnContextInfo);
         }
 
-        public PinInChat setType(Type type) {
+        public void setType(Type type) {
             this.type = type;
-            return this;
-        }
+    }
 
-        public PinInChat setKey(MessageKey key) {
+        public void setKey(MessageKey key) {
             this.key = key;
-            return this;
-        }
+    }
 
-        public PinInChat setSenderTimestampMs(Instant senderTimestampMs) {
+        public void setSenderTimestampMs(Instant senderTimestampMs) {
             this.senderTimestampMs = senderTimestampMs;
-            return this;
-        }
+    }
 
-        public PinInChat setServerTimestampMs(Instant serverTimestampMs) {
+        public void setServerTimestampMs(Instant serverTimestampMs) {
             this.serverTimestampMs = serverTimestampMs;
-            return this;
-        }
+    }
 
-        public PinInChat setMessageAddOnContextInfo(MessageAddOnContextInfo messageAddOnContextInfo) {
+        public void setMessageAddOnContextInfo(MessageAddOnContextInfo messageAddOnContextInfo) {
             this.messageAddOnContextInfo = messageAddOnContextInfo;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "PinInChat.Type")
         public static enum Type {

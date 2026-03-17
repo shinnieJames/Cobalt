@@ -52,9 +52,8 @@ public final class ChatAssignmentOpenedStatusAction implements SyncAction<ChatAs
         return chatOpened != null && chatOpened;
     }
 
-    public ChatAssignmentOpenedStatusAction setChatOpened(Boolean chatOpened) {
+    public void setChatOpened(Boolean chatOpened) {
         this.chatOpened = chatOpened;
-        return this;
     }
 
 

@@ -22,8 +22,7 @@ public final class AppStateSyncKeyShare implements Message {
         return keys == null ? List.of() : Collections.unmodifiableList(keys);
     }
 
-    public AppStateSyncKeyShare setKeys(List<AppStateSyncKey> keys) {
+    public void setKeys(List<AppStateSyncKey> keys) {
         this.keys = keys;
-        return this;
     }
 }

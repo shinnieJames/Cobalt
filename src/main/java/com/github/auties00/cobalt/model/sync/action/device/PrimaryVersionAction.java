@@ -54,8 +54,7 @@ public final class PrimaryVersionAction implements SyncAction<SyncActionEmptyArg
         return Optional.ofNullable(version);
     }
 
-    public PrimaryVersionAction setVersion(String version) {
+    public void setVersion(String version) {
         this.version = version;
-        return this;
     }
 }

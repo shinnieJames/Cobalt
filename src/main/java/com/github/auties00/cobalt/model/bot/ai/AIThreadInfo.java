@@ -62,22 +62,18 @@ public final class AIThreadInfo {
      * Sets the server-side metadata for this AI thread.
      *
      * @param serverInfo the new server info, or {@code null}
-     * @return this instance for chaining
      */
-    public AIThreadInfo setServerInfo(AIThreadServerInfo serverInfo) {
+    public void setServerInfo(AIThreadServerInfo serverInfo) {
         this.serverInfo = serverInfo;
-        return this;
     }
 
     /**
      * Sets the client-side metadata for this AI thread.
      *
      * @param clientInfo the new client info, or {@code null}
-     * @return this instance for chaining
      */
-    public AIThreadInfo setClientInfo(AIThreadClientInfo clientInfo) {
+    public void setClientInfo(AIThreadClientInfo clientInfo) {
         this.clientInfo = clientInfo;
-        return this;
     }
 
     /**
@@ -116,12 +112,10 @@ public final class AIThreadInfo {
          * Sets the privacy type of this AI thread.
          *
          * @param type the new thread type, or {@code null}
-         * @return this instance for chaining
          */
-        public AIThreadClientInfo setType(AIThreadType type) {
+        public void setType(AIThreadType type) {
             this.type = type;
-            return this;
-        }
+    }
 
         /**
          * The privacy type of an AI conversation thread.
@@ -201,11 +195,9 @@ public final class AIThreadInfo {
          * Sets the server-assigned title for this AI thread.
          *
          * @param title the new title, or {@code null}
-         * @return this instance for chaining
          */
-        public AIThreadServerInfo setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
     }
 }

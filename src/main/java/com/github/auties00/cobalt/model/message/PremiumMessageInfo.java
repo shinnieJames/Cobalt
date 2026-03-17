@@ -18,8 +18,7 @@ public final class PremiumMessageInfo {
         return Optional.ofNullable(serverCampaignId);
     }
 
-    public PremiumMessageInfo setServerCampaignId(String serverCampaignId) {
+    public void setServerCampaignId(String serverCampaignId) {
         this.serverCampaignId = serverCampaignId;
-        return this;
     }
 }

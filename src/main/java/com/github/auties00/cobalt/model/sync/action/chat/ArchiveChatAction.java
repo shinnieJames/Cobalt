@@ -62,14 +62,12 @@ public final class ArchiveChatAction implements SyncAction<ArchiveChatActionArgs
         return Optional.ofNullable(messageRange);
     }
 
-    public ArchiveChatAction setArchived(Boolean archived) {
+    public void setArchived(Boolean archived) {
         this.archived = archived;
-        return this;
     }
 
-    public ArchiveChatAction setMessageRange(SyncActionMessageRange messageRange) {
+    public void setMessageRange(SyncActionMessageRange messageRange) {
         this.messageRange = messageRange;
-        return this;
     }
 
 

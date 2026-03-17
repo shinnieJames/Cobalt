@@ -194,114 +194,92 @@ public final class StickerPackMessage implements ContextualMessage {
         return Optional.ofNullable(stickerPackOrigin);
     }
 
-    public StickerPackMessage setStickerPackId(String stickerPackId) {
+    public void setStickerPackId(String stickerPackId) {
         this.stickerPackId = stickerPackId;
-        return this;
     }
 
-    public StickerPackMessage setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public StickerPackMessage setPublisher(String publisher) {
+    public void setPublisher(String publisher) {
         this.publisher = publisher;
-        return this;
     }
 
-    public StickerPackMessage setStickers(List<Sticker> stickers) {
+    public void setStickers(List<Sticker> stickers) {
         this.stickers = stickers;
-        return this;
     }
 
-    public StickerPackMessage setFileLength(Long fileLength) {
+    public void setFileLength(Long fileLength) {
         this.fileLength = fileLength;
-        return this;
     }
 
-    public StickerPackMessage setFileSha256(byte[] fileSha256) {
+    public void setFileSha256(byte[] fileSha256) {
         this.fileSha256 = fileSha256;
-        return this;
     }
 
-    public StickerPackMessage setFileEncSha256(byte[] fileEncSha256) {
+    public void setFileEncSha256(byte[] fileEncSha256) {
         this.fileEncSha256 = fileEncSha256;
-        return this;
     }
 
-    public StickerPackMessage setMediaKey(byte[] mediaKey) {
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public StickerPackMessage setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
-    public StickerPackMessage setCaption(String caption) {
+    public void setCaption(String caption) {
         this.caption = caption;
-        return this;
     }
 
-    public StickerPackMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public StickerPackMessage setPackDescription(String packDescription) {
+    public void setPackDescription(String packDescription) {
         this.packDescription = packDescription;
-        return this;
     }
 
-    public StickerPackMessage setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public StickerPackMessage setTrayIconFileName(String trayIconFileName) {
+    public void setTrayIconFileName(String trayIconFileName) {
         this.trayIconFileName = trayIconFileName;
-        return this;
     }
 
-    public StickerPackMessage setThumbnailDirectPath(String thumbnailDirectPath) {
+    public void setThumbnailDirectPath(String thumbnailDirectPath) {
         this.thumbnailDirectPath = thumbnailDirectPath;
-        return this;
     }
 
-    public StickerPackMessage setThumbnailSha256(byte[] thumbnailSha256) {
+    public void setThumbnailSha256(byte[] thumbnailSha256) {
         this.thumbnailSha256 = thumbnailSha256;
-        return this;
     }
 
-    public StickerPackMessage setThumbnailEncSha256(byte[] thumbnailEncSha256) {
+    public void setThumbnailEncSha256(byte[] thumbnailEncSha256) {
         this.thumbnailEncSha256 = thumbnailEncSha256;
-        return this;
     }
 
-    public StickerPackMessage setThumbnailHeight(Integer thumbnailHeight) {
+    public void setThumbnailHeight(Integer thumbnailHeight) {
         this.thumbnailHeight = thumbnailHeight;
-        return this;
     }
 
-    public StickerPackMessage setThumbnailWidth(Integer thumbnailWidth) {
+    public void setThumbnailWidth(Integer thumbnailWidth) {
         this.thumbnailWidth = thumbnailWidth;
-        return this;
     }
 
-    public StickerPackMessage setImageDataHash(String imageDataHash) {
+    public void setImageDataHash(String imageDataHash) {
         this.imageDataHash = imageDataHash;
-        return this;
     }
 
-    public StickerPackMessage setStickerPackSize(Long stickerPackSize) {
+    public void setStickerPackSize(Long stickerPackSize) {
         this.stickerPackSize = stickerPackSize;
-        return this;
     }
 
-    public StickerPackMessage setStickerPackOrigin(StickerPackOrigin stickerPackOrigin) {
+    public void setStickerPackOrigin(StickerPackOrigin stickerPackOrigin) {
         this.stickerPackOrigin = stickerPackOrigin;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.StickerPackMessage.StickerPackOrigin")
@@ -375,34 +353,28 @@ public final class StickerPackMessage implements ContextualMessage {
             return Optional.ofNullable(mimetype);
         }
 
-        public Sticker setFileName(String fileName) {
+        public void setFileName(String fileName) {
             this.fileName = fileName;
-            return this;
-        }
+    }
 
-        public Sticker setAnimated(Boolean isAnimated) {
+        public void setAnimated(Boolean isAnimated) {
             this.isAnimated = isAnimated;
-            return this;
-        }
+    }
 
-        public Sticker setEmojis(List<String> emojis) {
+        public void setEmojis(List<String> emojis) {
             this.emojis = emojis;
-            return this;
-        }
+    }
 
-        public Sticker setAccessibilityLabel(String accessibilityLabel) {
+        public void setAccessibilityLabel(String accessibilityLabel) {
             this.accessibilityLabel = accessibilityLabel;
-            return this;
-        }
+    }
 
-        public Sticker setLottie(Boolean isLottie) {
+        public void setLottie(Boolean isLottie) {
             this.isLottie = isLottie;
-            return this;
-        }
+    }
 
-        public Sticker setMimetype(String mimetype) {
+        public void setMimetype(String mimetype) {
             this.mimetype = mimetype;
-            return this;
-        }
+    }
     }
 }

@@ -73,22 +73,18 @@ public final class BotUnifiedResponseMutation {
      * Sets the side-by-side A/B test comparison metadata.
      *
      * @param sideBySideMetadata the new side-by-side metadata, or {@code null}
-     * @return this instance for chaining
      */
-    public BotUnifiedResponseMutation setSideBySideMetadata(SideBySideMetadata sideBySideMetadata) {
+    public void setSideBySideMetadata(SideBySideMetadata sideBySideMetadata) {
         this.sideBySideMetadata = sideBySideMetadata;
-        return this;
     }
 
     /**
      * Sets the list of media detail entries.
      *
      * @param mediaDetailsMetadataList the new media details list, or {@code null}
-     * @return this instance for chaining
      */
-    public BotUnifiedResponseMutation setMediaDetailsMetadataList(List<MediaDetailsMetadata> mediaDetailsMetadataList) {
+    public void setMediaDetailsMetadataList(List<MediaDetailsMetadata> mediaDetailsMetadataList) {
         this.mediaDetailsMetadataList = mediaDetailsMetadataList;
-        return this;
     }
 
     /**
@@ -164,34 +160,28 @@ public final class BotUnifiedResponseMutation {
          * Sets the unique identifier for this media item.
          *
          * @param id the new media identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public MediaDetailsMetadata setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
 
         /**
          * Sets the high-resolution variant of this media item.
          *
          * @param highResMedia the new high-resolution metadata, or {@code null}
-         * @return this instance for chaining
          */
-        public MediaDetailsMetadata setHighResMedia(BotMediaMetadata highResMedia) {
+        public void setHighResMedia(BotMediaMetadata highResMedia) {
             this.highResMedia = highResMedia;
-            return this;
-        }
+    }
 
         /**
          * Sets the preview (thumbnail) variant of this media item.
          *
          * @param previewMedia the new preview metadata, or {@code null}
-         * @return this instance for chaining
          */
-        public MediaDetailsMetadata setPreviewMedia(BotMediaMetadata previewMedia) {
+        public void setPreviewMedia(BotMediaMetadata previewMedia) {
             this.previewMedia = previewMedia;
-            return this;
-        }
+    }
     }
 
     /**
@@ -250,22 +240,18 @@ public final class BotUnifiedResponseMutation {
          * Sets the identifier of the primary response in the comparison.
          *
          * @param primaryResponseId the new primary response identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideMetadata setPrimaryResponseId(String primaryResponseId) {
+        public void setPrimaryResponseId(String primaryResponseId) {
             this.primaryResponseId = primaryResponseId;
-            return this;
-        }
+    }
 
         /**
          * Sets whether the survey call-to-action has been rendered.
          *
          * @param surveyCallToActionHasRendered whether the survey CTA has been rendered, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideMetadata setSurveyCallToActionHasRendered(Boolean surveyCallToActionHasRendered) {
+        public void setSurveyCallToActionHasRendered(Boolean surveyCallToActionHasRendered) {
             this.surveyCallToActionHasRendered = surveyCallToActionHasRendered;
-            return this;
-        }
+    }
     }
 }

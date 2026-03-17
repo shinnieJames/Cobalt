@@ -47,8 +47,7 @@ public final class PrivacySettingChannelsPersonalisedRecommendationAction implem
         return isUserOptedOut != null && isUserOptedOut;
     }
 
-    public PrivacySettingChannelsPersonalisedRecommendationAction setUserOptedOut(Boolean isUserOptedOut) {
+    public void setUserOptedOut(Boolean isUserOptedOut) {
         this.isUserOptedOut = isUserOptedOut;
-        return this;
     }
 }

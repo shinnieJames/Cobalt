@@ -42,23 +42,19 @@ public final class ClientPairingProps {
         return isHsThumbnailSyncEnabled != null && isHsThumbnailSyncEnabled;
     }
 
-    public ClientPairingProps setChatDbLidMigrated(Boolean isChatDbLidMigrated) {
+    public void setChatDbLidMigrated(Boolean isChatDbLidMigrated) {
         this.isChatDbLidMigrated = isChatDbLidMigrated;
-        return this;
     }
 
-    public ClientPairingProps setSyncdPureLidSession(Boolean isSyncdPureLidSession) {
+    public void setSyncdPureLidSession(Boolean isSyncdPureLidSession) {
         this.isSyncdPureLidSession = isSyncdPureLidSession;
-        return this;
     }
 
-    public ClientPairingProps setSyncdSnapshotRecoveryEnabled(Boolean isSyncdSnapshotRecoveryEnabled) {
+    public void setSyncdSnapshotRecoveryEnabled(Boolean isSyncdSnapshotRecoveryEnabled) {
         this.isSyncdSnapshotRecoveryEnabled = isSyncdSnapshotRecoveryEnabled;
-        return this;
     }
 
-    public ClientPairingProps setHsThumbnailSyncEnabled(Boolean isHsThumbnailSyncEnabled) {
+    public void setHsThumbnailSyncEnabled(Boolean isHsThumbnailSyncEnabled) {
         this.isHsThumbnailSyncEnabled = isHsThumbnailSyncEnabled;
-        return this;
     }
 }

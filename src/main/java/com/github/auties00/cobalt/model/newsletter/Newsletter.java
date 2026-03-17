@@ -25,22 +25,31 @@ import java.util.*;
 @ProtobufMessage
 public abstract non-sealed class Newsletter implements JidProvider {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    protected Jid jid;
+    private Jid jid;
 
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    protected NewsletterState state;
+    private NewsletterState state;
 
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
-    protected NewsletterMetadata metadata;
+    private NewsletterMetadata metadata;
 
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
-    protected NewsletterViewerMetadata viewerMetadata;
+    private NewsletterViewerMetadata viewerMetadata;
 
     @ProtobufProperty(index = 6, type = ProtobufType.INT32)
-    protected int unreadMessagesCount;
+    private int unreadMessagesCount;
 
     @ProtobufProperty(index = 7, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
-    protected Instant timestamp;
+    private Instant timestamp;
+
+    protected Newsletter(Jid jid, NewsletterState state, NewsletterMetadata metadata, NewsletterViewerMetadata viewerMetadata, int unreadMessagesCount, Instant timestamp) {
+        this.jid = jid;
+        this.state = state;
+        this.metadata = metadata;
+        this.viewerMetadata = viewerMetadata;
+        this.unreadMessagesCount = unreadMessagesCount;
+        this.timestamp = timestamp;
+    }
 
     /**
      * Adds a message to this newsletter's message collection.
@@ -116,12 +125,10 @@ public abstract non-sealed class Newsletter implements JidProvider {
      * Sets this newsletter's JID.
      *
      * @param jid the JID, must not be {@code null}
-     * @return this instance for chaining
      * @throws NullPointerException if {@code jid} is {@code null}
      */
-    public Newsletter setJid(Jid jid) {
+    public void setJid(Jid jid) {
         this.jid = Objects.requireNonNull(jid, "jid cannot be null");
-        return this;
     }
 
     /**
@@ -137,22 +144,9 @@ public abstract non-sealed class Newsletter implements JidProvider {
      * Sets the newsletter state.
      *
      * @param state the newsletter state
-     * @return this instance for chaining
      */
-    public Newsletter setState(NewsletterState state) {
+    public void setState(NewsletterState state) {
         this.state = state;
-        return this;
-    }
-
-    /**
-     * Sets the newsletter metadata.
-     *
-     * @param metadata the newsletter metadata
-     * @return this instance for chaining
-     */
-    public Newsletter setMetadata(NewsletterMetadata metadata) {
-        this.metadata = metadata;
-        return this;
     }
 
     /**
@@ -162,6 +156,15 @@ public abstract non-sealed class Newsletter implements JidProvider {
      */
     public Optional<NewsletterMetadata> metadata() {
         return Optional.ofNullable(metadata);
+    }
+
+    /**
+     * Sets the newsletter metadata.
+     *
+     * @param metadata the newsletter metadata
+     */
+    public void setMetadata(NewsletterMetadata metadata) {
+        this.metadata = metadata;
     }
 
     /**
@@ -178,11 +181,9 @@ public abstract non-sealed class Newsletter implements JidProvider {
      * Sets the viewer's metadata.
      *
      * @param viewerMetadata the viewer metadata
-     * @return this instance for chaining
      */
-    public Newsletter setViewerMetadata(NewsletterViewerMetadata viewerMetadata) {
+    public void setViewerMetadata(NewsletterViewerMetadata viewerMetadata) {
         this.viewerMetadata = viewerMetadata;
-        return this;
     }
 
     /**
@@ -198,11 +199,9 @@ public abstract non-sealed class Newsletter implements JidProvider {
      * Sets the number of unread messages.
      *
      * @param unreadMessagesCount the unread messages count
-     * @return this instance for chaining
      */
-    public Newsletter setUnreadMessagesCount(int unreadMessagesCount) {
+    public void setUnreadMessagesCount(int unreadMessagesCount) {
         this.unreadMessagesCount = unreadMessagesCount;
-        return this;
     }
 
     /**
@@ -210,7 +209,7 @@ public abstract non-sealed class Newsletter implements JidProvider {
      *
      * @return the timestamp in seconds
      */
-    public Optional<Instant> timestampSeconds() {
+    public Optional<Instant> timestamp() {
         return Optional.ofNullable(timestamp);
     }
 
@@ -218,11 +217,9 @@ public abstract non-sealed class Newsletter implements JidProvider {
      * Sets the timestamp in seconds of the last activity.
      *
      * @param timestamp the timestamp in seconds
-     * @return this instance for chaining
      */
-    public Newsletter setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
     @Override

@@ -48,23 +48,19 @@ public final class PollUpdateMessage implements Message {
         return Optional.ofNullable(senderTimestampMs);
     }
 
-    public PollUpdateMessage setPollCreationMessageKey(MessageKey pollCreationMessageKey) {
+    public void setPollCreationMessageKey(MessageKey pollCreationMessageKey) {
         this.pollCreationMessageKey = pollCreationMessageKey;
-        return this;
     }
 
-    public PollUpdateMessage setVote(PollEncValue vote) {
+    public void setVote(PollEncValue vote) {
         this.vote = vote;
-        return this;
     }
 
-    public PollUpdateMessage setMetadata(PollUpdateMessageMetadata metadata) {
+    public void setMetadata(PollUpdateMessageMetadata metadata) {
         this.metadata = metadata;
-        return this;
     }
 
-    public PollUpdateMessage setSenderTimestampMs(Instant senderTimestampMs) {
+    public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
-        return this;
     }
 }

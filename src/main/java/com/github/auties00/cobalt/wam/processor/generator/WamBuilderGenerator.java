@@ -20,6 +20,10 @@ import java.time.Instant;
  * constructing the processor-generated {@code *Impl} class internally.
  */
 public final class WamBuilderGenerator {
+    private static final ClassName INTEGER = ClassName.get(Integer.class);
+    private static final ClassName BOOLEAN = ClassName.get(Boolean.class);
+    private static final ClassName STRING = ClassName.get(String.class);
+    private static final ClassName DOUBLE = ClassName.get(Double.class);
     private static final ClassName INSTANT = ClassName.get(Instant.class);
 
     private WamBuilderGenerator() {
@@ -82,8 +86,8 @@ public final class WamBuilderGenerator {
                                 .addModifiers(Modifier.PUBLIC)
                                 .returns(builderClassName)
                                 .beginControlFlow("if (this.$NStart != null)", prop.fieldName())
-                                .addStatement("this.$N = $T.now().toEpochMilli() - this.$NStart.toEpochMilli()",
-                                        prop.fieldName(), INSTANT, prop.fieldName())
+                                .addStatement("this.$N = $T.ofEpochMilli($T.now().toEpochMilli() - this.$NStart.toEpochMilli())",
+                                        prop.fieldName(), INSTANT, INSTANT, prop.fieldName())
                                 .addStatement("this.$NStart = null", prop.fieldName())
                                 .endControlFlow()
                                 .addStatement("return this")
@@ -121,11 +125,11 @@ public final class WamBuilderGenerator {
 
     private static TypeName resolveFieldType(WamPropertyElement prop) {
         return switch (prop.wamType()) {
-            case INTEGER -> ClassName.get(Integer.class);
-            case BOOLEAN -> ClassName.get(Boolean.class);
-            case STRING -> ClassName.get(String.class);
-            case FLOAT -> ClassName.get(Double.class);
-            case TIMER -> ClassName.get(Long.class);
+            case INTEGER -> INTEGER;
+            case BOOLEAN -> BOOLEAN;
+            case STRING -> STRING;
+            case FLOAT -> DOUBLE;
+            case TIMER -> INSTANT;
             case ENUM -> {
                 var enumElement = prop.enumElement();
                 if (enumElement == null) {

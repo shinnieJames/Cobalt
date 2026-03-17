@@ -137,79 +137,64 @@ public final class OrderMessage implements ContextualMessage {
         return Optional.ofNullable(catalogType);
     }
 
-    public OrderMessage setOrderId(String orderId) {
+    public void setOrderId(String orderId) {
         this.orderId = orderId;
-        return this;
     }
 
-    public OrderMessage setThumbnail(byte[] thumbnail) {
+    public void setThumbnail(byte[] thumbnail) {
         this.thumbnail = thumbnail;
-        return this;
     }
 
-    public OrderMessage setItemCount(Integer itemCount) {
+    public void setItemCount(Integer itemCount) {
         this.itemCount = itemCount;
-        return this;
     }
 
-    public OrderMessage setStatus(OrderStatus status) {
+    public void setStatus(OrderStatus status) {
         this.status = status;
-        return this;
     }
 
-    public OrderMessage setSurface(OrderSurface surface) {
+    public void setSurface(OrderSurface surface) {
         this.surface = surface;
-        return this;
     }
 
-    public OrderMessage setMessage(String message) {
+    public void setMessage(String message) {
         this.message = message;
-        return this;
     }
 
-    public OrderMessage setOrderTitle(String orderTitle) {
+    public void setOrderTitle(String orderTitle) {
         this.orderTitle = orderTitle;
-        return this;
     }
 
-    public OrderMessage setSellerJid(Jid sellerJid) {
+    public void setSellerJid(Jid sellerJid) {
         this.sellerJid = sellerJid;
-        return this;
     }
 
-    public OrderMessage setToken(String token) {
+    public void setToken(String token) {
         this.token = token;
-        return this;
     }
 
-    public OrderMessage setTotalAmount1000(Long totalAmount1000) {
+    public void setTotalAmount1000(Long totalAmount1000) {
         this.totalAmount1000 = totalAmount1000;
-        return this;
     }
 
-    public OrderMessage setTotalCurrencyCode(String totalCurrencyCode) {
+    public void setTotalCurrencyCode(String totalCurrencyCode) {
         this.totalCurrencyCode = totalCurrencyCode;
-        return this;
     }
 
-    public OrderMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public OrderMessage setMessageVersion(Integer messageVersion) {
+    public void setMessageVersion(Integer messageVersion) {
         this.messageVersion = messageVersion;
-        return this;
     }
 
-    public OrderMessage setOrderRequestMessageId(MessageKey orderRequestMessageId) {
+    public void setOrderRequestMessageId(MessageKey orderRequestMessageId) {
         this.orderRequestMessageId = orderRequestMessageId;
-        return this;
     }
 
-    public OrderMessage setCatalogType(String catalogType) {
+    public void setCatalogType(String catalogType) {
         this.catalogType = catalogType;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.OrderMessage.OrderStatus")

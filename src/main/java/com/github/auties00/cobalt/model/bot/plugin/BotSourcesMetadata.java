@@ -50,11 +50,9 @@ public final class BotSourcesMetadata {
      * Sets the list of source items cited in the bot response.
      *
      * @param sources the new list of source items, or {@code null}
-     * @return this instance for chaining
      */
-    public BotSourcesMetadata setSources(List<BotSourceItem> sources) {
+    public void setSources(List<BotSourceItem> sources) {
         this.sources = sources;
-        return this;
     }
 
     /**
@@ -206,78 +204,64 @@ public final class BotSourcesMetadata {
          * Sets the search provider that returned this source.
          *
          * @param provider the new provider, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setProvider(SourceProvider provider) {
+        public void setProvider(SourceProvider provider) {
             this.provider = provider;
-            return this;
-        }
+    }
 
         /**
          * Sets the CDN URL of a thumbnail image for this source.
          *
          * @param thumbnailCdnUrl the new thumbnail URL, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setThumbnailCdnUrl(URI thumbnailCdnUrl) {
+        public void setThumbnailCdnUrl(URI thumbnailCdnUrl) {
             this.thumbnailCdnUrl = thumbnailCdnUrl;
-            return this;
-        }
+    }
 
         /**
          * Sets the URL of the source page.
          *
          * @param sourceProviderUrl the new source URL, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setSourceProviderUrl(URI sourceProviderUrl) {
+        public void setSourceProviderUrl(URI sourceProviderUrl) {
             this.sourceProviderUrl = sourceProviderUrl;
-            return this;
-        }
+    }
 
         /**
          * Sets the search query that produced this source result.
          *
          * @param sourceQuery the new query, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setSourceQuery(String sourceQuery) {
+        public void setSourceQuery(String sourceQuery) {
             this.sourceQuery = sourceQuery;
-            return this;
-        }
+    }
 
         /**
          * Sets the CDN URL of the source site's favicon.
          *
          * @param faviconCdnUrl the new favicon URL, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setFaviconCdnUrl(URI faviconCdnUrl) {
+        public void setFaviconCdnUrl(URI faviconCdnUrl) {
             this.faviconCdnUrl = faviconCdnUrl;
-            return this;
-        }
+    }
 
         /**
          * Sets the citation number displayed in the bot response.
          *
          * @param citationNumber the new citation number, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setCitationNumber(Integer citationNumber) {
+        public void setCitationNumber(Integer citationNumber) {
             this.citationNumber = citationNumber;
-            return this;
-        }
+    }
 
         /**
          * Sets the title of the source page.
          *
          * @param sourceTitle the new title, or {@code null}
-         * @return this instance for chaining
          */
-        public BotSourceItem setSourceTitle(String sourceTitle) {
+        public void setSourceTitle(String sourceTitle) {
             this.sourceTitle = sourceTitle;
-            return this;
-        }
+    }
 
         /**
          * The search provider that returned a source citation in a bot

@@ -404,11 +404,9 @@ public final class CallLog {
      * Sets the outcome of this call.
      *
      * @param callResult the call result to set
-     * @return this instance for method chaining
      */
-    public CallLog setCallResult(Result callResult) {
+    public void setCallResult(Result callResult) {
         this.callResult = callResult;
-        return this;
     }
 
     /**
@@ -416,154 +414,126 @@ public final class CallLog {
      * was received.
      *
      * @param isDndMode whether DND mode was active
-     * @return this instance for method chaining
      */
-    public CallLog setDndMode(Boolean isDndMode) {
+    public void setDndMode(Boolean isDndMode) {
         this.isDndMode = isDndMode;
-        return this;
     }
 
     /**
      * Sets the reason why the call notification was silenced.
      *
      * @param silenceReason the silence reason to set
-     * @return this instance for method chaining
      */
-    public CallLog setSilenceReason(SilenceReason silenceReason) {
+    public void setSilenceReason(SilenceReason silenceReason) {
         this.silenceReason = silenceReason;
-        return this;
     }
 
     /**
      * Sets the duration of the call in seconds.
      *
      * @param duration the call duration in seconds
-     * @return this instance for method chaining
      */
-    public CallLog setDuration(Long duration) {
+    public void setDuration(Long duration) {
         this.duration = duration;
-        return this;
     }
 
     /**
      * Sets the instant at which the call was started.
      *
      * @param startTime the start time to set
-     * @return this instance for method chaining
      */
-    public CallLog setStartTime(Instant startTime) {
+    public void setStartTime(Instant startTime) {
         this.startTime = startTime;
-        return this;
     }
 
     /**
      * Sets whether this was an incoming call.
      *
      * @param isIncoming whether the call was incoming
-     * @return this instance for method chaining
      */
-    public CallLog setIncoming(Boolean isIncoming) {
+    public void setIncoming(Boolean isIncoming) {
         this.isIncoming = isIncoming;
-        return this;
     }
 
     /**
      * Sets whether this was a video call.
      *
      * @param isVideo whether the call was a video call
-     * @return this instance for method chaining
      */
-    public CallLog setVideo(Boolean isVideo) {
+    public void setVideo(Boolean isVideo) {
         this.isVideo = isVideo;
-        return this;
     }
 
     /**
      * Sets whether this call was initiated through a shareable call link.
      *
      * @param isCallLink whether this was a call link call
-     * @return this instance for method chaining
      */
-    public CallLog setCallLink(Boolean isCallLink) {
+    public void setCallLink(Boolean isCallLink) {
         this.isCallLink = isCallLink;
-        return this;
     }
 
     /**
      * Sets the token identifying the call link.
      *
      * @param callLinkToken the call link token to set
-     * @return this instance for method chaining
      */
-    public CallLog setCallLinkToken(String callLinkToken) {
+    public void setCallLinkToken(String callLinkToken) {
         this.callLinkToken = callLinkToken;
-        return this;
     }
 
     /**
      * Sets the identifier of the scheduled call.
      *
      * @param scheduledCallId the scheduled call identifier to set
-     * @return this instance for method chaining
      */
-    public CallLog setScheduledCallId(String scheduledCallId) {
+    public void setScheduledCallId(String scheduledCallId) {
         this.scheduledCallId = scheduledCallId;
-        return this;
     }
 
     /**
      * Sets the unique identifier for this call.
      *
      * @param callId the call identifier to set
-     * @return this instance for method chaining
      */
-    public CallLog setCallId(String callId) {
+    public void setCallId(String callId) {
         this.callId = callId;
-        return this;
     }
 
     /**
      * Sets the JID of the user who created this call.
      *
      * @param callCreatorJid the call creator's JID to set
-     * @return this instance for method chaining
      */
-    public CallLog setCallCreatorJid(Jid callCreatorJid) {
+    public void setCallCreatorJid(Jid callCreatorJid) {
         this.callCreatorJid = callCreatorJid;
-        return this;
     }
 
     /**
      * Sets the JID of the group for group calls.
      *
      * @param groupJid the group JID to set
-     * @return this instance for method chaining
      */
-    public CallLog setGroupJid(Jid groupJid) {
+    public void setGroupJid(Jid groupJid) {
         this.groupJid = groupJid;
-        return this;
     }
 
     /**
      * Sets the list of participants and their individual call results.
      *
      * @param participants the participant information list to set
-     * @return this instance for method chaining
      */
-    public CallLog setParticipants(List<ParticipantInfo> participants) {
+    public void setParticipants(List<ParticipantInfo> participants) {
         this.participants = participants;
-        return this;
     }
 
     /**
      * Sets the type of this call.
      *
      * @param callType the call type to set
-     * @return this instance for method chaining
      */
-    public CallLog setCallType(Type callType) {
+    public void setCallType(Type callType) {
         this.callType = callType;
-        return this;
     }
 
     /**
@@ -892,10 +862,9 @@ public final class CallLog {
          * @param userJid the participant's JID to set
          * @return this instance for method chaining
          */
-        public ParticipantInfo setUserJid(Jid userJid) {
+        public void setUserJid(Jid userJid) {
             this.userJid = userJid;
-            return this;
-        }
+    }
 
         /**
          * Sets the individual call outcome for this participant.
@@ -903,9 +872,8 @@ public final class CallLog {
          * @param callResult the participant's call result to set
          * @return this instance for method chaining
          */
-        public ParticipantInfo setCallResult(Result callResult) {
+        public void setCallResult(Result callResult) {
             this.callResult = callResult;
-            return this;
-        }
+    }
     }
 }

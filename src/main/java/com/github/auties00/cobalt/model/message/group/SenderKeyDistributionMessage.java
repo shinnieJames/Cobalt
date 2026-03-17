@@ -29,13 +29,11 @@ public final class SenderKeyDistributionMessage implements Message {
         return Optional.ofNullable(axolotlSenderKeyDistributionMessage);
     }
 
-    public SenderKeyDistributionMessage setGroupJid(Jid groupJid) {
+    public void setGroupJid(Jid groupJid) {
         this.groupJid = groupJid;
-        return this;
     }
 
-    public SenderKeyDistributionMessage setAxolotlSenderKeyDistributionMessage(byte[] axolotlSenderKeyDistributionMessage) {
+    public void setAxolotlSenderKeyDistributionMessage(byte[] axolotlSenderKeyDistributionMessage) {
         this.axolotlSenderKeyDistributionMessage = axolotlSenderKeyDistributionMessage;
-        return this;
     }
 }

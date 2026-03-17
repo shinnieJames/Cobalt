@@ -114,11 +114,9 @@ public final class Location implements InteractiveAction {
      *
      * @param degreesLatitude the latitude, or {@code null} to clear the
      *                        value
-     * @return this instance for method chaining
      */
-    public Location setDegreesLatitude(Double degreesLatitude) {
+    public void setDegreesLatitude(Double degreesLatitude) {
         this.degreesLatitude = degreesLatitude;
-        return this;
     }
 
     /**
@@ -126,21 +124,17 @@ public final class Location implements InteractiveAction {
      *
      * @param degreesLongitude the longitude, or {@code null} to clear the
      *                         value
-     * @return this instance for method chaining
      */
-    public Location setDegreesLongitude(Double degreesLongitude) {
+    public void setDegreesLongitude(Double degreesLongitude) {
         this.degreesLongitude = degreesLongitude;
-        return this;
     }
 
     /**
      * Sets the human-readable display name of this location.
      *
      * @param name the location name, or {@code null} to clear the value
-     * @return this instance for method chaining
      */
-    public Location setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 }

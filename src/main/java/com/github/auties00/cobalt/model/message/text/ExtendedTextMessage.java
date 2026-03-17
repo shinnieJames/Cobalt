@@ -281,164 +281,132 @@ public final class ExtendedTextMessage implements ContextualMessage {
         return Optional.ofNullable(paymentExtendedMetadata);
     }
 
-    public ExtendedTextMessage setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
-    public ExtendedTextMessage setMatchedText(String matchedText) {
+    public void setMatchedText(String matchedText) {
         this.matchedText = matchedText;
-        return this;
     }
 
-    public ExtendedTextMessage setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
-    public ExtendedTextMessage setTitle(String title) {
+    public void setTitle(String title) {
         this.title = title;
-        return this;
     }
 
-    public ExtendedTextMessage setTextArgb(Integer textArgb) {
+    public void setTextArgb(Integer textArgb) {
         this.textArgb = textArgb;
-        return this;
     }
 
-    public ExtendedTextMessage setBackgroundArgb(Integer backgroundArgb) {
+    public void setBackgroundArgb(Integer backgroundArgb) {
         this.backgroundArgb = backgroundArgb;
-        return this;
     }
 
-    public ExtendedTextMessage setFont(FontType font) {
+    public void setFont(FontType font) {
         this.font = font;
-        return this;
     }
 
-    public ExtendedTextMessage setPreviewType(PreviewType previewType) {
+    public void setPreviewType(PreviewType previewType) {
         this.previewType = previewType;
-        return this;
     }
 
-    public ExtendedTextMessage setJpegThumbnail(byte[] jpegThumbnail) {
+    public void setJpegThumbnail(byte[] jpegThumbnail) {
         this.jpegThumbnail = jpegThumbnail;
-        return this;
     }
 
-    public ExtendedTextMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public ExtendedTextMessage setDoNotPlayInline(Boolean doNotPlayInline) {
+    public void setDoNotPlayInline(Boolean doNotPlayInline) {
         this.doNotPlayInline = doNotPlayInline;
-        return this;
     }
 
-    public ExtendedTextMessage setThumbnailDirectPath(String thumbnailDirectPath) {
+    public void setThumbnailDirectPath(String thumbnailDirectPath) {
         this.thumbnailDirectPath = thumbnailDirectPath;
-        return this;
     }
 
-    public ExtendedTextMessage setThumbnailSha256(byte[] thumbnailSha256) {
+    public void setThumbnailSha256(byte[] thumbnailSha256) {
         this.thumbnailSha256 = thumbnailSha256;
-        return this;
     }
 
-    public ExtendedTextMessage setThumbnailEncSha256(byte[] thumbnailEncSha256) {
+    public void setThumbnailEncSha256(byte[] thumbnailEncSha256) {
         this.thumbnailEncSha256 = thumbnailEncSha256;
-        return this;
     }
 
-    public ExtendedTextMessage setMediaKey(byte[] mediaKey) {
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public ExtendedTextMessage setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public ExtendedTextMessage setThumbnailHeight(Integer thumbnailHeight) {
+    public void setThumbnailHeight(Integer thumbnailHeight) {
         this.thumbnailHeight = thumbnailHeight;
-        return this;
     }
 
-    public ExtendedTextMessage setThumbnailWidth(Integer thumbnailWidth) {
+    public void setThumbnailWidth(Integer thumbnailWidth) {
         this.thumbnailWidth = thumbnailWidth;
-        return this;
     }
 
-    public ExtendedTextMessage setInviteLinkGroupType(InviteLinkGroupType inviteLinkGroupType) {
+    public void setInviteLinkGroupType(InviteLinkGroupType inviteLinkGroupType) {
         this.inviteLinkGroupType = inviteLinkGroupType;
-        return this;
     }
 
-    public ExtendedTextMessage setInviteLinkParentGroupSubjectV2(String inviteLinkParentGroupSubjectV2) {
+    public void setInviteLinkParentGroupSubjectV2(String inviteLinkParentGroupSubjectV2) {
         this.inviteLinkParentGroupSubjectV2 = inviteLinkParentGroupSubjectV2;
-        return this;
     }
 
-    public ExtendedTextMessage setInviteLinkParentGroupThumbnailV2(byte[] inviteLinkParentGroupThumbnailV2) {
+    public void setInviteLinkParentGroupThumbnailV2(byte[] inviteLinkParentGroupThumbnailV2) {
         this.inviteLinkParentGroupThumbnailV2 = inviteLinkParentGroupThumbnailV2;
-        return this;
     }
 
-    public ExtendedTextMessage setInviteLinkGroupTypeV2(InviteLinkGroupType inviteLinkGroupTypeV2) {
+    public void setInviteLinkGroupTypeV2(InviteLinkGroupType inviteLinkGroupTypeV2) {
         this.inviteLinkGroupTypeV2 = inviteLinkGroupTypeV2;
-        return this;
     }
 
-    public ExtendedTextMessage setViewOnce(Boolean viewOnce) {
+    public void setViewOnce(Boolean viewOnce) {
         this.viewOnce = viewOnce;
-        return this;
     }
 
-    public ExtendedTextMessage setVideoHeight(Integer videoHeight) {
+    public void setVideoHeight(Integer videoHeight) {
         this.videoHeight = videoHeight;
-        return this;
     }
 
-    public ExtendedTextMessage setVideoWidth(Integer videoWidth) {
+    public void setVideoWidth(Integer videoWidth) {
         this.videoWidth = videoWidth;
-        return this;
     }
 
-    public ExtendedTextMessage setFaviconMMSMetadata(MessageMMSThumbnailMetadata faviconMMSMetadata) {
+    public void setFaviconMMSMetadata(MessageMMSThumbnailMetadata faviconMMSMetadata) {
         this.faviconMMSMetadata = faviconMMSMetadata;
-        return this;
     }
 
-    public ExtendedTextMessage setLinkPreviewMetadata(MessageLinkPreviewMetadata linkPreviewMetadata) {
+    public void setLinkPreviewMetadata(MessageLinkPreviewMetadata linkPreviewMetadata) {
         this.linkPreviewMetadata = linkPreviewMetadata;
-        return this;
     }
 
-    public ExtendedTextMessage setPaymentLinkMetadata(PaymentLinkMetadata paymentLinkMetadata) {
+    public void setPaymentLinkMetadata(PaymentLinkMetadata paymentLinkMetadata) {
         this.paymentLinkMetadata = paymentLinkMetadata;
-        return this;
     }
 
-    public ExtendedTextMessage setEndCardTiles(List<MessageVideoEndCard> endCardTiles) {
+    public void setEndCardTiles(List<MessageVideoEndCard> endCardTiles) {
         this.endCardTiles = endCardTiles;
-        return this;
     }
 
-    public ExtendedTextMessage setVideoContentUrl(String videoContentUrl) {
+    public void setVideoContentUrl(String videoContentUrl) {
         this.videoContentUrl = videoContentUrl;
-        return this;
     }
 
-    public ExtendedTextMessage setMusicMetadata(EmbeddedMusic musicMetadata) {
+    public void setMusicMetadata(EmbeddedMusic musicMetadata) {
         this.musicMetadata = musicMetadata;
-        return this;
     }
 
-    public ExtendedTextMessage setPaymentExtendedMetadata(PaymentExtendedMetadata paymentExtendedMetadata) {
+    public void setPaymentExtendedMetadata(PaymentExtendedMetadata paymentExtendedMetadata) {
         this.paymentExtendedMetadata = paymentExtendedMetadata;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ExtendedTextMessage.FontType")

@@ -71,33 +71,27 @@ public final class NewsletterName {
      * Sets the name identifier.
      *
      * @param id the name id
-     * @return this instance for chaining
      */
-    public NewsletterName setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
      * Sets the display text.
      *
      * @param text the display text
-     * @return this instance for chaining
      */
-    public NewsletterName setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
     /**
      * Sets the timestamp of the last name update.
      *
      * @param updateTime the update timestamp
-     * @return this instance for chaining
      */
-    public NewsletterName setUpdateTime(Instant updateTime) {
+    public void setUpdateTime(Instant updateTime) {
         this.updateTime = updateTime;
-        return this;
     }
 
     @Override

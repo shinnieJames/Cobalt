@@ -47,10 +47,8 @@ public final class AIRichResponseUnifiedResponse {
      * Sets the raw bytes of the unified response payload.
      *
      * @param data the raw bytes to set
-     * @return this instance for chaining
      */
-    public AIRichResponseUnifiedResponse setData(byte[] data) {
+    public void setData(byte[] data) {
         this.data = data;
-        return this;
     }
 }

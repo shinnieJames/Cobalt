@@ -101,22 +101,18 @@ public final class AIRichResponseInlineImageMetadata implements AIRichResponseSu
      * Sets the URL set for this inline image.
      *
      * @param imageUrl the image URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseInlineImageMetadata setImageUrl(AIRichResponseImageURL imageUrl) {
+    public void setImageUrl(AIRichResponseImageURL imageUrl) {
         this.imageUrl = imageUrl;
-        return this;
     }
 
     /**
      * Sets the alt text or caption for this image.
      *
      * @param imageText the image text to set
-     * @return this instance for chaining
      */
-    public AIRichResponseInlineImageMetadata setImageText(String imageText) {
+    public void setImageText(String imageText) {
         this.imageText = imageText;
-        return this;
     }
 
     /**
@@ -124,22 +120,18 @@ public final class AIRichResponseInlineImageMetadata implements AIRichResponseSu
      * bubble.
      *
      * @param alignment the alignment to set
-     * @return this instance for chaining
      */
-    public AIRichResponseInlineImageMetadata setAlignment(AIRichResponseImageAlignment alignment) {
+    public void setAlignment(AIRichResponseImageAlignment alignment) {
         this.alignment = alignment;
-        return this;
     }
 
     /**
      * Sets the URL that is opened when the user taps this image.
      *
      * @param tapLinkUrl the tap link URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseInlineImageMetadata setTapLinkUrl(URI tapLinkUrl) {
+    public void setTapLinkUrl(URI tapLinkUrl) {
         this.tapLinkUrl = tapLinkUrl;
-        return this;
     }
 
     /**

@@ -53,8 +53,7 @@ public final class ExternalWebBetaAction implements SyncAction<SyncActionEmptyAr
         return isOptIn != null && isOptIn;
     }
 
-    public ExternalWebBetaAction setOptIn(Boolean isOptIn) {
+    public void setOptIn(Boolean isOptIn) {
         this.isOptIn = isOptIn;
-        return this;
     }
 }

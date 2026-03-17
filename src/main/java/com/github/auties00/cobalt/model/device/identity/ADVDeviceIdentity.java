@@ -55,28 +55,23 @@ public final class ADVDeviceIdentity {
         return Optional.ofNullable(deviceType);
     }
 
-    public ADVDeviceIdentity setRawId(Integer rawId) {
+    public void setRawId(Integer rawId) {
         this.rawId = rawId;
-        return this;
     }
 
-    public ADVDeviceIdentity setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
-    public ADVDeviceIdentity setKeyIndex(Integer keyIndex) {
+    public void setKeyIndex(Integer keyIndex) {
         this.keyIndex = keyIndex;
-        return this;
     }
 
-    public ADVDeviceIdentity setAccountType(ADVEncryptionType accountType) {
+    public void setAccountType(ADVEncryptionType accountType) {
         this.accountType = accountType;
-        return this;
     }
 
-    public ADVDeviceIdentity setDeviceType(ADVEncryptionType deviceType) {
+    public void setDeviceType(ADVEncryptionType deviceType) {
         this.deviceType = deviceType;
-        return this;
     }
 }

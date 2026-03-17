@@ -88,29 +88,24 @@ public final class QuickReplyAction implements SyncAction<QuickReplyActionArgs> 
         return deleted != null && deleted;
     }
 
-    public QuickReplyAction setShortcut(String shortcut) {
+    public void setShortcut(String shortcut) {
         this.shortcut = shortcut;
-        return this;
     }
 
-    public QuickReplyAction setMessage(String message) {
+    public void setMessage(String message) {
         this.message = message;
-        return this;
     }
 
-    public QuickReplyAction setKeywords(List<String> keywords) {
+    public void setKeywords(List<String> keywords) {
         this.keywords = keywords;
-        return this;
     }
 
-    public QuickReplyAction setCount(Integer count) {
+    public void setCount(Integer count) {
         this.count = count;
-        return this;
     }
 
-    public QuickReplyAction setDeleted(Boolean deleted) {
+    public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
-        return this;
     }
 
 

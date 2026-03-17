@@ -75,23 +75,19 @@ public final class CustomPaymentMethod implements SyncAction<SyncActionEmptyArgs
         return metadata == null ? List.of() : Collections.unmodifiableList(metadata);
     }
 
-    public CustomPaymentMethod setCredentialId(String credentialId) {
+    public void setCredentialId(String credentialId) {
         this.credentialId = credentialId;
-        return this;
     }
 
-    public CustomPaymentMethod setCountry(String country) {
+    public void setCountry(String country) {
         this.country = country;
-        return this;
     }
 
-    public CustomPaymentMethod setType(String type) {
+    public void setType(String type) {
         this.type = type;
-        return this;
     }
 
-    public CustomPaymentMethod setMetadata(List<CustomPaymentMethodMetadata> metadata) {
+    public void setMetadata(List<CustomPaymentMethodMetadata> metadata) {
         this.metadata = metadata;
-        return this;
     }
 }

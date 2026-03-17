@@ -34,18 +34,15 @@ public final class ADVSignedKeyIndexList {
         return Optional.ofNullable(accountSignatureKey);
     }
 
-    public ADVSignedKeyIndexList setDetails(byte[] details) {
+    public void setDetails(byte[] details) {
         this.details = details;
-        return this;
     }
 
-    public ADVSignedKeyIndexList setAccountSignature(byte[] accountSignature) {
+    public void setAccountSignature(byte[] accountSignature) {
         this.accountSignature = accountSignature;
-        return this;
     }
 
-    public ADVSignedKeyIndexList setAccountSignatureKey(byte[] accountSignatureKey) {
+    public void setAccountSignatureKey(byte[] accountSignatureKey) {
         this.accountSignatureKey = accountSignatureKey;
-        return this;
     }
 }

@@ -99,44 +99,36 @@ public final class AIRichResponseDynamicMetadata implements AIRichResponseSubMes
      * Sets the media type of this dynamic content.
      *
      * @param type the media type to set
-     * @return this instance for chaining
      */
-    public AIRichResponseDynamicMetadata setType(AIRichResponseDynamicMediaType type) {
+    public void setType(AIRichResponseDynamicMediaType type) {
         this.type = type;
-        return this;
     }
 
     /**
      * Sets the version identifier for this dynamic media asset.
      *
      * @param version the version to set
-     * @return this instance for chaining
      */
-    public AIRichResponseDynamicMetadata setVersion(Long version) {
+    public void setVersion(Long version) {
         this.version = version;
-        return this;
     }
 
     /**
      * Sets the URL from which this dynamic media is fetched.
      *
      * @param url the URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseDynamicMetadata setUrl(String url) {
+    public void setUrl(String url) {
         this.url = url;
-        return this;
     }
 
     /**
      * Sets the number of times a GIF animation should loop.
      *
      * @param loopCount the loop count to set
-     * @return this instance for chaining
      */
-    public AIRichResponseDynamicMetadata setLoopCount(Integer loopCount) {
+    public void setLoopCount(Integer loopCount) {
         this.loopCount = loopCount;
-        return this;
     }
 
     /**

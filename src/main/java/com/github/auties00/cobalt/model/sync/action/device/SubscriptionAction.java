@@ -71,18 +71,15 @@ public final class SubscriptionAction implements SyncAction<SyncActionEmptyArgs>
         return expirationDate == null ? OptionalLong.empty() : OptionalLong.of(expirationDate);
     }
 
-    public SubscriptionAction setDeactivated(Boolean isDeactivated) {
+    public void setDeactivated(Boolean isDeactivated) {
         this.isDeactivated = isDeactivated;
-        return this;
     }
 
-    public SubscriptionAction setAutoRenewing(Boolean isAutoRenewing) {
+    public void setAutoRenewing(Boolean isAutoRenewing) {
         this.isAutoRenewing = isAutoRenewing;
-        return this;
     }
 
-    public SubscriptionAction setExpirationDate(Long expirationDate) {
+    public void setExpirationDate(Long expirationDate) {
         this.expirationDate = expirationDate;
-        return this;
     }
 }

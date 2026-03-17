@@ -51,10 +51,8 @@ public final class BotMessageOriginMetadata {
      * Sets the list of origination sources for this bot message.
      *
      * @param origins the new list of message origins, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMessageOriginMetadata setOrigins(List<BotMessageOrigin> origins) {
+    public void setOrigins(List<BotMessageOrigin> origins) {
         this.origins = origins;
-        return this;
     }
 }

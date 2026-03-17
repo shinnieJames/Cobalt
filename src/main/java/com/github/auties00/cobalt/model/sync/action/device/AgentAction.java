@@ -70,19 +70,16 @@ public final class AgentAction implements SyncAction<AgentActionArgs> {
         return isDeleted != null && isDeleted;
     }
 
-    public AgentAction setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public AgentAction setDeviceID(Integer deviceID) {
+    public void setDeviceID(Integer deviceID) {
         this.deviceID = deviceID;
-        return this;
     }
 
-    public AgentAction setDeleted(Boolean isDeleted) {
+    public void setDeleted(Boolean isDeleted) {
         this.isDeleted = isDeleted;
-        return this;
     }
 
 

@@ -64,22 +64,18 @@ public final class BusinessAccountPayload {
      * Sets the verified name certificate.
      *
      * @param verifiedNameCertificate the certificate to set
-     * @return this instance for chaining
      */
-    public BusinessAccountPayload setVerifiedNameCertificate(BusinessVerifiedNameCertificate verifiedNameCertificate) {
+    public void setVerifiedNameCertificate(BusinessVerifiedNameCertificate verifiedNameCertificate) {
         this.verifiedNameCertificate = verifiedNameCertificate;
-        return this;
     }
 
     /**
      * Sets the serialized account link info bytes.
      *
      * @param accountLinkInfo the raw bytes to set
-     * @return this instance for chaining
      */
-    public BusinessAccountPayload setAccountLinkInfo(byte[] accountLinkInfo) {
+    public void setAccountLinkInfo(byte[] accountLinkInfo) {
         this.accountLinkInfo = accountLinkInfo;
-        return this;
     }
 
     /**
@@ -192,56 +188,46 @@ public final class BusinessAccountPayload {
          * Sets the Facebook Business ID.
          *
          * @param facebookBusinessId the FBID to set
-         * @return this instance for chaining
          */
-        public AccountLinkInfo setFacebookBusinessId(Long facebookBusinessId) {
+        public void setFacebookBusinessId(Long facebookBusinessId) {
             this.facebookBusinessId = facebookBusinessId;
-            return this;
-        }
+    }
 
         /**
          * Sets the WhatsApp phone number.
          *
          * @param phoneNumber the phone number to set
-         * @return this instance for chaining
          */
-        public AccountLinkInfo setPhoneNumber(String phoneNumber) {
+        public void setPhoneNumber(String phoneNumber) {
             this.phoneNumber = phoneNumber;
-            return this;
-        }
+    }
 
         /**
          * Sets the instant at which the account link was established.
          *
          * @param issueTime the issue time to set
-         * @return this instance for chaining
          */
-        public AccountLinkInfo setsueTime(Instant issueTime) {
+        public void setsueTime(Instant issueTime) {
             this.issueTime = issueTime;
-            return this;
-        }
+    }
 
         /**
          * Sets the hosting infrastructure type.
          *
          * @param hostStorage the {@link HostStorageType} to set
-         * @return this instance for chaining
          */
-        public AccountLinkInfo setHostStorage(HostStorageType hostStorage) {
+        public void setHostStorage(HostStorageType hostStorage) {
             this.hostStorage = hostStorage;
-            return this;
-        }
+    }
 
         /**
          * Sets the business account type.
          *
          * @param accountType the {@link AccountType} to set
-         * @return this instance for chaining
          */
-        public AccountLinkInfo setAccountType(AccountType accountType) {
+        public void setAccountType(AccountType accountType) {
             this.accountType = accountType;
-            return this;
-        }
+    }
 
         /**
          * The type of WhatsApp Business account.

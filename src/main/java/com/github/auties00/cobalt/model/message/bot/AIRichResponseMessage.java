@@ -1,11 +1,16 @@
-package com.github.auties00.cobalt.model.bot.response;
+package com.github.auties00.cobalt.model.message.bot;
 
+import com.github.auties00.cobalt.model.bot.response.AIRichResponseMessageType;
+import com.github.auties00.cobalt.model.bot.response.AIRichResponseSubMessage;
+import com.github.auties00.cobalt.model.bot.response.AIRichResponseUnifiedResponse;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
+import com.github.auties00.cobalt.model.message.context.ContextualMessage;
+import it.auties.protobuf.annotation.ProtobufMessage;
+import it.auties.protobuf.annotation.ProtobufProperty;
+import it.auties.protobuf.model.ProtobufType;
 
 import java.util.Collections;
 import java.util.List;
-import it.auties.protobuf.annotation.*;
-import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 /**
@@ -25,7 +30,7 @@ import java.util.Optional;
  * {@code Message} protobuf.
  */
 @ProtobufMessage(name = "AIRichResponseMessage")
-public final class AIRichResponseMessage {
+public final class AIRichResponseMessage implements ContextualMessage {
     /**
      * The overall type of this rich response.
      */
@@ -35,9 +40,6 @@ public final class AIRichResponseMessage {
     /**
      * The ordered list of content fragments that compose this rich
      * response.
-     *
-     * <p>Clients iterate this list and render each fragment according
-     * to its {@linkplain AIRichResponseSubMessage#messageType() type}.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
     List<AIRichResponseSubMessage> submessages;
@@ -100,6 +102,7 @@ public final class AIRichResponseMessage {
      * @return an {@link Optional} containing the context info, or
      *         empty if not set
      */
+    @Override
     public Optional<ContextInfo> contextInfo() {
         return Optional.ofNullable(contextInfo);
     }
@@ -108,11 +111,9 @@ public final class AIRichResponseMessage {
      * Sets the overall type of this rich response.
      *
      * @param messageType the message type to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMessage setMessageType(AIRichResponseMessageType messageType) {
+    public void setMessageType(AIRichResponseMessageType messageType) {
         this.messageType = messageType;
-        return this;
     }
 
     /**
@@ -120,32 +121,27 @@ public final class AIRichResponseMessage {
      * rich response.
      *
      * @param submessages the sub-messages to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMessage setSubmessages(List<AIRichResponseSubMessage> submessages) {
+    public void setSubmessages(List<AIRichResponseSubMessage> submessages) {
         this.submessages = submessages;
-        return this;
     }
 
     /**
      * Sets the unified response payload.
      *
      * @param unifiedResponse the unified response to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMessage setUnifiedResponse(AIRichResponseUnifiedResponse unifiedResponse) {
+    public void setUnifiedResponse(AIRichResponseUnifiedResponse unifiedResponse) {
         this.unifiedResponse = unifiedResponse;
-        return this;
     }
 
     /**
      * Sets the context information for this message.
      *
      * @param contextInfo the context info to set
-     * @return this instance for chaining
      */
-    public AIRichResponseMessage setContextInfo(ContextInfo contextInfo) {
+    @Override
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

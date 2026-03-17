@@ -137,14 +137,14 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
             chat.setName(subject);
         }
 
-        chat.setCreatedAt(groupNode.getAttributeAsLong("creation", (Long) null))
-                .setCreatedBy(groupNode.getAttributeAsString("creator", null))
-                .setDescription(resolveDescriptionBody(groupNode))
-                .setSupport(groupNode.hasChild("support"))
-                .setDefaultSubgroup(groupNode.hasChild("default_sub_group"))
-                .setArchived(false)
-                .setSuspended(groupNode.hasChild("suspended"))
-                .setTerminated(false);
+        chat.setCreatedAt(groupNode.getAttributeAsLong("creation", (Long) null));
+        chat.setCreatedBy(groupNode.getAttributeAsString("creator", null));
+        chat.setDescription(resolveDescriptionBody(groupNode));
+        chat.setSupport(groupNode.hasChild("support"));
+        chat.setDefaultSubgroup(groupNode.hasChild("default_sub_group"));
+        chat.setArchived(false);
+        chat.setSuspended(groupNode.hasChild("suspended"));
+        chat.setTerminated(false);
 
         applyEphemeral(groupNode, chat, groupJid, groupNode);
 
@@ -431,11 +431,11 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
                 .ifPresent(relatedGroups::add);
     }
 
-    private ChatMetadata<?> currentMetadata(Jid groupJid) {
+    private ChatMetadata currentMetadata(Jid groupJid) {
         return whatsapp.store().findChatMetadata(groupJid).orElse(null);
     }
 
-    private void setSubject(ChatMetadata<?> metadata, String subject) {
+    private void setSubject(ChatMetadata metadata, String subject) {
         if (subject == null) {
             return;
         }
@@ -447,7 +447,7 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
         }
     }
 
-    private void setSubjectTimestamp(ChatMetadata<?> metadata, Instant timestamp, Jid author) {
+    private void setSubjectTimestamp(ChatMetadata metadata, Instant timestamp, Jid author) {
         if (metadata instanceof GroupMetadata groupMetadata) {
             groupMetadata.setSubjectTimestamp(timestamp);
             groupMetadata.setSubjectAuthorJid(author);
@@ -457,7 +457,7 @@ public final class NotificationGroupStreamHandler implements SocketStream.Handle
         }
     }
 
-    private void setDescription(ChatMetadata<?> metadata, String description, String id, Instant timestamp, Jid author) {
+    private void setDescription(ChatMetadata metadata, String description, String id, Instant timestamp, Jid author) {
         if (metadata instanceof GroupMetadata groupMetadata) {
             groupMetadata.setDescription(description);
             groupMetadata.setDescriptionId(id);

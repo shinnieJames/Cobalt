@@ -53,8 +53,7 @@ public final class PrivacySettingRelayAllCalls implements SyncAction<SyncActionE
         return isEnabled != null && isEnabled;
     }
 
-    public PrivacySettingRelayAllCalls setEnabled(Boolean isEnabled) {
+    public void setEnabled(Boolean isEnabled) {
         this.isEnabled = isEnabled;
-        return this;
     }
 }

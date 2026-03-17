@@ -56,7 +56,7 @@ import java.util.*;
  * @see ChatMetadata
  */
 @ProtobufMessage
-public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
+public final class GroupMetadata implements ChatMetadata {
     /**
      * The JID that uniquely identifies this group. In the WhatsApp Web client
      * this corresponds to the {@code id} property of the
@@ -602,11 +602,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the JID that identifies this group.
      *
      * @param jid the group JID
-     * @return this instance for method chaining
      */
-    public GroupMetadata setJid(Jid jid) {
+    public void setJid(Jid jid) {
         this.jid = jid;
-        return this;
     }
 
     /**
@@ -621,11 +619,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the subject (display name) of this group.
      *
      * @param subject the subject text
-     * @return this instance for method chaining
      */
-    public GroupMetadata setSubject(String subject) {
+    public void setSubject(String subject) {
         this.subject = subject;
-        return this;
     }
 
     /**
@@ -640,11 +636,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the JID of the participant who last changed the subject.
      *
      * @param subjectAuthorJid the author JID, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setSubjectAuthorJid(Jid subjectAuthorJid) {
+    public void setSubjectAuthorJid(Jid subjectAuthorJid) {
         this.subjectAuthorJid = subjectAuthorJid;
-        return this;
     }
 
     /**
@@ -660,11 +654,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param subjectTimestamp the subject change instant, or {@code null}
      *                        to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setSubjectTimestamp(Instant subjectTimestamp) {
+    public void setSubjectTimestamp(Instant subjectTimestamp) {
         this.subjectTimestamp = subjectTimestamp;
-        return this;
     }
 
     /**
@@ -680,11 +672,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param foundationTimestamp the creation instant, or {@code null} to
      *                           clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setFoundationTimestamp(Instant foundationTimestamp) {
+    public void setFoundationTimestamp(Instant foundationTimestamp) {
         this.foundationTimestamp = foundationTimestamp;
-        return this;
     }
 
     /**
@@ -699,11 +689,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the JID of the user who originally created this group.
      *
      * @param founderJid the founder JID, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setFounderJid(Jid founderJid) {
+    public void setFounderJid(Jid founderJid) {
         this.founderJid = founderJid;
-        return this;
     }
 
     /**
@@ -718,11 +706,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the free-form description text of this group.
      *
      * @param description the description text, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
     /**
@@ -738,11 +724,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param descriptionId the description identifier, or {@code null} to
      *                      clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDescriptionId(String descriptionId) {
+    public void setDescriptionId(String descriptionId) {
         this.descriptionId = descriptionId;
-        return this;
     }
 
     /**
@@ -761,11 +745,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param descriptionTimestamp the description change instant, or
      *                            {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDescriptionTimestamp(Instant descriptionTimestamp) {
+    public void setDescriptionTimestamp(Instant descriptionTimestamp) {
         this.descriptionTimestamp = descriptionTimestamp;
-        return this;
     }
 
     /**
@@ -783,11 +765,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the JID of the participant who last changed the description.
      *
      * @param descriptionAuthorJid the author JID, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDescriptionAuthorJid(Jid descriptionAuthorJid) {
+    public void setDescriptionAuthorJid(Jid descriptionAuthorJid) {
         this.descriptionAuthorJid = descriptionAuthorJid;
-        return this;
     }
 
     /**
@@ -828,9 +808,8 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * {@inheritDoc}
      */
     @Override
-    public GroupMetadata clearParticipants() {
+    public void clearParticipants() {
         participants.clear();
-        return this;
     }
 
     /**
@@ -854,12 +833,10 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param ephemeralExpiration the ephemeral timer to set, or {@code null}
      *        to disable ephemeral messaging
-     * @return this instance for method chaining
      */
     @Override
-    public GroupMetadata setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration) {
+    public void setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration) {
         this.ephemeralExpiration = ephemeralExpiration;
-        return this;
     }
 
     /**
@@ -882,11 +859,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the policy that determines who can edit the group's metadata.
      *
      * @param policy the non-{@code null} policy to set
-     * @return this instance for method chaining
      */
-    public GroupMetadata setRestrict(ChatPolicy policy) {
+    public void setRestrict(ChatPolicy policy) {
         this.restrict = policy == ChatPolicy.ADMINS;
-        return this;
     }
 
     /**
@@ -909,11 +884,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the policy that determines who can send messages in this group.
      *
      * @param policy the non-{@code null} policy to set
-     * @return this instance for method chaining
      */
-    public GroupMetadata setAnnounce(ChatPolicy policy) {
+    public void setAnnounce(ChatPolicy policy) {
         this.announce = policy == ChatPolicy.ADMINS;
-        return this;
     }
 
     /**
@@ -932,11 +905,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param parentCommunityJid the parent community JID, or {@code null}
      *                           to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setParentCommunityJid(Jid parentCommunityJid) {
+    public void setParentCommunityJid(Jid parentCommunityJid) {
         this.parentCommunityJid = parentCommunityJid;
-        return this;
     }
 
     /**
@@ -951,9 +922,8 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * {@inheritDoc}
      */
     @Override
-    public GroupMetadata setLidAddressingMode(boolean lidAddressingMode) {
+    public void setLidAddressingMode(boolean lidAddressingMode) {
         this.isLidAddressingMode = lidAddressingMode;
-        return this;
     }
 
     /**
@@ -969,11 +939,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param incognito {@code true} to enable incognito mode, {@code false}
      *                  to disable it
-     * @return this instance for method chaining
      */
-    public GroupMetadata setIncognito(boolean incognito) {
+    public void setIncognito(boolean incognito) {
         this.isIncognito = incognito;
-        return this;
     }
 
     /**
@@ -989,11 +957,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether frequently forwarded messages are blocked.
      *
      * @param noFrequentlyForwarded {@code true} to block forwarded messages
-     * @return this instance for method chaining
      */
-    public GroupMetadata setNoFrequentlyForwarded(boolean noFrequentlyForwarded) {
+    public void setNoFrequentlyForwarded(boolean noFrequentlyForwarded) {
         this.noFrequentlyForwarded = noFrequentlyForwarded;
-        return this;
     }
 
     /**
@@ -1017,11 +983,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * new members.
      *
      * @param policy the non-{@code null} policy to set
-     * @return this instance for method chaining
      */
-    public GroupMetadata setMembershipApprovalMode(ChatPolicy policy) {
+    public void setMembershipApprovalMode(ChatPolicy policy) {
         this.membershipApprovalMode = policy == ChatPolicy.ADMINS;
-        return this;
     }
 
     /**
@@ -1045,11 +1009,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * link.
      *
      * @param policy the non-{@code null} policy to set
-     * @return this instance for method chaining
      */
-    public GroupMetadata setMemberLinkMode(ChatPolicy policy) {
+    public void setMemberLinkMode(ChatPolicy policy) {
         this.memberLinkModeAdminOnly = policy == ChatPolicy.ADMINS;
-        return this;
     }
 
     /**
@@ -1072,11 +1034,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the policy that determines who can add new members to this group.
      *
      * @param policy the non-{@code null} policy to set
-     * @return this instance for method chaining
      */
-    public GroupMetadata setMemberAddMode(ChatPolicy policy) {
+    public void setMemberAddMode(ChatPolicy policy) {
         this.memberAddModeAdminOnly = policy == ChatPolicy.ADMINS;
-        return this;
     }
 
     /**
@@ -1094,11 +1054,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param growthLockExpiration the expiration instant, or {@code null}
      *                            to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setGrowthLockExpiration(Instant growthLockExpiration) {
+    public void setGrowthLockExpiration(Instant growthLockExpiration) {
         this.growthLockExpiration = growthLockExpiration;
-        return this;
     }
 
     /**
@@ -1115,11 +1073,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the type of growth lock applied to this group.
      *
      * @param growthLockType the growth lock type, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setGrowthLockType(String growthLockType) {
+    public void setGrowthLockType(String growthLockType) {
         this.growthLockType = growthLockType;
-        return this;
     }
 
     /**
@@ -1135,11 +1091,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether the report-to-admin feature is enabled.
      *
      * @param reportToAdminMode {@code true} to enable
-     * @return this instance for method chaining
      */
-    public GroupMetadata setReportToAdminMode(boolean reportToAdminMode) {
+    public void setReportToAdminMode(boolean reportToAdminMode) {
         this.reportToAdminMode = reportToAdminMode;
-        return this;
     }
 
     /**
@@ -1157,11 +1111,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param lastReportToAdminTimestamp the timestamp, or {@code null} to
      *                                  clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setLastReportToAdminTimestamp(Instant lastReportToAdminTimestamp) {
+    public void setLastReportToAdminTimestamp(Instant lastReportToAdminTimestamp) {
         this.lastReportToAdminTimestamp = lastReportToAdminTimestamp;
-        return this;
     }
 
     /**
@@ -1178,11 +1130,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the server-reported participant count.
      *
      * @param size the participant count, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setSize(Integer size) {
+    public void setSize(Integer size) {
         this.size = size;
-        return this;
     }
 
     /**
@@ -1198,11 +1148,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this is a support group.
      *
      * @param support {@code true} to mark as support
-     * @return this instance for method chaining
      */
-    public GroupMetadata setSupport(boolean support) {
+    public void setSupport(boolean support) {
         this.support = support;
-        return this;
     }
 
     /**
@@ -1218,11 +1166,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group is suspended.
      *
      * @param suspended {@code true} to mark as suspended
-     * @return this instance for method chaining
      */
-    public GroupMetadata setSuspended(boolean suspended) {
+    public void setSuspended(boolean suspended) {
         this.suspended = suspended;
-        return this;
     }
 
     /**
@@ -1238,11 +1184,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group is terminated.
      *
      * @param terminated {@code true} to mark as terminated
-     * @return this instance for method chaining
      */
-    public GroupMetadata setTerminated(boolean terminated) {
+    public void setTerminated(boolean terminated) {
         this.terminated = terminated;
-        return this;
     }
 
     /**
@@ -1259,11 +1203,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group is the default subgroup of a community.
      *
      * @param defaultSubgroup {@code true} if this is a default subgroup
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDefaultSubgroup(boolean defaultSubgroup) {
+    public void setDefaultSubgroup(boolean defaultSubgroup) {
         this.defaultSubgroup = defaultSubgroup;
-        return this;
     }
 
     /**
@@ -1280,11 +1222,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group is the general chat subgroup of a community.
      *
      * @param generalSubgroup {@code true} if this is a general subgroup
-     * @return this instance for method chaining
      */
-    public GroupMetadata setGeneralSubgroup(boolean generalSubgroup) {
+    public void setGeneralSubgroup(boolean generalSubgroup) {
         this.generalSubgroup = generalSubgroup;
-        return this;
     }
 
     /**
@@ -1300,11 +1240,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group is a hidden subgroup within a community.
      *
      * @param hiddenSubgroup {@code true} if this is a hidden subgroup
-     * @return this instance for method chaining
      */
-    public GroupMetadata setHiddenSubgroup(boolean hiddenSubgroup) {
+    public void setHiddenSubgroup(boolean hiddenSubgroup) {
         this.hiddenSubgroup = hiddenSubgroup;
-        return this;
     }
 
     /**
@@ -1320,11 +1258,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the group safety check flag.
      *
      * @param groupSafetyCheck {@code true} to set the flag
-     * @return this instance for method chaining
      */
-    public GroupMetadata setGroupSafetyCheck(boolean groupSafetyCheck) {
+    public void setGroupSafetyCheck(boolean groupSafetyCheck) {
         this.groupSafetyCheck = groupSafetyCheck;
-        return this;
     }
 
     /**
@@ -1342,11 +1278,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the JID of the user who added the current user to this group.
      *
      * @param groupAdder the adder JID, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setGroupAdder(Jid groupAdder) {
+    public void setGroupAdder(Jid groupAdder) {
         this.groupAdder = groupAdder;
-        return this;
     }
 
     /**
@@ -1362,11 +1296,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether auto-add to general chat is disabled.
      *
      * @param generalChatAutoAddDisabled {@code true} to disable auto-add
-     * @return this instance for method chaining
      */
-    public GroupMetadata setGeneralChatAutoAddDisabled(boolean generalChatAutoAddDisabled) {
+    public void setGeneralChatAutoAddDisabled(boolean generalChatAutoAddDisabled) {
         this.generalChatAutoAddDisabled = generalChatAutoAddDisabled;
-        return this;
     }
 
     /**
@@ -1383,11 +1315,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the instant of the last activity.
      *
      * @param lastActivityTimestamp the timestamp, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setLastActivityTimestamp(Instant lastActivityTimestamp) {
+    public void setLastActivityTimestamp(Instant lastActivityTimestamp) {
         this.lastActivityTimestamp = lastActivityTimestamp;
-        return this;
     }
 
     /**
@@ -1405,11 +1335,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param lastSeenActivityTimestamp the timestamp, or {@code null} to
      *                                 clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setLastSeenActivityTimestamp(Instant lastSeenActivityTimestamp) {
+    public void setLastSeenActivityTimestamp(Instant lastSeenActivityTimestamp) {
         this.lastSeenActivityTimestamp = lastSeenActivityTimestamp;
-        return this;
     }
 
     /**
@@ -1425,11 +1353,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group has CAPI capabilities.
      *
      * @param hasCapi {@code true} to enable
-     * @return this instance for method chaining
      */
-    public GroupMetadata setHasCapi(boolean hasCapi) {
+    public void setHasCapi(boolean hasCapi) {
         this.hasCapi = hasCapi;
-        return this;
     }
 
     /**
@@ -1445,11 +1371,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether this group is a TEE bot group.
      *
      * @param teeBotGroup {@code true} to mark as TEE bot group
-     * @return this instance for method chaining
      */
-    public GroupMetadata setTeeBotGroup(boolean teeBotGroup) {
+    public void setTeeBotGroup(boolean teeBotGroup) {
         this.isTeeBotGroup = teeBotGroup;
-        return this;
     }
 
     /**
@@ -1467,11 +1391,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the trigger that caused disappearing message mode.
      *
      * @param disappearingModeTrigger the trigger, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDisappearingModeTrigger(ChatDisappearingMode.Trigger disappearingModeTrigger) {
+    public void setDisappearingModeTrigger(ChatDisappearingMode.Trigger disappearingModeTrigger) {
         this.disappearingModeTrigger = disappearingModeTrigger;
-        return this;
     }
 
     /**
@@ -1489,11 +1411,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      *
      * @param disappearingModeInitiatedByMe {@code true} if initiated by
      *                                      current user
-     * @return this instance for method chaining
      */
-    public GroupMetadata setDisappearingModeInitiatedByMe(boolean disappearingModeInitiatedByMe) {
+    public void setDisappearingModeInitiatedByMe(boolean disappearingModeInitiatedByMe) {
         this.disappearingModeInitiatedByMe = disappearingModeInitiatedByMe;
-        return this;
     }
 
     /**
@@ -1509,11 +1429,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether the limit sharing feature is enabled.
      *
      * @param limitSharingEnabled {@code true} to enable
-     * @return this instance for method chaining
      */
-    public GroupMetadata setLimitSharingEnabled(boolean limitSharingEnabled) {
+    public void setLimitSharingEnabled(boolean limitSharingEnabled) {
         this.limitSharingEnabled = limitSharingEnabled;
-        return this;
     }
 
     /**
@@ -1530,11 +1448,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets the group evolution version.
      *
      * @param evolutionVersion the version, or {@code null} to clear
-     * @return this instance for method chaining
      */
-    public GroupMetadata setEvolutionVersion(Integer evolutionVersion) {
+    public void setEvolutionVersion(Integer evolutionVersion) {
         this.evolutionVersion = evolutionVersion;
-        return this;
     }
 
     /**
@@ -1550,11 +1466,9 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * Sets whether participant labels are enabled.
      *
      * @param participantLabelEnabled {@code true} to enable
-     * @return this instance for method chaining
      */
-    public GroupMetadata setParticipantLabelEnabled(boolean participantLabelEnabled) {
+    public void setParticipantLabelEnabled(boolean participantLabelEnabled) {
         this.participantLabelEnabled = participantLabelEnabled;
-        return this;
     }
 
     /**
@@ -1569,9 +1483,8 @@ public final class GroupMetadata implements ChatMetadata<GroupMetadata> {
      * {@inheritDoc}
      */
     @Override
-    public GroupMetadata setOpenBotGroup(boolean openBotGroup) {
+    public void setOpenBotGroup(boolean openBotGroup) {
         this.isOpenBotGroup = openBotGroup;
-        return this;
     }
 
     @Override

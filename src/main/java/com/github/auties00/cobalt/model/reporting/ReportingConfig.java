@@ -30,13 +30,11 @@ public final class ReportingConfig {
         return version == null ? OptionalInt.empty() : OptionalInt.of(version);
     }
 
-    public ReportingConfig setField(Map<Integer, ReportingField> field) {
+    public void setField(Map<Integer, ReportingField> field) {
         this.field = field;
-        return this;
     }
 
-    public ReportingConfig setVersion(Integer version) {
+    public void setVersion(Integer version) {
         this.version = version;
-        return this;
     }
 }

@@ -92,10 +92,15 @@ public final class ReportingStanza {
         //  HMAC verification to fail.
         var serializedProto = MessageContainerSpec.encode(messageInfo.message());
 
+        var id = messageInfo.key().id();
+        if(id.isEmpty()) {
+            return null;
+        }
+
         try {
             var reportingToken = ReportingToken.generate(
                     messageSecret,
-                    messageInfo.key().id(),
+                    id.get(),
                     selfJid.toUserJid(),
                     remoteJid.toUserJid(),
                     serializedProto,
@@ -129,7 +134,7 @@ public final class ReportingStanza {
      */
     private static boolean isMsgTypeCompatible(Message message) {
         return switch (message) {
-            case ReactionMessage _, PollUpdateMessage _, EncryptedReactionMessage _, EncryptedEventResponseMessage _ -> false;
+            case ReactionMessage _, PollUpdateMessage _, EncReactionMessage _, EncEventResponseMessage _ -> false;
             case null, default -> true;
         };
     }

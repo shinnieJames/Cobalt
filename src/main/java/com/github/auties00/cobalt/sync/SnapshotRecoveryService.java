@@ -1,10 +1,12 @@
 package com.github.auties00.cobalt.sync;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
@@ -20,9 +22,9 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -195,18 +197,17 @@ public final class SnapshotRecoveryService {
      *
      * @param response the recovery response
      * @return the decoded snapshot recovery
-     * @throws IOException if decompression or decoding fails
      */
     public SyncdSnapshotRecovery decodeRecoverySnapshot(
             PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse response
-    ) throws IOException {
+    ) {
         var snapshotBytes = response.collectionSnapshot()
-                .orElseThrow(() -> new IOException("Recovery response has no snapshot data"));
+                .orElseThrow(() -> new NoSuchElementException("Missing snapshot"));;
         if (response.isCompressed()) {
             try (var protobufStream = ProtobufInputStream.fromStream(new GZIPInputStream(new ByteArrayInputStream(snapshotBytes)))) {
                 return SyncdSnapshotRecoverySpec.decode(protobufStream);
             } catch (Exception e) {
-                throw new IOException(e);
+                throw new WhatsAppWebAppStateSyncException.ExternalDecodeFailed(e);
             }
         } else {
             return SyncdSnapshotRecoverySpec.decode(snapshotBytes);
@@ -248,8 +249,8 @@ public final class SnapshotRecoveryService {
         }
 
         var messageKey = new MessageKeyBuilder()
-                .id(MessageKey.randomId(client.store().clientType()))
-                .chatJid(self)
+                .id(MessageIdGenerator.generate(MessageIdVersion.V2, self))
+                .parentJid(self)
                 .fromMe(true)
                 .senderJid(self)
                 .build();

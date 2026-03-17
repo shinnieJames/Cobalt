@@ -70,11 +70,9 @@ public final class NewsletterViewerMetadata {
      * Sets whether the viewer has muted the newsletter.
      *
      * @param mute {@code true} to mute the newsletter
-     * @return this instance for chaining
      */
-    public NewsletterViewerMetadata setMute(boolean mute) {
+    public void setMute(boolean mute) {
         this.mute = mute;
-        return this;
     }
 
     /**
@@ -82,22 +80,18 @@ public final class NewsletterViewerMetadata {
      *
      * @param role the viewer role, defaults to {@link NewsletterViewerRole#UNKNOWN}
      *             if {@code null}
-     * @return this instance for chaining
      */
-    public NewsletterViewerMetadata setRole(NewsletterViewerRole role) {
+    public void setRole(NewsletterViewerRole role) {
         this.role = Objects.requireNonNullElse(role, NewsletterViewerRole.UNKNOWN);
-        return this;
     }
 
     /**
      * Sets the viewer's WAMO subscription status.
      *
      * @param wamoSubStatus the WAMO sub status
-     * @return this instance for chaining
      */
-    public NewsletterViewerMetadata setWamoSubStatus(NewsletterWamoSubStatus wamoSubStatus) {
+    public void setWamoSubStatus(NewsletterWamoSubStatus wamoSubStatus) {
         this.wamoSubStatus = wamoSubStatus;
-        return this;
     }
 
     @Override

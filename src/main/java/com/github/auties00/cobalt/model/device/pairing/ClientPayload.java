@@ -286,174 +286,140 @@ public final class ClientPayload {
         return processingQueueSize == null ? OptionalInt.empty() : OptionalInt.of(processingQueueSize);
     }
 
-    public ClientPayload setUsername(Long username) {
+    public void setUsername(Long username) {
         this.username = username;
-        return this;
     }
 
-    public ClientPayload setPassive(Boolean passive) {
+    public void setPassive(Boolean passive) {
         this.passive = passive;
-        return this;
     }
 
-    public ClientPayload setUserAgent(UserAgent userAgent) {
+    public void setUserAgent(UserAgent userAgent) {
         this.userAgent = userAgent;
-        return this;
     }
 
-    public ClientPayload setWebInfo(WebInfo webInfo) {
+    public void setWebInfo(WebInfo webInfo) {
         this.webInfo = webInfo;
-        return this;
     }
 
-    public ClientPayload setPushName(String pushName) {
+    public void setPushName(String pushName) {
         this.pushName = pushName;
-        return this;
     }
 
-    public ClientPayload setSessionId(Integer sessionId) {
+    public void setSessionId(Integer sessionId) {
         this.sessionId = sessionId;
-        return this;
     }
 
-    public ClientPayload setShortConnect(Boolean shortConnect) {
+    public void setShortConnect(Boolean shortConnect) {
         this.shortConnect = shortConnect;
-        return this;
     }
 
-    public ClientPayload setConnectType(ConnectType connectType) {
+    public void setConnectType(ConnectType connectType) {
         this.connectType = connectType;
-        return this;
     }
 
-    public ClientPayload setConnectReason(ConnectReason connectReason) {
+    public void setConnectReason(ConnectReason connectReason) {
         this.connectReason = connectReason;
-        return this;
     }
 
-    public ClientPayload setShards(List<Integer> shards) {
+    public void setShards(List<Integer> shards) {
         this.shards = shards;
-        return this;
     }
 
-    public ClientPayload setDnsSource(DNSSource dnsSource) {
+    public void setDnsSource(DNSSource dnsSource) {
         this.dnsSource = dnsSource;
-        return this;
     }
 
-    public ClientPayload setConnectAttemptCount(Integer connectAttemptCount) {
+    public void setConnectAttemptCount(Integer connectAttemptCount) {
         this.connectAttemptCount = connectAttemptCount;
-        return this;
     }
 
-    public ClientPayload setDevice(Integer device) {
+    public void setDevice(Integer device) {
         this.device = device;
-        return this;
     }
 
-    public ClientPayload setDevicePairingData(DevicePairingRegistrationData devicePairingData) {
+    public void setDevicePairingData(DevicePairingRegistrationData devicePairingData) {
         this.devicePairingData = devicePairingData;
-        return this;
     }
 
-    public ClientPayload setProduct(Product product) {
+    public void setProduct(Product product) {
         this.product = product;
-        return this;
     }
 
-    public ClientPayload setFbCat(byte[] fbCat) {
+    public void setFbCat(byte[] fbCat) {
         this.fbCat = fbCat;
-        return this;
     }
 
-    public ClientPayload setFbUserAgent(byte[] fbUserAgent) {
+    public void setFbUserAgent(byte[] fbUserAgent) {
         this.fbUserAgent = fbUserAgent;
-        return this;
     }
 
-    public ClientPayload setOc(Boolean oc) {
+    public void setOc(Boolean oc) {
         this.oc = oc;
-        return this;
     }
 
-    public ClientPayload setLc(Integer lc) {
+    public void setLc(Integer lc) {
         this.lc = lc;
-        return this;
     }
 
-    public ClientPayload setIosAppExtension(IOSAppExtension iosAppExtension) {
+    public void setIosAppExtension(IOSAppExtension iosAppExtension) {
         this.iosAppExtension = iosAppExtension;
-        return this;
     }
 
-    public ClientPayload setFbAppId(Long fbAppId) {
+    public void setFbAppId(Long fbAppId) {
         this.fbAppId = fbAppId;
-        return this;
     }
 
-    public ClientPayload setFbDeviceId(byte[] fbDeviceId) {
+    public void setFbDeviceId(byte[] fbDeviceId) {
         this.fbDeviceId = fbDeviceId;
-        return this;
     }
 
-    public ClientPayload setPull(Boolean pull) {
+    public void setPull(Boolean pull) {
         this.pull = pull;
-        return this;
     }
 
-    public ClientPayload setPaddingBytes(byte[] paddingBytes) {
+    public void setPaddingBytes(byte[] paddingBytes) {
         this.paddingBytes = paddingBytes;
-        return this;
     }
 
-    public ClientPayload setYearClass(Integer yearClass) {
+    public void setYearClass(Integer yearClass) {
         this.yearClass = yearClass;
-        return this;
     }
 
-    public ClientPayload setMemClass(Integer memClass) {
+    public void setMemClass(Integer memClass) {
         this.memClass = memClass;
-        return this;
     }
 
-    public ClientPayload setInteropData(InteropData interopData) {
+    public void setInteropData(InteropData interopData) {
         this.interopData = interopData;
-        return this;
     }
 
-    public ClientPayload setTrafficAnonymization(TrafficAnonymization trafficAnonymization) {
+    public void setTrafficAnonymization(TrafficAnonymization trafficAnonymization) {
         this.trafficAnonymization = trafficAnonymization;
-        return this;
     }
 
-    public ClientPayload setLidDbMigrated(Boolean lidDbMigrated) {
+    public void setLidDbMigrated(Boolean lidDbMigrated) {
         this.lidDbMigrated = lidDbMigrated;
-        return this;
     }
 
-    public ClientPayload setAccountType(AccountType accountType) {
+    public void setAccountType(AccountType accountType) {
         this.accountType = accountType;
-        return this;
     }
 
-    public ClientPayload setConnectionSequenceInfo(Integer connectionSequenceInfo) {
+    public void setConnectionSequenceInfo(Integer connectionSequenceInfo) {
         this.connectionSequenceInfo = connectionSequenceInfo;
-        return this;
     }
 
-    public ClientPayload setPaaLink(Boolean paaLink) {
+    public void setPaaLink(Boolean paaLink) {
         this.paaLink = paaLink;
-        return this;
     }
 
-    public ClientPayload setPreacksCount(Integer preacksCount) {
+    public void setPreacksCount(Integer preacksCount) {
         this.preacksCount = preacksCount;
-        return this;
     }
 
-    public ClientPayload setProcessingQueueSize(Integer processingQueueSize) {
+    public void setProcessingQueueSize(Integer processingQueueSize) {
         this.processingQueueSize = processingQueueSize;
-        return this;
     }
 
     @ProtobufEnum(name = "ClientPayload.AccountType")
@@ -633,15 +599,13 @@ public final class ClientPayload {
             return appCached != null && appCached;
         }
 
-        public DNSSource setDnsMethod(DNSResolutionMethod dnsMethod) {
+        public void setDnsMethod(DNSResolutionMethod dnsMethod) {
             this.dnsMethod = dnsMethod;
-            return this;
-        }
+    }
 
-        public DNSSource setAppCached(Boolean appCached) {
+        public void setAppCached(Boolean appCached) {
             this.appCached = appCached;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ClientPayload.DNSSource.DNSResolutionMethod")
         public static enum DNSResolutionMethod {
@@ -736,45 +700,37 @@ public final class ClientPayload {
             return Optional.ofNullable(deviceProps);
         }
 
-        public DevicePairingRegistrationData setERegid(byte[] eRegid) {
+        public void setERegid(byte[] eRegid) {
             this.eRegid = eRegid;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setEKeytype(byte[] eKeytype) {
+        public void setEKeytype(byte[] eKeytype) {
             this.eKeytype = eKeytype;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setEIdent(byte[] eIdent) {
+        public void setEIdent(byte[] eIdent) {
             this.eIdent = eIdent;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setESkeyId(byte[] eSkeyId) {
+        public void setESkeyId(byte[] eSkeyId) {
             this.eSkeyId = eSkeyId;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setESkeyVal(byte[] eSkeyVal) {
+        public void setESkeyVal(byte[] eSkeyVal) {
             this.eSkeyVal = eSkeyVal;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setESkeySig(byte[] eSkeySig) {
+        public void setESkeySig(byte[] eSkeySig) {
             this.eSkeySig = eSkeySig;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setBuildHash(byte[] buildHash) {
+        public void setBuildHash(byte[] buildHash) {
             this.buildHash = buildHash;
-            return this;
-        }
+    }
 
-        public DevicePairingRegistrationData setDeviceProps(byte[] deviceProps) {
+        public void setDeviceProps(byte[] deviceProps) {
             this.deviceProps = deviceProps;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "ClientPayload.InteropData")
@@ -807,20 +763,17 @@ public final class ClientPayload {
             return enableReadReceipts != null && enableReadReceipts;
         }
 
-        public InteropData setAccountId(Long accountId) {
+        public void setAccountId(Long accountId) {
             this.accountId = accountId;
-            return this;
-        }
+    }
 
-        public InteropData setToken(byte[] token) {
+        public void setToken(byte[] token) {
             this.token = token;
-            return this;
-        }
+    }
 
-        public InteropData setEnableReadReceipts(Boolean enableReadReceipts) {
+        public void setEnableReadReceipts(Boolean enableReadReceipts) {
             this.enableReadReceipts = enableReadReceipts;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "ClientPayload.UserAgent")
@@ -957,85 +910,69 @@ public final class ClientPayload {
             return Optional.ofNullable(deviceModelType);
         }
 
-        public UserAgent setPlatform(ClientPlatformType platform) {
+        public void setPlatform(ClientPlatformType platform) {
             this.platform = platform;
-            return this;
-        }
+    }
 
-        public UserAgent setAppVersion(ClientAppVersion appVersion) {
+        public void setAppVersion(ClientAppVersion appVersion) {
             this.appVersion = appVersion;
-            return this;
-        }
+    }
 
-        public UserAgent setMcc(String mcc) {
+        public void setMcc(String mcc) {
             this.mcc = mcc;
-            return this;
-        }
+    }
 
-        public UserAgent setMnc(String mnc) {
+        public void setMnc(String mnc) {
             this.mnc = mnc;
-            return this;
-        }
+    }
 
-        public UserAgent setOsVersion(String osVersion) {
+        public void setOsVersion(String osVersion) {
             this.osVersion = osVersion;
-            return this;
-        }
+    }
 
-        public UserAgent setManufacturer(String manufacturer) {
+        public void setManufacturer(String manufacturer) {
             this.manufacturer = manufacturer;
-            return this;
-        }
+    }
 
-        public UserAgent setDevice(String device) {
+        public void setDevice(String device) {
             this.device = device;
-            return this;
-        }
+    }
 
-        public UserAgent setOsBuildNumber(String osBuildNumber) {
+        public void setOsBuildNumber(String osBuildNumber) {
             this.osBuildNumber = osBuildNumber;
-            return this;
-        }
+    }
 
-        public UserAgent setPhoneId(String phoneId) {
+        public void setPhoneId(String phoneId) {
             this.phoneId = phoneId;
-            return this;
-        }
+    }
 
-        public UserAgent setReleaseChannel(ClientReleaseChannel releaseChannel) {
+        public void setReleaseChannel(ClientReleaseChannel releaseChannel) {
             this.releaseChannel = releaseChannel;
-            return this;
-        }
+    }
 
-        public UserAgent setLocaleLanguageIso6391(String localeLanguageIso6391) {
+        public void setLocaleLanguageIso6391(String localeLanguageIso6391) {
             this.localeLanguageIso6391 = localeLanguageIso6391;
-            return this;
-        }
+    }
 
-        public UserAgent setLocaleCountryIso31661Alpha2(String localeCountryIso31661Alpha2) {
+        public void setLocaleCountryIso31661Alpha2(String localeCountryIso31661Alpha2) {
             this.localeCountryIso31661Alpha2 = localeCountryIso31661Alpha2;
-            return this;
-        }
+    }
 
-        public UserAgent setDeviceBoard(String deviceBoard) {
+        public void setDeviceBoard(String deviceBoard) {
             this.deviceBoard = deviceBoard;
-            return this;
-        }
+    }
 
-        public UserAgent setDeviceExpId(String deviceExpId) {
+        public void setDeviceExpId(String deviceExpId) {
             this.deviceExpId = deviceExpId;
-            return this;
-        }
+    }
 
-        public UserAgent setDeviceType(ClientType deviceType) {
+        public void setDeviceType(ClientType deviceType) {
             this.deviceType = deviceType;
-            return this;
-        }
+    }
 
-        public UserAgent setDeviceModelType(String deviceModelType) {
+        public void setDeviceModelType(String deviceModelType) {
             this.deviceModelType = deviceModelType;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "ClientPayload.WebInfo")
@@ -1092,35 +1029,29 @@ public final class ClientPayload {
             return Optional.ofNullable(browserVersion);
         }
 
-        public WebInfo setRefToken(String refToken) {
+        public void setRefToken(String refToken) {
             this.refToken = refToken;
-            return this;
-        }
+    }
 
-        public WebInfo setVersion(String version) {
+        public void setVersion(String version) {
             this.version = version;
-            return this;
-        }
+    }
 
-        public WebInfo setWebdPayload(WebdPayload webdPayload) {
+        public void setWebdPayload(WebdPayload webdPayload) {
             this.webdPayload = webdPayload;
-            return this;
-        }
+    }
 
-        public WebInfo setWebSubPlatform(WebSubPlatform webSubPlatform) {
+        public void setWebSubPlatform(WebSubPlatform webSubPlatform) {
             this.webSubPlatform = webSubPlatform;
-            return this;
-        }
+    }
 
-        public WebInfo setBrowser(String browser) {
+        public void setBrowser(String browser) {
             this.browser = browser;
-            return this;
-        }
+    }
 
-        public WebInfo setBrowserVersion(String browserVersion) {
+        public void setBrowserVersion(String browserVersion) {
             this.browserVersion = browserVersion;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "ClientPayload.WebInfo.WebSubPlatform")
         public static enum WebSubPlatform {
@@ -1236,60 +1167,49 @@ public final class ClientPayload {
                 return Optional.ofNullable(features);
             }
 
-            public WebdPayload setUsesParticipantInKey(Boolean usesParticipantInKey) {
+            public void setUsesParticipantInKey(Boolean usesParticipantInKey) {
                 this.usesParticipantInKey = usesParticipantInKey;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsStarredMessages(Boolean supportsStarredMessages) {
+            public void setSupportsStarredMessages(Boolean supportsStarredMessages) {
                 this.supportsStarredMessages = supportsStarredMessages;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsDocumentMessages(Boolean supportsDocumentMessages) {
+            public void setSupportsDocumentMessages(Boolean supportsDocumentMessages) {
                 this.supportsDocumentMessages = supportsDocumentMessages;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsUrlMessages(Boolean supportsUrlMessages) {
+            public void setSupportsUrlMessages(Boolean supportsUrlMessages) {
                 this.supportsUrlMessages = supportsUrlMessages;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsMediaRetry(Boolean supportsMediaRetry) {
+            public void setSupportsMediaRetry(Boolean supportsMediaRetry) {
                 this.supportsMediaRetry = supportsMediaRetry;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsE2EImage(Boolean supportsE2EImage) {
+            public void setSupportsE2EImage(Boolean supportsE2EImage) {
                 this.supportsE2EImage = supportsE2EImage;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsE2EVideo(Boolean supportsE2EVideo) {
+            public void setSupportsE2EVideo(Boolean supportsE2EVideo) {
                 this.supportsE2EVideo = supportsE2EVideo;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsE2EAudio(Boolean supportsE2EAudio) {
+            public void setSupportsE2EAudio(Boolean supportsE2EAudio) {
                 this.supportsE2EAudio = supportsE2EAudio;
-                return this;
-            }
+    }
 
-            public WebdPayload setSupportsE2EDocument(Boolean supportsE2EDocument) {
+            public void setSupportsE2EDocument(Boolean supportsE2EDocument) {
                 this.supportsE2EDocument = supportsE2EDocument;
-                return this;
-            }
+    }
 
-            public WebdPayload setDocumentTypes(String documentTypes) {
+            public void setDocumentTypes(String documentTypes) {
                 this.documentTypes = documentTypes;
-                return this;
-            }
+    }
 
-            public WebdPayload setFeatures(byte[] features) {
+            public void setFeatures(byte[] features) {
                 this.features = features;
-                return this;
-            }
+    }
         }
     }
 }

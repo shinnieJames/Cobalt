@@ -88,33 +88,27 @@ public final class BusinessVerifiedNameCertificate {
      * Sets the serialized {@link Details} payload.
      *
      * @param details the details bytes to set
-     * @return this instance for chaining
      */
-    public BusinessVerifiedNameCertificate setDetails(byte[] details) {
+    public void setDetails(byte[] details) {
         this.details = details;
-        return this;
     }
 
     /**
      * Sets the client-side signature.
      *
      * @param signature the signature bytes to set
-     * @return this instance for chaining
      */
-    public BusinessVerifiedNameCertificate setSignature(byte[] signature) {
+    public void setSignature(byte[] signature) {
         this.signature = signature;
-        return this;
     }
 
     /**
      * Sets the server-side signature.
      *
      * @param serverSignature the server signature bytes to set
-     * @return this instance for chaining
      */
-    public BusinessVerifiedNameCertificate setServerSignature(byte[] serverSignature) {
+    public void setServerSignature(byte[] serverSignature) {
         this.serverSignature = serverSignature;
-        return this;
     }
 
     /**
@@ -224,56 +218,46 @@ public final class BusinessVerifiedNameCertificate {
          * Sets the serial number of this certificate.
          *
          * @param serial the serial number to set
-         * @return this instance for chaining
          */
-        public Details setSerial(Long serial) {
+        public void setSerial(Long serial) {
             this.serial = serial;
-            return this;
-        }
+    }
 
         /**
          * Sets the issuer of this certificate.
          *
          * @param issuer the {@link CertificateIssuer} to set
-         * @return this instance for chaining
          */
-        public Details setIssuer(CertificateIssuer issuer) {
+        public void setIssuer(CertificateIssuer issuer) {
             this.issuer = issuer;
-            return this;
-        }
+    }
 
         /**
          * Sets the primary verified business name.
          *
          * @param verifiedName the verified name to set
-         * @return this instance for chaining
          */
-        public Details setVerifiedName(String verifiedName) {
+        public void setVerifiedName(String verifiedName) {
             this.verifiedName = verifiedName;
-            return this;
-        }
+    }
 
         /**
          * Sets the localized name variants.
          *
          * @param localizedNames the list of {@link LocalizedName} entries to set
-         * @return this instance for chaining
          */
-        public Details setLocalizedNames(List<LocalizedName> localizedNames) {
+        public void setLocalizedNames(List<LocalizedName> localizedNames) {
             this.localizedNames = localizedNames;
-            return this;
-        }
+    }
 
         /**
          * Sets the instant at which this certificate was issued.
          *
          * @param issueTime the issue time to set
-         * @return this instance for chaining
          */
-        public Details setsueTime(Instant issueTime) {
+        public void setsueTime(Instant issueTime) {
             this.issueTime = issueTime;
-            return this;
-        }
+    }
     }
 
     /**
@@ -354,34 +338,28 @@ public final class BusinessVerifiedNameCertificate {
          * Sets the ISO 639-1 language code for this localized name.
          *
          * @param languageCode the language code to set (e.g. {@code "en"})
-         * @return this instance for chaining
          */
-        public LocalizedName setLanguageCode(String languageCode) {
+        public void setLanguageCode(String languageCode) {
             this.languageCode = languageCode;
-            return this;
-        }
+    }
 
         /**
          * Sets the ISO 3166-1 alpha-2 country code for this localized name.
          *
          * @param countryCode the country code to set (e.g. {@code "US"})
-         * @return this instance for chaining
          */
-        public LocalizedName setCountryCode(String countryCode) {
+        public void setCountryCode(String countryCode) {
             this.countryCode = countryCode;
-            return this;
-        }
+    }
 
         /**
          * Sets the verified business name in this locale.
          *
          * @param verifiedName the localized verified name to set
-         * @return this instance for chaining
          */
-        public LocalizedName setVerifiedName(String verifiedName) {
+        public void setVerifiedName(String verifiedName) {
             this.verifiedName = verifiedName;
-            return this;
-        }
+    }
     }
 
     /**

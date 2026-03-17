@@ -47,8 +47,7 @@ public final class StatusPostOptInNotificationPreferencesAction implements SyncA
         return enabled != null && enabled;
     }
 
-    public StatusPostOptInNotificationPreferencesAction setEnabled(Boolean enabled) {
+    public void setEnabled(Boolean enabled) {
         this.enabled = enabled;
-        return this;
     }
 }

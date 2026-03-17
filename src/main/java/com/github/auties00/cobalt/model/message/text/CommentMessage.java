@@ -30,13 +30,11 @@ public final class CommentMessage implements Message {
         return Optional.ofNullable(targetMessageKey);
     }
 
-    public CommentMessage setMessage(MessageContainer messageContainer) {
+    public void setMessage(MessageContainer messageContainer) {
         this.messageContainer = messageContainer;
-        return this;
     }
 
-    public CommentMessage setTargetMessageKey(MessageKey targetMessageKey) {
+    public void setTargetMessageKey(MessageKey targetMessageKey) {
         this.targetMessageKey = targetMessageKey;
-        return this;
     }
 }

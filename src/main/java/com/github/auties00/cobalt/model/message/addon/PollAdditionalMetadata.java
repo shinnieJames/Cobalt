@@ -18,8 +18,7 @@ public final class PollAdditionalMetadata {
         return pollInvalidated != null && pollInvalidated;
     }
 
-    public PollAdditionalMetadata setPollInvalidated(Boolean pollInvalidated) {
+    public void setPollInvalidated(Boolean pollInvalidated) {
         this.pollInvalidated = pollInvalidated;
-        return this;
     }
 }

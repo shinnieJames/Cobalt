@@ -178,88 +178,72 @@ public final class BusinessIdentityInfo {
      * Sets the verification level.
      *
      * @param verificationLevel the {@link VerificationLevel} to set
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setVerificationLevel(VerificationLevel verificationLevel) {
+    public void setVerificationLevel(VerificationLevel verificationLevel) {
         this.verificationLevel = verificationLevel;
-        return this;
     }
 
     /**
      * Sets the verified name certificate.
      *
      * @param verifiedNameCertificate the {@link BusinessVerifiedNameCertificate} to set
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setVerifiedNameCertificate(BusinessVerifiedNameCertificate verifiedNameCertificate) {
+    public void setVerifiedNameCertificate(BusinessVerifiedNameCertificate verifiedNameCertificate) {
         this.verifiedNameCertificate = verifiedNameCertificate;
-        return this;
     }
 
     /**
      * Sets whether this identity is cryptographically signed.
      *
      * @param signed {@code true} if signed
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setSigned(Boolean signed) {
+    public void setSigned(Boolean signed) {
         this.signed = signed;
-        return this;
     }
 
     /**
      * Sets whether this identity has been revoked.
      *
      * @param revoked {@code true} if revoked
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setRevoked(Boolean revoked) {
+    public void setRevoked(Boolean revoked) {
         this.revoked = revoked;
-        return this;
     }
 
     /**
      * Sets the hosting infrastructure type.
      *
      * @param hostStorage the {@link HostStorageType} to set
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setHostStorage(HostStorageType hostStorage) {
+    public void setHostStorage(HostStorageType hostStorage) {
         this.hostStorage = hostStorage;
-        return this;
     }
 
     /**
      * Sets the entity that processes messages on behalf of the business.
      *
      * @param actualActors the {@link ActualActorsType} to set
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setActualActors(ActualActorsType actualActors) {
+    public void setActualActors(ActualActorsType actualActors) {
         this.actualActors = actualActors;
-        return this;
     }
 
     /**
      * Sets the privacy mode change timestamp.
      *
      * @param privacyModeTimestamp the timestamp to set
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setPrivacyModeTimestamp(Instant privacyModeTimestamp) {
+    public void setPrivacyModeTimestamp(Instant privacyModeTimestamp) {
         this.privacyModeTimestamp = privacyModeTimestamp;
-        return this;
     }
 
     /**
      * Sets the feature control bitmask.
      *
      * @param featureControls the bitmask value to set
-     * @return this instance for chaining
      */
-    public BusinessIdentityInfo setFeatureControls(Long featureControls) {
+    public void setFeatureControls(Long featureControls) {
         this.featureControls = featureControls;
-        return this;
     }
 
     /**

@@ -19,8 +19,7 @@ public final class HistorySyncMessageAccessStatus implements Message {
         return completeAccessGranted != null && completeAccessGranted;
     }
 
-    public HistorySyncMessageAccessStatus setCompleteAccessGranted(Boolean completeAccessGranted) {
+    public void setCompleteAccessGranted(Boolean completeAccessGranted) {
         this.completeAccessGranted = completeAccessGranted;
-        return this;
     }
 }

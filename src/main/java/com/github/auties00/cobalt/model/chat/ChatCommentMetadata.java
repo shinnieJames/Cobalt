@@ -30,13 +30,11 @@ public final class ChatCommentMetadata {
         return replyCount == null ? OptionalInt.empty() : OptionalInt.of(replyCount);
     }
 
-    public ChatCommentMetadata setCommentParentKey(MessageKey commentParentKey) {
+    public void setCommentParentKey(MessageKey commentParentKey) {
         this.commentParentKey = commentParentKey;
-        return this;
     }
 
-    public ChatCommentMetadata setReplyCount(Integer replyCount) {
+    public void setReplyCount(Integer replyCount) {
         this.replyCount = replyCount;
-        return this;
     }
 }

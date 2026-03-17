@@ -60,11 +60,9 @@ public final class NewsletterReactionSettings {
      * Sets the reaction type policy.
      *
      * @param value the reaction type, defaults to {@link Type#UNKNOWN} if {@code null}
-     * @return this instance for chaining
      */
-    public NewsletterReactionSettings setValue(Type value) {
+    public void setValue(Type value) {
         this.value = Objects.requireNonNullElse(value, Type.UNKNOWN);
-        return this;
     }
 
     /**
@@ -80,11 +78,9 @@ public final class NewsletterReactionSettings {
      * Sets the list of blocked emoji codes.
      *
      * @param blockedCodes the blocked codes list
-     * @return this instance for chaining
      */
-    public NewsletterReactionSettings setBlockedCodes(List<String> blockedCodes) {
+    public void setBlockedCodes(List<String> blockedCodes) {
         this.blockedCodes = blockedCodes;
-        return this;
     }
 
     /**
@@ -101,11 +97,9 @@ public final class NewsletterReactionSettings {
      * Sets the timestamp when reactions were enabled.
      *
      * @param enabledTimestamp the enabled timestamp
-     * @return this instance for chaining
      */
-    public NewsletterReactionSettings setEnabledTimestamp(Instant enabledTimestamp) {
+    public void setEnabledTimestamp(Instant enabledTimestamp) {
         this.enabledTimestamp = enabledTimestamp;
-        return this;
     }
 
     @Override

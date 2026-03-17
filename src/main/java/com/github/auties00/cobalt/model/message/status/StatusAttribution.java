@@ -63,44 +63,36 @@ public final class StatusAttribution {
         return Optional.empty();
     }
 
-    public StatusAttribution setType(Type type) {
+    public void setType(Type type) {
         this.type = type;
-        return this;
     }
 
-    public StatusAttribution setActionUrl(String actionUrl) {
+    public void setActionUrl(String actionUrl) {
         this.actionUrl = actionUrl;
-        return this;
     }
 
-    public StatusAttribution setStatusReshare(StatusReshare statusReshare) {
+    public void setStatusReshare(StatusReshare statusReshare) {
         this.statusReshare = statusReshare;
-        return this;
     }
 
-    public StatusAttribution setExternalShare(ExternalShare externalShare) {
+    public void setExternalShare(ExternalShare externalShare) {
         this.externalShare = externalShare;
-        return this;
     }
 
-    public StatusAttribution setMusic(Music music) {
+    public void setMusic(Music music) {
         this.music = music;
-        return this;
     }
 
-    public StatusAttribution setGroupStatus(GroupStatus groupStatus) {
+    public void setGroupStatus(GroupStatus groupStatus) {
         this.groupStatus = groupStatus;
-        return this;
     }
 
-    public StatusAttribution setRlAttribution(RLAttribution rlAttribution) {
+    public void setRlAttribution(RLAttribution rlAttribution) {
         this.rlAttribution = rlAttribution;
-        return this;
     }
 
-    public StatusAttribution setAiCreatedAttribution(AiCreatedAttribution aiCreatedAttribution) {
+    public void setAiCreatedAttribution(AiCreatedAttribution aiCreatedAttribution) {
         this.aiCreatedAttribution = aiCreatedAttribution;
-        return this;
     }
 
     @ProtobufEnum(name = "StatusAttribution.Type")
@@ -141,10 +133,9 @@ public final class StatusAttribution {
             return Optional.ofNullable(source);
         }
 
-        public AiCreatedAttribution setSource(Source source) {
+        public void setSource(Source source) {
             this.source = source;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "StatusAttribution.AiCreatedAttribution.Source")
         public static enum Source {
@@ -201,25 +192,21 @@ public final class StatusAttribution {
             return Optional.ofNullable(actionFallbackUrl);
         }
 
-        public ExternalShare setActionUrl(String actionUrl) {
+        public void setActionUrl(String actionUrl) {
             this.actionUrl = actionUrl;
-            return this;
-        }
+    }
 
-        public ExternalShare setSource(Source source) {
+        public void setSource(Source source) {
             this.source = source;
-            return this;
-        }
+    }
 
-        public ExternalShare setDuration(Integer duration) {
+        public void setDuration(Integer duration) {
             this.duration = duration;
-            return this;
-        }
+    }
 
-        public ExternalShare setActionFallbackUrl(String actionFallbackUrl) {
+        public void setActionFallbackUrl(String actionFallbackUrl) {
             this.actionFallbackUrl = actionFallbackUrl;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "StatusAttribution.ExternalShare.Source")
         public static enum Source {
@@ -261,10 +248,9 @@ public final class StatusAttribution {
             return Optional.ofNullable(authorJid);
         }
 
-        public GroupStatus setAuthorJid(Jid authorJid) {
+        public void setAuthorJid(Jid authorJid) {
             this.authorJid = authorJid;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "StatusAttribution.Music")
@@ -321,35 +307,29 @@ public final class StatusAttribution {
             return isExplicit != null && isExplicit;
         }
 
-        public Music setAuthorName(String authorName) {
+        public void setAuthorName(String authorName) {
             this.authorName = authorName;
-            return this;
-        }
+    }
 
-        public Music setSongId(String songId) {
+        public void setSongId(String songId) {
             this.songId = songId;
-            return this;
-        }
+    }
 
-        public Music setTitle(String title) {
+        public void setTitle(String title) {
             this.title = title;
-            return this;
-        }
+    }
 
-        public Music setAuthor(String author) {
+        public void setAuthor(String author) {
             this.author = author;
-            return this;
-        }
+    }
 
-        public Music setArtistAttribution(String artistAttribution) {
+        public void setArtistAttribution(String artistAttribution) {
             this.artistAttribution = artistAttribution;
-            return this;
-        }
+    }
 
-        public Music setExplicit(Boolean isExplicit) {
+        public void setExplicit(Boolean isExplicit) {
             this.isExplicit = isExplicit;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "StatusAttribution.RLAttribution")
@@ -366,10 +346,9 @@ public final class StatusAttribution {
             return Optional.ofNullable(source);
         }
 
-        public RLAttribution setSource(Source source) {
+        public void setSource(Source source) {
             this.source = source;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "StatusAttribution.RLAttribution.Source")
         public static enum Source {
@@ -412,15 +391,13 @@ public final class StatusAttribution {
             return Optional.ofNullable(metadata);
         }
 
-        public StatusReshare setSource(Source source) {
+        public void setSource(Source source) {
             this.source = source;
-            return this;
-        }
+    }
 
-        public StatusReshare setMetadata(Metadata metadata) {
+        public void setMetadata(Metadata metadata) {
             this.metadata = metadata;
-            return this;
-        }
+    }
 
         @ProtobufEnum(name = "StatusAttribution.StatusReshare.Source")
         public static enum Source {
@@ -479,25 +456,21 @@ public final class StatusAttribution {
                 return hasMultipleReshares != null && hasMultipleReshares;
             }
 
-            public Metadata setDuration(Integer duration) {
+            public void setDuration(Integer duration) {
                 this.duration = duration;
-                return this;
-            }
+    }
 
-            public Metadata setChannelJid(Jid channelJid) {
+            public void setChannelJid(Jid channelJid) {
                 this.channelJid = channelJid;
-                return this;
-            }
+    }
 
-            public Metadata setChannelMessageId(Integer channelMessageId) {
+            public void setChannelMessageId(Integer channelMessageId) {
                 this.channelMessageId = channelMessageId;
-                return this;
-            }
+    }
 
-            public Metadata setHasMultipleReshares(Boolean hasMultipleReshares) {
+            public void setHasMultipleReshares(Boolean hasMultipleReshares) {
                 this.hasMultipleReshares = hasMultipleReshares;
-                return this;
-            }
+    }
         }
     }
 }

@@ -54,9 +54,8 @@ public final class MarketingMessageBroadcastAction implements SyncAction<Marketi
         return repliedCount == null ? OptionalInt.empty() : OptionalInt.of(repliedCount);
     }
 
-    public MarketingMessageBroadcastAction setRepliedCount(Integer repliedCount) {
+    public void setRepliedCount(Integer repliedCount) {
         this.repliedCount = repliedCount;
-        return this;
     }
 
 

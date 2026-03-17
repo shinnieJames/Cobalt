@@ -54,9 +54,8 @@ public final class WaffleAccountLinkStateAction implements SyncAction<SyncAction
         return Optional.ofNullable(linkState);
     }
 
-    public WaffleAccountLinkStateAction setLinkState(AccountLinkState linkState) {
+    public void setLinkState(AccountLinkState linkState) {
         this.linkState = linkState;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.WaffleAccountLinkStateAction.AccountLinkState")

@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.send.bot.BotMessageSecret;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.message.security.SecretEncryptedMessageSpec;
+import com.github.auties00.cobalt.model.message.security.SecretEncMessageSpec;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.exception.*;
@@ -279,7 +279,7 @@ public final class MessageDecryption {
         Objects.requireNonNull(botSenderJid, "botSenderJid");
 
         try {
-            var secretMessage = SecretEncryptedMessageSpec.decode(ciphertext);
+            var secretMessage = SecretEncMessageSpec.decode(ciphertext);
             var encIv = secretMessage.encIv().orElseThrow(() ->
                     new WhatsAppMessageException.Receive.InvalidMessage(
                             "MSMSG missing encIv", null));

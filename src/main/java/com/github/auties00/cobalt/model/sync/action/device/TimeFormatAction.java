@@ -53,8 +53,7 @@ public final class TimeFormatAction implements SyncAction<SyncActionEmptyArgs> {
         return isTwentyFourHourFormatEnabled != null && isTwentyFourHourFormatEnabled;
     }
 
-    public TimeFormatAction setTwentyFourHourFormatEnabled(Boolean isTwentyFourHourFormatEnabled) {
+    public void setTwentyFourHourFormatEnabled(Boolean isTwentyFourHourFormatEnabled) {
         this.isTwentyFourHourFormatEnabled = isTwentyFourHourFormatEnabled;
-        return this;
     }
 }

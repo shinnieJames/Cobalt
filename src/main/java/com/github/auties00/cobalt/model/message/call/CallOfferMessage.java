@@ -95,53 +95,43 @@ public final class CallOfferMessage implements ContextualMessage {
         return Optional.ofNullable(messageContextInfo);
     }
 
-    public CallOfferMessage setCallKey(byte[] callKey) {
+    public void setCallKey(byte[] callKey) {
         this.callKey = callKey;
-        return this;
     }
 
-    public CallOfferMessage setConversionSource(String conversionSource) {
+    public void setConversionSource(String conversionSource) {
         this.conversionSource = conversionSource;
-        return this;
     }
 
-    public CallOfferMessage setConversionData(byte[] conversionData) {
+    public void setConversionData(byte[] conversionData) {
         this.conversionData = conversionData;
-        return this;
     }
 
-    public CallOfferMessage setConversionDelaySeconds(Integer conversionDelaySeconds) {
+    public void setConversionDelaySeconds(Integer conversionDelaySeconds) {
         this.conversionDelaySeconds = conversionDelaySeconds;
-        return this;
     }
 
-    public CallOfferMessage setCtwaSignals(String ctwaSignals) {
+    public void setCtwaSignals(String ctwaSignals) {
         this.ctwaSignals = ctwaSignals;
-        return this;
     }
 
-    public CallOfferMessage setCtwaPayload(byte[] ctwaPayload) {
+    public void setCtwaPayload(byte[] ctwaPayload) {
         this.ctwaPayload = ctwaPayload;
-        return this;
     }
 
-    public CallOfferMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public CallOfferMessage setNativeFlowCallButtonPayload(String nativeFlowCallButtonPayload) {
+    public void setNativeFlowCallButtonPayload(String nativeFlowCallButtonPayload) {
         this.nativeFlowCallButtonPayload = nativeFlowCallButtonPayload;
-        return this;
     }
 
-    public CallOfferMessage setDeeplinkPayload(String deeplinkPayload) {
+    public void setDeeplinkPayload(String deeplinkPayload) {
         this.deeplinkPayload = deeplinkPayload;
-        return this;
     }
 
-    public CallOfferMessage setMessageContextInfo(ChatMessageContextInfo messageContextInfo) {
+    public void setMessageContextInfo(ChatMessageContextInfo messageContextInfo) {
         this.messageContextInfo = messageContextInfo;
-        return this;
     }
 }

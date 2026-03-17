@@ -56,29 +56,24 @@ public final class CallLogMessage implements Message {
         return participants == null ? List.of() : Collections.unmodifiableList(participants);
     }
 
-    public CallLogMessage setVideo(Boolean isVideo) {
+    public void setVideo(Boolean isVideo) {
         this.isVideo = isVideo;
-        return this;
     }
 
-    public CallLogMessage setCallOutcome(CallOutcome callOutcome) {
+    public void setCallOutcome(CallOutcome callOutcome) {
         this.callOutcome = callOutcome;
-        return this;
     }
 
-    public CallLogMessage setDurationSecs(Long durationSecs) {
+    public void setDurationSecs(Long durationSecs) {
         this.durationSecs = durationSecs;
-        return this;
     }
 
-    public CallLogMessage setCallType(CallType callType) {
+    public void setCallType(CallType callType) {
         this.callType = callType;
-        return this;
     }
 
-    public CallLogMessage setParticipants(List<CallParticipant> participants) {
+    public void setParticipants(List<CallParticipant> participants) {
         this.participants = participants;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.CallLogMessage.CallOutcome")
@@ -142,14 +137,12 @@ public final class CallLogMessage implements Message {
             return Optional.ofNullable(callOutcome);
         }
 
-        public CallParticipant setJid(Jid jid) {
+        public void setJid(Jid jid) {
             this.jid = jid;
-            return this;
-        }
+    }
 
-        public CallParticipant setCallOutcome(CallOutcome callOutcome) {
+        public void setCallOutcome(CallOutcome callOutcome) {
             this.callOutcome = callOutcome;
-            return this;
-        }
+    }
     }
 }

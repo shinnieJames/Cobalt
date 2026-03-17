@@ -55,9 +55,8 @@ public final class RemoveRecentStickerAction implements SyncAction<RemoveRecentS
         return Optional.ofNullable(lastStickerSentTs);
     }
 
-    public RemoveRecentStickerAction setLastStickerSentTs(Instant lastStickerSentTs) {
+    public void setLastStickerSentTs(Instant lastStickerSentTs) {
         this.lastStickerSentTs = lastStickerSentTs;
-        return this;
     }
 
 

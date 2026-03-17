@@ -52,9 +52,8 @@ public final class BotWelcomeRequestAction implements SyncAction<BotWelcomeReque
         return isSent != null && isSent;
     }
 
-    public BotWelcomeRequestAction setSent(Boolean isSent) {
+    public void setSent(Boolean isSent) {
         this.isSent = isSent;
-        return this;
     }
 
 

@@ -29,13 +29,11 @@ public final class EphemeralSetting {
         return timestamp == null ? OptionalLong.empty() : OptionalLong.of(timestamp);
     }
 
-    public EphemeralSetting setDuration(Integer duration) {
+    public void setDuration(Integer duration) {
         this.duration = duration;
-        return this;
     }
 
-    public EphemeralSetting setTimestamp(Long timestamp) {
+    public void setTimestamp(Long timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 }

@@ -42,23 +42,19 @@ public final class AutoDownloadSettings {
         return downloadDocuments != null && downloadDocuments;
     }
 
-    public AutoDownloadSettings setDownloadImages(Boolean downloadImages) {
+    public void setDownloadImages(Boolean downloadImages) {
         this.downloadImages = downloadImages;
-        return this;
     }
 
-    public AutoDownloadSettings setDownloadAudio(Boolean downloadAudio) {
+    public void setDownloadAudio(Boolean downloadAudio) {
         this.downloadAudio = downloadAudio;
-        return this;
     }
 
-    public AutoDownloadSettings setDownloadVideo(Boolean downloadVideo) {
+    public void setDownloadVideo(Boolean downloadVideo) {
         this.downloadVideo = downloadVideo;
-        return this;
     }
 
-    public AutoDownloadSettings setDownloadDocuments(Boolean downloadDocuments) {
+    public void setDownloadDocuments(Boolean downloadDocuments) {
         this.downloadDocuments = downloadDocuments;
-        return this;
     }
 }

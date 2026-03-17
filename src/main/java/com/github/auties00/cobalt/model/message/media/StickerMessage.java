@@ -1,12 +1,12 @@
 package com.github.auties00.cobalt.model.message.media;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
-
-import java.time.Instant;
-
 import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
+
+import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -14,13 +14,13 @@ import java.util.OptionalLong;
 @ProtobufMessage(name = "Message.StickerMessage")
 public final class StickerMessage implements MediaMessage {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-    String url;
+    String mediaUrl;
 
     @ProtobufProperty(index = 2, type = ProtobufType.BYTES)
-    byte[] fileSha256;
+    byte[] mediaSha256;
 
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
-    byte[] fileEncSha256;
+    byte[] mediaEncryptedSha256;
 
     @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
     byte[] mediaKey;
@@ -35,10 +35,10 @@ public final class StickerMessage implements MediaMessage {
     Integer width;
 
     @ProtobufProperty(index = 8, type = ProtobufType.STRING)
-    String directPath;
+    String mediaDirectPath;
 
     @ProtobufProperty(index = 9, type = ProtobufType.UINT64)
-    Long fileLength;
+    Long mediaSize;
 
     @ProtobufProperty(index = 10, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant mediaKeyTimestamp;
@@ -77,16 +77,16 @@ public final class StickerMessage implements MediaMessage {
     MediaMessageKeyDomain mediaKeyDomain;
 
 
-    StickerMessage(String url, byte[] fileSha256, byte[] fileEncSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String directPath, Long fileLength, Instant mediaKeyTimestamp, Integer firstFrameLength, byte[] firstFrameSidecar, Boolean isAnimated, byte[] pngThumbnail, ContextInfo contextInfo, Instant stickerSentTs, Boolean isAvatar, Boolean isAiSticker, Boolean isLottie, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain) {
-        this.url = url;
-        this.fileSha256 = fileSha256;
-        this.fileEncSha256 = fileEncSha256;
+    StickerMessage(String mediaUrl, byte[] mediaSha256, byte[] mediaEncryptedSha256, byte[] mediaKey, String mimetype, Integer height, Integer width, String mediaDirectPath, Long mediaSize, Instant mediaKeyTimestamp, Integer firstFrameLength, byte[] firstFrameSidecar, Boolean isAnimated, byte[] pngThumbnail, ContextInfo contextInfo, Instant stickerSentTs, Boolean isAvatar, Boolean isAiSticker, Boolean isLottie, String accessibilityLabel, MediaMessageKeyDomain mediaKeyDomain) {
+        this.mediaUrl = mediaUrl;
+        this.mediaSha256 = mediaSha256;
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
         this.mediaKey = mediaKey;
         this.mimetype = mimetype;
         this.height = height;
         this.width = width;
-        this.directPath = directPath;
-        this.fileLength = fileLength;
+        this.mediaDirectPath = mediaDirectPath;
+        this.mediaSize = mediaSize;
         this.mediaKeyTimestamp = mediaKeyTimestamp;
         this.firstFrameLength = firstFrameLength;
         this.firstFrameSidecar = firstFrameSidecar;
@@ -102,15 +102,30 @@ public final class StickerMessage implements MediaMessage {
     }
 
     public Optional<String> url() {
-        return Optional.ofNullable(url);
+        return Optional.ofNullable(mediaUrl);
+    }
+
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.ofNullable(mediaUrl);
     }
 
     public Optional<byte[]> fileSha256() {
-        return Optional.ofNullable(fileSha256);
+        return Optional.ofNullable(mediaSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(mediaSha256);
     }
 
     public Optional<byte[]> fileEncSha256() {
-        return Optional.ofNullable(fileEncSha256);
+        return Optional.ofNullable(mediaEncryptedSha256);
+    }
+
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(mediaEncryptedSha256);
     }
 
     public Optional<byte[]> mediaKey() {
@@ -130,11 +145,21 @@ public final class StickerMessage implements MediaMessage {
     }
 
     public Optional<String> directPath() {
-        return Optional.ofNullable(directPath);
+        return Optional.ofNullable(mediaDirectPath);
+    }
+
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(mediaDirectPath);
     }
 
     public OptionalLong fileLength() {
-        return fileLength == null ? OptionalLong.empty() : OptionalLong.of(fileLength);
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
+    }
+
+    @Override
+    public OptionalLong mediaSize() {
+        return mediaSize == null ? OptionalLong.empty() : OptionalLong.of(mediaSize);
     }
 
     public Optional<Instant> mediaKeyTimestamp() {
@@ -185,108 +210,99 @@ public final class StickerMessage implements MediaMessage {
         return Optional.ofNullable(mediaKeyDomain);
     }
 
-    public StickerMessage setUrl(String url) {
-        this.url = url;
-        return this;
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.STICKER;
     }
 
-    public StickerMessage setFileSha256(byte[] fileSha256) {
-        this.fileSha256 = fileSha256;
-        return this;
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        this.mediaUrl = mediaUrl;
     }
 
-    public StickerMessage setFileEncSha256(byte[] fileEncSha256) {
-        this.fileEncSha256 = fileEncSha256;
-        return this;
+    @Override
+    public void setMediaSha256(byte[] mediaSha256) {
+        this.mediaSha256 = mediaSha256;
     }
 
-    public StickerMessage setMediaKey(byte[] mediaKey) {
+    @Override
+    public void setMediaEncryptedSha256(byte[] mediaEncryptedSha256) {
+        this.mediaEncryptedSha256 = mediaEncryptedSha256;
+    }
+
+    @Override
+    public void setMediaKey(byte[] mediaKey) {
         this.mediaKey = mediaKey;
-        return this;
     }
 
-    public StickerMessage setMimetype(String mimetype) {
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
-    public StickerMessage setHeight(Integer height) {
+    public void setHeight(Integer height) {
         this.height = height;
-        return this;
     }
 
-    public StickerMessage setWidth(Integer width) {
+    public void setWidth(Integer width) {
         this.width = width;
-        return this;
     }
 
-    public StickerMessage setDirectPath(String directPath) {
-        this.directPath = directPath;
-        return this;
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.mediaDirectPath = mediaDirectPath;
     }
 
-    public StickerMessage setFileLength(Long fileLength) {
-        this.fileLength = fileLength;
-        return this;
+    @Override
+    public void setMediaSize(long mediaSize) {
+        this.mediaSize = mediaSize;
     }
 
-    public StickerMessage setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
+    @Override
+    public void setMediaKeyTimestamp(Instant mediaKeyTimestamp) {
         this.mediaKeyTimestamp = mediaKeyTimestamp;
-        return this;
     }
 
-    public StickerMessage setFirstFrameLength(Integer firstFrameLength) {
+    public void setFirstFrameLength(Integer firstFrameLength) {
         this.firstFrameLength = firstFrameLength;
-        return this;
     }
 
-    public StickerMessage setFirstFrameSidecar(byte[] firstFrameSidecar) {
+    public void setFirstFrameSidecar(byte[] firstFrameSidecar) {
         this.firstFrameSidecar = firstFrameSidecar;
-        return this;
     }
 
-    public StickerMessage setAnimated(Boolean isAnimated) {
+    public void setAnimated(Boolean isAnimated) {
         this.isAnimated = isAnimated;
-        return this;
     }
 
-    public StickerMessage setPngThumbnail(byte[] pngThumbnail) {
+    public void setPngThumbnail(byte[] pngThumbnail) {
         this.pngThumbnail = pngThumbnail;
-        return this;
     }
 
-    public StickerMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public StickerMessage setStickerSentTs(Instant stickerSentTs) {
+    public void setStickerSentTs(Instant stickerSentTs) {
         this.stickerSentTs = stickerSentTs;
-        return this;
     }
 
-    public StickerMessage setAvatar(Boolean isAvatar) {
+    public void setAvatar(Boolean isAvatar) {
         this.isAvatar = isAvatar;
-        return this;
     }
 
-    public StickerMessage setAiSticker(Boolean isAiSticker) {
+    public void setAiSticker(Boolean isAiSticker) {
         this.isAiSticker = isAiSticker;
-        return this;
     }
 
-    public StickerMessage setLottie(Boolean isLottie) {
+    public void setLottie(Boolean isLottie) {
         this.isLottie = isLottie;
-        return this;
     }
 
-    public StickerMessage setAccessibilityLabel(String accessibilityLabel) {
+    public void setAccessibilityLabel(String accessibilityLabel) {
         this.accessibilityLabel = accessibilityLabel;
-        return this;
     }
 
-    public StickerMessage setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
+    public void setMediaKeyDomain(MediaMessageKeyDomain mediaKeyDomain) {
         this.mediaKeyDomain = mediaKeyDomain;
-        return this;
     }
 }

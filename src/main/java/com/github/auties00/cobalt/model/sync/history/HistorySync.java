@@ -1,30 +1,33 @@
 package com.github.auties00.cobalt.model.sync.history;
 
 import com.github.auties00.cobalt.model.call.CallLog;
-import com.github.auties00.cobalt.model.chat.Chat;
+import com.github.auties00.cobalt.model.chat.*;
+import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
 import com.github.auties00.cobalt.model.chat.group.GroupPastParticipants;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
-import com.github.auties00.cobalt.model.media.StickerMetadata;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.PhoneNumberToLIDMapping;
+import com.github.auties00.cobalt.model.media.MediaVisibility;
+import com.github.auties00.cobalt.model.media.StickerMetadata;
+import com.github.auties00.cobalt.model.message.PrivacySystemMessage;
 import com.github.auties00.cobalt.model.setting.GlobalSettings;
+import com.github.auties00.cobalt.model.setting.WallpaperSettings;
+import com.github.auties00.collections.ConcurrentLinkedHashMap;
 import it.auties.protobuf.annotation.ProtobufEnum;
 import it.auties.protobuf.annotation.ProtobufEnumIndex;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
+import it.auties.protobuf.stream.ProtobufInputStream;
+import it.auties.protobuf.stream.ProtobufOutputStream;
 
+import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 
 @ProtobufMessage(name = "HistorySync")
-public final class HistorySync {
+public abstract sealed class HistorySync {
     @ProtobufProperty(index = 1, type = ProtobufType.ENUM)
     HistorySyncType syncType;
-
-    @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
-    List<Chat> chats;
-
-    @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
-    List<ChatMessageInfo> statusV3Messages;
 
     @ProtobufProperty(index = 5, type = ProtobufType.UINT32)
     Integer chunkOrder;
@@ -69,10 +72,8 @@ public final class HistorySync {
     List<Account> accounts;
 
 
-    HistorySync(HistorySyncType syncType, List<Chat> chats, List<ChatMessageInfo> statusV3Messages, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts) {
+    HistorySync(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts) {
         this.syncType = Objects.requireNonNull(syncType);
-        this.chats = chats;
-        this.statusV3Messages = statusV3Messages;
         this.chunkOrder = chunkOrder;
         this.progress = progress;
         this.pushnames = pushnames;
@@ -89,17 +90,21 @@ public final class HistorySync {
         this.accounts = accounts;
     }
 
+    public static HistorySync ofFull(ProtobufInputStream stream) {
+        return HistorySyncFullSpec.decode(stream);
+    }
+
+    public static HistorySync ofLight(ProtobufInputStream stream) {
+        return HistorySyncLightSpec.decode(stream);
+    }
+
     public HistorySyncType syncType() {
         return syncType;
     }
 
-    public List<Chat> chats() {
-        return chats == null ? List.of() : Collections.unmodifiableList(chats);
-    }
+    public abstract List<? extends Chat> chats();
 
-    public List<ChatMessageInfo> statusV3Messages() {
-        return statusV3Messages == null ? List.of() : Collections.unmodifiableList(statusV3Messages);
-    }
+    public abstract List<ChatMessageInfo> statusV3Messages();
 
     public OptionalInt chunkOrder() {
         return chunkOrder == null ? OptionalInt.empty() : OptionalInt.of(chunkOrder);
@@ -157,93 +162,288 @@ public final class HistorySync {
         return accounts == null ? List.of() : Collections.unmodifiableList(accounts);
     }
 
-    public HistorySync setSyncType(HistorySyncType syncType) {
+    public void setSyncType(HistorySyncType syncType) {
         this.syncType = syncType;
-        return this;
     }
 
-    public HistorySync setChats(List<Chat> chats) {
-        this.chats = chats;
-        return this;
-    }
-
-    public HistorySync setStatusV3Messages(List<ChatMessageInfo> statusV3Messages) {
-        this.statusV3Messages = statusV3Messages;
-        return this;
-    }
-
-    public HistorySync setChunkOrder(Integer chunkOrder) {
+    public void setChunkOrder(Integer chunkOrder) {
         this.chunkOrder = chunkOrder;
-        return this;
     }
 
-    public HistorySync setProgress(Integer progress) {
+    public void setProgress(Integer progress) {
         this.progress = progress;
-        return this;
     }
 
-    public HistorySync setPushnames(List<Pushname> pushnames) {
+    public void setPushnames(List<Pushname> pushnames) {
         this.pushnames = pushnames;
-        return this;
     }
 
-    public HistorySync setGlobalSettings(GlobalSettings globalSettings) {
+    public void setGlobalSettings(GlobalSettings globalSettings) {
         this.globalSettings = globalSettings;
-        return this;
     }
 
-    public HistorySync setThreadIdUserSecret(byte[] threadIdUserSecret) {
+    public void setThreadIdUserSecret(byte[] threadIdUserSecret) {
         this.threadIdUserSecret = threadIdUserSecret;
-        return this;
     }
 
-    public HistorySync setThreadDsTimeframeOffset(Integer threadDsTimeframeOffset) {
+    public void setThreadDsTimeframeOffset(Integer threadDsTimeframeOffset) {
         this.threadDsTimeframeOffset = threadDsTimeframeOffset;
-        return this;
     }
 
-    public HistorySync setRecentStickers(List<StickerMetadata> recentStickers) {
+    public void setRecentStickers(List<StickerMetadata> recentStickers) {
         this.recentStickers = recentStickers;
-        return this;
     }
 
-    public HistorySync setPastParticipants(List<GroupPastParticipants> pastParticipants) {
+    public void setPastParticipants(List<GroupPastParticipants> pastParticipants) {
         this.pastParticipants = pastParticipants;
-        return this;
     }
 
-    public HistorySync setCallLogRecords(List<CallLog> callLogs) {
+    public void setCallLogRecords(List<CallLog> callLogs) {
         this.callLogs = callLogs;
-        return this;
     }
 
-    public HistorySync setAiWaitListState(BotAIWaitListState aiWaitListState) {
+    public void setAiWaitListState(BotAIWaitListState aiWaitListState) {
         this.aiWaitListState = aiWaitListState;
-        return this;
     }
 
-    public HistorySync setPhoneNumberToLidMappings(List<PhoneNumberToLIDMapping> phoneNumberToLidMappings) {
+    public void setPhoneNumberToLidMappings(List<PhoneNumberToLIDMapping> phoneNumberToLidMappings) {
         this.phoneNumberToLidMappings = phoneNumberToLidMappings;
-        return this;
     }
 
-    public HistorySync setCompanionMetaNonce(String companionMetaNonce) {
+    public void setCompanionMetaNonce(String companionMetaNonce) {
         this.companionMetaNonce = companionMetaNonce;
-        return this;
     }
 
-    public HistorySync setShareableChatIdentifierEncryptionKey(byte[] shareableChatIdentifierEncryptionKey) {
+    public void setShareableChatIdentifierEncryptionKey(byte[] shareableChatIdentifierEncryptionKey) {
         this.shareableChatIdentifierEncryptionKey = shareableChatIdentifierEncryptionKey;
-        return this;
     }
 
-    public HistorySync setAccounts(List<Account> accounts) {
+    public void setAccounts(List<Account> accounts) {
         this.accounts = accounts;
-        return this;
+    }
+
+    public abstract void writeTo(ProtobufOutputStream<?> out) throws IOException;
+
+    @ProtobufMessage
+    static final class Full extends HistorySync {
+        @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
+        List<Chat> chats;
+
+        @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
+        List<ChatMessageInfo> statusV3Messages;
+
+        Full(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts, List<Chat> chats, List<ChatMessageInfo> statusV3Messages) {
+            super(syncType, chunkOrder, progress, pushnames, globalSettings, threadIdUserSecret, threadDsTimeframeOffset, recentStickers, pastParticipants, callLogs, aiWaitListState, phoneNumberToLidMappings, companionMetaNonce, shareableChatIdentifierEncryptionKey, accounts);
+            this.chats = chats;
+            this.statusV3Messages = statusV3Messages;
+        }
+
+        @Override
+        public List<Chat> chats() {
+            return chats == null ? List.of() : Collections.unmodifiableList(chats);
+        }
+
+        @Override
+        public List<ChatMessageInfo> statusV3Messages() {
+            return statusV3Messages == null ? List.of() : Collections.unmodifiableList(statusV3Messages);
+        }
+
+        @Override
+        public void writeTo(ProtobufOutputStream<?> out) {
+            HistorySyncFullSpec.encode(this, out);
+        }
+
+        @ProtobufMessage
+        static final class Chat extends com.github.auties00.cobalt.model.chat.Chat {
+            @ProtobufProperty(index = 2, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
+            final ConcurrentLinkedHashMap<String, HistorySyncMsg> messages;
+
+            Chat(Jid jid, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Instant pinnedTimestamp, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, Jid accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled, ConcurrentLinkedHashMap<String, HistorySyncMsg> messages) {
+                super(jid, newJid, oldJid, lastMsgTimestamp, unreadCount, readOnly, endOfHistoryTransfer, ephemeralExpiration, ephemeralSettingTimestamp, endOfHistoryTransferType, conversationTimestamp, name, pHash, notSpam, archived, disappearingMode, unreadMentionCount, markedAsUnread, participant, tcToken, tcTokenTimestamp, contactPrimaryIdentityKey, pinnedTimestamp, mute, wallpaper, mediaVisibility, tcTokenSenderTimestamp, suspended, terminated, createdAt, createdBy, description, support, isParentGroup, parentGroupId, isDefaultSubgroup, displayName, phoneNumberJid, shareOwnPhoneNumber, phoneNumberhDuplicateLidThread, lid, username, lidOriginType, commentsCount, locked, systemMessageToInsert, capiCreatedGroup, accountLid, limitSharing, limitSharingSettingTimestamp, limitSharingTrigger, limitSharingInitiatedByMe, maibaAiThreadEnabled);
+                this.messages = messages;
+            }
+
+            @Override
+            public SequencedCollection<ChatMessageInfo> messages() {
+                return createMessagesView(messages.sequencedValues());
+            }
+
+            private SequencedCollection<ChatMessageInfo> createMessagesView(SequencedCollection<HistorySyncMsg> data) {
+                return new SequencedCollection<>() {
+                    @Override
+                    public SequencedCollection<ChatMessageInfo> reversed() {
+                        return createMessagesView(data.reversed());
+                    }
+
+                    @Override
+                    public int size() {
+                        return data.size();
+                    }
+
+                    @Override
+                    public boolean isEmpty() {
+                        return data.isEmpty();
+                    }
+
+                    @Override
+                    public boolean contains(Object o) {
+                        if(!(o instanceof ChatMessageInfo chatMessageInfo)) {
+                            return false;
+                        }
+
+                        var id = chatMessageInfo.key().id();
+                        return id.isPresent()
+                               && messages.containsKey(id.get());
+                    }
+
+                    @Override
+                    public Iterator<ChatMessageInfo> iterator() {
+                        var delegate = data.iterator();
+                        return new Iterator<>() {
+                            @Override
+                            public boolean hasNext() {
+                                return delegate.hasNext();
+                            }
+
+                            @Override
+                            public ChatMessageInfo next() {
+                                var result = delegate.next();
+                                return result != null ? result.message : null;
+                            }
+                        };
+                    }
+
+                    @Override
+                    public Object[] toArray() {
+                        return data.toArray();
+                    }
+
+                    @Override
+                    public <T> T[] toArray(T[] a) {
+                        return data.toArray(a);
+                    }
+
+                    @Override
+                    public boolean add(ChatMessageInfo info) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean remove(Object o) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean containsAll(Collection<?> c) {
+                        for (var entry : c) {
+                            if (!contains(entry)) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public boolean addAll(Collection<? extends ChatMessageInfo> c) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean removeAll(Collection<?> c) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean retainAll(Collection<?> c) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public void clear() {
+                        throw new UnsupportedOperationException();
+                    }
+                };
+            }
+
+            @Override
+            public void addMessage(ChatMessageInfo info) {
+                Objects.requireNonNull(info, "info cannot be null");
+                var id = info.key()
+                        .id()
+                        .orElseThrow(() -> new NullPointerException("id cannot be null"));
+                var msg = new HistorySyncMsgBuilder()
+                        .msgOrderId(-1L)
+                        .message(info)
+                        .build();
+                messages.put(id, msg);
+            }
+
+            @Override
+            public boolean removeMessage(String id) {
+                return messages.get(id) != null;
+            }
+
+            @Override
+            public void removeMessages() {
+                messages.clear();
+            }
+
+            @Override
+            public Optional<ChatMessageInfo> getMessageById(String id) {
+                var msg = messages.get(id);
+                if(msg == null) {
+                    return Optional.empty();
+                } else {
+                    return msg.message();
+                }
+            }
+
+            @Override
+            public Optional<ChatMessageInfo> newestMessage() {
+                var entry = messages.lastEntry();
+                if(entry == null) {
+                    return Optional.empty();
+                } else {
+                    return entry.getValue().message();
+                }
+            }
+
+            @Override
+            public Optional<ChatMessageInfo> oldestMessage() {
+                var entry = messages.firstEntry();
+                if(entry == null) {
+                    return Optional.empty();
+                } else {
+                    return entry.getValue().message();
+                }
+            }
+        }
+    }
+
+    @ProtobufMessage
+    static final class Light extends HistorySync {
+        Light(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts) {
+            super(syncType, chunkOrder, progress, pushnames, globalSettings, threadIdUserSecret, threadDsTimeframeOffset, recentStickers, pastParticipants, callLogs, aiWaitListState, phoneNumberToLidMappings, companionMetaNonce, shareableChatIdentifierEncryptionKey, accounts);
+        }
+
+        @Override
+        public List<Chat> chats() {
+            return List.of();
+        }
+
+        @Override
+        public List<ChatMessageInfo> statusV3Messages() {
+            return List.of();
+        }
+
+        @Override
+        public void writeTo(ProtobufOutputStream<?> out) {
+            HistorySyncLightSpec.encode(this, out);
+        }
     }
 
     @ProtobufEnum(name = "HistorySync.BotAIWaitListState")
-    public static enum BotAIWaitListState {
+    public enum BotAIWaitListState {
         IN_WAITLIST(0),
         AI_AVAILABLE(1);
 
@@ -259,7 +459,7 @@ public final class HistorySync {
     }
 
     @ProtobufEnum(name = "HistorySync.HistorySyncType")
-    public static enum HistorySyncType {
+    public enum HistorySyncType {
         INITIAL_BOOTSTRAP(0),
         INITIAL_STATUS_V3(1),
         FULL(2),
@@ -317,25 +517,21 @@ public final class HistorySync {
             return isUsernameDeleted != null && isUsernameDeleted;
         }
 
-        public Account setLid(String lid) {
+        public void setLid(String lid) {
             this.lid = lid;
-            return this;
-        }
+    }
 
-        public Account setUsername(String username) {
+        public void setUsername(String username) {
             this.username = username;
-            return this;
-        }
+    }
 
-        public Account setCountryCode(String countryCode) {
+        public void setCountryCode(String countryCode) {
             this.countryCode = countryCode;
-            return this;
-        }
+    }
 
-        public Account setUsernameDeleted(Boolean isUsernameDeleted) {
+        public void setUsernameDeleted(Boolean isUsernameDeleted) {
             this.isUsernameDeleted = isUsernameDeleted;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Pushname")
@@ -360,14 +556,12 @@ public final class HistorySync {
             return Optional.ofNullable(pushname);
         }
 
-        public Pushname setId(String id) {
+        public void setId(String id) {
             this.id = id;
-            return this;
-        }
+    }
 
-        public Pushname setPushname(String pushname) {
+        public void setPushname(String pushname) {
             this.pushname = pushname;
-            return this;
-        }
+    }
     }
 }

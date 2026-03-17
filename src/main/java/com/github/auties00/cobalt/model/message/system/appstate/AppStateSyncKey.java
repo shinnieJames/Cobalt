@@ -28,13 +28,11 @@ public final class AppStateSyncKey implements Message {
         return Optional.ofNullable(keyData);
     }
 
-    public AppStateSyncKey setKeyId(AppStateSyncKeyId keyId) {
+    public void setKeyId(AppStateSyncKeyId keyId) {
         this.keyId = keyId;
-        return this;
     }
 
-    public AppStateSyncKey setKeyData(AppStateSyncKeyData keyData) {
+    public void setKeyData(AppStateSyncKeyData keyData) {
         this.keyData = keyData;
-        return this;
     }
 }

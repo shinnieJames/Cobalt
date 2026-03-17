@@ -18,8 +18,7 @@ public final class SyncdIndex {
         return Optional.ofNullable(blob);
     }
 
-    public SyncdIndex setBlob(byte[] blob) {
+    public void setBlob(byte[] blob) {
         this.blob = blob;
-        return this;
     }
 }

@@ -74,21 +74,17 @@ public final class BotProfilePrompt {
      * Sets the emoji for this prompt.
      *
      * @param emoji the emoji string, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfilePrompt setEmoji(String emoji) {
+    public void setEmoji(String emoji) {
         this.emoji = emoji;
-        return this;
     }
 
     /**
      * Sets the prompt text.
      *
      * @param text the prompt text, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfilePrompt setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 }

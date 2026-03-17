@@ -94,9 +94,8 @@ public final class Money {
      * @param value the scaled integer value
      * @return this instance
      */
-    public Money setValue(Long value) {
+    public void setValue(Long value) {
         this.value = value;
-        return this;
     }
 
     /**
@@ -105,9 +104,8 @@ public final class Money {
      * @param offset the divisor, or {@code null} to default to {@code 1000}
      * @return this instance
      */
-    public Money setOffset(Integer offset) {
+    public void setOffset(Integer offset) {
         this.offset = offset;
-        return this;
     }
 
     /**
@@ -116,8 +114,7 @@ public final class Money {
      * @param currencyCode the currency code
      * @return this instance
      */
-    public Money setCurrencyCode(String currencyCode) {
+    public void setCurrencyCode(String currencyCode) {
         this.currencyCode = currencyCode;
-        return this;
     }
 }

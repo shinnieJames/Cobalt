@@ -127,55 +127,45 @@ public final class BotReminderMetadata {
      * Sets the key of the message that originally requested this reminder.
      *
      * @param requestMessageKey the new request message key, or {@code null}
-     * @return this instance for chaining
      */
-    public BotReminderMetadata setRequestMessageKey(MessageKey requestMessageKey) {
+    public void setRequestMessageKey(MessageKey requestMessageKey) {
         this.requestMessageKey = requestMessageKey;
-        return this;
     }
 
     /**
      * Sets the action being performed on this reminder.
      *
      * @param action the new action, or {@code null}
-     * @return this instance for chaining
      */
-    public BotReminderMetadata setAction(ReminderAction action) {
+    public void setAction(ReminderAction action) {
         this.action = action;
-        return this;
     }
 
     /**
      * Sets the human-readable name of the reminder.
      *
      * @param name the new name, or {@code null}
-     * @return this instance for chaining
      */
-    public BotReminderMetadata setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the timestamp at which this reminder will next trigger.
      *
      * @param nextTriggerTimestamp the new trigger timestamp, or {@code null}
-     * @return this instance for chaining
      */
-    public BotReminderMetadata setNextTriggerTimestamp(Instant nextTriggerTimestamp) {
+    public void setNextTriggerTimestamp(Instant nextTriggerTimestamp) {
         this.nextTriggerTimestamp = nextTriggerTimestamp;
-        return this;
     }
 
     /**
      * Sets the recurrence frequency of this reminder.
      *
      * @param frequency the new frequency, or {@code null}
-     * @return this instance for chaining
      */
-    public BotReminderMetadata setFrequency(ReminderFrequency frequency) {
+    public void setFrequency(ReminderFrequency frequency) {
         this.frequency = frequency;
-        return this;
     }
 
     /**

@@ -27,7 +27,7 @@ import java.util.Set;
  * @apiNote WAWebDBGroupsGroupMetadata: the canonical metadata object stored
  * per group or community in the WhatsApp Web database.
  */
-public sealed interface ChatMetadata<T extends ChatMetadata<T>> permits GroupMetadata, CommunityMetadata {
+public sealed interface ChatMetadata permits GroupMetadata, CommunityMetadata {
 
     /**
      * Returns the JID that uniquely identifies this group or community.
@@ -132,7 +132,7 @@ public sealed interface ChatMetadata<T extends ChatMetadata<T>> permits GroupMet
     /**
      * Removes all participants from this group or community.
      */
-    T clearParticipants();
+    void clearParticipants();
 
     /**
      * Adds all participants in the given collection to this group or
@@ -166,9 +166,8 @@ public sealed interface ChatMetadata<T extends ChatMetadata<T>> permits GroupMet
      *
      * @param ephemeralExpiration the ephemeral timer to set, or {@code null}
      *        to disable ephemeral messaging
-     * @return this instance for method chaining
      */
-    T setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration);
+    void setEphemeralExpiration(ChatEphemeralTimer ephemeralExpiration);
 
     /**
      * Returns whether this group or community uses LID (Linked Identity)
@@ -183,9 +182,8 @@ public sealed interface ChatMetadata<T extends ChatMetadata<T>> permits GroupMet
      *
      * @param lidAddressingMode {@code true} to enable LID addressing,
      *        {@code false} to disable it
-     * @return this instance for method chaining
      */
-    T setLidAddressingMode(boolean lidAddressingMode);
+    void setLidAddressingMode(boolean lidAddressingMode);
 
     /**
      * Returns whether this group or community operates in incognito mode.
@@ -209,9 +207,8 @@ public sealed interface ChatMetadata<T extends ChatMetadata<T>> permits GroupMet
      * community.
      *
      * @param openBotGroup {@code true} to enable, {@code false} to disable
-     * @return this instance for method chaining
      * @apiNote WAWebMexFetchGroupInfoIncludBotsJob: populated from group
      * query response when bot participants are present.
      */
-    T setOpenBotGroup(boolean openBotGroup);
+    void setOpenBotGroup(boolean openBotGroup);
 }

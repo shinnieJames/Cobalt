@@ -218,9 +218,8 @@ public final class PaymentBackground {
      * @param id the image identifier
      * @return this instance
      */
-    public PaymentBackground setId(String id) {
+    public void setId(String id) {
         this.id = id;
-        return this;
     }
 
     /**
@@ -229,9 +228,8 @@ public final class PaymentBackground {
      * @param fileLength the file length
      * @return this instance
      */
-    public PaymentBackground setFileLength(Long fileLength) {
+    public void setFileLength(Long fileLength) {
         this.fileLength = fileLength;
-        return this;
     }
 
     /**
@@ -240,9 +238,8 @@ public final class PaymentBackground {
      * @param width the width
      * @return this instance
      */
-    public PaymentBackground setWidth(Integer width) {
+    public void setWidth(Integer width) {
         this.width = width;
-        return this;
     }
 
     /**
@@ -251,9 +248,8 @@ public final class PaymentBackground {
      * @param height the height
      * @return this instance
      */
-    public PaymentBackground setHeight(Integer height) {
+    public void setHeight(Integer height) {
         this.height = height;
-        return this;
     }
 
     /**
@@ -262,9 +258,8 @@ public final class PaymentBackground {
      * @param mimetype the MIME type
      * @return this instance
      */
-    public PaymentBackground setMimetype(String mimetype) {
+    public void setMimetype(String mimetype) {
         this.mimetype = mimetype;
-        return this;
     }
 
     /**
@@ -273,9 +268,8 @@ public final class PaymentBackground {
      * @param placeholderArgb the ARGB colour
      * @return this instance
      */
-    public PaymentBackground setPlaceholderArgb(Integer placeholderArgb) {
+    public void setPlaceholderArgb(Integer placeholderArgb) {
         this.placeholderArgb = placeholderArgb;
-        return this;
     }
 
     /**
@@ -284,9 +278,8 @@ public final class PaymentBackground {
      * @param textArgb the ARGB colour
      * @return this instance
      */
-    public PaymentBackground setTextArgb(Integer textArgb) {
+    public void setTextArgb(Integer textArgb) {
         this.textArgb = textArgb;
-        return this;
     }
 
     /**
@@ -295,9 +288,8 @@ public final class PaymentBackground {
      * @param subtextArgb the ARGB colour
      * @return this instance
      */
-    public PaymentBackground setSubtextArgb(Integer subtextArgb) {
+    public void setSubtextArgb(Integer subtextArgb) {
         this.subtextArgb = subtextArgb;
-        return this;
     }
 
     /**
@@ -306,9 +298,8 @@ public final class PaymentBackground {
      * @param mediaData the media data
      * @return this instance
      */
-    public PaymentBackground setMediaData(MediaData mediaData) {
+    public void setMediaData(MediaData mediaData) {
         this.mediaData = mediaData;
-        return this;
     }
 
     /**
@@ -317,9 +308,8 @@ public final class PaymentBackground {
      * @param type the background variant
      * @return this instance
      */
-    public PaymentBackground setType(Type type) {
+    public void setType(Type type) {
         this.type = type;
-        return this;
     }
 
     /**
@@ -483,10 +473,9 @@ public final class PaymentBackground {
          * @param mediaKey the media key bytes
          * @return this instance
          */
-        public MediaData setMediaKey(byte[] mediaKey) {
+        public void setMediaKey(byte[] mediaKey) {
             this.mediaKey = mediaKey;
-            return this;
-        }
+    }
 
         /**
          * Sets the epoch-second timestamp of when the media key was generated.
@@ -494,10 +483,9 @@ public final class PaymentBackground {
          * @param mediaKeyTimestamp the timestamp as epoch seconds
          * @return this instance
          */
-        public MediaData setMediaKeyTimestamp(Long mediaKeyTimestamp) {
+        public void setMediaKeyTimestamp(Long mediaKeyTimestamp) {
             this.mediaKeyTimestamp = mediaKeyTimestamp;
-            return this;
-        }
+    }
 
         /**
          * Sets the SHA-256 hash of the plaintext background image file.
@@ -505,10 +493,9 @@ public final class PaymentBackground {
          * @param fileSha256 the hash bytes
          * @return this instance
          */
-        public MediaData setFileSha256(byte[] fileSha256) {
+        public void setFileSha256(byte[] fileSha256) {
             this.fileSha256 = fileSha256;
-            return this;
-        }
+    }
 
         /**
          * Sets the SHA-256 hash of the encrypted background image file.
@@ -516,10 +503,9 @@ public final class PaymentBackground {
          * @param fileEncSha256 the hash bytes
          * @return this instance
          */
-        public MediaData setFileEncSha256(byte[] fileEncSha256) {
+        public void setFileEncSha256(byte[] fileEncSha256) {
             this.fileEncSha256 = fileEncSha256;
-            return this;
-        }
+    }
 
         /**
          * Sets the CDN direct path for the encrypted background image.
@@ -527,9 +513,8 @@ public final class PaymentBackground {
          * @param directPath the CDN path
          * @return this instance
          */
-        public MediaData setDirectPath(String directPath) {
+        public void setDirectPath(String directPath) {
             this.directPath = directPath;
-            return this;
-        }
+    }
     }
 }

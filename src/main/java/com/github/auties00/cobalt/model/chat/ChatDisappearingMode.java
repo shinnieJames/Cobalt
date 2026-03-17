@@ -44,24 +44,20 @@ public final class ChatDisappearingMode {
         return initiatedByMe != null && initiatedByMe;
     }
 
-    public ChatDisappearingMode setInitiator(Initiator initiator) {
+    public void setInitiator(Initiator initiator) {
         this.initiator = initiator;
-        return this;
     }
 
-    public ChatDisappearingMode setTrigger(Trigger trigger) {
+    public void setTrigger(Trigger trigger) {
         this.trigger = trigger;
-        return this;
     }
 
-    public ChatDisappearingMode setInitiatorDeviceJid(Jid initiatorDeviceJid) {
+    public void setInitiatorDeviceJid(Jid initiatorDeviceJid) {
         this.initiatorDeviceJid = initiatorDeviceJid;
-        return this;
     }
 
-    public ChatDisappearingMode setInitiatedByMe(Boolean initiatedByMe) {
+    public void setInitiatedByMe(Boolean initiatedByMe) {
         this.initiatedByMe = initiatedByMe;
-        return this;
     }
 
     @ProtobufEnum(name = "DisappearingMode.Initiator")

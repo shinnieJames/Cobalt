@@ -57,28 +57,23 @@ public final class ADVKeyIndexList {
         return Optional.ofNullable(accountType);
     }
 
-    public ADVKeyIndexList setRawId(Integer rawId) {
+    public void setRawId(Integer rawId) {
         this.rawId = rawId;
-        return this;
     }
 
-    public ADVKeyIndexList setTimestamp(Instant timestamp) {
+    public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
-        return this;
     }
 
-    public ADVKeyIndexList setCurrentIndex(Integer currentIndex) {
+    public void setCurrentIndex(Integer currentIndex) {
         this.currentIndex = currentIndex;
-        return this;
     }
 
-    public ADVKeyIndexList setValidIndexes(List<Integer> validIndexes) {
+    public void setValidIndexes(List<Integer> validIndexes) {
         this.validIndexes = validIndexes;
-        return this;
     }
 
-    public ADVKeyIndexList setAccountType(ADVEncryptionType accountType) {
+    public void setAccountType(ADVEncryptionType accountType) {
         this.accountType = accountType;
-        return this;
     }
 }

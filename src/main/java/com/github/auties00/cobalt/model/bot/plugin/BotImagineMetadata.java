@@ -62,22 +62,18 @@ public final class BotImagineMetadata {
      * Sets the type of image-generation operation.
      *
      * @param imagineType the new imagine type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotImagineMetadata setImagineType(ImagineType imagineType) {
+    public void setImagineType(ImagineType imagineType) {
         this.imagineType = imagineType;
-        return this;
     }
 
     /**
      * Sets the shortened version of the user's prompt.
      *
      * @param shortPrompt the new short prompt, or {@code null}
-     * @return this instance for chaining
      */
-    public BotImagineMetadata setShortPrompt(String shortPrompt) {
+    public void setShortPrompt(String shortPrompt) {
         this.shortPrompt = shortPrompt;
-        return this;
     }
 
     /**

@@ -107,44 +107,36 @@ public final class MediaRetryNotification {
      * Sets the stanza identifier of the original message.
      *
      * @param stanzaId the stanza identifier
-     * @return this instance for chaining
      */
-    public MediaRetryNotification setStanzaId(String stanzaId) {
+    public void setStanzaId(String stanzaId) {
         this.stanzaId = stanzaId;
-        return this;
     }
 
     /**
      * Sets the updated CDN direct path to the re-uploaded media file.
      *
      * @param directPath the direct path
-     * @return this instance for chaining
      */
-    public MediaRetryNotification setDirectPath(String directPath) {
+    public void setDirectPath(String directPath) {
         this.directPath = directPath;
-        return this;
     }
 
     /**
      * Sets the outcome of the media re-upload request.
      *
      * @param result the result type
-     * @return this instance for chaining
      */
-    public MediaRetryNotification setResult(ResultType result) {
+    public void setResult(ResultType result) {
         this.result = result;
-        return this;
     }
 
     /**
      * Sets the secret for HKDF key derivation.
      *
      * @param messageSecret the message secret
-     * @return this instance for chaining
      */
-    public MediaRetryNotification setMessageSecret(byte[] messageSecret) {
+    public void setMessageSecret(byte[] messageSecret) {
         this.messageSecret = messageSecret;
-        return this;
     }
 
     /**

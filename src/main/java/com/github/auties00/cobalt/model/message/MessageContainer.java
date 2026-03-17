@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.model.message;
 
-import com.github.auties00.cobalt.model.bot.response.AIRichResponseMessage;
+import com.github.auties00.cobalt.model.message.bot.AIRichResponseMessage;
 import com.github.auties00.cobalt.model.chat.ChatMessageContextInfo;
 import com.github.auties00.cobalt.model.message.call.*;
 import com.github.auties00.cobalt.model.message.commerce.*;
@@ -29,7 +29,7 @@ import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.security.PlaceholderMessage;
-import com.github.auties00.cobalt.model.message.security.SecretEncryptedMessage;
+import com.github.auties00.cobalt.model.message.security.SecretEncMessage;
 import com.github.auties00.cobalt.model.message.status.StatusNotificationMessage;
 import com.github.auties00.cobalt.model.message.status.StatusQuestionAnswerMessage;
 import com.github.auties00.cobalt.model.message.status.StatusQuotedMessage;
@@ -76,9 +76,8 @@ import java.util.function.Consumer;
  * forward the raw protobuf bytes to other participants.
  *
  * <p>Examples include ephemeral (disappearing) messages, view-once media,
- * message edits, and documents with captions. The convenience method
- * {@link #unbox()} strips one layer of wrapping, and {@link #content()}
- * recursively unwraps all envelopes to return the innermost
+ * message edits, and documents with captions. The {@link #content()}
+ * method recursively unwraps all envelopes to return the innermost
  * {@link Message}.
  *
  * <h2>DeviceSentMessage</h2>
@@ -96,8 +95,8 @@ import java.util.function.Consumer;
  * has three versions. All versions share the same Java type. The factory
  * methods ({@link #of(Message)}, {@link #ofViewOnce(Message)}, etc.) and
  * instance converters ({@link #toViewOnce()}, {@link #toGroupStatus()},
- * etc.) always produce the newest version. The {@link #content()} and
- * {@link #unbox()} methods transparently read any version.
+ * etc.) always produce the newest version. The {@link #content()}
+ * method transparently reads any version.
  *
  * <h2>Usage</h2>
  *
@@ -288,8 +287,7 @@ public final class MessageContainer {
      * <p>When a user sends a message from one device, WhatsApp distributes
      * it to the user's other linked devices wrapped in this envelope. The
      * inner {@link DeviceSentMessage#message()} contains the original
-     * message. {@link #content()} and {@link #unbox()} transparently
-     * unwrap this layer.
+     * message.
      */
     @ProtobufProperty(index = 31, type = ProtobufType.MESSAGE)
     DeviceSentMessage deviceSentMessage;
@@ -570,7 +568,7 @@ public final class MessageContainer {
      * targeting another message (used for event edits).
      */
     @ProtobufProperty(index = 82, type = ProtobufType.MESSAGE)
-    SecretEncryptedMessage secretEncryptedMessage;
+    SecretEncMessage secretEncryptedMessage;
 
     /**
      * An album message grouping multiple media messages together.
@@ -649,9 +647,6 @@ public final class MessageContainer {
     /**
      * A rich response from the WhatsApp AI bot, composed of typed
      * sub-message fragments (text, code, tables, images, etc.).
-     *
-     * <p>This type does not implement {@link Message} and is therefore
-     * not returned by {@link #content()}.
      */
     @ProtobufProperty(index = 97, type = ProtobufType.MESSAGE)
     AIRichResponseMessage richResponseMessage;
@@ -768,7 +763,7 @@ public final class MessageContainer {
     FutureProofMessage newsletterAdminProfileMessageV2;
 
 
-    MessageContainer(String conversation, SenderKeyDistributionMessage senderKeyDistributionMessage, ImageMessage imageMessage, ContactMessage contactMessage, LocationMessage locationMessage, ExtendedTextMessage extendedTextMessage, DocumentMessage documentMessage, AudioMessage audioMessage, VideoMessage videoMessage, CallOfferMessage call, ChatProtocolMessage chat, ProtocolMessage protocolMessage, ContactsArrayMessage contactsArrayMessage, HighlyStructuredMessage highlyStructuredMessage, SenderKeyDistributionMessage fastRatchetKeySenderKeyDistributionMessage, SendPaymentMessage sendPaymentMessage, LiveLocationMessage liveLocationMessage, RequestPaymentMessage requestPaymentMessage, DeclinePaymentRequestMessage declinePaymentRequestMessage, CancelPaymentRequestMessage cancelPaymentRequestMessage, TemplateMessage templateMessage, StickerMessage stickerMessage, GroupInviteMessage groupInviteMessage, TemplateButtonReplyMessage templateButtonReplyMessage, ProductMessage productMessage, DeviceSentMessage deviceSentMessage, ChatMessageContextInfo messageContextInfo, ListMessage listMessage, FutureProofMessage viewOnceMessage, OrderMessage orderMessage, ListResponseMessage listResponseMessage, FutureProofMessage ephemeralMessage, InvoiceMessage invoiceMessage, ButtonsMessage buttonsMessage, ButtonsResponseMessage buttonsResponseMessage, PaymentInviteMessage paymentInviteMessage, InteractiveMessage interactiveMessage, ReactionMessage reactionMessage, StickerSyncRMRMessage stickerSyncRmrMessage, InteractiveResponseMessage interactiveResponseMessage, PollCreationMessage pollCreationMessage, PollUpdateMessage pollUpdateMessage, KeepInChatMessage keepInChatMessage, FutureProofMessage documentWithCaptionMessage, RequestPhoneNumberMessage requestPhoneNumberMessage, FutureProofMessage viewOnceMessageV2, EncReactionMessage encReactionMessage, FutureProofMessage editedMessage, FutureProofMessage viewOnceMessageV2Extension, PollCreationMessage pollCreationMessageV2, ScheduledCallCreationMessage scheduledCallCreationMessage, FutureProofMessage groupMentionedMessage, PinInChatMessage pinInChatMessage, PollCreationMessage pollCreationMessageV3, ScheduledCallEditMessage scheduledCallEditMessage, VideoMessage ptvMessage, FutureProofMessage botInvokeMessage, CallLogMessage callLogMesssage, MessageHistoryBundle messageHistoryBundle, EncCommentMessage encCommentMessage, BCallMessage bcallMessage, FutureProofMessage lottieStickerMessage, EventMessage eventMessage, EncEventResponseMessage encEventResponseMessage, CommentMessage commentMessage, NewsletterAdminInviteMessage newsletterAdminInviteMessage, PlaceholderMessage placeholderMessage, SecretEncryptedMessage secretEncryptedMessage, AlbumMessage albumMessage, FutureProofMessage eventCoverImage, StickerPackMessage stickerPackMessage, FutureProofMessage statusMentionMessage, PollResultSnapshotMessage pollResultSnapshotMessage, FutureProofMessage pollCreationOptionImageMessage, FutureProofMessage associatedChildMessage, FutureProofMessage groupStatusMentionMessage, FutureProofMessage pollCreationMessageV4, FutureProofMessage statusAddYours, FutureProofMessage groupStatusMessage, AIRichResponseMessage richResponseMessage, StatusNotificationMessage statusNotificationMessage, FutureProofMessage limitSharingMessage, FutureProofMessage botTaskMessage, FutureProofMessage questionMessage, MessageHistoryNotice messageHistoryNotice, FutureProofMessage groupStatusMessageV2, FutureProofMessage botForwardedMessage, StatusQuestionAnswerMessage statusQuestionAnswerMessage, FutureProofMessage questionReplyMessage, QuestionResponseMessage questionResponseMessage, StatusQuotedMessage statusQuotedMessage, StatusStickerInteractionMessage statusStickerInteractionMessage, PollCreationMessage pollCreationMessageV5, NewsletterFollowerInviteMessage newsletterFollowerInviteMessageV2, PollResultSnapshotMessage pollResultSnapshotMessageV3, FutureProofMessage newsletterAdminProfileMessage, FutureProofMessage newsletterAdminProfileMessageV2) {
+    MessageContainer(String conversation, SenderKeyDistributionMessage senderKeyDistributionMessage, ImageMessage imageMessage, ContactMessage contactMessage, LocationMessage locationMessage, ExtendedTextMessage extendedTextMessage, DocumentMessage documentMessage, AudioMessage audioMessage, VideoMessage videoMessage, CallOfferMessage call, ChatProtocolMessage chat, ProtocolMessage protocolMessage, ContactsArrayMessage contactsArrayMessage, HighlyStructuredMessage highlyStructuredMessage, SenderKeyDistributionMessage fastRatchetKeySenderKeyDistributionMessage, SendPaymentMessage sendPaymentMessage, LiveLocationMessage liveLocationMessage, RequestPaymentMessage requestPaymentMessage, DeclinePaymentRequestMessage declinePaymentRequestMessage, CancelPaymentRequestMessage cancelPaymentRequestMessage, TemplateMessage templateMessage, StickerMessage stickerMessage, GroupInviteMessage groupInviteMessage, TemplateButtonReplyMessage templateButtonReplyMessage, ProductMessage productMessage, DeviceSentMessage deviceSentMessage, ChatMessageContextInfo messageContextInfo, ListMessage listMessage, FutureProofMessage viewOnceMessage, OrderMessage orderMessage, ListResponseMessage listResponseMessage, FutureProofMessage ephemeralMessage, InvoiceMessage invoiceMessage, ButtonsMessage buttonsMessage, ButtonsResponseMessage buttonsResponseMessage, PaymentInviteMessage paymentInviteMessage, InteractiveMessage interactiveMessage, ReactionMessage reactionMessage, StickerSyncRMRMessage stickerSyncRmrMessage, InteractiveResponseMessage interactiveResponseMessage, PollCreationMessage pollCreationMessage, PollUpdateMessage pollUpdateMessage, KeepInChatMessage keepInChatMessage, FutureProofMessage documentWithCaptionMessage, RequestPhoneNumberMessage requestPhoneNumberMessage, FutureProofMessage viewOnceMessageV2, EncReactionMessage encReactionMessage, FutureProofMessage editedMessage, FutureProofMessage viewOnceMessageV2Extension, PollCreationMessage pollCreationMessageV2, ScheduledCallCreationMessage scheduledCallCreationMessage, FutureProofMessage groupMentionedMessage, PinInChatMessage pinInChatMessage, PollCreationMessage pollCreationMessageV3, ScheduledCallEditMessage scheduledCallEditMessage, VideoMessage ptvMessage, FutureProofMessage botInvokeMessage, CallLogMessage callLogMesssage, MessageHistoryBundle messageHistoryBundle, EncCommentMessage encCommentMessage, BCallMessage bcallMessage, FutureProofMessage lottieStickerMessage, EventMessage eventMessage, EncEventResponseMessage encEventResponseMessage, CommentMessage commentMessage, NewsletterAdminInviteMessage newsletterAdminInviteMessage, PlaceholderMessage placeholderMessage, SecretEncMessage secretEncryptedMessage, AlbumMessage albumMessage, FutureProofMessage eventCoverImage, StickerPackMessage stickerPackMessage, FutureProofMessage statusMentionMessage, PollResultSnapshotMessage pollResultSnapshotMessage, FutureProofMessage pollCreationOptionImageMessage, FutureProofMessage associatedChildMessage, FutureProofMessage groupStatusMentionMessage, FutureProofMessage pollCreationMessageV4, FutureProofMessage statusAddYours, FutureProofMessage groupStatusMessage, AIRichResponseMessage richResponseMessage, StatusNotificationMessage statusNotificationMessage, FutureProofMessage limitSharingMessage, FutureProofMessage botTaskMessage, FutureProofMessage questionMessage, MessageHistoryNotice messageHistoryNotice, FutureProofMessage groupStatusMessageV2, FutureProofMessage botForwardedMessage, StatusQuestionAnswerMessage statusQuestionAnswerMessage, FutureProofMessage questionReplyMessage, QuestionResponseMessage questionResponseMessage, StatusQuotedMessage statusQuotedMessage, StatusStickerInteractionMessage statusStickerInteractionMessage, PollCreationMessage pollCreationMessageV5, NewsletterFollowerInviteMessage newsletterFollowerInviteMessageV2, PollResultSnapshotMessage pollResultSnapshotMessageV3, FutureProofMessage newsletterAdminProfileMessage, FutureProofMessage newsletterAdminProfileMessageV2) {
         this.conversation = conversation;
         this.senderKeyDistributionMessage = senderKeyDistributionMessage;
         this.imageMessage = imageMessage;
@@ -963,7 +958,7 @@ public final class MessageContainer {
             case NewsletterAdminInviteMessage m -> builder.newsletterAdminInviteMessage(m);
             case NewsletterFollowerInviteMessage m -> builder.newsletterFollowerInviteMessageV2(m);
             case PlaceholderMessage m -> builder.placeholderMessage(m);
-            case SecretEncryptedMessage m -> builder.secretEncryptedMessage(m);
+            case SecretEncMessage m -> builder.secretEncryptedMessage(m);
             case AlbumMessage m -> builder.albumMessage(m);
             case PollResultSnapshotMessage m -> builder.pollResultSnapshotMessageV3(m);
             case StatusNotificationMessage m -> builder.statusNotificationMessage(m);
@@ -1288,12 +1283,35 @@ public final class MessageContainer {
      * @return a {@code Message} describing the innermost {@link Message}
      */
     public Message content() {
-        // Unwrap FutureProofMessage / DeviceSentMessage envelopes first
-        var inner = unbox();
-        if (inner != this) {
-            return inner.content();
-        }
-
+        // FutureProofMessage wrappers — WhatsApp priority order first
+        if (groupMentionedMessage != null) return unboxFutureProof(groupMentionedMessage).content();
+        if (documentWithCaptionMessage != null) return unboxFutureProof(documentWithCaptionMessage).content();
+        if (viewOnceMessage != null) return unboxFutureProof(viewOnceMessage).content();
+        if (viewOnceMessageV2 != null) return unboxFutureProof(viewOnceMessageV2).content();
+        if (viewOnceMessageV2Extension != null) return unboxFutureProof(viewOnceMessageV2Extension).content();
+        if (ephemeralMessage != null) return unboxFutureProof(ephemeralMessage).content();
+        if (editedMessage != null) return unboxFutureProof(editedMessage).content();
+        if (botInvokeMessage != null) return unboxFutureProof(botInvokeMessage).content();
+        // Remaining FutureProofMessage wrappers in field index order
+        if (lottieStickerMessage != null) return unboxFutureProof(lottieStickerMessage).content();
+        if (eventCoverImage != null) return unboxFutureProof(eventCoverImage).content();
+        if (statusMentionMessage != null) return unboxFutureProof(statusMentionMessage).content();
+        if (pollCreationOptionImageMessage != null) return unboxFutureProof(pollCreationOptionImageMessage).content();
+        if (associatedChildMessage != null) return unboxFutureProof(associatedChildMessage).content();
+        if (groupStatusMentionMessage != null) return unboxFutureProof(groupStatusMentionMessage).content();
+        if (pollCreationMessageV4 != null) return unboxFutureProof(pollCreationMessageV4).content();
+        if (statusAddYours != null) return unboxFutureProof(statusAddYours).content();
+        if (groupStatusMessage != null) return unboxFutureProof(groupStatusMessage).content();
+        if (limitSharingMessage != null) return unboxFutureProof(limitSharingMessage).content();
+        if (botTaskMessage != null) return unboxFutureProof(botTaskMessage).content();
+        if (questionMessage != null) return unboxFutureProof(questionMessage).content();
+        if (groupStatusMessageV2 != null) return unboxFutureProof(groupStatusMessageV2).content();
+        if (botForwardedMessage != null) return unboxFutureProof(botForwardedMessage).content();
+        if (questionReplyMessage != null) return unboxFutureProof(questionReplyMessage).content();
+        if (newsletterAdminProfileMessage != null) return unboxFutureProof(newsletterAdminProfileMessage).content();
+        if (newsletterAdminProfileMessageV2 != null) return unboxFutureProof(newsletterAdminProfileMessageV2).content();
+        // DeviceSentMessage wrapping
+        if (deviceSentMessage != null && deviceSentMessage.message().isPresent()) return deviceSentMessage.message().get().content();
         // Direct message fields in protobuf index order
         if (conversation != null) return new ExtendedTextMessageBuilder().text(conversation).build();
         if (imageMessage != null) return imageMessage;
@@ -1353,6 +1371,7 @@ public final class MessageContainer {
         if (albumMessage != null) return albumMessage;
         if (stickerPackMessage != null) return stickerPackMessage;
         if (pollResultSnapshotMessage != null) return pollResultSnapshotMessage;
+        if (richResponseMessage != null) return richResponseMessage;
         if (statusNotificationMessage != null) return statusNotificationMessage;
         if (messageHistoryNotice != null) return messageHistoryNotice;
         if (statusQuestionAnswerMessage != null) return statusQuestionAnswerMessage;
@@ -1362,9 +1381,6 @@ public final class MessageContainer {
         if (pollCreationMessageV5 != null) return pollCreationMessageV5;
         if (newsletterFollowerInviteMessageV2 != null) return newsletterFollowerInviteMessageV2;
         if (pollResultSnapshotMessageV3 != null) return pollResultSnapshotMessageV3;
-        // Side-channel: checked last as they can coexist with a payload
-        if (senderKeyDistributionMessage != null) return senderKeyDistributionMessage;
-        if (fastRatchetKeySenderKeyDistributionMessage != null) return fastRatchetKeySenderKeyDistributionMessage;
         return EmptyMessage.INSTANCE;
     }
 
@@ -1376,68 +1392,43 @@ public final class MessageContainer {
      *
      * @return an {@code Optional} describing the {@link ContextualMessage}
      */
-    public Optional<ContextualMessage> contentWithContext() {
+    public Optional<ContextualMessage> contextualContent() {
         return content() instanceof ContextualMessage contextualMessage
                 ? Optional.of(contextualMessage)
                 : Optional.empty();
     }
 
     /**
-     * Returns the inner {@code MessageContainer} if this container holds a
-     * {@link FutureProofMessage} or {@link DeviceSentMessage} wrapper.
-     * Otherwise returns {@code this}.
+     * Returns the {@link FutureProofMessageType} identifying which wrapper
+     * field is populated in this container, or {@link FutureProofMessageType#NONE}
+     * if no wrapper is present.
      *
-     * <p>Only one layer of wrapping is removed. Call {@link #content()} to
-     * recursively unwrap all layers.
-     *
-     * <p>The unwrapping order follows WhatsApp Web's
-     * {@code maybeGetFutureproofMessage} priority:
-     * <ol>
-     * <li>{@code groupMentionedMessage}
-     * <li>{@code documentWithCaptionMessage}
-     * <li>{@code viewOnceMessage} / {@code viewOnceMessageV2} / {@code viewOnceMessageV2Extension}
-     * <li>{@code ephemeralMessage}
-     * <li>{@code editedMessage}
-     * <li>{@code botInvokeMessage}
-     * <li>Remaining {@link FutureProofMessage} wrappers in field index order
-     * <li>{@code deviceSentMessage}
-     * </ol>
-     *
-     * @return the inner container, or {@code this} if not wrapped
+     * @return the wrapper type, never {@code null}
      */
-    public MessageContainer unbox() {
-        // FutureProofMessage wrappers — WhatsApp priority order first
-        if (groupMentionedMessage != null) return unboxFutureProof(groupMentionedMessage);
-        if (documentWithCaptionMessage != null) return unboxFutureProof(documentWithCaptionMessage);
-        if (viewOnceMessage != null) return unboxFutureProof(viewOnceMessage);
-        if (viewOnceMessageV2 != null) return unboxFutureProof(viewOnceMessageV2);
-        if (viewOnceMessageV2Extension != null) return unboxFutureProof(viewOnceMessageV2Extension);
-        if (ephemeralMessage != null) return unboxFutureProof(ephemeralMessage);
-        if (editedMessage != null) return unboxFutureProof(editedMessage);
-        if (botInvokeMessage != null) return unboxFutureProof(botInvokeMessage);
-        // Remaining FutureProofMessage wrappers in field index order
-        if (lottieStickerMessage != null) return unboxFutureProof(lottieStickerMessage);
-        if (eventCoverImage != null) return unboxFutureProof(eventCoverImage);
-        if (statusMentionMessage != null) return unboxFutureProof(statusMentionMessage);
-        if (pollCreationOptionImageMessage != null) return unboxFutureProof(pollCreationOptionImageMessage);
-        if (associatedChildMessage != null) return unboxFutureProof(associatedChildMessage);
-        if (groupStatusMentionMessage != null) return unboxFutureProof(groupStatusMentionMessage);
-        if (pollCreationMessageV4 != null) return unboxFutureProof(pollCreationMessageV4);
-        if (statusAddYours != null) return unboxFutureProof(statusAddYours);
-        if (groupStatusMessage != null) return unboxFutureProof(groupStatusMessage);
-        if (limitSharingMessage != null) return unboxFutureProof(limitSharingMessage);
-        if (botTaskMessage != null) return unboxFutureProof(botTaskMessage);
-        if (questionMessage != null) return unboxFutureProof(questionMessage);
-        if (groupStatusMessageV2 != null) return unboxFutureProof(groupStatusMessageV2);
-        if (botForwardedMessage != null) return unboxFutureProof(botForwardedMessage);
-        if (questionReplyMessage != null) return unboxFutureProof(questionReplyMessage);
-        if (newsletterAdminProfileMessage != null) return unboxFutureProof(newsletterAdminProfileMessage);
-        if (newsletterAdminProfileMessageV2 != null) return unboxFutureProof(newsletterAdminProfileMessageV2);
-        // DeviceSentMessage wrapping
-        if (deviceSentMessage != null && deviceSentMessage.message().isPresent()) {
-            return deviceSentMessage.message().get();
-        }
-        return this;
+    public FutureProofMessageType futureProofContentType() {
+        if (groupMentionedMessage != null) return FutureProofMessageType.GROUP_MENTIONED;
+        if (documentWithCaptionMessage != null) return FutureProofMessageType.DOCUMENT_WITH_CAPTION;
+        if (viewOnceMessage != null || viewOnceMessageV2 != null || viewOnceMessageV2Extension != null) return FutureProofMessageType.VIEW_ONCE;
+        if (ephemeralMessage != null) return FutureProofMessageType.EPHEMERAL;
+        if (editedMessage != null) return FutureProofMessageType.EDITED;
+        if (botInvokeMessage != null) return FutureProofMessageType.BOT_INVOKE;
+        if (lottieStickerMessage != null) return FutureProofMessageType.LOTTIE_STICKER;
+        if (eventCoverImage != null) return FutureProofMessageType.EVENT_COVER_IMAGE;
+        if (statusMentionMessage != null) return FutureProofMessageType.STATUS_MENTION;
+        if (pollCreationOptionImageMessage != null) return FutureProofMessageType.POLL_CREATION_OPTION_IMAGE;
+        if (associatedChildMessage != null) return FutureProofMessageType.ASSOCIATED_CHILD;
+        if (groupStatusMentionMessage != null) return FutureProofMessageType.GROUP_STATUS_MENTION;
+        if (pollCreationMessageV4 != null) return FutureProofMessageType.POLL_CREATION;
+        if (statusAddYours != null) return FutureProofMessageType.STATUS_ADD_YOURS;
+        if (groupStatusMessage != null || groupStatusMessageV2 != null) return FutureProofMessageType.GROUP_STATUS;
+        if (limitSharingMessage != null) return FutureProofMessageType.LIMIT_SHARING;
+        if (botTaskMessage != null) return FutureProofMessageType.BOT_TASK;
+        if (questionMessage != null) return FutureProofMessageType.QUESTION;
+        if (botForwardedMessage != null) return FutureProofMessageType.BOT_FORWARDED;
+        if (questionReplyMessage != null) return FutureProofMessageType.QUESTION_REPLY;
+        if (newsletterAdminProfileMessage != null || newsletterAdminProfileMessageV2 != null) return FutureProofMessageType.NEWSLETTER_ADMIN_PROFILE;
+        if (deviceSentMessage != null) return FutureProofMessageType.DEVICE_SENT;
+        return FutureProofMessageType.NONE;
     }
 
     /**
@@ -1518,48 +1509,42 @@ public final class MessageContainer {
     }
 
     /**
-     * Sets the per-message transport metadata on this container.
+     * Returns a new container with the given per-message transport
+     * metadata, preserving the current message and all other sidecar
+     * fields.
      *
-     * <p>The current payload, wrapper structure, and all other sidecar
-     * fields are preserved.
-     *
-     * @param value the message context info to attach, or {@code null} to clear
-     * @return this container, for chaining
+     * @param value the message context info to attach, or {@code null}
+     *              to clear
+     * @return a new container with the updated value
      */
     public MessageContainer withMessageContextInfo(ChatMessageContextInfo value) {
-        this.messageContextInfo = value;
-        return this;
+        return wrapAs(b -> b.messageContextInfo(value));
     }
 
     /**
-     * Sets the sender key distribution message on this container.
-     *
-     * <p>The current payload, wrapper structure, and all other sidecar
-     * fields are preserved.
+     * Returns a new container with the given sender key distribution
+     * message, preserving the current message and all other sidecar
+     * fields.
      *
      * @param value the sender key distribution message to attach, or
      *              {@code null} to clear
-     * @return this container, for chaining
+     * @return a new container with the updated value
      */
     public MessageContainer withSenderKeyDistributionMessage(SenderKeyDistributionMessage value) {
-        this.senderKeyDistributionMessage = value;
-        return this;
+        return wrapAs(b -> b.senderKeyDistributionMessage(value));
     }
 
     /**
-     * Sets the fast ratchet key sender key distribution message on this
-     * container.
-     *
-     * <p>The current payload, wrapper structure, and all other sidecar
-     * fields are preserved.
+     * Returns a new container with the given fast ratchet key sender key
+     * distribution message, preserving the current message and all other
+     * sidecar fields.
      *
      * @param value the fast ratchet key sender key distribution message
      *              to attach, or {@code null} to clear
-     * @return this container, for chaining
+     * @return a new container with the updated value
      */
     public MessageContainer withFastRatchetKeySenderKeyDistributionMessage(SenderKeyDistributionMessage value) {
-        this.fastRatchetKeySenderKeyDistributionMessage = value;
-        return this;
+        return wrapAs(b -> b.fastRatchetKeySenderKeyDistributionMessage(value));
     }
 
     /**
@@ -1790,12 +1775,12 @@ public final class MessageContainer {
     }
 
     /**
-     * Creates a {@link FutureProofMessage} wrapping the unboxed content
+     * Creates a {@link FutureProofMessage} wrapping the content
      * of this container.
      */
     private FutureProofMessage wrapInner() {
         return new FutureProofMessageBuilder()
-                .messageContainer(unbox())
+                .messageContainer(MessageContainer.of(content()))
                 .build();
     }
 

@@ -45,11 +45,9 @@ public final class BotLinkedAccount {
      * Sets the type of linked account.
      *
      * @param type the new linked account type, or {@code null}
-     * @return this instance for chaining
      */
-    public BotLinkedAccount setType(BotLinkedAccountType type) {
+    public void setType(BotLinkedAccountType type) {
         this.type = type;
-        return this;
     }
 
     /**

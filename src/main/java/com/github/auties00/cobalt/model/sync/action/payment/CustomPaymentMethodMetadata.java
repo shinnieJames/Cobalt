@@ -57,13 +57,11 @@ public final class CustomPaymentMethodMetadata implements SyncAction<SyncActionE
         return value;
     }
 
-    public CustomPaymentMethodMetadata setKey(String key) {
+    public void setKey(String key) {
         this.key = key;
-        return this;
     }
 
-    public CustomPaymentMethodMetadata setValue(String value) {
+    public void setValue(String value) {
         this.value = value;
-        return this;
     }
 }

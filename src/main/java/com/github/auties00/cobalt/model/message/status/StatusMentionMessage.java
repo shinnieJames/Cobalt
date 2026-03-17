@@ -20,8 +20,7 @@ public final class StatusMentionMessage {
         return Optional.ofNullable(quotedStatus);
     }
 
-    public StatusMentionMessage setQuotedStatus(MessageContainer quotedStatus) {
+    public void setQuotedStatus(MessageContainer quotedStatus) {
         this.quotedStatus = quotedStatus;
-        return this;
     }
 }

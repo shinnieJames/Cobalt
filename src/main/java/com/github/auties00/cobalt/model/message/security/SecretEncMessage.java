@@ -8,7 +8,7 @@ import it.auties.protobuf.model.*;
 import java.util.Optional;
 
 @ProtobufMessage(name = "Message.SecretEncryptedMessage")
-public final class SecretEncryptedMessage implements Message {
+public final class SecretEncMessage implements Message {
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
     MessageKey targetMessageKey;
 
@@ -22,7 +22,7 @@ public final class SecretEncryptedMessage implements Message {
     SecretEncType secretEncType;
 
 
-    SecretEncryptedMessage(MessageKey targetMessageKey, byte[] encPayload, byte[] encIv, SecretEncType secretEncType) {
+    SecretEncMessage(MessageKey targetMessageKey, byte[] encPayload, byte[] encIv, SecretEncType secretEncType) {
         this.targetMessageKey = targetMessageKey;
         this.encPayload = encPayload;
         this.encIv = encIv;
@@ -45,24 +45,20 @@ public final class SecretEncryptedMessage implements Message {
         return Optional.ofNullable(secretEncType);
     }
 
-    public SecretEncryptedMessage setTargetMessageKey(MessageKey targetMessageKey) {
+    public void setTargetMessageKey(MessageKey targetMessageKey) {
         this.targetMessageKey = targetMessageKey;
-        return this;
     }
 
-    public SecretEncryptedMessage setEncPayload(byte[] encPayload) {
+    public void setEncPayload(byte[] encPayload) {
         this.encPayload = encPayload;
-        return this;
     }
 
-    public SecretEncryptedMessage setEncIv(byte[] encIv) {
+    public void setEncIv(byte[] encIv) {
         this.encIv = encIv;
-        return this;
     }
 
-    public SecretEncryptedMessage setSecretEncType(SecretEncType secretEncType) {
+    public void setSecretEncType(SecretEncType secretEncType) {
         this.secretEncType = secretEncType;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.SecretEncryptedMessage.SecretEncType")

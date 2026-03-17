@@ -62,10 +62,14 @@ public final class NewsletterStanza {
      */
     public static Node buildMediaId(NewsletterMessageInfo info) {
         return info.mediaHandle()
-                .map(handle -> new NodeBuilder()
-                        .description("media_id")
-                        .content(handle)
-                        .build())
+                .map(NewsletterStanza::buildMediaId)
                 .orElse(null);
+    }
+
+    private static Node buildMediaId(String handle) {
+        return new NodeBuilder()
+                .description("media_id")
+                .content(handle)
+                .build();
     }
 }

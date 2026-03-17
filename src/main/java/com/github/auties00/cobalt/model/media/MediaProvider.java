@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
 import com.github.auties00.cobalt.model.message.media.MediaMessage;
 import com.github.auties00.cobalt.model.preference.Sticker;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -76,10 +77,10 @@ public sealed interface MediaProvider
     /**
      * Sets the epoch-second timestamp at which the media key was generated.
      *
-     * @param timestamp the media key timestamp in epoch seconds, or
+     * @param timestamp the media key timestamp, or
      *        {@code null} to clear
      */
-    void setMediaKeyTimestamp(Long timestamp);
+    void setMediaKeyTimestamp(Instant timestamp);
 
     /**
      * Returns the SHA-256 digest of the plaintext (decrypted) media file,

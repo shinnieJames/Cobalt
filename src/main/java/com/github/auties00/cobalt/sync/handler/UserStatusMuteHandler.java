@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.sync.handler;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
@@ -55,7 +56,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
         }
 
         var userJid = Jid.of(userJidString);
-        if (userJid.hasGroupServer()) {
+        if (userJid.hasServer(JidServer.groupOrCommunity())) {
             var states = new java.util.HashMap<>(client.store().groupStatusMuteStates());
             states.put(userJidString, action.muted());
             client.store().setGroupStatusMuteStates(states);

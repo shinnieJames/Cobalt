@@ -6,42 +6,37 @@ import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.message.receive.receipt.MessageReceiptHandler;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanza;
 import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveStanzaParser;
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayload;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayloadSpec;
-import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
-import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
-import com.github.auties00.cobalt.model.message.context.ContextInfo;
-import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
-import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyBuilder;
-import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
-import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyShare;
-import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyShareBuilder;
+import com.github.auties00.cobalt.model.message.system.appstate.*;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestResponseMessage;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestType;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.model.payment.OrphanPaymentNotificationBuilder;
 import com.github.auties00.cobalt.model.payment.PaymentInfo;
 import com.github.auties00.cobalt.model.payment.PaymentInfoBuilder;
+import com.github.auties00.cobalt.model.sync.SyncCollectionState;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketStream;
-import com.github.auties00.cobalt.model.sync.SyncCollectionState;
-import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import it.auties.protobuf.stream.ProtobufInputStream;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.zip.GZIPInputStream;
@@ -105,7 +100,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                     handleProtocolMessage(chatInfo);
                 }
                 resolveOrphanPayment(info);
-                var quoted = findQuotedMessage(info);
+                var quoted = whatsapp.store().findQuotedMessage(info);
                 notifyMessageReceived(info, quoted);
             }
 
@@ -151,7 +146,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
             storeIncomingMessage(info);
             resolveOrphanPayment(info);
-            var quoted = findQuotedMessage(info);
+            var quoted = whatsapp.store().findQuotedMessage(info);
             notifyMessageReceived(info, quoted);
         } catch (RuntimeException exception) {
             LOGGER.log(System.Logger.Level.WARNING,
@@ -281,35 +276,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
-    private Optional<MessageInfo> findQuotedMessage(MessageInfo info) {
-        return contextInfo(info)
-                .flatMap(context -> {
-                    var quotedId = context.stanzaId().orElse(null);
-                    var provider = context.remoteJid()
-                            .or(() -> info.key().parentJid())
-                            .orElse(null);
-                    if (quotedId == null || provider == null) {
-                        return Optional.empty();
-                    }
-
-                    return whatsapp.store()
-                            .findMessageById(provider, quotedId)
-                            .map(MessageInfo.class::cast);
-                });
-    }
-
-    private Optional<ContextInfo> contextInfo(MessageInfo info) {
-        return switch (info) {
-            case NewsletterMessageInfo newsletterInfo -> newsletterInfo.message()
-                    .contentWithContext()
-                    .flatMap(ContextualMessage::contextInfo);
-            case ChatMessageInfo chatInfo -> chatInfo.message()
-                    .contentWithContext()
-                    .flatMap(ContextualMessage::contextInfo);
-        };
-    }
-
-    private void notifyMessageReceived(MessageInfo info, Optional<MessageInfo> quotedMessage) {
+    private void notifyMessageReceived(MessageInfo info, Optional<? extends MessageInfo> quotedMessage) {
         var statusMessage = isStatusMessage(info);
         for (var listener : whatsapp.store().listeners()) {
             Thread.startVirtualThread(() -> {
@@ -334,8 +301,10 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        var messageId = chatMessageInfo.id();
-        var orphan = whatsapp.store().removeOrphanPaymentNotification(messageId).orElse(null);
+        var orphan = chatMessageInfo.key()
+                .id()
+                .flatMap(whatsapp.store()::removeOrphanPaymentNotification)
+                .orElse(null);
         if (orphan == null) {
             return;
         }
@@ -349,7 +318,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 .attribute("transaction-type", orphan.transactionType().orElse(null))
                 .attribute("status", orphan.status().orElse(null))
                 .attribute("ts", orphan.transactionTimestamp().orElse(null))
-                .attribute("sender", chatMessageInfo.senderJid())
+                .attribute("sender", chatMessageInfo.senderJid().orElse(null))
                 .build();
         handlePaymentTransaction(transactionNode);
     }
@@ -363,7 +332,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
 
         var self = whatsapp.store().jid().orElse(null);
-        var fromMe = self != null && java.util.Objects.equals(self.toUserJid(), sender.toUserJid());
+        var fromMe = self != null && Objects.equals(self.toUserJid(), sender.toUserJid());
         var group = transaction.getAttributeAsJid("group").orElse(null);
         var remote = group != null ? group : fromMe ? receiver : sender;
         var participant = group != null ? sender : null;
@@ -386,12 +355,12 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         var type = transaction.getAttributeAsString("transaction-type", null);
         var status = transaction.getAttributeAsString("status", null);
 
-        paymentInfo.setReceiverJid(receiver)
-                .setAmount1000(transaction.getAttributeAsLong("amount_1000", (Long) null))
-                .setCurrency(transaction.getAttributeAsString("currency", null))
-                .setTransactionTimestamp(transaction.getAttributeAsLong("ts", (Long) null))
-                .setStatus(mapPaymentStatus(type, status, fromMe))
-                .setTxnStatus(mapTxnStatus(type, status, fromMe));
+        paymentInfo.setReceiverJid(receiver);
+        paymentInfo.setAmount1000(transaction.getAttributeAsLong("amount_1000", (Long) null));
+        paymentInfo.setCurrency(transaction.getAttributeAsString("currency", null));
+        paymentInfo.setTransactionTimestamp(transaction.getAttributeAsLong("ts", (Long) null));
+        paymentInfo.setStatus(mapPaymentStatus(type, status, fromMe));
+        paymentInfo.setTxnStatus(mapTxnStatus(type, status, fromMe));
 
         chatMessageInfo.setPaymentInfo(paymentInfo);
         for (var listener : whatsapp.store().listeners()) {
@@ -437,7 +406,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             case RECV_PAY_EXPIRED, REQUEST_PAY_EXPIRED, SEND_PAY_AUTH_CANCELED, SEND_PAY_AUTH_CANCEL_FAILED, SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING, SEND_PAY_EXPIRED -> PaymentInfo.Status.EXPIRED;
             case REQUEST_PAY_REJECTED -> PaymentInfo.Status.REJECTED;
             case REQUEST_PAY_CANCELLED -> PaymentInfo.Status.CANCELLED;
-            default -> PaymentInfo.Status.UNKNOWN_STATUS;
+            case null, default -> PaymentInfo.Status.UNKNOWN_STATUS;
         };
     }
 
@@ -470,13 +439,14 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             case SEND_PAY_REFUND_FAILED -> PaymentInfo.TxnStatus.REFUND_FAILED;
             case SEND_PAY_REFUND_PENDING -> PaymentInfo.TxnStatus.REFUND_FAILED_DA;
             case SEND_PAY_IN_REVIEW -> PaymentInfo.TxnStatus.IN_REVIEW;
-            default -> PaymentInfo.TxnStatus.UNKNOWN;
+            case null, default -> PaymentInfo.TxnStatus.UNKNOWN;
         };
     }
 
     private PaymentMessageStatus paymentMessageStatus(String type, String status, boolean fromMe) {
         var statusValue = status == null ? "" : status.toUpperCase();
         return switch (paymentMessageTransactionType(type, fromMe)) {
+            case TYPE_P2M_PAYOUT -> null;
             case TYPE_P2P_SENT, TYPE_P2M_SENT, TYPE_DEPOSIT -> switch (statusValue) {
                 case "PENDING_RECEIVER_SETUP" -> PaymentMessageStatus.SEND_PAY_PENDING_RECEIVER;
                 case "FAILED_DA" -> PaymentMessageStatus.SEND_PAY_PENDING;
@@ -581,8 +551,8 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     private void processAppStateSyncKeyShare(ChatMessageInfo info, AppStateSyncKeyShare keyShare) {
         var keys = keyShare.keys();
-        var senderDeviceId = info.senderJid() != null ? info.senderJid().device() : -1;
-        var usableKeys = new ArrayList<com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey>(keys.size());
+        var senderDeviceId = info.senderJid().isPresent() ? info.senderJid().get().device() : -1;
+        var usableKeys = new ArrayList<AppStateSyncKey>(keys.size());
 
         var resolvedAny = false;
         var negativeResponseObserved = false;
@@ -595,7 +565,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             }
 
             var hasKeyData = key.keyData()
-                    .flatMap(com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyData::keyData)
+                    .flatMap(AppStateSyncKeyData::keyData)
                     .map(data -> data.length > 0)
                     .orElse(false);
             if (hasKeyData) {
@@ -650,14 +620,14 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
     private void processAppStateSyncKeyRequest(
             ChatMessageInfo info,
-            com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyRequest request
+            AppStateSyncKeyRequest request
     ) {
         var sender = info.senderJid();
-        if (sender == null) {
+        if (sender.isEmpty()) {
             return;
         }
 
-        var keysToShare = new ArrayList<com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey>();
+        var keysToShare = new ArrayList<AppStateSyncKey>();
         for (var requestedKeyId : request.keyIds()) {
             var rawKeyId = requestedKeyId.keyId().orElse(null);
             if (rawKeyId == null) {
@@ -666,7 +636,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
             var keyToShare = whatsapp.store().findWebAppStateKeyById(rawKeyId)
                     .orElseGet(() -> new AppStateSyncKeyBuilder()
-                            .keyId(new com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyIdBuilder()
+                            .keyId(new AppStateSyncKeyIdBuilder()
                                     .keyId(rawKeyId)
                                     .build())
                             .build());
@@ -694,18 +664,18 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             }
 
             var key = new MessageKeyBuilder()
-                    .id(MessageKey.randomId(whatsapp.store().clientType()))
-                    .chatJid(self)
+                    .id(MessageIdGenerator.generate(MessageIdVersion.V2, sender.get()))
+                    .parentJid(self)
                     .fromMe(true)
                     .senderJid(self)
                     .build();
             var response = new ChatMessageInfoBuilder()
                     .key(key)
                     .message(messageContainer)
-                    .timestamp(java.time.Instant.now())
+                    .timestamp(Instant.now())
                     .senderJid(self)
                     .build();
-            whatsapp.sendPeerMessage(sender, response);
+            whatsapp.sendPeerMessage(sender.get(), response);
         } catch (Throwable throwable) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Failed to answer app state sync key request from {0}: {1}",
@@ -726,19 +696,10 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 continue;
             }
 
-            try {
-                var snapshot = snapshotRecoveryService.decodeRecoverySnapshot(recovery);
-                var collectionName = snapshot.collectionName()
-                        .flatMap(SyncPatchType::of)
-                        .orElse(null);
-                if (collectionName != null) {
-                    snapshotRecoveryService.resolveRecovery(collectionName, recovery);
-                }
-            } catch (IOException exception) {
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "Failed to decode snapshot recovery response: {0}",
-                        exception.getMessage());
-            }
+            var snapshot = snapshotRecoveryService.decodeRecoverySnapshot(recovery);
+            snapshot.collectionName()
+                    .flatMap(SyncPatchType::of)
+                    .ifPresent(collectionName -> snapshotRecoveryService.resolveRecovery(collectionName, recovery));
         }
     }
 

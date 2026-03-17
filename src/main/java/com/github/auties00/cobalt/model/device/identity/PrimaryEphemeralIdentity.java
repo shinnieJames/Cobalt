@@ -26,13 +26,11 @@ public final class PrimaryEphemeralIdentity {
         return Optional.ofNullable(nonce);
     }
 
-    public PrimaryEphemeralIdentity setPublicKey(byte[] publicKey) {
+    public void setPublicKey(byte[] publicKey) {
         this.publicKey = publicKey;
-        return this;
     }
 
-    public PrimaryEphemeralIdentity setNonce(byte[] nonce) {
+    public void setNonce(byte[] nonce) {
         this.nonce = nonce;
-        return this;
     }
 }

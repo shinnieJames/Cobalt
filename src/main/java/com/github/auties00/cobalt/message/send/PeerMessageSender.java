@@ -85,7 +85,7 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
 
         var stanza = new NodeBuilder()
                 .description("message")
-                .attribute("id", messageInfo.key().id())
+                .attribute("id", messageInfo.key().id().orElseThrow())
                 .attribute("to", targetDevice)
                 .attribute("type", resolvePeerStanzaType(container))
                 .attribute("subtype", resolvePeerStanzaSubtype(container))
@@ -111,7 +111,13 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
             return null;
         }
 
-        return switch (protocolMessage.protocolType()) {
+        var type = protocolMessage.type()
+                .orElse(null);
+        if(type == null) {
+            return null;
+        }
+
+        return switch (type) {
             case APP_STATE_SYNC_KEY_SHARE -> "app_state_sync_key_share";
             case APP_STATE_SYNC_KEY_REQUEST -> "app_state_sync_key_request";
             case APP_STATE_FATAL_EXCEPTION_NOTIFICATION -> "app_state_fatal_exception_notification";

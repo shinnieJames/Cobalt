@@ -3,21 +3,27 @@ package com.github.auties00.cobalt.message.send;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
-import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
-import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.send.ack.AckParser;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.ack.NackReason;
+import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
+import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.*;
 import com.github.auties00.cobalt.message.send.token.ContentBindingToken;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
-import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
+import com.github.auties00.cobalt.model.chat.group.GroupParticipantBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
+import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
+import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
+import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABProp;
@@ -184,7 +190,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 var contentBindings = generateContentBindings(messageInfo, participantUserJids);
 
                 // WAWebSendGroupSkmsgJob: create receipt records for all devices
-                store.createOrMergeReceiptRecords(messageInfo.key().id(), allDevices);
+                store.createOrMergeReceiptRecords(messageInfo.key().id().orElseThrow(), allDevices);
 
                 // WAWebSendGroupSkmsgJob: get sender key bytes and encrypt SK distribution
                 // WAWebGetGroupKeyDistributionMsg: populates ICDC per device
@@ -214,15 +220,16 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
                 // WAWebSendGroupSkmsgJob: build open group bot node when applicable
                 // WAWebBotGroupGatingUtils.isOpenGroupBotSendEnabled: AB prop gate
-                var isOpenBotGroup = groupMetadata != null && groupMetadata.isOpenBotGroup()
-                        && abPropsService.getBool(ABProp.OPEN_GROUP_BOT_SEND_ENABLED);
+                var isOpenBotGroup = chatMetadata != null && chatMetadata.isOpenBotGroup()
+                        && abPropsService.getBool(ABProp.WEB_AI_GROUP_OPEN_SUPPORT)
+                        && abPropsService.getBool(ABProp.AI_GROUP_PARTICIPATION_ENABLED);
                 Node openBotNode = null;
                 if (isOpenBotGroup) {
                     // WAWebSendGroupSkmsgJob function L: ensure sessions with
                     // the bot device before encrypting
                     deviceService.ensureSessions(List.of(Jid.metaAiBotAccount()));
                     store.createOrMergeReceiptRecords(
-                            messageInfo.key().id(), List.of(Jid.metaAiBotAccount()));
+                            messageInfo.key().id().orElseThrow(), List.of(Jid.metaAiBotAccount()));
                     openBotNode = botStanza.buildForGroup(messageInfo, true);
                 }
 
@@ -243,7 +250,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                         ? openBotNode
                         : botStanza.build(messageInfo, groupJid);
                 var stanza = GroupSkmsgFanoutStanza.build(
-                        messageInfo.key().id(),
+                        messageInfo.key().id().orElseThrow(),
                         groupJid,
                         resolveStanzaType(container),
                         phash,
@@ -344,7 +351,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
         // WAWebMsgRcatUtils: only for URL messages (extendedTextMessage with matchedText)
         var message = messageInfo.message().content();
-        if (!(message instanceof TextMessage text) || text.matchedText().isEmpty()) {
+        if (!(message instanceof ExtendedTextMessage text) || text.matchedText().isEmpty()) {
             return null;
         }
 
@@ -359,7 +366,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
         try {
             return ContentBindingToken.generate(
-                    messageInfo.key().id(), messageSecret,
+                    messageInfo.key().id().orElseThrow(), messageSecret,
                     selfJid, participantJids, contentId);
         } catch (GeneralSecurityException e) {
             LOGGER.log(System.Logger.Level.WARNING,
@@ -382,10 +389,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
      */
     private static boolean isCagAddonMessage(MessageContainer container) {
         return switch (container.content()) {
-            case EncryptedReactionMessage _ -> true;
-            case EncryptedCommentMessage _ -> true;
-            case EncryptedEventResponseMessage _ -> true;
-            case PollUpdateMessage _ -> true;
+            case EncReactionMessage _, EncCommentMessage _, EncEventResponseMessage _, PollUpdateMessage _ -> true;
             default -> false;
         };
     }
@@ -451,7 +455,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 .build();
 
         var stanza = ChatFanoutStanza.build(
-                messageInfo.key().id(),
+                messageInfo.key().id().orElseThrow(),
                 groupJid,
                 resolveStanzaType(container),
                 payloads,
@@ -516,7 +520,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
         for (var participant : metadata.participants()) {
             var convertedJid = convertJid(participant.userJid(), toLid);
             if (convertedJid != null) {
-                migratedParticipants.add(new com.github.auties00.cobalt.model.group.GroupParticipantBuilder()
+                migratedParticipants.add(new GroupParticipantBuilder()
                         .userJid(convertedJid)
                         .rank(participant.rank().orElse(null))
                         .build());

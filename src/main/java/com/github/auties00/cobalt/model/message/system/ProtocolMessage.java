@@ -227,124 +227,100 @@ public final class ProtocolMessage implements Message {
         return Optional.ofNullable(participantLabel);
     }
 
-    public ProtocolMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public ProtocolMessage setType(Type type) {
+    public void setType(Type type) {
         this.type = type;
-        return this;
     }
 
-    public ProtocolMessage setEphemeralExpiration(Integer ephemeralExpiration) {
+    public void setEphemeralExpiration(Integer ephemeralExpiration) {
         this.ephemeralExpiration = ephemeralExpiration;
-        return this;
     }
 
-    public ProtocolMessage setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
+    public void setEphemeralSettingTimestamp(Instant ephemeralSettingTimestamp) {
         this.ephemeralSettingTimestamp = ephemeralSettingTimestamp;
-        return this;
     }
 
-    public ProtocolMessage setHistorySyncNotification(HistorySyncNotification historySyncNotification) {
+    public void setHistorySyncNotification(HistorySyncNotification historySyncNotification) {
         this.historySyncNotification = historySyncNotification;
-        return this;
     }
 
-    public ProtocolMessage setAppStateSyncKeyShare(AppStateSyncKeyShare appStateSyncKeyShare) {
+    public void setAppStateSyncKeyShare(AppStateSyncKeyShare appStateSyncKeyShare) {
         this.appStateSyncKeyShare = appStateSyncKeyShare;
-        return this;
     }
 
-    public ProtocolMessage setAppStateSyncKeyRequest(AppStateSyncKeyRequest appStateSyncKeyRequest) {
+    public void setAppStateSyncKeyRequest(AppStateSyncKeyRequest appStateSyncKeyRequest) {
         this.appStateSyncKeyRequest = appStateSyncKeyRequest;
-        return this;
     }
 
-    public ProtocolMessage setInitialSecurityNotificationSettingSync(InitialSecurityNotificationSettingSync initialSecurityNotificationSettingSync) {
+    public void setInitialSecurityNotificationSettingSync(InitialSecurityNotificationSettingSync initialSecurityNotificationSettingSync) {
         this.initialSecurityNotificationSettingSync = initialSecurityNotificationSettingSync;
-        return this;
     }
 
-    public ProtocolMessage setAppStateFatalExceptionNotification(AppStateFatalExceptionNotification appStateFatalExceptionNotification) {
+    public void setAppStateFatalExceptionNotification(AppStateFatalExceptionNotification appStateFatalExceptionNotification) {
         this.appStateFatalExceptionNotification = appStateFatalExceptionNotification;
-        return this;
     }
 
-    public ProtocolMessage setDisappearingMode(ChatDisappearingMode disappearingMode) {
+    public void setDisappearingMode(ChatDisappearingMode disappearingMode) {
         this.disappearingMode = disappearingMode;
-        return this;
     }
 
-    public ProtocolMessage setEditedMessage(MessageContainer editedMessageContainer) {
+    public void setEditedMessage(MessageContainer editedMessageContainer) {
         this.editedMessageContainer = editedMessageContainer;
-        return this;
     }
 
-    public ProtocolMessage setTimestampMs(Instant timestampMs) {
+    public void setTimestampMs(Instant timestampMs) {
         this.timestampMs = timestampMs;
-        return this;
     }
 
-    public ProtocolMessage setPeerDataOperationRequestMessage(PeerDataOperationRequestMessage peerDataOperationRequestMessage) {
+    public void setPeerDataOperationRequestMessage(PeerDataOperationRequestMessage peerDataOperationRequestMessage) {
         this.peerDataOperationRequestMessage = peerDataOperationRequestMessage;
-        return this;
     }
 
-    public ProtocolMessage setPeerDataOperationRequestResponseMessage(PeerDataOperationRequestResponseMessage peerDataOperationRequestResponseMessage) {
+    public void setPeerDataOperationRequestResponseMessage(PeerDataOperationRequestResponseMessage peerDataOperationRequestResponseMessage) {
         this.peerDataOperationRequestResponseMessage = peerDataOperationRequestResponseMessage;
-        return this;
     }
 
-    public ProtocolMessage setBotFeedbackMessage(BotFeedbackMessage botFeedbackMessage) {
+    public void setBotFeedbackMessage(BotFeedbackMessage botFeedbackMessage) {
         this.botFeedbackMessage = botFeedbackMessage;
-        return this;
     }
 
-    public ProtocolMessage setInvokerJid(Jid invokerJid) {
+    public void setInvokerJid(Jid invokerJid) {
         this.invokerJid = invokerJid;
-        return this;
     }
 
-    public ProtocolMessage setRequestWelcomeMessageMetadata(RequestWelcomeMessageMetadata requestWelcomeMessageMetadata) {
+    public void setRequestWelcomeMessageMetadata(RequestWelcomeMessageMetadata requestWelcomeMessageMetadata) {
         this.requestWelcomeMessageMetadata = requestWelcomeMessageMetadata;
-        return this;
     }
 
-    public ProtocolMessage setMediaNotifyMessage(MediaNotifyMessage mediaNotifyMessage) {
+    public void setMediaNotifyMessage(MediaNotifyMessage mediaNotifyMessage) {
         this.mediaNotifyMessage = mediaNotifyMessage;
-        return this;
     }
 
-    public ProtocolMessage setCloudApiThreadControlNotification(CloudAPIThreadControlNotification cloudApiThreadControlNotification) {
+    public void setCloudApiThreadControlNotification(CloudAPIThreadControlNotification cloudApiThreadControlNotification) {
         this.cloudApiThreadControlNotification = cloudApiThreadControlNotification;
-        return this;
     }
 
-    public ProtocolMessage setLidMigrationMappingSyncMessage(LIDMigrationMappingSyncMessage lidMigrationMappingSyncMessage) {
+    public void setLidMigrationMappingSyncMessage(LIDMigrationMappingSyncMessage lidMigrationMappingSyncMessage) {
         this.lidMigrationMappingSyncMessage = lidMigrationMappingSyncMessage;
-        return this;
     }
 
-    public ProtocolMessage setLimitSharing(ChatLimitSharing limitSharing) {
+    public void setLimitSharing(ChatLimitSharing limitSharing) {
         this.limitSharing = limitSharing;
-        return this;
     }
 
-    public ProtocolMessage setAiPsiMetadata(byte[] aiPsiMetadata) {
+    public void setAiPsiMetadata(byte[] aiPsiMetadata) {
         this.aiPsiMetadata = aiPsiMetadata;
-        return this;
     }
 
-    public ProtocolMessage setAiQueryFanout(AIQueryFanout aiQueryFanout) {
+    public void setAiQueryFanout(AIQueryFanout aiQueryFanout) {
         this.aiQueryFanout = aiQueryFanout;
-        return this;
     }
 
-    public ProtocolMessage setMemberLabel(GroupParticipantLabel participantLabel) {
+    public void setMemberLabel(GroupParticipantLabel participantLabel) {
         this.participantLabel = participantLabel;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.ProtocolMessage.Type")

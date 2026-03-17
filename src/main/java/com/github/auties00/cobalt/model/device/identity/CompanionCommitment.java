@@ -18,8 +18,7 @@ public final class CompanionCommitment {
         return Optional.ofNullable(hash);
     }
 
-    public CompanionCommitment setHash(byte[] hash) {
+    public void setHash(byte[] hash) {
         this.hash = hash;
-        return this;
     }
 }

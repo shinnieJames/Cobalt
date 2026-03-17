@@ -93,11 +93,9 @@ public final class LIDMigrationMappingSyncPayload {
      * Sets the list of phone-number-to-LID mapping entries.
      *
      * @param pnToLidMappings the new list of mapping entries, or {@code null}
-     * @return this instance for chaining
      */
-    public LIDMigrationMappingSyncPayload setPnToLidMappings(List<LIDMigrationMapping> pnToLidMappings) {
+    public void setPnToLidMappings(List<LIDMigrationMapping> pnToLidMappings) {
         this.pnToLidMappings = pnToLidMappings;
-        return this;
     }
 
     /**
@@ -106,10 +104,8 @@ public final class LIDMigrationMappingSyncPayload {
      *
      * @param chatDbMigrationTimestamp the new migration timestamp in seconds
      *                                since the Unix epoch, or {@code null}
-     * @return this instance for chaining
      */
-    public LIDMigrationMappingSyncPayload setChatDbMigrationTimestamp(Long chatDbMigrationTimestamp) {
+    public void setChatDbMigrationTimestamp(Long chatDbMigrationTimestamp) {
         this.chatDbMigrationTimestamp = chatDbMigrationTimestamp;
-        return this;
     }
 }

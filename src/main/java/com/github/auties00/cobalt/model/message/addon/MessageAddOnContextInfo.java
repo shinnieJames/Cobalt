@@ -31,14 +31,12 @@ public final class MessageAddOnContextInfo {
         return Optional.ofNullable(messageAddOnExpiryType);
     }
 
-    public MessageAddOnContextInfo setMessageAddOnDurationInSecs(Integer messageAddOnDurationInSecs) {
+    public void setMessageAddOnDurationInSecs(Integer messageAddOnDurationInSecs) {
         this.messageAddOnDurationInSecs = messageAddOnDurationInSecs;
-        return this;
     }
 
-    public MessageAddOnContextInfo setExpiryType(ExpiryType expiryType) {
+    public void setExpiryType(ExpiryType expiryType) {
         this.messageAddOnExpiryType = expiryType;
-        return this;
     }
 
     @ProtobufEnum(name = "MessageContextInfo.MessageAddonExpiryType")

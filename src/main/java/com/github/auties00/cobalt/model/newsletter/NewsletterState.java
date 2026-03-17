@@ -54,11 +54,9 @@ public final class NewsletterState {
      * Sets the state type.
      *
      * @param type the state type string
-     * @return this instance for chaining
      */
-    public NewsletterState setType(String type) {
+    public void setType(String type) {
         this.type = type;
-        return this;
     }
 
     @Override

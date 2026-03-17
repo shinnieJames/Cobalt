@@ -48,23 +48,19 @@ public final class ReactionMessage implements Message {
         return Optional.ofNullable(senderTimestampMs);
     }
 
-    public ReactionMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public ReactionMessage setText(String text) {
+    public void setText(String text) {
         this.text = text;
-        return this;
     }
 
-    public ReactionMessage setGroupingKey(String groupingKey) {
+    public void setGroupingKey(String groupingKey) {
         this.groupingKey = groupingKey;
-        return this;
     }
 
-    public ReactionMessage setSenderTimestampMs(Instant senderTimestampMs) {
+    public void setSenderTimestampMs(Instant senderTimestampMs) {
         this.senderTimestampMs = senderTimestampMs;
-        return this;
     }
 }

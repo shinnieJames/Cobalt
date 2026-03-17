@@ -48,8 +48,7 @@ public final class WamoUserIdentifierAction implements SyncAction<SyncActionEmpt
         return Optional.ofNullable(identifier);
     }
 
-    public WamoUserIdentifierAction setIdentifier(String identifier) {
+    public void setIdentifier(String identifier) {
         this.identifier = identifier;
-        return this;
     }
 }

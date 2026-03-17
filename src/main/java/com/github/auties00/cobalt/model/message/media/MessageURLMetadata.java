@@ -21,8 +21,7 @@ public final class MessageURLMetadata implements Message {
         return fbExperimentId == null ? OptionalInt.empty() : OptionalInt.of(fbExperimentId);
     }
 
-    public MessageURLMetadata setFbExperimentId(Integer fbExperimentId) {
+    public void setFbExperimentId(Integer fbExperimentId) {
         this.fbExperimentId = fbExperimentId;
-        return this;
     }
 }

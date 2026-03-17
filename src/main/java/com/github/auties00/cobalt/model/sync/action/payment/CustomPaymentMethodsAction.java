@@ -56,8 +56,7 @@ public final class CustomPaymentMethodsAction implements SyncAction<SyncActionEm
         return customPaymentMethods == null ? List.of() : Collections.unmodifiableList(customPaymentMethods);
     }
 
-    public CustomPaymentMethodsAction setCustomPaymentMethods(List<CustomPaymentMethod> customPaymentMethods) {
+    public void setCustomPaymentMethods(List<CustomPaymentMethod> customPaymentMethods) {
         this.customPaymentMethods = customPaymentMethods;
-        return this;
     }
 }

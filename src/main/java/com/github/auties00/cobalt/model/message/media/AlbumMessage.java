@@ -38,18 +38,15 @@ public final class AlbumMessage implements ContextualMessage {
         return Optional.ofNullable(contextInfo);
     }
 
-    public AlbumMessage setExpectedImageCount(Integer expectedImageCount) {
+    public void setExpectedImageCount(Integer expectedImageCount) {
         this.expectedImageCount = expectedImageCount;
-        return this;
     }
 
-    public AlbumMessage setExpectedVideoCount(Integer expectedVideoCount) {
+    public void setExpectedVideoCount(Integer expectedVideoCount) {
         this.expectedVideoCount = expectedVideoCount;
-        return this;
     }
 
-    public AlbumMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 }

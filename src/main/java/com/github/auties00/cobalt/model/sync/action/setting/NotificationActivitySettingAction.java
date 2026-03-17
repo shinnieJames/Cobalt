@@ -47,9 +47,8 @@ public final class NotificationActivitySettingAction implements SyncAction<SyncA
         return Optional.ofNullable(notificationActivitySetting);
     }
 
-    public NotificationActivitySettingAction setNotificationActivitySetting(NotificationActivitySetting notificationActivitySetting) {
+    public void setNotificationActivitySetting(NotificationActivitySetting notificationActivitySetting) {
         this.notificationActivitySetting = notificationActivitySetting;
-        return this;
     }
 
     @ProtobufEnum(name = "SyncActionValue.NotificationActivitySettingAction.NotificationActivitySetting")

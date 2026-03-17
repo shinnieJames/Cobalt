@@ -28,13 +28,11 @@ public final class GroupMention {
         return Optional.ofNullable(groupSubject);
     }
 
-    public GroupMention setGroupJid(Jid groupJid) {
+    public void setGroupJid(Jid groupJid) {
         this.groupJid = groupJid;
-        return this;
     }
 
-    public GroupMention setGroupSubject(String groupSubject) {
+    public void setGroupSubject(String groupSubject) {
         this.groupSubject = groupSubject;
-        return this;
     }
 }

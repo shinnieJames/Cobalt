@@ -20,9 +20,8 @@ public final class RequestWelcomeMessageMetadata implements Message {
         return Optional.ofNullable(localChatState);
     }
 
-    public RequestWelcomeMessageMetadata setLocalChatState(LocalChatState localChatState) {
+    public void setLocalChatState(LocalChatState localChatState) {
         this.localChatState = localChatState;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.RequestWelcomeMessageMetadata.LocalChatState")

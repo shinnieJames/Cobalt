@@ -381,153 +381,125 @@ public final class BotProfile {
      * Sets the bot's JID.
      *
      * @param jid the JID to set, must be non-{@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setJid(Jid jid) {
+    public void setJid(Jid jid) {
         this.jid = jid;
-        return this;
     }
 
     /**
      * Sets the bot's display name.
      *
      * @param name the display name, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setName(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
     /**
      * Sets the opaque attributes string.
      *
      * @param attributes the attributes string, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setAttributes(String attributes) {
+    public void setAttributes(String attributes) {
         this.attributes = attributes;
-        return this;
     }
 
     /**
      * Sets the bot's description.
      *
      * @param description the description, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
     /**
      * Sets the persona category.
      *
      * @param category the category, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setCategory(BotProfileCategory category) {
+    public void setCategory(BotProfileCategory category) {
         this.category = category;
-        return this;
     }
 
     /**
      * Sets whether this is the default Meta AI bot.
      *
      * @param isDefault {@code true} if this is the default bot
-     * @return this instance for chaining
      */
-    public BotProfile setDefault(boolean isDefault) {
+    public void setDefault(boolean isDefault) {
         this.isDefault = isDefault;
-        return this;
     }
 
     /**
      * Sets the suggested prompts.
      *
      * @param prompts the prompts collection, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setPrompts(SequencedCollection<BotProfilePrompt> prompts) {
+    public void setPrompts(SequencedCollection<BotProfilePrompt> prompts) {
         this.prompts = prompts;
-        return this;
     }
 
     /**
      * Sets the persona identifier.
      *
      * @param personaId the persona ID, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setPersonaId(String personaId) {
+    public void setPersonaId(String personaId) {
         this.personaId = personaId;
-        return this;
     }
 
     /**
      * Sets the registered commands.
      *
      * @param commands the commands collection, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setCommands(SequencedCollection<BotProfileCommand> commands) {
+    public void setCommands(SequencedCollection<BotProfileCommand> commands) {
         this.commands = commands;
-        return this;
     }
 
     /**
      * Sets the commands section description.
      *
      * @param commandsDescription the description, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setCommandsDescription(String commandsDescription) {
+    public void setCommandsDescription(String commandsDescription) {
         this.commandsDescription = commandsDescription;
-        return this;
     }
 
     /**
      * Sets whether this bot was created by Meta.
      *
      * @param isMetaCreated {@code true} if Meta created this bot
-     * @return this instance for chaining
      */
-    public BotProfile setMetaCreated(boolean isMetaCreated) {
+    public void setMetaCreated(boolean isMetaCreated) {
         this.isMetaCreated = isMetaCreated;
-        return this;
     }
 
     /**
      * Sets the bot creator's display name.
      *
      * @param creatorName the creator name, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setCreatorName(String creatorName) {
+    public void setCreatorName(String creatorName) {
         this.creatorName = creatorName;
-        return this;
     }
 
     /**
      * Sets the bot creator's profile URL.
      *
      * @param creatorProfileUrl the profile URL, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setCreatorProfileUrl(URI creatorProfileUrl) {
+    public void setCreatorProfileUrl(URI creatorProfileUrl) {
         this.creatorProfileUrl = creatorProfileUrl;
-        return this;
     }
 
     /**
      * Sets the professional-status classification.
      *
      * @param professionalStatus the status, may be {@code null}
-     * @return this instance for chaining
      */
-    public BotProfile setProfessionalStatus(BotProfessionalStatus professionalStatus) {
+    public void setProfessionalStatus(BotProfessionalStatus professionalStatus) {
         this.professionalStatus = professionalStatus;
-        return this;
     }
 }

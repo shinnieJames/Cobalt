@@ -48,8 +48,7 @@ public final class NewsletterSavedInterestsAction implements SyncAction<SyncActi
         return Optional.ofNullable(newsletterSavedInterests);
     }
 
-    public NewsletterSavedInterestsAction setNewsletterSavedInterests(String newsletterSavedInterests) {
+    public void setNewsletterSavedInterests(String newsletterSavedInterests) {
         this.newsletterSavedInterests = newsletterSavedInterests;
-        return this;
     }
 }

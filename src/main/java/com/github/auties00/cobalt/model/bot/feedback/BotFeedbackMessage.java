@@ -664,101 +664,83 @@ public final class BotFeedbackMessage {
          * Sets the identifier of the request whose response was selected.
          *
          * @param selectedRequestId the new selected request identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setSelectedRequestId(String selectedRequestId) {
+        public void setSelectedRequestId(String selectedRequestId) {
             this.selectedRequestId = selectedRequestId;
-            return this;
-        }
+    }
 
         /**
          * Sets the numeric identifier of the survey instance.
          *
          * @param surveyId the new survey identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setSurveyId(Integer surveyId) {
+        public void setSurveyId(Integer surveyId) {
             this.surveyId = surveyId;
-            return this;
-        }
+    }
 
         /**
          * Sets the session identifier for the survey platform.
          *
          * @param surveySessionId the new survey session identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setSurveySessionId(String surveySessionId) {
+        public void setSurveySessionId(String surveySessionId) {
             this.surveySessionId = surveySessionId;
-            return this;
-        }
+    }
 
         /**
          * Sets the original trace identifier of the AI response being evaluated.
          *
          * @param responseOriginalTraceId the new response original trace identifier, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setResponseOriginalTraceId(String responseOriginalTraceId) {
+        public void setResponseOriginalTraceId(String responseOriginalTraceId) {
             this.responseOriginalTraceId = responseOriginalTraceId;
-            return this;
-        }
+    }
 
         /**
          * Sets the timestamp in milliseconds when the AI response was generated.
          *
          * @param responseTimestampMillis the new response timestamp in milliseconds, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setResponseTimestampMillis(String responseTimestampMillis) {
+        public void setResponseTimestampMillis(String responseTimestampMillis) {
             this.responseTimestampMillis = responseTimestampMillis;
-            return this;
-        }
+    }
 
         /**
          * Sets whether the response selected by the user was the primary (control)
          * response in the A/B test.
          *
          * @param isSelectedResponsePrimary the new primary response flag, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setSelectedResponsePrimary(Boolean isSelectedResponsePrimary) {
+        public void setSelectedResponsePrimary(Boolean isSelectedResponsePrimary) {
             this.isSelectedResponsePrimary = isSelectedResponsePrimary;
-            return this;
-        }
+    }
 
         /**
          * Sets the identifier of the message to edit as a result of this survey.
          *
          * @param messageIdToEdit the new message identifier to edit, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setMessageIdToEdit(String messageIdToEdit) {
+        public void setMessageIdToEdit(String messageIdToEdit) {
             this.messageIdToEdit = messageIdToEdit;
-            return this;
-        }
+    }
 
         /**
          * Sets the analytics data for the side-by-side survey.
          *
          * @param analyticsData the new analytics data, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setAnalyticsData(SideBySideSurveyAnalyticsData analyticsData) {
+        public void setAnalyticsData(SideBySideSurveyAnalyticsData analyticsData) {
             this.analyticsData = analyticsData;
-            return this;
-        }
+    }
 
         /**
          * Sets the Meta AI-specific analytics data for the side-by-side survey.
          *
          * @param metaAiAnalyticsData the new Meta AI analytics data, or {@code null}
-         * @return this instance for chaining
          */
-        public SideBySideSurveyMetadata setMetaAiAnalyticsData(SidebySideSurveyMetaAiAnalyticsData metaAiAnalyticsData) {
+        public void setMetaAiAnalyticsData(SidebySideSurveyMetaAiAnalyticsData metaAiAnalyticsData) {
             this.metaAiAnalyticsData = metaAiAnalyticsData;
-            return this;
-        }
+    }
 
         /**
          * A protobuf message containing analytics event tracking data for a
@@ -831,34 +813,28 @@ public final class BotFeedbackMessage {
              * Sets the name of the analytics event to log.
              *
              * @param analyticsEvent the new analytics event name, or {@code null}
-             * @return this instance for chaining
              */
-            public SideBySideSurveyAnalyticsData setAnalyticsEvent(String analyticsEvent) {
+            public void setAnalyticsEvent(String analyticsEvent) {
                 this.analyticsEvent = analyticsEvent;
-                return this;
-            }
+    }
 
             /**
              * Sets the analytics platform session identifier.
              *
              * @param analyticsSessionId the new analytics session identifier, or {@code null}
-             * @return this instance for chaining
              */
-            public SideBySideSurveyAnalyticsData setAnalyticsSessionId(String analyticsSessionId) {
+            public void setAnalyticsSessionId(String analyticsSessionId) {
                 this.analyticsSessionId = analyticsSessionId;
-                return this;
-            }
+    }
 
             /**
              * Sets the survey platform session identifier.
              *
              * @param surveySessionId the new survey session identifier, or {@code null}
-             * @return this instance for chaining
              */
-            public SideBySideSurveyAnalyticsData setSurveySessionId(String surveySessionId) {
+            public void setSurveySessionId(String surveySessionId) {
                 this.surveySessionId = surveySessionId;
-                return this;
-            }
+    }
         }
 
         /**
@@ -1038,100 +1014,82 @@ public final class BotFeedbackMessage {
              * Sets the numeric identifier of the survey instance.
              *
              * @param surveyId the new survey identifier, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setSurveyId(Integer surveyId) {
+            public void setSurveyId(Integer surveyId) {
                 this.surveyId = surveyId;
-                return this;
-            }
+    }
 
             /**
              * Sets the identifier of the primary (control) AI response.
              *
              * @param primaryResponseId the new primary response identifier, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setPrimaryResponseId(String primaryResponseId) {
+            public void setPrimaryResponseId(String primaryResponseId) {
                 this.primaryResponseId = primaryResponseId;
-                return this;
-            }
+    }
 
             /**
              * Sets the name of the test arm (experiment variant).
              *
              * @param testArmName the new test arm name, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setTestArmName(String testArmName) {
+            public void setTestArmName(String testArmName) {
                 this.testArmName = testArmName;
-                return this;
-            }
+    }
 
             /**
              * Sets the timestamp in milliseconds when this analytics event occurred.
              *
              * @param timestampMillis the new timestamp in milliseconds, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setTimestampMillis(String timestampMillis) {
+            public void setTimestampMillis(String timestampMillis) {
                 this.timestampMillis = timestampMillis;
-                return this;
-            }
+    }
 
             /**
              * Sets the CTA impression event data.
              *
              * @param ctaImpressionEvent the new CTA impression event data, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setCtaImpressionEvent(SideBySideSurveyCTAImpressionEventData ctaImpressionEvent) {
+            public void setCtaImpressionEvent(SideBySideSurveyCTAImpressionEventData ctaImpressionEvent) {
                 this.ctaImpressionEvent = ctaImpressionEvent;
-                return this;
-            }
+    }
 
             /**
              * Sets the CTA click event data.
              *
              * @param ctaClickEvent the new CTA click event data, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setCtaClickEvent(SideBySideSurveyCTAClickEventData ctaClickEvent) {
+            public void setCtaClickEvent(SideBySideSurveyCTAClickEventData ctaClickEvent) {
                 this.ctaClickEvent = ctaClickEvent;
-                return this;
-            }
+    }
 
             /**
              * Sets the card impression event data.
              *
              * @param cardImpressionEvent the new card impression event data, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setCardImpressionEvent(SideBySideSurveyCardImpressionEventData cardImpressionEvent) {
+            public void setCardImpressionEvent(SideBySideSurveyCardImpressionEventData cardImpressionEvent) {
                 this.cardImpressionEvent = cardImpressionEvent;
-                return this;
-            }
+    }
 
             /**
              * Sets the response selection event data.
              *
              * @param responseEvent the new response event data, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setResponseEvent(SideBySideSurveyResponseEventData responseEvent) {
+            public void setResponseEvent(SideBySideSurveyResponseEventData responseEvent) {
                 this.responseEvent = responseEvent;
-                return this;
-            }
+    }
 
             /**
              * Sets the survey abandonment event data.
              *
              * @param abandonEvent the new abandon event data, or {@code null}
-             * @return this instance for chaining
              */
-            public SidebySideSurveyMetaAiAnalyticsData setAbandonEvent(SideBySideSurveyAbandonEventData abandonEvent) {
+            public void setAbandonEvent(SideBySideSurveyAbandonEventData abandonEvent) {
                 this.abandonEvent = abandonEvent;
-                return this;
-            }
+    }
 
             /**
              * A protobuf message containing event data recorded when a user abandons
@@ -1169,12 +1127,10 @@ public final class BotFeedbackMessage {
                  * Sets the dwell time in milliseconds before the user abandoned the survey.
                  *
                  * @param abandonDwellTimeMillis the new abandon dwell time in milliseconds, or {@code null}
-                 * @return this instance for chaining
                  */
-                public SideBySideSurveyAbandonEventData setAbandonDwellTimeMillis(String abandonDwellTimeMillis) {
+                public void setAbandonDwellTimeMillis(String abandonDwellTimeMillis) {
                     this.abandonDwellTimeMillis = abandonDwellTimeMillis;
-                    return this;
-                }
+    }
             }
 
             /**
@@ -1230,23 +1186,19 @@ public final class BotFeedbackMessage {
                  * Sets whether the survey had expired at the time the user clicked the CTA.
                  *
                  * @param isSurveyExpired the new survey expired flag, or {@code null}
-                 * @return this instance for chaining
                  */
-                public SideBySideSurveyCTAClickEventData setSurveyExpired(Boolean isSurveyExpired) {
+                public void setSurveyExpired(Boolean isSurveyExpired) {
                     this.isSurveyExpired = isSurveyExpired;
-                    return this;
-                }
+    }
 
                 /**
                  * Sets the dwell time in milliseconds before the user clicked the CTA.
                  *
                  * @param clickDwellTimeMillis the new click dwell time in milliseconds, or {@code null}
-                 * @return this instance for chaining
                  */
-                public SideBySideSurveyCTAClickEventData setClickDwellTimeMillis(String clickDwellTimeMillis) {
+                public void setClickDwellTimeMillis(String clickDwellTimeMillis) {
                     this.clickDwellTimeMillis = clickDwellTimeMillis;
-                    return this;
-                }
+    }
             }
 
             /**
@@ -1287,12 +1239,10 @@ public final class BotFeedbackMessage {
                  * Sets whether the survey had expired at the time the CTA was displayed.
                  *
                  * @param isSurveyExpired the new survey expired flag, or {@code null}
-                 * @return this instance for chaining
                  */
-                public SideBySideSurveyCTAImpressionEventData setSurveyExpired(Boolean isSurveyExpired) {
+                public void setSurveyExpired(Boolean isSurveyExpired) {
                     this.isSurveyExpired = isSurveyExpired;
-                    return this;
-                }
+    }
             }
 
             /**
@@ -1365,23 +1315,19 @@ public final class BotFeedbackMessage {
                  * Sets the dwell time in milliseconds before the user submitted a response.
                  *
                  * @param responseDwellTimeMillis the new response dwell time in milliseconds, or {@code null}
-                 * @return this instance for chaining
                  */
-                public SideBySideSurveyResponseEventData setResponseDwellTimeMillis(String responseDwellTimeMillis) {
+                public void setResponseDwellTimeMillis(String responseDwellTimeMillis) {
                     this.responseDwellTimeMillis = responseDwellTimeMillis;
-                    return this;
-                }
+    }
 
                 /**
                  * Sets the identifier of the AI response selected by the user.
                  *
                  * @param selectedResponseId the new selected response identifier, or {@code null}
-                 * @return this instance for chaining
                  */
-                public SideBySideSurveyResponseEventData setSelectedResponseId(String selectedResponseId) {
+                public void setSelectedResponseId(String selectedResponseId) {
                     this.selectedResponseId = selectedResponseId;
-                    return this;
-                }
+    }
             }
         }
     }

@@ -21,8 +21,7 @@ public final class SyncdMutations {
         return mutations == null ? List.of() : Collections.unmodifiableList(mutations);
     }
 
-    public SyncdMutations setMutations(List<SyncdMutation> mutations) {
+    public void setMutations(List<SyncdMutation> mutations) {
         this.mutations = mutations;
-        return this;
     }
 }

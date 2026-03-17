@@ -27,13 +27,11 @@ public final class DeviceConsistencyCodeMessage {
         return Optional.ofNullable(signature);
     }
 
-    public DeviceConsistencyCodeMessage setGeneration(Integer generation) {
+    public void setGeneration(Integer generation) {
         this.generation = generation;
-        return this;
     }
 
-    public DeviceConsistencyCodeMessage setSignature(byte[] signature) {
+    public void setSignature(byte[] signature) {
         this.signature = signature;
-        return this;
     }
 }

@@ -63,34 +63,28 @@ public final class TemplateMessage implements ContextualMessage {
         return Optional.empty();
     }
 
-    public TemplateMessage setContextInfo(ContextInfo contextInfo) {
+    public void setContextInfo(ContextInfo contextInfo) {
         this.contextInfo = contextInfo;
-        return this;
     }
 
-    public TemplateMessage setHydratedTemplate(HydratedFourRowTemplate hydratedTemplate) {
+    public void setHydratedTemplate(HydratedFourRowTemplate hydratedTemplate) {
         this.hydratedTemplate = hydratedTemplate;
-        return this;
     }
 
-    public TemplateMessage setTemplateId(String templateId) {
+    public void setTemplateId(String templateId) {
         this.templateId = templateId;
-        return this;
     }
 
-    public TemplateMessage setFourRowTemplate(FourRowTemplate fourRowTemplate) {
+    public void setFourRowTemplate(FourRowTemplate fourRowTemplate) {
         this.fourRowTemplate = fourRowTemplate;
-        return this;
     }
 
-    public TemplateMessage setHydratedFourRowTemplate(HydratedFourRowTemplate hydratedFourRowTemplate) {
+    public void setHydratedFourRowTemplate(HydratedFourRowTemplate hydratedFourRowTemplate) {
         this.hydratedFourRowTemplate = hydratedFourRowTemplate;
-        return this;
     }
 
-    public TemplateMessage setInteractiveMessageTemplate(InteractiveMessage interactiveMessageTemplate) {
+    public void setInteractiveMessageTemplate(InteractiveMessage interactiveMessageTemplate) {
         this.interactiveMessageTemplate = interactiveMessageTemplate;
-        return this;
     }
 
     public sealed interface Title permits DocumentMessage, HighlyStructuredMessage, ImageMessage, VideoMessage, LocationMessage {
@@ -176,45 +170,37 @@ public final class TemplateMessage implements ContextualMessage {
             return Optional.empty();
         }
 
-        public FourRowTemplate setContent(HighlyStructuredMessage content) {
+        public void setContent(HighlyStructuredMessage content) {
             this.content = content;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setFooter(HighlyStructuredMessage footer) {
+        public void setFooter(HighlyStructuredMessage footer) {
             this.footer = footer;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setButtons(List<TemplateButton> buttons) {
+        public void setButtons(List<TemplateButton> buttons) {
             this.buttons = buttons;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setDocumentMessage(DocumentMessage documentMessage) {
+        public void setDocumentMessage(DocumentMessage documentMessage) {
             this.documentMessage = documentMessage;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setHighlyStructuredMessage(HighlyStructuredMessage highlyStructuredMessage) {
+        public void setHighlyStructuredMessage(HighlyStructuredMessage highlyStructuredMessage) {
             this.highlyStructuredMessage = highlyStructuredMessage;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setImageMessage(ImageMessage imageMessage) {
+        public void setImageMessage(ImageMessage imageMessage) {
             this.imageMessage = imageMessage;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setVideoMessage(VideoMessage videoMessage) {
+        public void setVideoMessage(VideoMessage videoMessage) {
             this.videoMessage = videoMessage;
-            return this;
-        }
+    }
 
-        public FourRowTemplate setLocationMessage(LocationMessage locationMessage) {
+        public void setLocationMessage(LocationMessage locationMessage) {
             this.locationMessage = locationMessage;
-            return this;
-        }
+    }
     }
 
     @ProtobufMessage(name = "Message.TemplateMessage.HydratedFourRowTemplate")
@@ -292,54 +278,44 @@ public final class TemplateMessage implements ContextualMessage {
             return Optional.empty();
         }
 
-        public HydratedFourRowTemplate setHydratedContentText(String hydratedContentText) {
+        public void setHydratedContentText(String hydratedContentText) {
             this.hydratedContentText = hydratedContentText;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setHydratedFooterText(String hydratedFooterText) {
+        public void setHydratedFooterText(String hydratedFooterText) {
             this.hydratedFooterText = hydratedFooterText;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setHydratedButtons(List<HydratedTemplateButton> hydratedButtons) {
+        public void setHydratedButtons(List<HydratedTemplateButton> hydratedButtons) {
             this.hydratedButtons = hydratedButtons;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setTemplateId(String templateId) {
+        public void setTemplateId(String templateId) {
             this.templateId = templateId;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setMaskLinkedDevices(Boolean maskLinkedDevices) {
+        public void setMaskLinkedDevices(Boolean maskLinkedDevices) {
             this.maskLinkedDevices = maskLinkedDevices;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setDocumentMessage(DocumentMessage documentMessage) {
+        public void setDocumentMessage(DocumentMessage documentMessage) {
             this.documentMessage = documentMessage;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setHydratedTitleText(String hydratedTitleText) {
+        public void setHydratedTitleText(String hydratedTitleText) {
             this.hydratedTitleText = hydratedTitleText;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setImageMessage(ImageMessage imageMessage) {
+        public void setImageMessage(ImageMessage imageMessage) {
             this.imageMessage = imageMessage;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setVideoMessage(VideoMessage videoMessage) {
+        public void setVideoMessage(VideoMessage videoMessage) {
             this.videoMessage = videoMessage;
-            return this;
-        }
+    }
 
-        public HydratedFourRowTemplate setLocationMessage(LocationMessage locationMessage) {
+        public void setLocationMessage(LocationMessage locationMessage) {
             this.locationMessage = locationMessage;
-            return this;
-        }
+    }
     }
 }

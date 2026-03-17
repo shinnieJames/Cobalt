@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
+import com.github.auties00.cobalt.model.newsletter.NewsletterViewerMetadata;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
@@ -221,7 +222,7 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     private void refreshNewsletter(Jid newsletterJid) {
         var newsletter = ensureNewsletter(newsletterJid);
         var role = newsletter.viewerMetadata()
-                .map(viewerMetadata -> viewerMetadata.role())
+                .map(NewsletterViewerMetadata::role)
                 .filter(existingRole -> existingRole != NewsletterViewerRole.UNKNOWN)
                 .orElse(NewsletterViewerRole.GUEST);
         var refreshed = whatsapp.queryNewsletter(newsletterJid, role).orElse(null);
@@ -229,11 +230,11 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        newsletter.setState(refreshed.state().orElse(null))
-                .setMetadata(refreshed.metadata().orElse(null))
-                .setViewerMetadata(refreshed.viewerMetadata().orElse(null))
-                .setUnreadMessagesCount(refreshed.unreadMessagesCount())
-                .setTimestamp(refreshed.timestampSeconds().orElse(null));
+        newsletter.setState(refreshed.state().orElse(null));
+        newsletter.setMetadata(refreshed.metadata().orElse(null));
+        newsletter.setViewerMetadata(refreshed.viewerMetadata().orElse(null));
+        newsletter.setUnreadMessagesCount(refreshed.unreadMessagesCount());
+        newsletter.setTimestamp(refreshed.timestamp().orElse(null));
     }
 
     private void fireListeners(java.util.function.Consumer<com.github.auties00.cobalt.client.WhatsAppClientListener> consumer) {

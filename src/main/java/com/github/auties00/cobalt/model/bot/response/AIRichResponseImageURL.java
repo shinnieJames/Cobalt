@@ -87,22 +87,18 @@ public final class AIRichResponseImageURL {
      * Sets the low-resolution preview URL for this image.
      *
      * @param imagePreviewUrl the preview URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseImageURL setImagePreviewUrl(URI imagePreviewUrl) {
+    public void setImagePreviewUrl(URI imagePreviewUrl) {
         this.imagePreviewUrl = imagePreviewUrl;
-        return this;
     }
 
     /**
      * Sets the full-resolution URL for this image.
      *
      * @param imageHighResUrl the high-resolution URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseImageURL setImageHighResUrl(URI imageHighResUrl) {
+    public void setImageHighResUrl(URI imageHighResUrl) {
         this.imageHighResUrl = imageHighResUrl;
-        return this;
     }
 
     /**
@@ -110,10 +106,8 @@ public final class AIRichResponseImageURL {
      * this image was sourced.
      *
      * @param sourceUrl the source URL to set
-     * @return this instance for chaining
      */
-    public AIRichResponseImageURL setSourceUrl(URI sourceUrl) {
+    public void setSourceUrl(URI sourceUrl) {
         this.sourceUrl = sourceUrl;
-        return this;
     }
 }

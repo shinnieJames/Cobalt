@@ -54,7 +54,7 @@ public final class MediaConnection {
             try (uploadStream; var outputStream = Files.newOutputStream(tempFile)) {
                 uploadStream.transferTo(outputStream);
             }
-            var timestamp = Instant.now().getEpochSecond();
+            var timestamp = Instant.now();
             var fileSha256 = uploadStream.fileSha256();
             var fileEncSha256 = uploadStream.fileEncSha256()
                     .orElse(null);

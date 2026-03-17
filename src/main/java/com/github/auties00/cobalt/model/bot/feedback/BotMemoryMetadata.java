@@ -85,32 +85,26 @@ public final class BotMemoryMetadata {
      * Sets the list of facts newly memorized by the AI bot.
      *
      * @param addedFacts the new list of added facts, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMemoryMetadata setAddedFacts(List<BotMemoryFact> addedFacts) {
+    public void setAddedFacts(List<BotMemoryFact> addedFacts) {
         this.addedFacts = addedFacts;
-        return this;
     }
 
     /**
      * Sets the list of facts removed from the AI bot's memory.
      *
      * @param removedFacts the new list of removed facts, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMemoryMetadata setRemovedFacts(List<BotMemoryFact> removedFacts) {
+    public void setRemovedFacts(List<BotMemoryFact> removedFacts) {
         this.removedFacts = removedFacts;
-        return this;
     }
 
     /**
      * Sets the disclaimer text about memory usage.
      *
      * @param disclaimer the new disclaimer text, or {@code null}
-     * @return this instance for chaining
      */
-    public BotMemoryMetadata setDisclaimer(String disclaimer) {
+    public void setDisclaimer(String disclaimer) {
         this.disclaimer = disclaimer;
-        return this;
     }
 }

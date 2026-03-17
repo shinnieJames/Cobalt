@@ -48,10 +48,8 @@ public final class BotGroupParticipantMetadata {
      * Sets the Facebook ID (FBID) of the bot participant.
      *
      * @param botFacebookId the new bot Facebook ID, or {@code null}
-     * @return this instance for chaining
      */
-    public BotGroupParticipantMetadata setBotFacebookId(String botFacebookId) {
+    public void setBotFacebookId(String botFacebookId) {
         this.botFacebookId = botFacebookId;
-        return this;
     }
 }

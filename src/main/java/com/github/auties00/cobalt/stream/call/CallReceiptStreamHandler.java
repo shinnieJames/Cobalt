@@ -31,10 +31,14 @@ public final class CallReceiptStreamHandler implements SocketStream.Handler {
         }
 
         switch (payload.description()) {
-            case "accept" -> whatsapp.store().findCallById(callId)
-                    .ifPresent(call -> whatsapp.store().addCall(call.setStatus(CallOffer.Status.ACCEPTED)));
-            case "reject" -> whatsapp.store().findCallById(callId)
-                    .ifPresent(call -> whatsapp.store().addCall(call.setStatus(CallOffer.Status.REJECTED)));
+            case "accept" -> whatsapp.store().findCallById(callId).ifPresent(call -> {
+                call.setStatus(CallOffer.Status.ACCEPTED);
+                whatsapp.store().addCall(call);
+            });
+            case "reject" -> whatsapp.store().findCallById(callId).ifPresent(call -> {
+                call.setStatus(CallOffer.Status.REJECTED);
+                whatsapp.store().addCall(call);
+            });
             case "offer" -> {
                 // Keep existing ringing state.
             }

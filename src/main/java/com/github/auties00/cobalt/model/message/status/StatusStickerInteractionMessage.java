@@ -37,19 +37,16 @@ public final class StatusStickerInteractionMessage implements Message {
         return Optional.ofNullable(type);
     }
 
-    public StatusStickerInteractionMessage setKey(MessageKey key) {
+    public void setKey(MessageKey key) {
         this.key = key;
-        return this;
     }
 
-    public StatusStickerInteractionMessage setStickerKey(String stickerKey) {
+    public void setStickerKey(String stickerKey) {
         this.stickerKey = stickerKey;
-        return this;
     }
 
-    public StatusStickerInteractionMessage setType(StatusStickerType type) {
+    public void setType(StatusStickerType type) {
         this.type = type;
-        return this;
     }
 
     @ProtobufEnum(name = "Message.StatusStickerInteractionMessage.StatusStickerType")

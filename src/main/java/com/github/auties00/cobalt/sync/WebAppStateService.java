@@ -3,11 +3,11 @@ package com.github.auties00.cobalt.sync;
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
+import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
-import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.media.ExternalBlobReference;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
-import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.system.ProtocolMessageBuilder;
@@ -31,9 +31,8 @@ import com.github.auties00.cobalt.sync.exchange.SyncRequest;
 import com.github.auties00.cobalt.sync.key.MissingSyncKeyRequestService;
 import com.github.auties00.cobalt.sync.key.MissingSyncKeyTimeoutScheduler;
 import com.github.auties00.cobalt.sync.key.SyncKeyRotationService;
-import it.auties.protobuf.stream.ProtobufInputStream;
-
 import com.github.auties00.cobalt.util.SchedulerUtils;
+import it.auties.protobuf.stream.ProtobufInputStream;
 
 import java.io.InputStream;
 import java.time.Duration;
@@ -41,7 +40,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 
 /**
@@ -498,7 +496,7 @@ public final class WebAppStateService {
 
         if (!sortedPatches.isEmpty()) {
             var localVersion = getCurrentVersion(collectionName);
-            var minPatchVersion = sortedPatches.getFirst().version()
+            long minPatchVersion = sortedPatches.getFirst().version()
                     .map(version -> version.version().orElse(0L))
                     .orElse(0L);
             if (localVersion > 0 && minPatchVersion > localVersion + 1) {
@@ -815,9 +813,11 @@ public final class WebAppStateService {
                     .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
                             "Recovery record missing action value", null));
             var actionVersion = actionData.version()
-                    .filter(version -> version > 0)
-                    .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
-                            "Recovery record missing action version", null));
+                    .orElse(0);
+            if(actionVersion <= 0) {
+                throw new WhatsAppWebAppStateSyncException.UnexpectedError("Recovery record missing action version", null);
+            }
+
             var timestamp = actionValue.timestamp()
                     .orElseThrow(WhatsAppWebAppStateSyncException.MissingActionTimestamp::new);
 
@@ -858,7 +858,7 @@ public final class WebAppStateService {
 
         // Use recovery's LT-Hash and version directly
         var recoveryVersion = recoveredSnapshot.version()
-                .flatMap(SyncdVersion::version)
+                .map(entry -> entry.version().orElse(0))
                 .filter(version -> version > 0)
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
                         "Recovery response missing version for " + collectionName,
@@ -1023,9 +1023,6 @@ public final class WebAppStateService {
 
         for (var mutation : mutationsToApply) {
             var actionName = resolveActionName(mutation);
-            if (actionName == null) {
-                continue;
-            }
             mutationsByAction
                     .computeIfAbsent(actionName, _ -> new ArrayList<>())
                     .add(mutation);
@@ -1122,10 +1119,6 @@ public final class WebAppStateService {
                     orphan.actionVersion()
             );
             var actionName = resolveActionName(mutation);
-            if (actionName == null) {
-                continue;
-            }
-
             var handler = handlerRegistry.findHandler(actionName);
             if (handler.isEmpty()) {
                 store.addOrphanMutation(collectionName, orphan);
@@ -1267,10 +1260,6 @@ public final class WebAppStateService {
                     entry.actionVersion()
             );
             var actionName = resolveActionName(mutation);
-            if (actionName == null) {
-                continue;
-            }
-
             var handler = handlerRegistry.findHandler(actionName);
             if (handler.isEmpty() || mutation.actionVersion() > handler.get().version()) {
                 continue;
@@ -1327,7 +1316,7 @@ public final class WebAppStateService {
 
             // Delegate to the handler for conflict resolution
             var actionName = resolveActionName(remoteMutation);
-            var handler = actionName != null ? handlerRegistry.findHandler(actionName).orElse(null) : null;
+            var handler = handlerRegistry.findHandler(actionName).orElse(null);
             var resolution = handler != null
                     ? handler.resolveConflicts(localMutation, remoteMutation)
                     : ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
@@ -1355,7 +1344,7 @@ public final class WebAppStateService {
         var filteredResults = new ArrayList<DecryptedMutation.Trusted>(results.size());
         for (var remoteMutation : results) {
             var actionName = resolveActionName(remoteMutation);
-            var handler = actionName != null ? handlerRegistry.findHandler(actionName).orElse(null) : null;
+            var handler = handlerRegistry.findHandler(actionName).orElse(null);
             if (handler != null && handler.dropMutationDueToCrossIndexConflict(remoteMutation, pendingByIndex)) {
                 continue;
             }
@@ -1478,9 +1467,7 @@ public final class WebAppStateService {
             }
 
             // Per WA Web: collectionNames is the list of affected collections as strings
-            sendAppStateFatalExceptionNotification(
-                    collectionName != null ? List.of(String.valueOf(collectionName)) : List.of()
-            );
+            sendAppStateFatalExceptionNotification(List.of(String.valueOf(collectionName)));
             whatsapp.handleFailure(syncEx);
         } else {
             var firstFailureTimestamp = metadata.lastErrorTimestamp() > 0
@@ -1540,8 +1527,8 @@ public final class WebAppStateService {
 
             var primaryDeviceJid = myJid.withDevice(0);
             var messageKey = new MessageKeyBuilder()
-                    .id(MessageKey.randomId(whatsapp.store().clientType()))
-                    .chatJid(myJid)
+                    .id(MessageIdGenerator.generate(MessageIdVersion.V2, myJid))
+                    .parentJid(myJid)
                     .fromMe(true)
                     .senderJid(myJid)
                     .build();

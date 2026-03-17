@@ -50,11 +50,9 @@ public final class NewsletterReaction {
      * Sets the emoji reaction content.
      *
      * @param content the emoji string, must not be {@code null}
-     * @return this instance for chaining
      */
-    public NewsletterReaction setContent(String content) {
+    public void setContent(String content) {
         this.content = content;
-        return this;
     }
 
     /**
@@ -70,11 +68,9 @@ public final class NewsletterReaction {
      * Sets the total count of this reaction.
      *
      * @param count the reaction count
-     * @return this instance for chaining
      */
-    public NewsletterReaction setCount(long count) {
+    public void setCount(long count) {
         this.count = count;
-        return this;
     }
 
     /**
@@ -90,11 +86,9 @@ public final class NewsletterReaction {
      * Sets whether the current user sent this reaction.
      *
      * @param fromMe {@code true} if the reaction is from the current user
-     * @return this instance for chaining
      */
-    public NewsletterReaction setFromMe(boolean fromMe) {
+    public void setFromMe(boolean fromMe) {
         this.fromMe = fromMe;
-        return this;
     }
 
     @Override

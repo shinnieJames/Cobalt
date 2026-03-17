@@ -29,13 +29,11 @@ public final class LegacyMessageContainer {
         return Optional.ofNullable(pollVote);
     }
 
-    public LegacyMessageContainer setEventResponseMessage(EventResponseMessage eventResponseMessage) {
+    public void setEventResponseMessage(EventResponseMessage eventResponseMessage) {
         this.eventResponseMessage = eventResponseMessage;
-        return this;
     }
 
-    public LegacyMessageContainer setPollVote(PollVoteMessage pollVote) {
+    public void setPollVote(PollVoteMessage pollVote) {
         this.pollVote = pollVote;
-        return this;
     }
 }

@@ -24,13 +24,11 @@ public final class EmbeddedContent {
         return Optional.empty();
     }
 
-    public EmbeddedContent setEmbeddedMessage(EmbeddedMessage embeddedMessage) {
+    public void setEmbeddedMessage(EmbeddedMessage embeddedMessage) {
         this.embeddedMessage = embeddedMessage;
-        return this;
     }
 
-    public EmbeddedContent setEmbeddedMusic(EmbeddedMusic embeddedMusic) {
+    public void setEmbeddedMusic(EmbeddedMusic embeddedMusic) {
         this.embeddedMusic = embeddedMusic;
-        return this;
     }
 }
