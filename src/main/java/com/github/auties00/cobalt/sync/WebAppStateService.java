@@ -227,30 +227,121 @@ public final class WebAppStateService {
     }
 
     /**
-     * Retries orphan mutations that match the specified entity identifiers.
+     * Retries orphan mutations matching the specified message and chat identifiers.
      *
-     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanMutations}: when
-     * new entities become available (e.g., messages from history sync or new
-     * contacts), only orphans matching those specific entity IDs are retried
-     * instead of scanning all orphans across all collections.
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanMutations}: when new messages
+     * or chats become available (e.g. from history sync or incoming messages), orphans matching
+     * those specific entity IDs are retried. Delegates to {@link #checkOrphanMessages},
+     * {@link #checkOrphanChats}, and account-level orphan retry in parallel.
      *
      * @implNote WAWebSyncdOrphan.checkOrphanMutations
-     * @param modelIds the entity identifiers to match (e.g. message IDs or JIDs)
+     * @param msgIds  the message identifiers to match for {@code Msg}-type orphans
+     * @param chatIds the chat identifiers to match for {@code Chat}-type and {@code Account}-type orphans
      */
-    public void retryOrphanMutationsForEntities(Collection<String> modelIds) {
+    public void checkOrphanMutations(Collection<String> msgIds, Collection<String> chatIds) {
+        checkOrphanMessages(msgIds); // WAWebSyncdOrphan.checkOrphanMutations: C(e)
+        checkOrphanChats(chatIds); // WAWebSyncdOrphan.checkOrphanMutations: v(t)
+        retryOrphanMutationsByModelIds(chatIds, "Account"); // WAWebSyncdOrphan.checkOrphanMutations: bulkGetAccountLid(t).then(R) — ADAPTED: Cobalt uses chatIds directly, WA Web resolves LID accounts first
+    }
+
+    /**
+     * Retries orphan mutations of model type {@code Msg} matching the specified message identifiers.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanMessages}: enriches the key list
+     * with additional LID message keys and (if forced history LID chat is enabled) history chat
+     * ID message keys, then delegates to the private helper {@code E} with {@code SyncModelType.Msg}.
+     *
+     * @implNote WAWebSyncdOrphan.checkOrphanMessages
+     * @param msgIds the message identifiers to check
+     */
+    public void checkOrphanMessages(Collection<String> msgIds) {
+        if (msgIds == null || msgIds.isEmpty()) { // ADAPTED: defensive null check
+            return;
+        }
+        retryOrphanMutationsByModelIds(msgIds, "Msg"); // WAWebSyncdOrphan.checkOrphanMessages -> E(keys, SyncModelType.Msg) — ADAPTED: Cobalt skips getAdditionalLidMsgKeys/getAdditionalHistoryChatIdMsgKeys enrichment (LID resolution handled by store)
+    }
+
+    /**
+     * Retries orphan mutations of model type {@code Chat} matching the specified chat identifiers.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanChats}: enriches the key list
+     * with additional history chat IDs (if forced history LID chat is enabled), then delegates
+     * to the private helper {@code E} with {@code SyncModelType.Chat}.
+     *
+     * @implNote WAWebSyncdOrphan.checkOrphanChats
+     * @param chatIds the chat identifiers to check
+     */
+    public void checkOrphanChats(Collection<String> chatIds) {
+        if (chatIds == null || chatIds.isEmpty()) { // ADAPTED: defensive null check
+            return;
+        }
+        retryOrphanMutationsByModelIds(chatIds, "Chat"); // WAWebSyncdOrphan.checkOrphanChats -> E(keys, SyncModelType.Chat) — ADAPTED: Cobalt skips getAdditionalHistoryChatIds enrichment (LID resolution handled by store)
+    }
+
+    /**
+     * Retries orphan mutations of model type {@code Agent} matching the specified agent identifiers.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanAgents}: delegates directly to the
+     * private helper {@code E} with {@code SyncModelType.Agent}.
+     *
+     * @implNote WAWebSyncdOrphan.checkOrphanAgents
+     * @param agentIds the agent identifiers to check
+     */
+    public void checkOrphanAgents(Collection<String> agentIds) {
+        retryOrphanMutationsByModelIds(agentIds, "Agent"); // WAWebSyncdOrphan.checkOrphanAgents -> E(e, SyncModelType.Agent)
+    }
+
+    /**
+     * Retries orphan mutations of model type {@code ChatAssignment} matching the specified assignment identifiers.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanChatAssignments}: delegates directly
+     * to the private helper {@code E} with {@code SyncModelType.ChatAssignment}.
+     *
+     * @implNote WAWebSyncdOrphan.checkOrphanChatAssignments
+     * @param assignmentIds the chat assignment identifiers to check
+     */
+    public void checkOrphanChatAssignments(Collection<String> assignmentIds) {
+        retryOrphanMutationsByModelIds(assignmentIds, "ChatAssignment"); // WAWebSyncdOrphan.checkOrphanChatAssignments -> E(e, SyncModelType.ChatAssignment)
+    }
+
+    /**
+     * Retries orphan mutations of model type {@code UserStatusMute} matching the specified contact identifiers.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.checkOrphanUserStatusMutes}: delegates directly
+     * to the private helper {@code E} with {@code SyncModelType.UserStatusMute}.
+     *
+     * @implNote WAWebSyncdOrphan.checkOrphanUserStatusMutes
+     * @param contactIds the contact identifiers to check
+     */
+    public void checkOrphanUserStatusMutes(Collection<String> contactIds) {
+        retryOrphanMutationsByModelIds(contactIds, "UserStatusMute"); // WAWebSyncdOrphan.checkOrphanUserStatusMutes -> E(e, SyncModelType.UserStatusMute)
+    }
+
+    /**
+     * Retries orphan mutations matching the specified model IDs and model type.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdOrphan.E}: queries the orphan store for entries
+     * matching both the entity key and the model type, then applies them via individual mutation
+     * retry. This is the core helper that all type-specific orphan check methods delegate to.
+     *
+     * @implNote WAWebSyncdOrphan.E
+     * @param modelIds  the entity identifiers to match
+     * @param modelType the model type to filter by (e.g. {@code "Msg"}, {@code "Chat"})
+     */
+    private void retryOrphanMutationsByModelIds(Collection<String> modelIds, String modelType) {
         if (modelIds == null || modelIds.isEmpty()) { // ADAPTED: defensive null check
             return;
         }
 
         var modelIdSet = modelIds instanceof Set ? (Set<String>) modelIds : new HashSet<>(modelIds); // ADAPTED: optimization for set lookup
-        for (var patchType : SyncPatchType.values()) { // ADAPTED: WAWebSyncdOrphan.E queries by (key, modelType, Orphan) tuples; Cobalt scans all patch types filtering by modelId
+        for (var patchType : SyncPatchType.values()) { // WAWebSyncdOrphan.E: getSyncActionsByModelInfosInTransaction — ADAPTED: Cobalt scans all patch types
             var orphans = store.findOrphanMutations(patchType); // WAWebSyncdOrphan.E: getSyncActionsByModelInfosInTransaction
             if (orphans.isEmpty()) {
                 continue;
             }
 
             var matching = orphans.stream()
-                    .filter(o -> o.modelId() != null && modelIdSet.contains(o.modelId())) // WAWebSyncdOrphan.E: match by key
+                    .filter(o -> modelType.equals(o.modelType()) && o.modelId() != null && modelIdSet.contains(o.modelId())) // WAWebSyncdOrphan.E: match by (key, modelType, Orphan)
                     .toList();
             if (matching.isEmpty()) {
                 continue;
@@ -843,24 +934,40 @@ public final class WebAppStateService {
         return currentHashState.hash() != null ? currentHashState.hash() : MutationLTHash.EMPTY_HASH;
     }
 
+    /**
+     * Downloads and decodes a snapshot from an external blob reference.
+     *
+     * <p>Validates the blob reference fields, downloads the encrypted blob via
+     * the media connection, and decodes the protobuf into a {@link SyncdSnapshot}.
+     * Snapshot field validation (version, mac, keyId, records) is performed by
+     * the caller and {@link MutationIntegrityVerifier#verifySnapshotMac}.
+     *
+     * @implNote WAWebSyncdMMSDownload.downloadSnapshot (download + decode),
+     *           WAWebSyncdNetCallbacksApi.downloadSyncBlob (blob download),
+     *           WAWebSyncdDecode.decodeSyncdSnapshot (protobuf decoding),
+     *           WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference (pre-download validation)
+     * @param snapshotRef the external blob reference for the snapshot
+     * @return the decoded snapshot
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError if the blob reference is invalid or decoding fails
+     * @throws WhatsAppWebAppStateSyncException.ExternalDownloadFailed if the download fails
+     */
     private SyncdSnapshot downloadAndDecodeSnapshot(ExternalBlobReference snapshotRef) {
-        // Per WA Web validateExternalBlobReference: validate required fields before download
-        validateExternalBlobReference(snapshotRef);
+        validateExternalBlobReference(snapshotRef); // ADAPTED: WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference — validated pre-download
 
         try {
             var downloadedData = whatsapp.store()
                     .awaitMediaConnection()
-                    .download(snapshotRef);
+                    .download(snapshotRef); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "snapshot", collectionName)
             try (var protobufStream = ProtobufInputStream.fromStream(downloadedData)) {
-                return SyncdSnapshotSpec.decode(protobufStream);
+                return SyncdSnapshotSpec.decode(protobufStream); // WAWebSyncdDecode.decodeSyncdSnapshot
             } catch (Throwable throwable) {
-                throw new WhatsAppWebAppStateSyncException.UnexpectedError("Failed to decode snapshot", throwable);
+                throw new WhatsAppWebAppStateSyncException.UnexpectedError("Failed to decode snapshot", throwable); // WAWebSyncdDecode.decodeSyncdSnapshot — SyncdFatalError
             }
         } catch (Throwable throwable) {
             if (throwable instanceof WhatsAppWebAppStateSyncException exception) {
                 throw exception;
             }
-            throw new WhatsAppWebAppStateSyncException.ExternalDownloadFailed(throwable);
+            throw new WhatsAppWebAppStateSyncException.ExternalDownloadFailed(throwable); // ADAPTED: WAWebSyncdNetCallbacksApi.downloadSyncBlob — MediaNotFoundError → SyncdFatalError("external patch expired")
         }
     }
 
@@ -975,20 +1082,34 @@ public final class WebAppStateService {
         return trusted;
     }
 
+    /**
+     * Extracts mutations from a patch, downloading external mutations if needed.
+     *
+     * <p>A patch contains either inline mutations or an external blob reference
+     * (never both). When external, the blob is downloaded, decoded as
+     * {@link SyncdMutations}, and the contained mutations are returned.
+     * Per-mutation field validation is deferred to {@link #decryptMutations}.
+     *
+     * @implNote WAWebSyncdMMSDownload.downloadExternalPatch (external path),
+     *           WAWebSyncdValidateServerSyncProtobuf.validatePatchProtobuf (both-inline-and-external check)
+     * @param patch the decoded patch
+     * @return the mutations from this patch (inline or external)
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError if the patch has both inline and external mutations
+     */
     private SequencedCollection<SyncdMutation> getMutationsFromPatch(SyncdPatch patch) {
-        var hasInline = patch.mutations() != null && !patch.mutations().isEmpty();
-        var hasExternal = patch.externalMutations().isPresent();
+        var hasInline = patch.mutations() != null && !patch.mutations().isEmpty(); // WAWebSyncdValidateServerSyncProtobuf.validatePatchProtobuf — u && u.length > 0
+        var hasExternal = patch.externalMutations().isPresent(); // WAWebSyncdValidateServerSyncProtobuf.validatePatchProtobuf — l (externalMutations)
 
-        // A patch must not contain both inline and external mutations
+        // WAWebSyncdValidateServerSyncProtobuf.validatePatchProtobuf — u && u.length > 0 && l → SyncdFatalError("patch with both inline and external mutations")
         if (hasInline && hasExternal) {
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "Patch contains both inline and external mutations", null);
         }
 
-        if (hasExternal) {
-            var downloadedData = downloadExternalMutation(patch.externalMutations().get());
-            var externalMutations = decodeExternalMutation(downloadedData);
-            return externalMutations.mutations() != null
+        if (hasExternal) { // WAWebSyncdMMSDownload.downloadExternalPatch path
+            var downloadedData = downloadExternalMutation(patch.externalMutations().get()); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "patch", collectionName)
+            var externalMutations = decodeExternalMutation(downloadedData); // WAWebSyncdDecode.decodeSyncdMutations
+            return externalMutations.mutations() != null // WAWebSyncdDecode.decodeSyncdMutations — .mutations
                     ? Collections.unmodifiableList(externalMutations.mutations())
                     : List.of();
         }
@@ -998,39 +1119,54 @@ public final class WebAppStateService {
                 : List.of();
     }
 
+    /**
+     * Downloads an external mutation blob from the media connection.
+     *
+     * @implNote WAWebSyncdNetCallbacksApi.downloadSyncBlob (patch variant),
+     *           WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference (pre-download validation)
+     * @param externalRef the external blob reference
+     * @return the downloaded data stream
+     * @throws WhatsAppWebAppStateSyncException.ExternalDownloadFailed if the download fails
+     */
     private InputStream downloadExternalMutation(ExternalBlobReference externalRef) {
-        // Per WA Web validateExternalBlobReference: validate required fields before download
-        validateExternalBlobReference(externalRef);
+        validateExternalBlobReference(externalRef); // ADAPTED: WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference — validated pre-download
 
         try {
             return whatsapp.store()
                     .awaitMediaConnection()
-                    .download(externalRef);
-        }catch (Throwable throwable) {
-            throw new WhatsAppWebAppStateSyncException.ExternalDownloadFailed(throwable);
+                    .download(externalRef); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "patch", collectionName)
+        } catch (Throwable throwable) {
+            throw new WhatsAppWebAppStateSyncException.ExternalDownloadFailed(throwable); // ADAPTED: WAWebSyncdNetCallbacksApi.downloadSyncBlob — MediaNotFoundError → SyncdFatalError("external patch expired")
         }
     }
 
+    /**
+     * Validates that an external blob reference has all required fields for download.
+     *
+     * @implNote WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference
+     * @param ref the external blob reference to validate
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError if any required field is missing
+     */
     private void validateExternalBlobReference(ExternalBlobReference ref) {
-        if (ref.mediaDirectPath().isEmpty() || ref.mediaDirectPath().get().isEmpty()) {
+        if (ref.mediaDirectPath().isEmpty() || ref.mediaDirectPath().get().isEmpty()) { // WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference — e == null → SyncdFatalError("missing external blob reference direct path")
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "External blob reference missing directPath",
                     null
             );
         }
-        if (ref.mediaKey().isEmpty() || ref.mediaKey().get().length == 0) {
+        if (ref.mediaKey().isEmpty() || ref.mediaKey().get().length == 0) { // WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference — !s → SyncdFatalError("missing external blob reference media key")
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "External blob reference missing mediaKey",
                     null
             );
         }
-        if (ref.fileEncSha256().isEmpty()) {
+        if (ref.fileEncSha256().isEmpty()) { // WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference — !r → SyncdFatalError("missing external blob reference file enc SHA256")
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "External blob reference missing fileEncSha256",
                     null
             );
         }
-        if (ref.fileSha256().isEmpty()) {
+        if (ref.fileSha256().isEmpty()) { // WAWebSyncdValidateServerSyncProtobuf.validateExternalBlobReference — !a → SyncdFatalError("missing external blob reference file SHA256")
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
                     "External blob reference missing fileSha256",
                     null
@@ -1038,11 +1174,19 @@ public final class WebAppStateService {
         }
     }
 
+    /**
+     * Decodes downloaded external mutation data into a {@link SyncdMutations} object.
+     *
+     * @implNote WAWebSyncdDecode.decodeSyncdMutations
+     * @param downloadedData the downloaded data stream
+     * @return the decoded mutations container
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError if protobuf decoding fails
+     */
     private SyncdMutations decodeExternalMutation(InputStream downloadedData) {
-        try(var protobufStream = ProtobufInputStream.fromStream(downloadedData)) {
-            return SyncdMutationsSpec.decode(protobufStream);
-        }catch (Throwable throwable) {
-            throw new WhatsAppWebAppStateSyncException.UnexpectedError("Failed to decode external mutations", throwable);
+        try (var protobufStream = ProtobufInputStream.fromStream(downloadedData)) {
+            return SyncdMutationsSpec.decode(protobufStream); // WAWebSyncdDecode.decodeSyncdMutations
+        } catch (Throwable throwable) {
+            throw new WhatsAppWebAppStateSyncException.UnexpectedError("Failed to decode external mutations", throwable); // WAWebSyncdDecode.decodeSyncdMutations — SyncdFatalError
         }
     }
 
@@ -1494,42 +1638,46 @@ public final class WebAppStateService {
      * @return the filtered list of remote mutations to apply
      */
     private SequencedCollection<DecryptedMutation.Trusted> resolveConflicts(SequencedCollection<DecryptedMutation.Trusted> remoteMutations, SyncPatchType collectionName) {
-        // Create index for quick lookup of pending mutations
+        // WAWebSyncdResolveConflict.resolveConflict: getSyncPendingMutationsByCollectionInTransaction(e)
+        var pendingMutations = whatsapp.store().findPendingMutations(collectionName);
+        // WAWebSyncdResolveConflict.resolveConflict: l = new Map(i.map(e => [e.index, e]))
         var pendingByIndex = new LinkedHashMap<String, DecryptedMutation.Trusted>();
-        for (var pendingMutation : whatsapp.store().findPendingMutations(collectionName)) {
+        for (var pendingMutation : pendingMutations) {
             pendingByIndex.put(pendingMutation.mutation().index(), pendingMutation.mutation());
         }
 
+        // WAWebSyncdResolveConflict.resolveConflict: n = [], a = []
         var results = new ArrayList<DecryptedMutation.Trusted>(remoteMutations.size());
         var pendingToDrop = new HashSet<String>();
         var mergedPendingToAdd = new ArrayList<SyncPendingMutation>();
+        // WAWebSyncdResolveConflict.resolveConflict: u = yield s(t, l) then t.forEach(...)
         for (var remoteMutation : remoteMutations) {
-            var localMutation = pendingByIndex.get(remoteMutation.index());
+            var localMutation = pendingByIndex.get(remoteMutation.index()); // WAWebSyncdResolveConflict.resolveConflict: u.get(e.index)
             if (localMutation == null) {
-                // No conflict, apply remote — WAWebSyncdResolveConflict.resolveConflict
-                results.add(remoteMutation);
+                results.add(remoteMutation); // WAWebSyncdResolveConflict.resolveConflict: no conflict, n.push(e)
                 continue;
             }
 
-            // Delegate to the handler for conflict resolution — WAWebSyncdResolveConflict.resolveConflict
-            var actionName = resolveActionNameSafe(remoteMutation); // WAWebSyncdResolveConflict: uses getMutationNameFromIndex (safe)
+            // ADAPTED: WAWebSyncdResolveConflict uses e.actionHandler from remote mutation; Cobalt resolves via registry
+            var actionName = resolveActionNameSafe(remoteMutation);
             var handler = actionName != null ? handlerRegistry.findHandler(actionName).orElse(null) : null;
+            // WAWebSyncdResolveConflict: s() calls n.resolveConflicts(t, e) — local first, remote second
             var resolution = handler != null
                     ? handler.resolveConflicts(localMutation, remoteMutation)
                     : ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
 
             switch (resolution.state()) {
                 case APPLY_REMOTE_DROP_LOCAL -> {
-                    results.add(remoteMutation);
-                    pendingToDrop.add(remoteMutation.index());
+                    results.add(remoteMutation); // WAWebSyncdResolveConflict.resolveConflict: n.push(e)
+                    pendingToDrop.add(remoteMutation.index()); // WAWebSyncdResolveConflict.resolveConflict: a = a.concat(i.filter(...))
                 }
                 case SKIP_REMOTE -> {
-                    // Keep local, skip remote
+                    // WAWebSyncdResolveConflict.resolveConflict: break e (no-op)
                 }
                 case SKIP_REMOTE_DROP_LOCAL -> {
-                    pendingToDrop.add(remoteMutation.index());
-                    // Per WA Web: when a merged mutation is produced, it replaces
-                    // the old local pending and is applied to local state
+                    pendingToDrop.add(remoteMutation.index()); // WAWebSyncdResolveConflict.resolveConflict: a = a.concat(i.filter(...))
+                    // ADAPTED: WA Web handlers apply merged mutation via lockForMessageRangeSync inside resolveConflicts;
+                    // Cobalt defers the merged mutation via ConflictResolution.mergedMutation()
                     if (resolution.mergedMutation() != null) {
                         results.add(resolution.mergedMutation());
                         mergedPendingToAdd.add(new SyncPendingMutation(resolution.mergedMutation(), 0));
@@ -1538,18 +1686,23 @@ public final class WebAppStateService {
             }
         }
 
+        // WAWebSyncdResolveConflict.resolveConflict: cross-index conflict check loop
         var filteredResults = new ArrayList<DecryptedMutation.Trusted>(results.size());
         for (var remoteMutation : results) {
-            var actionName = resolveActionNameSafe(remoteMutation); // WAWebSyncdResolveConflict: cross-index check uses safe path
+            // ADAPTED: WAWebSyncdResolveConflict uses n[d].actionHandler; Cobalt resolves via registry
+            var actionName = resolveActionNameSafe(remoteMutation);
             var handler = actionName != null ? handlerRegistry.findHandler(actionName).orElse(null) : null;
+            // WAWebSyncdResolveConflict.resolveConflict: p = yield m.dropMutationDueToCrossIndexConflict(n[d], l)
             if (handler != null && handler.dropMutationDueToCrossIndexConflict(remoteMutation, pendingByIndex)) {
-                continue;
+                continue; // WAWebSyncdResolveConflict.resolveConflict: p is true, skip
             }
-            filteredResults.add(remoteMutation);
+            filteredResults.add(remoteMutation); // WAWebSyncdResolveConflict.resolveConflict: c.push(n[d])
         }
 
-        // Drop resolved pending mutations and add merged ones
+        // ADAPTED: WA Web returns {remoteMutationsToApply, pendingSetMutationsToDrop} for caller to handle;
+        // Cobalt performs the store cleanup here (same net effect)
         if (!pendingToDrop.isEmpty() || !mergedPendingToAdd.isEmpty()) {
+            // WAWebSyncdResolveConflict.resolveConflict: _ = compactMap(a, e => e.id)
             var pendingMutationIdsToDrop = whatsapp.store()
                     .findPendingMutations(collectionName)
                     .stream()
@@ -1668,40 +1821,43 @@ public final class WebAppStateService {
             return;
         }
 
-        var metadata = store.findWebAppState(collectionName);
+        var metadata = store.findWebAppState(collectionName); // WAWebSyncdServerSync.S
         if (error instanceof WhatsAppWebAppStateSyncException.MissingKey missingKeyEx) {
             store.markWebAppStateBlocked(collectionName); // WAWebSyncdServerSync.S: Blocked state
-            var keyId = missingKeyEx.keyId();
+            var keyId = missingKeyEx.keyId(); // WAWebSyncdServerSync.S
 
-            // Per WhatsApp Web WAWebSyncdHandleMissingKeys._handleMissingKeys:
-            // Request missing key from companion devices and schedule timeout
-            missingSyncKeyRequestService.requestMissingKey(keyId);
-            missingSyncKeyTimeoutScheduler.scheduleTimeoutCheck();
-            missingSyncKeyTimeoutScheduler.startPeriodicReRequestJob();
+            missingSyncKeyRequestService.requestMissingKey(keyId); // WAWebSyncdHandleMissingKeys._handleMissingKeys
+            missingSyncKeyTimeoutScheduler.scheduleTimeoutCheck(); // WAWebSyncdStoreMissingKeys._scheduleTimeoutForMissingKey
+            missingSyncKeyTimeoutScheduler.startPeriodicReRequestJob(); // WAWebSyncdStoreMissingKeys._startPeriodicReRequestJob
         } else if (error instanceof WhatsAppWebAppStateSyncException syncEx && syncEx.isFatal()) {
-            // WAWebSyncdServerSync.S: catch (SyncdFatalError) -> ErrorFatal for all collections
-            store.markWebAppStateErrorFatal(collectionName);
+            store.markWebAppStateErrorFatal(collectionName); // WAWebSyncdServerSync.S: catch (SyncdFatalError) -> ErrorFatal
 
-            // Per WA Web handleFatalError: sleep 5 seconds, send a fatal exception
-            // notification to the primary device, and force logout
-            try {
+            // WAWebSyncdFatal.handleFatalError: var n = t != null ? t.map(e => String(e)) : []
+            var collectionNames = List.of(String.valueOf(collectionName));
+
+            try { // WAWebSyncdFatal.handleFatalError: yield asyncSleep(5000)
                 Thread.sleep(5000);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             }
 
-            // Per WA Web: collectionNames is the list of affected collections as strings
-            sendAppStateFatalExceptionNotification(List.of(String.valueOf(collectionName)));
+            sendAppStateFatalExceptionNotification(collectionNames); // WAWebSyncdFatal.handleFatalError: yield sendAppStateFatalExceptionNotification(n)
+            // ADAPTED: WAWebSyncdFatal.handleFatalError calls socketLogout(LogoutReason.SyncdFailure);
+            // Cobalt routes through pluggable error handler instead of hardcoded logout
             whatsapp.handleFailure(syncEx);
         } else {
             // WAWebSyncdServerSync.S: catch (retryable) -> ErrorRetry with serverBackoff
             var firstFailureTimestamp = metadata.lastErrorTimestamp() > 0
                     ? metadata.lastErrorTimestamp()
                     : System.currentTimeMillis();
-            // WAWebSyncdServerSync.S: n.errorBackoff -> serverBackoff on ErrorRetry result
+            // WAWebSyncd.ee: i.length > 0 && (q = i[0].serverBackoff || 0, W = 0)
+            // When server returns ErrorRetry with backoff, reset the global attempt counter
             var serverBackoffMs = error instanceof WhatsAppWebAppStateSyncException.RetryableServerError retryable
                     ? retryable.serverBackoffMs() // WAWebSyncdServerSync.S: serverBackoff: n.errorBackoff
                     : null;
+            if (serverBackoffMs != null) {
+                retryScheduler.resetAttemptCounter(); // WAWebSyncd.ee: W = 0 on ErrorRetry results
+            }
             var result = retryScheduler.scheduleRetry( // WAWebSyncd.te/ne: backoff scheduling
                     collectionName,
                     firstFailureTimestamp,
@@ -1721,51 +1877,50 @@ public final class WebAppStateService {
      *
      * <p>Per WhatsApp Web {@code WAWebSyncdFatalExceptionNotificationApi.sendAppStateFatalExceptionNotification}:
      * constructs an {@code AppStateFatalExceptionNotification} protobuf with the
-     * affected collection names and the current timestamp, wraps it in a
+     * affected collection names and the current timestamp (milliseconds), wraps it in a
      * {@code ProtocolMessage} with type {@code APP_STATE_FATAL_EXCEPTION_NOTIFICATION},
      * and sends it to device 0 (primary) as a peer message via
      * {@code encryptAndSendKeyMsg}.
      *
+     * @implNote WAWebSyncdFatalExceptionNotificationApi.sendAppStateFatalExceptionNotification
      * @param collectionNames the collections that triggered the fatal error
      */
     private void sendAppStateFatalExceptionNotification(List<String> collectionNames) {
-        try {
-            var myJid = whatsapp.store().jid().orElse(null);
-            if (myJid == null) {
-                LOGGER.warning("Cannot send fatal exception notification: own JID not available");
-                return;
-            }
-
-            var notification = new AppStateFatalExceptionNotificationBuilder()
-                    .collectionNames(collectionNames)
-                    .timestamp(Instant.now())
-                    .build();
-
-            var protocolMessage = new ProtocolMessageBuilder()
-                    .type(ProtocolMessage.Type.APP_STATE_FATAL_EXCEPTION_NOTIFICATION)
-                    .appStateFatalExceptionNotification(notification)
-                    .build();
-
-            var messageContainer = new MessageContainerBuilder()
-                    .protocolMessage(protocolMessage)
-                    .build();
-
-            var primaryDeviceJid = myJid.withDevice(0);
-            var messageKey = new MessageKeyBuilder()
-                    .id(MessageIdGenerator.generate(MessageIdVersion.V2, myJid))
-                    .parentJid(myJid)
-                    .fromMe(true)
-                    .senderJid(myJid)
-                    .build();
-            var messageInfo = new ChatMessageInfoBuilder()
-                    .key(messageKey)
-                    .message(messageContainer)
-                    .build();
-
-            whatsapp.sendPeerMessage(primaryDeviceJid, messageInfo);
-        } catch (Exception e) {
-            LOGGER.warning("Failed to send fatal exception notification: " + e.getMessage());
+        var myJid = whatsapp.store().jid().orElse(null); // ADAPTED: WAWebSyncdFatalExceptionNotificationApi: getMePnUserOrThrow() / getMeDevicePnOrThrow()
+        if (myJid == null) {
+            LOGGER.warning("Cannot send fatal exception notification: own JID not available");
+            return;
         }
+
+        var notification = new AppStateFatalExceptionNotificationBuilder() // WAWebSyncdFatalExceptionNotificationApi: {collectionNames: e, timestamp: unixTimeMs()}
+                .collectionNames(collectionNames) // WAWebSyncdFatalExceptionNotificationApi: collectionNames: e
+                .timestamp(Instant.now()) // WAWebSyncdFatalExceptionNotificationApi: timestamp: unixTimeMs()
+                .build();
+
+        var protocolMessage = new ProtocolMessageBuilder() // WAWebSyncdFatalExceptionNotificationApi: appStateFatalExceptionNotification: t
+                .type(ProtocolMessage.Type.APP_STATE_FATAL_EXCEPTION_NOTIFICATION)
+                .appStateFatalExceptionNotification(notification)
+                .build();
+
+        var messageContainer = new MessageContainerBuilder()
+                .protocolMessage(protocolMessage)
+                .build();
+
+        var primaryDeviceJid = myJid.withDevice(0); // WAWebSyncdFatalExceptionNotificationApi: createDeviceWidFromUserAndDevice(..., 0)
+        var messageKey = new MessageKeyBuilder() // WAWebSyncdFatalExceptionNotificationApi: new WAWebMsgKey({fromMe: true, remote: getMePnUserOrThrow(), id: ...})
+                .id(MessageIdGenerator.generate(MessageIdVersion.V2, myJid)) // WAWebSyncdFatalExceptionNotificationApi: yield WAWebMsgKey.newId()
+                .parentJid(myJid) // ADAPTED: WAWebSyncdFatalExceptionNotificationApi: remote: getMePnUserOrThrow()
+                .fromMe(true) // WAWebSyncdFatalExceptionNotificationApi: fromMe: true
+                .senderJid(myJid) // ADAPTED: Cobalt peer message pattern
+                .build();
+        var messageInfo = new ChatMessageInfoBuilder() // WAWebSyncdFatalExceptionNotificationApi: {id: n, to: ..., type: "protocol", ...}
+                .key(messageKey)
+                .message(messageContainer)
+                .build();
+
+        // ADAPTED: WA Web calls storePeerMessages([a]) then encryptAndSendKeyMsg({msg: a})
+        // Cobalt's sendPeerMessage handles both storage and sending
+        whatsapp.sendPeerMessage(primaryDeviceJid, messageInfo); // WAWebSyncdFatalExceptionNotificationApi: encryptAndSendKeyMsg({msg: a})
     }
 
     /**
@@ -1778,6 +1933,20 @@ public final class WebAppStateService {
      */
     public void scheduleAllDevicesRespondedCheck() {
         missingSyncKeyTimeoutScheduler.scheduleAllDevicesRespondedCheck();
+    }
+
+    /**
+     * Reschedules the missing sync key timeout check.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdStoreMissingKeys._setMissingKeyTimeout}:
+     * after keys are resolved (removed from the missing key store), the timeout
+     * must be rescheduled because the earliest missing key may have changed
+     * or there may be no missing keys left.
+     *
+     * @implNote WAWebSyncdStoreMissingKeys._setMissingKeyTimeout
+     */
+    public void rescheduleMissingSyncKeyTimeout() {
+        missingSyncKeyTimeoutScheduler.scheduleTimeoutCheck();
     }
 
     /**

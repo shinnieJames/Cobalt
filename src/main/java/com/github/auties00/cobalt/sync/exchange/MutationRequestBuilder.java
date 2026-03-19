@@ -22,9 +22,7 @@ import com.github.auties00.cobalt.sync.crypto.MutationKeys;
 import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
 
-import javax.crypto.Mac;
 import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Instant;
 import java.util.*;
@@ -334,14 +332,10 @@ public final class MutationRequestBuilder {
             // WAWebSyncdEncryptMutationsWrapper.encryptMutation — switch on operation
             if (mutation.operation() == SyncdOperation.REMOVE) {
                 // WAWebSyncdEncryptMutationsWrapper.encryptMutation — REMOVE branch: look up original key
-                var indexBytes = mutation.index().getBytes(StandardCharsets.UTF_8);
-                var indexMac = Mac.getInstance("HmacSHA256");
-                indexMac.init(derivedKeys.indexKey());
-                var indexMacResult = indexMac.doFinal(indexBytes);
-
                 // WAWebSyncdEncryptMutationsWrapper.encryptMutation — getSyncActionInTransaction(a)
+                // Per WA Web: lookup by plaintext index string (key-independent), NOT by indexMac
                 var originalEntry = whatsapp.store()
-                        .findSyncActionEntry(patchType, indexMacResult)
+                        .findSyncActionEntryByActionIndex(patchType, mutation.index())
                         .orElseThrow(() -> new IllegalStateException( // WAWebSyncdEncryptMutationsWrapper.encryptMutation — SyncdFatalError("no corresponding set mutation")
                                 "Cannot find original key for REMOVE operation on index: " + mutation.index()
                         ));

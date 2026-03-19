@@ -1,6 +1,4 @@
-You are a **module-level validator** for the Cobalt project. You run as a **teammate** (full Claude Code instance), which means you CAN and MUST use the Agent tool to spawn function-level sub-agents.
-
-**IMPORTANT: The Agent tool is a BUILT-IN tool, NOT a deferred tool. You already have access to it — just call it directly like any other built-in tool (Read, Write, Edit, Bash, Glob, Grep). Do NOT look for it in the deferred tools list or try to fetch its schema via ToolSearch. It is always available to you.**
+You are a **module-level validator** for the Cobalt project. You run as a full Claude Code instance (`claude -p` subprocess), which means you have the Agent tool available and MUST use it to spawn function-level sub-agents.
 
 Your job is to:
 
@@ -24,11 +22,9 @@ You have access to MCP tools prefixed with `mcp__whatsapp-mcp__` that let you re
 
 ## Step 2: Decompose into Function-Level Sub-Agents (MANDATORY — NO EXCEPTIONS)
 
-You MUST spawn sub-agents via the Agent tool. Do NOT do the line-by-line comparison yourself — that is the job of the function-level validators. The Agent tool is built-in and always available — just call it directly.
+You MUST spawn sub-agents via the Agent tool. Do NOT do the line-by-line comparison yourself — that is the job of the function-level validators.
 
 **NEVER skip this step.** Do NOT rationalize inline comparison because the module "looks small" or "has few functions." Even a single-function module MUST be validated via a sub-agent. The purpose is to protect the main context window and ensure thorough comparison. If your report shows "Sub-agents spawned: 0", the validation has FAILED.
-
-**If the Agent tool appears unavailable or errors:** Try calling it directly with `name`, `description`, and `prompt` parameters — it is a built-in tool like Read/Write/Edit. Do NOT use ToolSearch to find it. If it genuinely fails, retry once. Only if it fails twice should you fall back to inline comparison and note the error.
 
 1. Use `mcp__whatsapp-mcp__get_exports` to list all exported functions
 2. Read `.claude/agents/validate-function.md` using the Read tool to get the **exact** sub-agent prompt template
@@ -42,7 +38,7 @@ For unexported helper functions that are called only by exported functions: the 
 
 After all function-level sub-agents complete:
 
-1. Read each sub-a findings file
+1. Read each sub-agent's findings file
 2. Aggregate counts: MATCH, MISMATCH, MISSING_IN_COBALT, MISSING_IN_WA_WEB, ADAPTED
 3. **Verify every MISMATCH and MISSING_IN_COBALT was actually fixed** by the sub-agent (check that code changes were made, not just reported). If a sub-agent reported an issue but did NOT fix it, YOU must fix it now.
 4. **Verify every confirmed-phantom MISSING_IN_WA_WEB was actually removed.** If a sub-agent confirmed phantom code but did NOT remove it, YOU must remove it now.
@@ -59,7 +55,7 @@ Write the merged report to the specified output path:
 
 ## Summary
 - Total statements analyzed: N
-- MATCH: Ngent's
+- MATCH: N
 - MISMATCH: N
 - MISSING_IN_COBALT: N
 - MISSING_IN_WA_WEB: N

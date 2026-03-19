@@ -1830,6 +1830,18 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    public Optional<SyncActionEntry> findSyncActionEntryByActionIndex(SyncPatchType patchType, String actionIndex) {
+        var inner = syncActionEntries.get(patchType);
+        if (inner == null) {
+            return Optional.empty();
+        }
+        return inner.values()
+                .stream()
+                .filter(entry -> actionIndex.equals(entry.actionIndex()))
+                .findFirst();
+    }
+
+    @Override
     public void putSyncActionEntry(SyncPatchType patchType, byte[] indexMac, SyncActionEntry entry) {
         syncActionEntries.computeIfAbsent(patchType, _ -> new ConcurrentHashMap<>())
                 .put(HexFormat.of().formatHex(indexMac), entry);
@@ -2035,31 +2047,29 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         }
     }
 
-    public void markWebAppStateDirty(SyncPatchType collectionName) {
+    public void markWebAppStateDirty(SyncPatchType collectionName) { // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty
         webAppStateCollections.compute(collectionName, (_, current) -> {
             if (current == null) {
                 return new SyncCollectionMetadata(
                         collectionName,
                         0,
                         MutationLTHash.copy(MutationLTHash.EMPTY_HASH),
-                        System.currentTimeMillis(),
-                        SyncCollectionState.DIRTY,
+                        0, // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty: no lastSyncTimestamp field in WA Web state entry
+                        SyncCollectionState.DIRTY, // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty: state = Dirty
                         0,
-                        0,
+                        0, // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty: finiteFailureStartTime = undefined for new entries
                         false,
                         false
                 );
             }
-            var preserveFailureWindow = current.state() == SyncCollectionState.ERROR_RETRY
-                    || current.state() == SyncCollectionState.BLOCKED;
             return new SyncCollectionMetadata(
                     current.name(),
                     current.version(),
-                    MutationLTHash.copy(current.ltHash()),
-                    System.currentTimeMillis(),
-                    SyncCollectionState.DIRTY,
-                    preserveFailureWindow ? current.retryCount() : 0,
-                    preserveFailureWindow ? current.lastErrorTimestamp() : 0,
+                    current.ltHash(), // ADAPTED: Cobalt shares record reference, no copy needed
+                    current.lastSyncTimestamp(), // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty: WA Web does not update lastSyncTimestamp
+                    SyncCollectionState.DIRTY, // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty: state = Dirty
+                    current.retryCount(), // ADAPTED: retryCount preserved (WA Web tracks retries via global counter W in WAWebSyncd)
+                    current.lastErrorTimestamp(), // WAWebSyncdCollectionsStateMachine.moveCollectionsToDirty: unconditionally preserves finiteFailureStartTime
                     current.macMismatch(),
                     current.bootstrapped()
             );
@@ -2067,7 +2077,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public void markWebAppStateInFlight(SyncPatchType collectionName) {
+    public void markWebAppStateInFlight(SyncPatchType collectionName) { // NO_WA_BASIS: InFlight is a Cobalt-only state (WA Web uses in-memory Set A for inflight tracking)
         webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
                 new SyncCollectionMetadata(
                         current.name(),
@@ -2084,16 +2094,16 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public void markWebAppStateUpToDate(SyncPatchType collectionName) {
+    public void markWebAppStateUpToDate(SyncPatchType collectionName) { // WAWebSyncdCollectionsStateMachine.moveCollectionsToUpToDate
         webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
                 new SyncCollectionMetadata(
                         current.name(),
                         current.version(),
                         current.ltHash(),
                         System.currentTimeMillis(),
-                        SyncCollectionState.UP_TO_DATE,
-                        0,  // Reset retry count on success
-                        0,  // Reset error timestamp
+                        SyncCollectionState.UP_TO_DATE, // WAWebSyncdCollectionsStateMachine.moveCollectionsToUpToDate: state = UpToDate
+                        0, // ADAPTED: reset retry count (WA Web uses global counter W)
+                        0, // WAWebSyncdCollectionsStateMachine.moveCollectionsToUpToDate: finiteFailureStartTime = undefined
                         current.macMismatch(),
                         current.bootstrapped()
                 )
@@ -2101,7 +2111,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public void markWebAppStatePending(SyncPatchType collectionName) {
+    public void markWebAppStatePending(SyncPatchType collectionName) { // NO_WA_BASIS: Pending is a Cobalt-only state (WA Web uses in-memory Set F for pending tracking)
         webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
                 new SyncCollectionMetadata(
                         current.name(),
@@ -2118,14 +2128,14 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public void markWebAppStateBlocked(SyncPatchType collectionName) {
+    public void markWebAppStateBlocked(SyncPatchType collectionName) { // WAWebSyncdCollectionsStateMachine.moveCollectionsToBlocked
         webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
                 new SyncCollectionMetadata(
                         current.name(),
                         current.version(),
                         current.ltHash(),
                         current.lastSyncTimestamp(),
-                        SyncCollectionState.BLOCKED,
+                        SyncCollectionState.BLOCKED, // WAWebSyncdCollectionsStateMachine.moveCollectionsToBlocked: state = Blocked
                         current.retryCount(),
                         current.lastErrorTimestamp(), // WAWebSyncdCollectionsStateMachine.moveCollectionsToBlocked: preserves finiteFailureStartTime
                         current.macMismatch(),
@@ -2135,16 +2145,16 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public void markWebAppStateErrorRetry(SyncPatchType collectionName) {
+    public void markWebAppStateErrorRetry(SyncPatchType collectionName) { // WAWebSyncdCollectionsStateMachine.moveCollectionsToFiniteRetry
         webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
                 new SyncCollectionMetadata(
                         current.name(),
                         current.version(),
                         current.ltHash(),
                         current.lastSyncTimestamp(),
-                        SyncCollectionState.ERROR_RETRY,
-                        current.retryCount() + 1,
-                        current.lastErrorTimestamp() > 0 ? current.lastErrorTimestamp() : System.currentTimeMillis(),
+                        SyncCollectionState.ERROR_RETRY, // WAWebSyncdCollectionsStateMachine.moveCollectionsToFiniteRetry: state = FailingFiniteRetry
+                        current.retryCount() + 1, // ADAPTED: per-collection retry count (WA Web uses global W counter in WAWebSyncd)
+                        current.lastErrorTimestamp() > 0 ? current.lastErrorTimestamp() : System.currentTimeMillis(), // WAWebSyncdCollectionsStateMachine.moveCollectionsToFiniteRetry: finiteFailureStartTime ?? unixTimeMs()
                         current.macMismatch(),
                         current.bootstrapped()
                 )
@@ -2152,16 +2162,16 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public void markWebAppStateErrorFatal(SyncPatchType collectionName) {
+    public void markWebAppStateErrorFatal(SyncPatchType collectionName) { // WAWebSyncdCollectionsStateMachine.moveCollectionsToFatal
         webAppStateCollections.computeIfPresent(collectionName, (_, current) ->
                 new SyncCollectionMetadata(
                         current.name(),
                         current.version(),
                         current.ltHash(),
                         current.lastSyncTimestamp(),
-                        SyncCollectionState.ERROR_FATAL,
+                        SyncCollectionState.ERROR_FATAL, // WAWebSyncdCollectionsStateMachine.moveCollectionsToFatal: state = Fatal
                         current.retryCount(),
-                        current.lastErrorTimestamp(), // WAWebSyncdCollectionsStateMachine.moveCollectionsToFatal: does not set finiteFailureStartTime
+                        0, // WAWebSyncdCollectionsStateMachine.moveCollectionsToFatal: does not include finiteFailureStartTime (undefined)
                         current.macMismatch(),
                         current.bootstrapped()
                 )
@@ -2188,16 +2198,16 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public SyncCollectionMetadata findWebAppState(SyncPatchType collectionName) {
-        return webAppStateCollections.computeIfAbsent(collectionName, key ->
+    public SyncCollectionMetadata findWebAppState(SyncPatchType collectionName) { // WAWebSyncdCollectionsStateMachine.getCollectionState
+        return webAppStateCollections.computeIfAbsent(collectionName, key -> // WAWebSyncdCollectionsStateMachine.getCollectionState: missing -> moveCollectionsToUpToDate, return UpToDate
                 new SyncCollectionMetadata(
                         key,
                         0,
                         MutationLTHash.copy(MutationLTHash.EMPTY_HASH),
                         0,
-                        SyncCollectionState.UP_TO_DATE,
+                        SyncCollectionState.UP_TO_DATE, // WAWebSyncdCollectionsStateMachine.getCollectionState: default = UpToDate
                         0,
-                        0,
+                        0, // WAWebSyncdCollectionsStateMachine.moveCollectionsToUpToDate: finiteFailureStartTime = undefined
                         false,
                         false
                 )

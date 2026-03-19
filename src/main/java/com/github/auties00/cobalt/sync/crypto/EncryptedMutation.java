@@ -89,7 +89,7 @@ public record EncryptedMutation(
         var cipher = Cipher.getInstance("AES/CBC/PKCS5Padding"); // ADAPTED: WACryptoAesCbc.aesCbcEncrypt
         cipher.init(Cipher.ENCRYPT_MODE, keys.valueEncryptionKey(), ivSpec);
         var ciphertextLength = cipher.getOutputSize(plaintext.length);
-        var encryptedValue = new byte[IV_LENGTH + ciphertextLength + MAC_LENGTH]; // WAWebSyncdCryptoUtils.combine([ciphertext, mac])
+        var encryptedValue = new byte[IV_LENGTH + ciphertextLength + MAC_LENGTH]; // WACryptoAesCbc.aesCbcEncrypt prepends IV; WAWebSyncdCryptoUtils.combine([b, S])
         System.arraycopy(iv, 0, encryptedValue, 0, IV_LENGTH);
         if(cipher.doFinal(plaintext, 0, plaintext.length, encryptedValue, IV_LENGTH) != ciphertextLength) {
             throw new InternalError("Ciphertext length mismatch");
@@ -108,7 +108,7 @@ public record EncryptedMutation(
         // Compute value MAC using HMAC-SHA-512 truncated to 32 bytes — WAWebSyncdMutationsCryptoUtils.generateMac
         var mac = Mac.getInstance("HmacSHA512"); // WACryptoHmac.hmacSha512
         mac.init(keys.valueMacKey());
-        mac.update(associatedData); // WAWebSyncdCryptoUtils.combine([associatedData, ciphertext, lengthSuffix])
+        mac.update(associatedData); // WAWebSyncdMutationsCryptoUtils.generateMac: combine([associatedData, IV||ciphertext, lengthSuffix])
         mac.update(encryptedValue, 0, IV_LENGTH + ciphertextLength); // IV || ciphertext
         mac.update(lengthSuffix);
         var fullMac = mac.doFinal();

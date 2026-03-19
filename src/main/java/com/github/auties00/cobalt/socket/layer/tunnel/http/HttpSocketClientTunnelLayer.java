@@ -287,7 +287,6 @@ public final class HttpSocketClientTunnelLayer implements SocketClientTunnelLaye
                 b = responseReader.nextHeaderByte(deadline);
             } while (b == SPACE);
 
-            // ── Fast path: entire value in buffer ────────────────
             var dist = responseReader.distanceToLineFeed();
             if (dist >= 0) {
                 var end = dist;
@@ -308,7 +307,6 @@ public final class HttpSocketClientTunnelLayer implements SocketClientTunnelLaye
                 }
                 challenges.add(new String(value, 0, len, StandardCharsets.ISO_8859_1));
             } else {
-                // ── Slow path: value spans buffers ───────────────
                 challenges.add(readAuthValueSlow(b, deadline));
             }
         }
@@ -453,7 +451,6 @@ public final class HttpSocketClientTunnelLayer implements SocketClientTunnelLaye
                 b = responseReader.nextHeaderByte(deadline);
             } while (b == SPACE);
 
-            // ── Fast path: entire value in buffer ────────────────
             var dist = responseReader.distanceToLineFeed();
             if (dist >= 0) {
                 var end = dist;
@@ -474,7 +471,6 @@ public final class HttpSocketClientTunnelLayer implements SocketClientTunnelLaye
                 }
                 result = parseRedirectUri(value, valueLen, currentProxy);
             } else {
-                // ── Slow path: parse URI in streaming fashion ─────
                 result = parseRedirectUriStreaming(b, currentProxy, deadline);
             }
         }

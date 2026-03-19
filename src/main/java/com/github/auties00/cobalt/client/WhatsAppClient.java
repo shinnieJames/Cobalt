@@ -425,6 +425,19 @@ public final class WhatsAppClient {
     }
 
     /**
+     * Reschedules the missing sync key timeout check.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdStoreMissingKeys.updateMissingKeys}:
+     * after keys with data are received and removed from the missing key store,
+     * the timeout is rescheduled because the earliest missing key may have changed.
+     *
+     * @implNote WAWebSyncdStoreMissingKeys._setMissingKeyTimeout
+     */
+    public void rescheduleMissingSyncKeyTimeout() {
+        webAppStateService.rescheduleMissingSyncKeyTimeout();
+    }
+
+    /**
      * Retries orphan mutations across all collections.
      *
      * <p>Per WhatsApp Web {@code WAWebSyncdOrphan}: called after events that

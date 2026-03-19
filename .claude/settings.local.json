@@ -1,7 +1,5 @@
 {
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
+  "env": {},
   "permissions": {
     "allow": [
       "mcp__whatsapp-mcp__search_modules",
@@ -23,7 +21,11 @@
       "Bash(for f:*)",
       "Bash(do echo:*)",
       "Read(//c/Users/ALESSA~1/AppData/Local/Temp/claude/C--Users-Alessandro-Autiero-Desktop-Cobalt1/5d77e420-72d7-477d-b679-e11659755177/tasks/**)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(find '/c/Users/Alessandro Autiero/Desktop/Cobalt1/target' -path */sync/SyncAction* -name *.java)",
+      "Read(//c/Users/Alessandro Autiero/Desktop/Cobalt1/**)",
+      "Bash(2)",
+      "Bash(claude mcp:*)"
     ]
   }
 }

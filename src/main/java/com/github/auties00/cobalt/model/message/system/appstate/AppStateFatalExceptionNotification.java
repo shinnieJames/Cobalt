@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.message.system.appstate;
 
 import com.github.auties00.cobalt.model.message.Message;
-import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
+import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
@@ -16,7 +16,7 @@ public final class AppStateFatalExceptionNotification implements Message {
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     List<String> collectionNames;
 
-    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
+    @ProtobufProperty(index = 2, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
     Instant timestamp;
 
 

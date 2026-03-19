@@ -607,6 +607,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
 
         if (resolvedAny) {
+            whatsapp.rescheduleMissingSyncKeyTimeout(); // WAWebSyncdStoreMissingKeys.updateMissingKeys: yield I({MissingKeyStore: t}) — reschedule after +keys removed
             var blockedCollections = new ArrayList<SyncPatchType>();
             for (var patchType : SyncPatchType.values()) {
                 var metadata = whatsapp.store().findWebAppState(patchType);

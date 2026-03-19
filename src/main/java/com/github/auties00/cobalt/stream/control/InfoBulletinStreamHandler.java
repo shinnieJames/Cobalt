@@ -68,28 +68,40 @@ public final class InfoBulletinStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Handles dirty bit notifications by inspecting each dirty node's type
+     * and syncing the appropriate syncd collections.
+     *
+     * <p>Per WhatsApp Web, the {@code syncd_app_state} dirty type triggers a
+     * sync for all collection types, while other dirty types only sync
+     * collections explicitly listed as children of the dirty node.
+     *
+     * @param node the info bulletin node containing dirty children
+     * @implNote WAWebHandleDirtyBits.handleDirtyBits, WAWebHandleDirtyBits.p (syncd_app_state handler)
+     */
     private void handleDirty(Node node) {
-        var collectionsToSync = new LinkedHashSet<SyncPatchType>();
+        var collectionsToSync = new LinkedHashSet<SyncPatchType>(); // WAWebHandleDirtyBits.handleDirtyBits (aggregated collections)
 
-        for (var dirtyNode : node.getChildren("dirty")) {
-            var type = dirtyNode.getAttributeAsString("type", null);
-            if ("account_sync".equals(type)) {
-                whatsapp.store().setSyncedContacts(false);
-                whatsapp.store().setSyncedStatus(false);
+        for (var dirtyNode : node.getChildren("dirty")) { // WAWebHandleInfoBulletin (parser: forEachChildWithTag DIRTY)
+            var type = dirtyNode.getAttributeAsString("type", null); // WAWebHandleInfoBulletin (parser: e.attrString("type"))
+            if ("account_sync".equals(type)) { // WAWebHandleDirtyBits.handleDirtyBits (SUPPORTED_DIRTY_TYPE.account_sync)
+                whatsapp.store().setSyncedContacts(false); // ADAPTED: WAWebHandleDirtyBits.c (account sync handler)
+                whatsapp.store().setSyncedStatus(false); // ADAPTED: WAWebHandleDirtyBits.c (account sync handler)
+            } else if ("syncd_app_state".equals(type)) { // WAWebHandleDirtyBits.handleDirtyBits (SUPPORTED_DIRTY_TYPE.syncd_app_state)
+                java.util.Collections.addAll(collectionsToSync, SyncPatchType.values()); // WAWebHandleDirtyBits.p: markCollectionsForSync(ALL collections)
             }
 
-            for (var child : dirtyNode.children()) {
-                SyncPatchType.of(child.description()).ifPresent(collectionsToSync::add);
+            for (var child : dirtyNode.children()) { // WAWebHandleInfoBulletin (parser: e.mapChildren for protocols)
+                SyncPatchType.of(child.description()).ifPresent(collectionsToSync::add); // WAWebHandleDirtyBits.handleDirtyBits (collection name matching)
             }
         }
 
-        if (!collectionsToSync.isEmpty()) {
-            whatsapp.store().setSyncedWebAppState(false);
-            whatsapp.pullWebAppState(collectionsToSync.toArray(SyncPatchType[]::new));
+        if (!collectionsToSync.isEmpty()) { // WAWebHandleDirtyBits.handleDirtyBits (markCollectionsForSync call)
+            whatsapp.store().setSyncedWebAppState(false); // ADAPTED: Cobalt store flag
+            whatsapp.pullWebAppState(collectionsToSync.toArray(SyncPatchType[]::new)); // WAWebHandleDirtyBits.p -> WAWebSyncd.markCollectionsForSync
         }
 
-        // Dirty bulletins often arrive when remote mutations or contact changes land.
-        whatsapp.retryOrphanMutations();
+        whatsapp.retryOrphanMutations(); // ADAPTED: retry orphan mutations on dirty (Cobalt-specific)
     }
 
     private void handleRouting(Node routingNode) {

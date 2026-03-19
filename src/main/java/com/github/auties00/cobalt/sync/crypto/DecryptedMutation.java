@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.sync.crypto;
 
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+import com.github.auties00.cobalt.model.sync.SyncActionData;
 import com.github.auties00.cobalt.model.sync.SyncActionDataSpec;
 import com.github.auties00.cobalt.model.sync.SyncActionValue;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -147,7 +148,13 @@ public sealed interface DecryptedMutation {
             cipher.init(Cipher.DECRYPT_MODE, keys.valueEncryptionKey(), ivSpec);
             var ciphertextStream = new ByteArrayInputStream(encryptedValue, IV_LENGTH, encryptedValue.length - IV_LENGTH - MAC_LENGTH); // WAWebSyncdCryptoUtils.split — ciphertext part
             var plaintextStream = new CipherInputStream(ciphertextStream, cipher);
-            var actionData = SyncActionDataSpec.decode(ProtobufInputStream.fromStream(plaintextStream)); // WAWebSyncdDecode.decodeSyncActionData
+            SyncActionData actionData;
+            try {
+                actionData = SyncActionDataSpec.decode(ProtobufInputStream.fromStream(plaintextStream)); // WAWebSyncdDecode.decodeSyncActionData
+            } catch (Exception e) {
+                throw new WhatsAppWebAppStateSyncException.DecryptionFailed( // WAWebSyncdDecode.decodeSyncActionData — SyncdFatalError("syncd: data protobuf deserialization failed: ...")
+                        "syncd: data protobuf deserialization failed: " + e.getMessage(), e);
+            }
 
             // Verify index MAC — WAWebSyncdCrypto.generateIndexMac
             var actionIndex = actionData.index() // WAWebSyncdValidateSyncActionProtobuf.validateSyncActionDataProtobuf — index check

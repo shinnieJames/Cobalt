@@ -1328,6 +1328,21 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<SyncActionEntry> findSyncActionEntry(SyncPatchType patchType, byte[] indexMac);
 
     /**
+     * Finds a sync action entry by collection and plaintext action index.
+     *
+     * <p>Per WhatsApp Web {@code WAWebGetSyncAction.getSyncActionInTransaction}: the sync
+     * action store supports lookup by plaintext index string, which is key-independent
+     * unlike the index MAC. This is needed for REMOVE operations where the encrypting
+     * key may differ from the key used for the original SET.
+     *
+     * @implNote WAWebGetSyncAction.getSyncActionInTransaction
+     * @param patchType    the collection type
+     * @param actionIndex  the plaintext action index string
+     * @return an {@code Optional} containing the entry if found
+     */
+    Optional<SyncActionEntry> findSyncActionEntryByActionIndex(SyncPatchType patchType, String actionIndex);
+
+    /**
      * Stores or updates a sync action entry for the specified collection.
      *
      * @param patchType the collection type
