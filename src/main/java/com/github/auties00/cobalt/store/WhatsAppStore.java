@@ -1392,6 +1392,23 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void removeMissingSyncKey(byte[] keyId);
 
     /**
+     * Stores a peer message for offline retry.
+     *
+     * @implNote WAWebApiPeerMessageStore.storePeerMessages
+     * @param id the message ID
+     * @param message the peer message to store
+     */
+    void addPeerMessage(String id, ChatMessageInfo message);
+
+    /**
+     * Removes a peer message after successful delivery.
+     *
+     * @implNote WAWebApiPeerMessageStore.deletePeerMessage
+     * @param id the message ID to remove
+     */
+    void removePeerMessage(String id);
+
+    /**
      * Gets metadata for a web app state collection.
      *
      * @param collectionName the collection name

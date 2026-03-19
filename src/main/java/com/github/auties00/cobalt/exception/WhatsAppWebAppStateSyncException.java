@@ -40,7 +40,7 @@ import java.util.Objects;
  *       <li>{@link MissingKey} - Required encryption key not yet available</li>
  *     </ul>
  *   </li>
- *   <li><b>Decryption errors (retryable):</b>
+ *   <li><b>Decryption errors (fatal):</b>
  *     <ul>
  *       <li>{@link DecryptionFailed} - Cryptographic decryption operation failed</li>
  *     </ul>
@@ -83,6 +83,7 @@ import java.util.Objects;
  * @see ExternalDecodeFailed
  * @see MacComputationFailed
  * @see UnexpectedError
+ * @implNote WAWebSyncdError.SyncdMissingKeyError, WAWebSyncdError.SyncdRetryableError, WAWebSyncdError.SyncdFatalError
  */
 public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppException
         permits WhatsAppWebAppStateSyncException.SnapshotMacMismatch,
@@ -148,6 +149,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error. Clear the affected collection's local state and request
      * a new snapshot from the server.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError("unable to validate snapshot mac")}
      */
     public static final class SnapshotMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
@@ -230,6 +233,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error. Clear the affected collection's local state and request
      * a fresh snapshot from the server.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError("unable to validate patch mac")}
      */
     public static final class PatchMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
@@ -307,6 +312,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error indicating potential data corruption or tampering.
      * The affected collection must be reset and re-synced.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError("decryption failure: valueMAC mismatch")}
      */
     public static final class ValueMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
@@ -345,6 +352,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error indicating potential data corruption or tampering.
      * The affected collection must be reset and re-synced.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError("decryption failure: indexMAC mismatch")}
      */
     public static final class IndexMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
@@ -387,6 +396,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *   <li>Wait for the key sync to complete</li>
      *   <li>Retry the web app state sync operation</li>
      * </ol>
+     *
+     * @implNote WAWebSyncdError.SyncdMissingKeyError
      */
     public static final class MissingKey extends WhatsAppWebAppStateSyncException {
         /**
@@ -447,6 +458,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error. The sync state cannot be recovered without
      * logging out and re-linking the device.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web reports SyncdFatalErrorType.MISSING_KEY_ON_ALL_CLIENTS
      */
     public static final class MissingKeyOnAllDevices extends WhatsAppWebAppStateSyncException {
         private final byte[] keyId;
@@ -483,12 +496,10 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * </ul>
      *
      * <h2>Recovery</h2>
-     * This is a retryable error. If decryption consistently fails:
-     * <ol>
-     *   <li>Verify the key material is correct</li>
-     *   <li>Request the mutation again from the server</li>
-     *   <li>If failures persist, treat as fatal and resync</li>
-     * </ol>
+     * This is a fatal error. Clear the affected collection's local state and
+     * perform a full resync from scratch.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError(e.message)} in WASyncdKmpEncryptionManager
      */
     public static final class DecryptionFailed extends WhatsAppWebAppStateSyncException {
         /**
@@ -546,6 +557,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *   <li>Retry the download</li>
      *   <li>If the URL has expired, request fresh sync data</li>
      * </ol>
+     *
+     * @implNote WAWebSyncdError.SyncdRetryableError — download failures are retryable in WA Web
      */
     public static final class ExternalDownloadFailed extends WhatsAppWebAppStateSyncException {
         /**
@@ -586,6 +599,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a retryable error. If decoding consistently fails, the blob
      * may be corrupted and a fresh sync request may be needed.
+     *
+     * @implNote WAWebSyncdError.SyncdRetryableError — decode failures are retryable in WA Web
      */
     public static final class ExternalDecodeFailed extends WhatsAppWebAppStateSyncException {
         /**
@@ -625,6 +640,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error. The cryptographic subsystem may be compromised.
      * Re-establish keys and resync from scratch.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — MAC computation failures are fatal in WA Web
      */
     public static final class MacComputationFailed extends WhatsAppWebAppStateSyncException {
         /**
@@ -657,6 +674,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *
      * <p>This validation applies only to SET mutations. REMOVE mutations
      * do not carry a {@code SyncActionValue} and are not subject to this check.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws fatal error on missing timestamp
      */
     public static final class MissingActionTimestamp extends WhatsAppWebAppStateSyncException {
         /**
@@ -688,6 +707,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *
      * <p>For snapshots, duplicate indices are logged as a metric but do
      * not trigger a fatal error.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws fatal error on duplicate mutation indices
      */
     public static final class DuplicateIndexInPatch extends WhatsAppWebAppStateSyncException {
         /**
@@ -731,6 +752,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <p>Per WhatsApp Web {@code validateNoDuplicatePatchVersionInCollection}:
      * if two patches in the same sync response have the same version, the
      * response is malformed and processing is aborted with a fatal error.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws fatal error on duplicate patch versions
      */
     public static final class DuplicatePatchVersion extends WhatsAppWebAppStateSyncException {
         /**
@@ -802,6 +825,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * <h2>Recovery</h2>
      * This is a fatal error. Log the exception details for debugging and
      * perform a full resync from scratch.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — catch-all for unclassified errors
      */
     public static final class UnexpectedError extends WhatsAppWebAppStateSyncException {
         /**
@@ -841,6 +866,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * than the local version plus one, indicating a gap in the patch sequence.
      *
      * <p>This is a fatal error requiring a full resync from snapshot.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError("syncd: has missing patches")}
      */
     public static final class MissingPatches extends WhatsAppWebAppStateSyncException {
         private final SyncPatchType collectionName;
@@ -906,6 +933,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * </ul>
      *
      * <p>This is a fatal error.
+     *
+     * @implNote WAWebSyncdError.SyncdFatalError — WA Web throws {@code new SyncdFatalError("received terminal patch with exit code: ...")}
      */
     public static final class TerminalPatch extends WhatsAppWebAppStateSyncException {
         private final SyncPatchType collectionName;
@@ -952,6 +981,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *
      * <p>This indicates that the server rejected the client's patch because
      * a newer version exists. The client should re-fetch and retry.
+     *
+     * @implNote WAWebSyncdError.SyncdRetryableError — WA Web handles 409 as a retryable conflict
      */
     public static final class Conflict extends WhatsAppWebAppStateSyncException {
         private final boolean hasMorePatches;
@@ -985,6 +1016,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Exception thrown when the server returns a retryable error code.
      *
      * <p>This covers error codes other than 409 (conflict) and 400/404 (fatal).
+     *
+     * @implNote WAWebSyncdError.SyncdRetryableError — WA Web creates {@code new SyncdRetryableError(t, n)} with backoff
      */
     public static final class RetryableServerError extends WhatsAppWebAppStateSyncException {
         private final String errorCode;

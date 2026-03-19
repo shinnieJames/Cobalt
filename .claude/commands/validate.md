@@ -114,8 +114,9 @@ Each task covers **exactly ONE WA Web module** against its Cobalt counterpart(s)
 
 **Correct:** one task for `WAWebSyncdResponseParser` ↔ `MutationResponseParser.java`
 **Wrong:** one task for "exchange layer" covering 7 modules
+**Also wrong:** one task for "action handler registry" that bundles 60 individual handler modules — verifying handlers are REGISTERED is not the same as validating their BEHAVIOR. Each individual handler module (e.g., WAWebArchiveChatSync ↔ ArchiveChatHandler.java) gets its own task.
 
-Exception: very small utility modules (<50 lines, 1-2 exports) that are tightly coupled can be grouped with their parent module.
+Exception: very small utility modules (<50 lines, 1-2 exports) that are tightly coupled can be grouped with their parent module. This exception does NOT apply to sets of peer modules (like action handlers) — those are independent modules that each need their own task.
 
 ### Creating tasks
 
@@ -155,19 +156,30 @@ After creating all tasks:
    - `team_name` set to the team name
    - `run_in_background: true`
    - `mode: "bypassPermissions"`
-   - A prompt that tells the teammate to claim its specific task by ID, complete it, report findings, and stop
+   - A prompt that **includes the full contents of `.claude/agents/validate-module.md` inline** — do NOT tell the teammate to "read the file", as this causes them to skip the sub-agent decomposition step
 3. Each teammate's prompt MUST include the specific task ID to claim — do NOT tell teammates to "find the next available task"
 
-Example teammate prompt:
+**CRITICAL: The teammate Agent prompt MUST include the FULL validate-module.md template contents directly in the prompt text.** Do NOT paraphrase it, and do NOT tell the teammate to "Read .claude/agents/validate-module.md" — teammates that are told to read a file often skip it or deprioritize its instructions. The template must be part of the immediate prompt.
+
+Example teammate prompt structure:
 ```
-You are a single-task validation teammate. Claim task #N via TaskUpdate (set owner to your name, status to in_progress).
-Read .claude/agents/validate-module.md for the full workflow. Complete the validation, mark the task completed, and send findings to team-lead.
+[FULL CONTENTS OF .claude/agents/validate-module.md — pasted inline, not a file reference]
+
+---
+
+YOUR TASK:
+- Task ID: #N — claim via TaskUpdate (set owner to your name, status to in_progress)
+- WA Web module: `WAWebModuleName`
+- Cobalt file(s): `src/main/java/.../File.java`
+- Write findings to: validation/<feature>/WAWebModuleName.md
+
+IMPORTANT: You are validating BEHAVIOR PARITY, not structural parity.
+IMPORTANT: You MUST decompose into function-level sub-agents per Step 2. Do NOT do the comparison inline.
+IMPORTANT: You MUST FIX all MISMATCH, MISSING_IN_COBALT, and confirmed-phantom MISSING_IN_WA_WEB issues. Reporting without fixing is a FAILED validation.
 IMPORTANT: The Agent tool is a BUILT-IN tool (like Read, Write, Edit, Bash). You can call it directly — do NOT look for it in the deferred tools list or try to fetch its schema via ToolSearch.
 ```
 
-If there are more than 25 tasks, spawn them in batches of 25 to avoid overwhelming the system. Wait for a batch to finish before spawning the next.
-
-Teammates are full Claude Code instances — they CAN and SHOULD use the Agent tool to spawn function-level sub-agents for each exported function in the module they're validating. **Remind each teammate in its prompt that the Agent tool is a BUILT-IN tool (not a deferred tool) and can be called directly without fetching its schema.**
+Teammates are full Claude Code instances — they CAN and SHOULD use the Agent tool to spawn function-level sub-agents for each exported function in the module they're validating.
 
 ## Phase 3: Verify Fixes and Synthesis
 

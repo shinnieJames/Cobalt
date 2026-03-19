@@ -476,6 +476,8 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     protected MaibaAIFeaturesControlAction.MaibaAIFeatureStatus maibaAiFeatureStatus;
 
+    protected final ConcurrentMap<String, com.github.auties00.cobalt.model.chat.ChatMessageInfo> peerMessages;
+
     protected final System.Logger logger;
 
     AbstractWhatsAppStore(java.util.UUID uuid, java.lang.Long phoneNumber, com.github.auties00.cobalt.client.WhatsAppClientType clientType, java.time.Instant initializationTimeStamp, com.github.auties00.cobalt.model.jid.JidDevice device, com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel releaseChannel, boolean online, java.lang.String locale, java.lang.String name, java.lang.String verifiedName, java.net.URI profilePicture, java.lang.String about, com.github.auties00.cobalt.model.jid.Jid jid, com.github.auties00.cobalt.model.jid.Jid lid, java.lang.String businessAddress, java.lang.Double businessLongitude, java.lang.Double businessLatitude, java.lang.String businessDescription, java.lang.String businessWebsite, java.lang.String businessEmail, com.github.auties00.cobalt.model.business.profile.BusinessCategory businessCategory, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.Contact> contacts, java.util.concurrent.ConcurrentHashMap<java.lang.String,com.github.auties00.cobalt.model.call.CallOffer> calls, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.privacy.PrivacySettingType,com.github.auties00.cobalt.model.privacy.PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, com.github.auties00.cobalt.model.chat.ChatEphemeralTimer newChatsEphemeralTimer, com.github.auties00.cobalt.client.WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, java.lang.Integer registrationId, com.github.auties00.libsignal.key.SignalIdentityKeyPair noiseKeyPair, com.github.auties00.libsignal.key.SignalIdentityKeyPair identityKeyPair, com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity signedDeviceIdentity, com.github.auties00.libsignal.key.SignalSignedKeyPair signedKeyPair, java.util.LinkedHashMap<java.lang.Integer,com.github.auties00.libsignal.key.SignalPreKeyPair> preKeys, java.util.UUID fdid, byte[] deviceId, java.util.UUID advertisingId, byte[] identityId, byte[] backupToken, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.groups.SignalSenderKeyName,com.github.auties00.libsignal.groups.state.SignalSenderKeyRecord> senderKeys, java.util.LinkedHashMap<java.lang.String,com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey> appStateKeys, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.state.SignalSessionRecord> sessions, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.model.sync.SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> recentStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> favouriteStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.QuickReply> quickReplies, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Label> labels, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion clientVersion, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion companionVersion, java.time.Instant lastAdvCheckTime, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.key.SignalIdentityPublicKey> remoteIdentities, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.business.BusinessVerifiedName> verifiedBusinessNames, java.nio.file.Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, com.github.auties00.cobalt.model.setting.ChatLockSettings chatLockSettings, java.util.List<com.github.auties00.cobalt.model.jid.Jid> favoriteChats, java.util.List<java.lang.String> primaryFeatures, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.chat.ChatMute> mentionEveryoneMuteExpirations, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.store.AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries) {
@@ -609,6 +611,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.offlineResumeState = WhatsAppClientOfflineResumeState.INIT;
         this.offlineDeliveryLatch = new CountDownLatch(1);
         this.usersNeedingSenderKeyRotation = ConcurrentHashMap.newKeySet();
+        this.peerMessages = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -1873,6 +1876,16 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public void removeMissingSyncKey(byte[] keyId) {
         missingSyncKeys.remove(HexFormat.of().formatHex(keyId));
+    }
+
+    @Override
+    public void addPeerMessage(String id, com.github.auties00.cobalt.model.chat.ChatMessageInfo message) {
+        peerMessages.put(id, message);
+    }
+
+    @Override
+    public void removePeerMessage(String id) {
+        peerMessages.remove(id);
     }
 
     @Override

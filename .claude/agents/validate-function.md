@@ -88,7 +88,6 @@ Rules:
 - Do NOT classify a real MISMATCH as "low impact" to avoid fixing it
 
 ### After fixing:
-- Verify compilation: `mvn compile -pl . -q -Dcobalt.build.dir=target/validate-$$`
 - Re-read the Cobalt source and re-do the comparison from Step 2
 - Repeat until there are zero MISMATCH, zero MISSING_IN_COBALT, and zero confirmed-phantom MISSING_IN_WA_WEB issues
 - Cap at 5 passes maximum to avoid infinite loops
@@ -135,7 +134,7 @@ Write to the specified output path:
 - `MISMATCH`: Different behavior — wrong condition, wrong value, missing parameter
 - `MISSING_IN_COBALT`: WA Web statement with no Cobalt equivalent
 - `MISSING_IN_WA_WEB`: Cobalt statement with no WA Web basis
-- `ADAPTED`: Semantically equivalent but structurally different (async/await → blocking, builder pattern, Optional, constructor DI store access, fieldName() getters)
+- `ADAPTED`: Semantically equivalent but structurally different (async/await → blocking, builder pattern, Optional, constructor DI store access, fieldName() getters, nullable Boolean → existing boolean accessor with null coercion)
 - String literals, numeric constants, enum values MUST match EXACTLY
 - Skip WAM/telemetry/logging code with a note
 
@@ -146,7 +145,7 @@ Write to the specified output path:
 - NEVER break existing working code.
 - NEVER defer a fix with excuses like "low impact", "needs investigation", "requires architectural changes", or "harmless". Fix it now or reclassify it as ADAPTED with justification.
 - ALWAYS follow Cobalt patterns: constructor DI, `fieldName()` getters, `Optional<T>`, builders, virtual threads.
-- ALWAYS verify compilation after changes.
+- NEVER create `Optional<Boolean>` accessors for nullable `Boolean` fields. Cobalt protobuf classes already have `boolean fieldName()` or `boolean isFieldName()` accessors that coalesce null to false. Use those and classify as ADAPTED.
 - Do NOT fix `ADAPTED` issues — those are intentional language differences.
 - When unsure about a WA Web function, use `mcp__whatsapp-mcp__find_references` or `mcp__whatsapp-mcp__search_code` (with `scope`) to trace it.
 - You MUST annotate the Cobalt source file. The report alone is not sufficient.

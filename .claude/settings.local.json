@@ -19,7 +19,11 @@
       "Bash(mvn clean:*)",
       "Bash(javac --enable-preview --release 25 -d /tmp/test_compile -cp src/main/java \"src/main/java/com/github/auties00/cobalt/sync/WebAppStateBackoffScheduler.java\")",
       "mcp__whatsapp-mcp__trace_dependencies",
-      "mcp__whatsapp-mcp__get_module_metadata"
+      "mcp__whatsapp-mcp__get_module_metadata",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/ALESSA~1/AppData/Local/Temp/claude/C--Users-Alessandro-Autiero-Desktop-Cobalt1/5d77e420-72d7-477d-b679-e11659755177/tasks/**)",
+      "Bash(done)"
     ]
   }
 }

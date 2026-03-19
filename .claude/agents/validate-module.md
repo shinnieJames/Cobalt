@@ -22,13 +22,17 @@ You have access to MCP tools prefixed with `mcp__whatsapp-mcp__` that let you re
 - Use `mcp__whatsapp-mcp__get_exports` to understand what the module exposes
 - Read the full Cobalt Java file(s)
 
-## Step 2: Decompose into Function-Level Sub-Agents (MANDATORY)
+## Step 2: Decompose into Function-Level Sub-Agents (MANDATORY — NO EXCEPTIONS)
 
 You MUST spawn sub-agents via the Agent tool. Do NOT do the line-by-line comparison yourself — that is the job of the function-level validators. The Agent tool is built-in and always available — just call it directly.
 
+**NEVER skip this step.** Do NOT rationalize inline comparison because the module "looks small" or "has few functions." Even a single-function module MUST be validated via a sub-agent. The purpose is to protect the main context window and ensure thorough comparison. If your report shows "Sub-agents spawned: 0", the validation has FAILED.
+
+**If the Agent tool appears unavailable or errors:** Try calling it directly with `name`, `description`, and `prompt` parameters — it is a built-in tool like Read/Write/Edit. Do NOT use ToolSearch to find it. If it genuinely fails, retry once. Only if it fails twice should you fall back to inline comparison and note the error.
+
 1. Use `mcp__whatsapp-mcp__get_exports` to list all exported functions
 2. Read `.claude/agents/validate-function.md` using the Read tool to get the **exact** sub-agent prompt template
-3. For each exported function that has a Cobalt counterpart, spawn a sub-agent using the Agent tool (it is a built-in tool, NOT a deferred tool) with `subagent_type: "general-purpose"`, using the validate-function prompt template customized with the specific function name, module name, Cobalt file/method, and output path
+3. For EACH exported function that has a Cobalt counterpart, spawn a sub-agent using the Agent tool with `subagent_type: "general-purpose"`, using the validate-function prompt template customized with the specific function name, module name, Cobalt file/method, and output path. For modules with only 1-2 exports, you still MUST spawn at least 1 sub-agent.
 4. Launch multiple sub-agents in parallel when functions are independent
 5. After all sub-agents complete, read their findings and merge into a single module report
 
@@ -38,7 +42,7 @@ For unexported helper functions that are called only by exported functions: the 
 
 After all function-level sub-agents complete:
 
-1. Read each sub-agent's findings file
+1. Read each sub-a findings file
 2. Aggregate counts: MATCH, MISMATCH, MISSING_IN_COBALT, MISSING_IN_WA_WEB, ADAPTED
 3. **Verify every MISMATCH and MISSING_IN_COBALT was actually fixed** by the sub-agent (check that code changes were made, not just reported). If a sub-agent reported an issue but did NOT fix it, YOU must fix it now.
 4. **Verify every confirmed-phantom MISSING_IN_WA_WEB was actually removed.** If a sub-agent confirmed phantom code but did NOT remove it, YOU must remove it now.
@@ -55,7 +59,7 @@ Write the merged report to the specified output path:
 
 ## Summary
 - Total statements analyzed: N
-- MATCH: N
+- MATCH: Ngent's
 - MISMATCH: N
 - MISSING_IN_COBALT: N
 - MISSING_IN_WA_WEB: N
@@ -88,12 +92,6 @@ Items initially flagged as MISSING_IN_WA_WEB but determined to be legitimate Jav
 | functionA | findings/functionA.md | N | N | N | N | N |
 ```
 
-## Step 5: Verify All Fixes Compile
-
-If any sub-agent made code changes, run `mvn compile -pl . -q -Dcobalt.build.dir=target/validate-$$` to verify compilation.
-The `-Dcobalt.build.dir=target/validate-$$` flag isolates this agent's build output to avoid file locking conflicts with other agents compiling in parallel.
-If compilation fails, identify which sub-agent's changes broke it and fix.
-
 ## Classification Rules
 
 - `MATCH`: Same semantics, even if syntax differs
@@ -107,6 +105,7 @@ If compilation fails, identify which sub-agent's changes broke it and fix.
   - Protobuf: JS `msg.field` → Cobalt `msg.field()` returning `Optional<T>`
   - Store: `WAWebChatCollection.find()` → `store.findChatByJid()` (constructor DI)
   - Getter style: `fieldName()` not `getFieldName()` = normal
+  - Nullable `Boolean` fields: use the existing `boolean fieldName()` or `boolean isFieldName()` accessor (which coalesces null → false), do NOT create a new `Optional<Boolean>` accessor
 - String literals, numeric constants, enum values MUST match EXACTLY
 - Skip WAM/telemetry/logging code with a note
 - Missing javadoc = MISSING_IN_COBALT. Wrong `@implNote` = MISMATCH.
@@ -122,5 +121,5 @@ If compilation fails, identify which sub-agent's changes broke it and fix.
 - NEVER defer fixes with excuses like "low impact", "needs investigation", "requires architectural changes", or "harmless".
 - NEVER dismiss missing store/collection operations with comments like "Cobalt does not have a dedicated X store" or "the action is acknowledged". WA Web's ~12 IndexedDB databases, ~100 IDB tables, ~45 Collections, and UserPrefs are ALL collapsed into `WhatsAppStore` / `AbstractWhatsAppStore` in Cobalt. If a WA Web store operation has no Cobalt equivalent, ADD the field and accessors to the appropriate store class and implement the logic.
 - ALWAYS follow Cobalt patterns: constructor DI, `fieldName()` getters, `Optional<T>`, builders, virtual threads.
-- ALWAYS verify compilation after changes.
+- NEVER create `Optional<Boolean>` accessors for nullable `Boolean` fields. Cobalt protobuf classes already have `boolean fieldName()` or `boolean isFieldName()` accessors that coalesce null to false. Use those and classify as ADAPTED.
 - Do NOT fix `ADAPTED` issues — those are intentional language differences.
