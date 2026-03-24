@@ -2,33 +2,40 @@ package com.github.auties00.cobalt.yunsuo;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientSixPartsKeys;
-import com.github.auties00.cobalt.model.button.base.Button;
-import com.github.auties00.cobalt.model.info.NativeFlowInfoBuilder;
+import com.github.auties00.cobalt.model.button.template.hydrated.HydratedFourRowTemplateSimpleBuilder;
+import com.github.auties00.cobalt.model.button.template.hydrated.HydratedTemplateButton;
+import com.github.auties00.cobalt.model.button.template.hydrated.HydratedURLButtonBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidCompanion;
+import com.github.auties00.cobalt.model.message.button.TemplateMessage;
+import com.github.auties00.cobalt.model.message.button.TemplateMessageSimpleBuilder;
 import com.github.auties00.cobalt.model.message.model.MessageContainer;
-import com.github.auties00.cobalt.model.message.button.ButtonsMessage;
-import com.github.auties00.cobalt.model.message.button.ButtonsMessageSimpleBuilder;
+import com.github.auties00.cobalt.model.message.standard.ImageMessage;
 import com.github.auties00.cobalt.model.message.standard.ImageMessageBuilder;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.util.List;
 
 public class MobileLoginTest {
-    private static final Jid RECIPIENT = Jid.of(60102619686L);
-    private static final String HEADER_IMAGE_URL = "https://picsum.photos/900/500.jpg";
-    private static final String BUTTON_LINK_URL = "https://www.baidu.com/";
-    private static final String BODY_TEXT = "this is text";
-    private static final String BUTTON_TEXT = "this is a button";
+    private static final String IPHONE_16_MODEL = "iPhone 16";
+    private static final String IPHONE_16_OS_VERSION = "18.3.2";
+    private static final String IPHONE_16_OS_BUILD = "22D82";
+    private static final String IPHONE_16_MODEL_ID = "iPhone17,3";
 
     static void main() {
         var sixParts = promptSixParts();
         var business = promptBusiness();
+        var recipient = Jid.of(60102619686L);
+        var headerImageUrl = "https://picsum.photos/900/500.jpg";
+        var bodyText = "this is text";
+        var buttonText = "this is a button🚀";
+        var buttonLinkUrl = "https://www.baidu.com/";
         WhatsAppClient.builder()
                 .mobileClient()
                 .loadConnection(WhatsAppClientSixPartsKeys.of(sixParts))
                 // .proxy(URI.create("http://username:password@host:port/")) Remember to set an HTTP proxy
-                .device(JidCompanion.ios(business)) // Make sure to select the correct account type(business or personal) or you'll get error 401
+                .device(createIphone16(business))
                 .registered()
                 .orElseThrow()
                 .addNodeReceivedListener((_, incoming) -> System.out.printf("Received node %s%n", incoming))
@@ -40,11 +47,19 @@ public class MobileLoginTest {
                 ))
                 .addLoggedInListener(client -> {
                     System.out.println("Logged in");
-                    var textInfo = client.sendChatMessage(RECIPIENT, MessageContainer.of("hi"), false);
-                    System.out.printf("Sent text message: id=%s, status=%s%n", textInfo.id(), textInfo.status());
-
-                    var buttonsInfo = client.sendChatMessage(RECIPIENT, MessageContainer.of(createThreePartButtonsMessage()), false);
-                    System.out.printf("Sent buttons message: id=%s, status=%s%n", buttonsInfo.id(), buttonsInfo.status());
+                    var templateMessage = createUploadedImageUrlTemplateMessage(
+                            client,
+                            headerImageUrl,
+                            bodyText,
+                            buttonText,
+                            buttonLinkUrl
+                    );
+                    var templateInfo = client.sendChatMessage(
+                            recipient,
+                            MessageContainer.of(templateMessage),
+                            false
+                    );
+                    System.out.printf("Sent template message: id=%s, status=%s%n", templateInfo.id(), templateInfo.status());
 
                     Thread.startVirtualThread(() -> {
                         try {
@@ -55,34 +70,73 @@ public class MobileLoginTest {
                         }
                     });
                 })
-                .connect() // If you get error 403 o 503 the account is banned
+                .connect()
                 .waitForDisconnection();
     }
 
-    private static ButtonsMessage createThreePartButtonsMessage() {
-        var header = new ImageMessageBuilder()
+    private static JidCompanion createIphone16(boolean business) {
+        return JidCompanion.ios(
+                IPHONE_16_MODEL,
+                IPHONE_16_OS_VERSION,
+                IPHONE_16_OS_BUILD,
+                IPHONE_16_MODEL_ID,
+                business
+        );
+    }
+
+    private static TemplateMessage createUploadedImageUrlTemplateMessage(
+            WhatsAppClient client,
+            String headerImageUrl,
+            String bodyText,
+            String buttonText,
+            String buttonLinkUrl
+    ) {
+        var imageBytes = downloadImage(headerImageUrl);
+        var titleImage = new ImageMessageBuilder()
                 .mimetype("image/jpeg")
-                .thumbnail(downloadHeaderImage())
+                .caption(bodyText)
+                .thumbnail(imageBytes)
                 .build();
-        var button = Button.of(new NativeFlowInfoBuilder()
-                .name("cta_url")
-                .parameters("{\"display_text\":\"" + BUTTON_TEXT + "\",\"url\":\"" + BUTTON_LINK_URL + "\"}")
-                .build());
-        return new ButtonsMessageSimpleBuilder()
-                .header(header)
-                .body(BODY_TEXT)
-                .buttons(List.of(button))
+        uploadTitleImage(client, titleImage, imageBytes);
+
+        var urlButton = new HydratedURLButtonBuilder()
+                .text(buttonText)
+                .url(buttonLinkUrl)
+                .build();
+
+        var template = new HydratedFourRowTemplateSimpleBuilder()
+                .title(titleImage)
+                .body(bodyText)
+                .buttons(List.of(HydratedTemplateButton.of(urlButton)))
+                .build();
+
+        return new TemplateMessageSimpleBuilder()
+                .content(template)
+                .format(template)
                 .build();
     }
 
-    private static byte[] downloadHeaderImage() {
+    private static void uploadTitleImage(WhatsAppClient client, ImageMessage titleImage, byte[] imageBytes) {
+        try (var inputStream = new ByteArrayInputStream(imageBytes)) {
+            var mediaConnection = client.store()
+                    .waitForMediaConnection();
+            var uploaded = mediaConnection.upload(titleImage, inputStream);
+            if (!uploaded) {
+                throw new IllegalStateException("Image upload was rejected because the message does not expose an uploadable media path");
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot upload template image to WhatsApp media servers", exception);
+        }
+    }
+
+    private static byte[] downloadImage(String headerImageUrl) {
         try {
-            return URI.create(HEADER_IMAGE_URL)
+            return URI.create(headerImageUrl)
                     .toURL()
                     .openStream()
                     .readAllBytes();
         } catch (Exception exception) {
-            throw new IllegalStateException("Cannot download header image from " + HEADER_IMAGE_URL, exception);
+            throw new IllegalStateException("Cannot download header image from " + headerImageUrl, exception);
         }
     }
 
@@ -105,4 +159,28 @@ public class MobileLoginTest {
         }
     }
 
+    private static Jid promptRecipient() {
+        return Jid.of(IO.readln("Enter the recipient phone number(with country code): ")
+                .trim());
+    }
+
+    private static String promptHeaderImageUrl() {
+        return IO.readln("Enter the image url: ")
+                .trim();
+    }
+
+    private static String promptBodyText() {
+        return IO.readln("Enter the message text: ")
+                .trim();
+    }
+
+    private static String promptButtonText() {
+        return IO.readln("Enter the button text: ")
+                .trim();
+    }
+
+    private static String promptButtonLinkUrl() {
+        return IO.readln("Enter the button target url: ")
+                .trim();
+    }
 }

@@ -329,6 +329,18 @@ public final class JidCompanion {
         );
     }
 
+    public static JidCompanion ios(String model, String osVersion, String osBuildNumber, String modelId, boolean business) {
+        return new JidCompanion(
+                Objects.requireNonNull(model, "model cannot be null"),
+                "Apple",
+                business ? PlatformType.IOS_BUSINESS : PlatformType.IOS,
+                Version.of(Objects.requireNonNull(osVersion, "osVersion cannot be null")),
+                Objects.requireNonNull(osBuildNumber, "osBuildNumber cannot be null"),
+                Objects.requireNonNull(modelId, "modelId cannot be null"),
+                WhatsAppClientType.MOBILE
+        );
+    }
+
     public static JidCompanion android(boolean business) {
         var model = "Pixel_" + ThreadLocalRandom.current().nextInt(2, 9);
         return new JidCompanion(
