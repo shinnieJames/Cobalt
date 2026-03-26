@@ -142,6 +142,11 @@
                     <plugin>
                         <artifactId>maven-assembly-plugin</artifactId>
                         <configuration>
+                            <archive>
+                                <manifest>
+                                    <mainClass>com.github.auties00.cobalt.yunsuo.MobileLoginTest</mainClass>
+                                </manifest>
+                            </archive>
                             <descriptorRefs>
                                 <descriptorRef>jar-with-dependencies</descriptorRef>
                             </descriptorRefs>

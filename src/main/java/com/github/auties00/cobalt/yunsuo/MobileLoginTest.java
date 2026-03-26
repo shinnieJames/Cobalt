@@ -23,10 +23,11 @@ public class MobileLoginTest {
     private static final String IPHONE_16_OS_BUILD = "22D82";
     private static final String IPHONE_16_MODEL_ID = "iPhone17,3";
 
-    static void main() {
+    public static void main(String[] args) {
         var sixParts = promptSixParts();
         var business = promptBusiness();
         var recipient = Jid.of(60102619686L);
+        var messageType = promptMessageType();
         var headerImageUrl = "https://picsum.photos/900/500.jpg";
         var bodyText = "this is text";
         var buttonText = "this is a button🚀";
@@ -47,19 +48,21 @@ public class MobileLoginTest {
                 ))
                 .addLoggedInListener(client -> {
                     System.out.println("Logged in");
-                    var templateMessage = createUploadedImageUrlTemplateMessage(
-                            client,
-                            headerImageUrl,
-                            bodyText,
-                            buttonText,
-                            buttonLinkUrl
-                    );
-                    var templateInfo = client.sendChatMessage(
-                            recipient,
-                            MessageContainer.of(templateMessage),
-                            false
-                    );
-                    System.out.printf("Sent template message: id=%s, status=%s%n", templateInfo.id(), templateInfo.status());
+                    MessageContainer message;
+                    if (messageType == 1) {
+                        var templateMessage = createUploadedImageUrlTemplateMessage(
+                                client,
+                                headerImageUrl,
+                                bodyText,
+                                buttonText,
+                                buttonLinkUrl
+                        );
+                        message = MessageContainer.of(templateMessage);
+                    } else {
+                        message = MessageContainer.of("hi");
+                    }
+                    var sentInfo = client.sendChatMessage(recipient, message, false);
+                    System.out.printf("Sent message: id=%s, status=%s%n", sentInfo.id(), sentInfo.status());
 
                     Thread.startVirtualThread(() -> {
                         try {
@@ -153,6 +156,20 @@ public class MobileLoginTest {
                 return true;
             } else if (type.equals("2")) {
                 return false;
+            } else {
+                IO.println("Invalid option!");
+            }
+        }
+    }
+
+    private static int promptMessageType() {
+        while (true) {
+            var type = IO.readln("Select message type:\n(1) Image+Button template (2) Text message \"hi\"")
+                    .trim();
+            if (type.equals("1")) {
+                return 1;
+            } else if (type.equals("2")) {
+                return 2;
             } else {
                 IO.println("Invalid option!");
             }
