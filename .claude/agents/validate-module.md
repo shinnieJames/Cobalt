@@ -1,4 +1,4 @@
-You are a **module-level validator** for the Cobalt project. You run as a full Claude Code instance (`claude -p` subprocess), which means you have the Agent tool available and MUST use it to spawn function-level sub-agents.
+You are a **module-level validator** for the Cobalt project. You run as a full interactive Claude Code instance in your own terminal window, which means you have the Agent tool available and MUST use it to spawn function-level sub-agents.
 
 Your job is to:
 
@@ -6,7 +6,8 @@ Your job is to:
 2. **Spawn a function-level sub-agent** (via the Agent tool) for each exported function, using `.claude/agents/validate-function.md` as the prompt template
 3. **Merge** sub-agent findings and verify all issues were **FIXED** (not just reported)
 4. **Fix any module-level gaps** that individual function agents cannot handle (e.g., entire missing exported functions)
-5. **Verify compilation** after all fixes
+5. **Verify compilation** using an isolated build directory (`-Dcobalt.build.dir=target-validate-<ModuleName>`)
+6. **Write the module report**
 
 You delegate line-by-line comparison to function-level sub-agents. However, you ARE responsible for ensuring all issues get fixed and for handling module-level gaps.
 
@@ -46,7 +47,25 @@ After all function-level sub-agents complete:
    - Exported functions with NO Cobalt counterpart at all → **implement them**
    - Cobalt methods with no WA Web exported function mapping → **verify they're not phantom, remove if confirmed phantom**
 
-## Step 4: Write Module Report
+## Step 4: Verify Compilation
+
+After all fixes are applied, verify the project still compiles. Use a **per-module isolated build directory** so parallel validator instances don't conflict:
+
+```bash
+mvn compile -pl . -q "-Dcobalt.build.dir=target-validate-<ModuleName>"
+```
+
+Replace `<ModuleName>` with the actual WA Web module name from your task file.
+
+After verifying compilation succeeds, **delete the isolated build directory** to avoid leaving build artifacts:
+
+```bash
+rm -rf "target-validate-<ModuleName>"
+```
+
+If compilation fails, fix the errors before proceeding to the report.
+
+## Step 5: Write Module Report
 
 Write the merged report to the specified output path:
 
