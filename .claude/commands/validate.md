@@ -147,7 +147,15 @@ Write `validation/<feature>/manifest.json`:
 }
 ```
 
-### Step 2.4: Write the Plan
+### Step 2.4: Coverage Check
+
+Before writing the plan, verify full coverage from both sides:
+
+1. Every discovered Cobalt file must appear as an owned file in at least one agent assignment. If any file is unowned, find its WA Web module(s) and create an agent for it.
+2. Every discovered WA Web module must appear in at least one agent assignment. If any module is unassigned, find its Cobalt counterpart(s) and create an agent for it.
+3. The plan is not complete until both checks pass.
+
+### Step 2.5: Write the Plan
 
 Write `validation/<feature>/plan.md` with:
 
@@ -156,6 +164,7 @@ Write `validation/<feature>/plan.md` with:
 - Export counts per module.
 - Unmapped exports and methods.
 - Validation agent assignments (which modules will be validated together).
+- Coverage: N/N Cobalt files and N/N WA Web modules covered by agent assignments.
 
 ---
 
@@ -263,7 +272,19 @@ mvn compile -pl . -q "-Dcobalt.build.dir=target-validate-final"
 
 Delete `target-validate-final` after success.
 
-### Step 4.4: Write Synthesis Report
+### Step 4.4: Re-validation Pass
+
+If any agent in Phase 3 reported MISMATCH, MISSING_IN_COBALT, or MISSING_IN_WA_WEB issues (i.e., it made fixes), re-run the entire validation from Phase 3:
+
+1. Clear the reports directory.
+2. Re-run all agents sequentially against the now-fixed codebase.
+3. Verify compilation after each agent.
+4. If the re-validation pass produces zero MISMATCH, zero MISSING_IN_COBALT, and zero MISSING_IN_WA_WEB across all agents, the validation is complete.
+5. If it still finds issues, fix them and re-run again. Repeat until a clean pass is achieved.
+
+This guarantees that fixes introduced by one agent didn't break another module's parity, and that the final state is fully validated — not just the diff.
+
+### Step 4.5: Write Synthesis Report
 
 Write `validation/<feature>/report.md`:
 
