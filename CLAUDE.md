@@ -78,7 +78,10 @@ ALL members (public, protected, package-private, private) MUST have JDK-style mu
 
 ## Validation System
 The `/validate` command validates Cobalt's Java against WhatsApp Web's JS source via MCP tools.
-- **Orchestrator:** `.claude/commands/validate.md` — discovery, manifest building, agent spawning, integration.
+- **Orchestrator:** `.claude/commands/validate.md` — discovery, manifest building, dependency-ordered agent spawning, cross-cutting flow validation, phantom sweep, synthesis.
 - **Module validator agent:** `.claude/agents/validate-module.md` — per-module exhaustive comparison and fixes.
-- **MCP server:** `.mcp.json` registers `whatsapp` MCP (stdio) from `tooling/web-mcp-server-new`.
-- **Exhaustiveness guarantee:** The orchestrator builds a manifest of ALL WA Web exports via `get_exports`, then spawns agents to validate every entry. The completeness check at the end verifies every export has a verdict.
+- **Cross-cutting flow agent:** `.claude/agents/validate-flow.md` — multi-file architectural pattern fixes (delegation, type mismatches across boundaries, batched-vs-per-item).
+- **Phantom sweep agent:** `.claude/agents/validate-phantom.md` — whole-codebase dead-code removal, verified against WA Web before deletion.
+- **MCP server:** `.mcp.json` registers `whatsapp` MCP (HTTP at localhost:8787) from `tooling/web-mcp-server-new`.
+- **Exhaustiveness guarantee:** The orchestrator builds a manifest of ALL WA Web exports via `get_exports`, then validates every entry. The completeness check at the end verifies every export has a verdict.
+- **Dependency ordering:** Validation runs in topological order (leaves first, consumers last) so each agent's dependencies are already in place when it runs.
