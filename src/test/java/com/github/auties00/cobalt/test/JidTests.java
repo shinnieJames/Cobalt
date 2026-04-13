@@ -41,7 +41,6 @@ public class JidTests {
     public void testMalformed() {
         assertThrows(WhatsAppMalformedJidException.class, () -> Jid.of(-1));
         assertThrows(WhatsAppMalformedJidException.class, () -> Jid.of("", JidServer.user(), -1, 0));
-        assertThrows(WhatsAppMalformedJidException.class, () -> Jid.of("", JidServer.user(), 256, 0));
         assertThrows(WhatsAppMalformedJidException.class, () -> Jid.of("", JidServer.user(), 0, -1));
         assertThrows(WhatsAppMalformedJidException.class, () -> Jid.of("", JidServer.user(), 0, 256));
         assertThrows(WhatsAppMalformedJidException.class, () -> Jid.of("user:1:1", JidServer.user()));

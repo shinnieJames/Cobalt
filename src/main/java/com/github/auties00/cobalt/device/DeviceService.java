@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.device.fanout.DeviceFanoutCalculator;
 import com.github.auties00.cobalt.device.fanout.DeviceGroupFanoutResult;
 import com.github.auties00.cobalt.device.fanout.DevicePhashCalculator;
 import com.github.auties00.cobalt.device.fanout.DevicePhashVersion;
+import com.github.auties00.cobalt.device.icdc.HostedIcdcResult;
 import com.github.auties00.cobalt.device.icdc.IcdcComputer;
 import com.github.auties00.cobalt.device.icdc.IcdcResult;
 import com.github.auties00.cobalt.device.key.DevicePreKeyHandler;
@@ -20,6 +21,7 @@ import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
 import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
+import com.github.auties00.cobalt.model.device.DeviceListMetadata;
 import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.*;
@@ -54,7 +56,7 @@ import java.util.stream.Stream;
  * using the USync protocol, validates ADV signatures for companion devices, and calculates
  * which devices should receive messages (fanout).
  *
- * @apiNote WAWebAdvSyncDeviceListApi: provides syncDeviceList, syncMyDeviceList, syncAndGetDeviceList.
+ * @implNote WAWebAdvSyncDeviceListApi: provides syncDeviceList, syncMyDeviceList, syncAndGetDeviceList.
  * WAWebDBDeviceListFanout.getFanOutList: generates device lists for message fanout.
  * WAWebAdvHandlerApi: handles USync response processing and dispatches to handlers.
  * WAWebHandleAdvKeyIndexResultApi: processes full device list responses with key index validation.
@@ -120,7 +122,7 @@ public final class DeviceService {
      * <p>When multiple callers request the same user's device list simultaneously,
      * only one USync request is made and all callers wait on the same future.
      *
-     * @apiNote WAWebAdvSyncDeviceListApi.syncDeviceList: uses a Map (_) to track
+     * @implNote WAWebAdvSyncDeviceListApi.syncDeviceList: uses a Map (_) to track
      * pending promises and avoid duplicate requests for the same user.
      */
     private final ConcurrentHashMap<Jid, CompletableFuture<DeviceList>> pendingFetches;
@@ -128,7 +130,7 @@ public final class DeviceService {
     /**
      * Scheduler for periodic ADV device info expiration checks.
      *
-     * @apiNote WAWebAdvDeviceInfoCheckJob: runs every 24 hours to detect and handle
+     * @implNote WAWebAdvDeviceInfoCheckJob: runs every 24 hours to detect and handle
      * expired device lists based on timestamp age and expectedTs staleness.
      */
     private final DeviceADVChecker advCheckScheduler;
@@ -136,7 +138,7 @@ public final class DeviceService {
     /**
      * Service for fetching and storing Signal pre-key bundles and identity keys.
      *
-     * @apiNote WAWebGetIdentityKeysJob.getAndStoreIdentityKeys: prefetches identity
+     * @implNote WAWebGetIdentityKeysJob.getAndStoreIdentityKeys: prefetches identity
      * keys for users with validated key index info after device sync.
      */
     private final DevicePreKeyHandler preKeyHandler;
@@ -144,7 +146,7 @@ public final class DeviceService {
     /**
      * Service for accessing AB (A/B test) property values for feature gating.
      *
-     * @apiNote WAWebABProps: provides configuration values that control feature behavior
+     * @implNote WAWebABProps: provides configuration values that control feature behavior
      * such as hosted device support, username sync, and expiration thresholds.
      */
     private final ABPropsService abPropsService;
@@ -152,14 +154,14 @@ public final class DeviceService {
     /**
      * Service for validating ADV signatures on device identities and key index lists.
      *
-     * @apiNote WAWebAdvSignatureApi: validates Curve25519 signatures using the appropriate headers.
+     * @implNote WAWebAdvSignatureApi: validates Curve25519 signatures using the appropriate headers.
      */
     private final DeviceADVValidator advValidator;
 
     /**
      * Parser for USync IQ response nodes into structured device list results.
      *
-     * @apiNote WAWebUsyncDevice.deviceParser: extracts device lists, key indices,
+     * @implNote WAWebUsyncDevice.deviceParser: extracts device lists, key indices,
      * timestamps, and hosting status from USync response XML nodes.
      */
     private final DeviceUSyncResponseParser usyncResponseParser;
@@ -167,7 +169,7 @@ public final class DeviceService {
     /**
      * Service for calculating message fanout (which devices receive a message).
      *
-     * @apiNote WAWebDBDeviceListFanout.getFanOutList: computes the set of device JIDs
+     * @implNote WAWebDBDeviceListFanout.getFanOutList: computes the set of device JIDs
      * that should receive a message, excluding self devices and filtering hosted devices.
      */
     private final DeviceFanoutCalculator fanoutCalculator;
@@ -175,7 +177,7 @@ public final class DeviceService {
     /**
      * Service for computing ICDC (Identity Change Detection Consistency) metadata.
      *
-     * @apiNote WAWebIdentityIcdcApi: computes identity key hashes and device
+     * @implNote WAWebIdentityIcdcApi: computes identity key hashes and device
      * timestamps for inclusion in every outgoing message's messageContextInfo.
      */
     private final IcdcComputer icdcComputer;
@@ -183,7 +185,7 @@ public final class DeviceService {
     /**
      * Service for calculating participant hashes (phash) for group message verification.
      *
-     * @apiNote WAWebPhashUtils: computes SHA-1 (V1) or SHA-256 (V2) hash of sorted
+     * @implNote WAWebPhashUtils: computes SHA-1 (V1) or SHA-256 (V2) hash of sorted
      * device JIDs to verify sender and server agree on recipient list.
      */
     private final DevicePhashCalculator phashCalculator;
@@ -194,7 +196,7 @@ public final class DeviceService {
      * <p>Ensures consistency when updating multiple related tables (device-list, session,
      * sender-key, missing-keys, contact) that must remain synchronized.
      *
-     * @apiNote WAWebApiGetDeviceUpdateLock.getDeviceUpdateLock: device table updates should
+     * @implNote WAWebApiGetDeviceUpdateLock.getDeviceUpdateLock: device table updates should
      * be serialized to prevent race conditions when updating device-list, session, sender-key,
      * missing-keys, and contact tables.
      */
@@ -206,10 +208,21 @@ public final class DeviceService {
      * <p>Maps user JID to the timestamp when a hosted system message was last created,
      * preventing duplicate messages within the same second.
      *
-     * @apiNote WAWebBizCoexUtils.shouldDedupInitialHostedSystemMsg: prevents creating
+     * @implNote WAWebBizCoexUtils.shouldDedupInitialHostedSystemMsg: prevents creating
      * duplicate system messages for the same user within the same second.
      */
     private final ConcurrentHashMap<Jid, Instant> hostedSystemMsgDedupCache;
+
+    /**
+     * Cache for tracking which senders have already been processed for offline hosted ICDC.
+     *
+     * <p>Prevents redundant processing of hosted ICDC metadata during offline message delivery.
+     * This is an in-memory cache that is cleared on reconnect.
+     *
+     * @implNote WAWebBizCoexOfflineICDCHandledCache: module-level in-memory cache
+     * used by handleHostedIcdcMetadataInline to avoid duplicate processing.
+     */
+    private final Set<Jid> offlineBizHostedSenderICDCProcessedCache;
 
     /**
      * Creates a new device service.
@@ -232,6 +245,7 @@ public final class DeviceService {
         this.advCheckScheduler = new DeviceADVChecker(client, this, abPropsService);
         this.deviceUpdateLock = new ReentrantLock();
         this.hostedSystemMsgDedupCache = new ConcurrentHashMap<>();
+        this.offlineBizHostedSenderICDCProcessedCache = ConcurrentHashMap.newKeySet();
     }
 
     /**
@@ -242,7 +256,7 @@ public final class DeviceService {
      *
      * @param task the task to execute
      *
-     * @apiNote WAWebApiGetDeviceUpdateLock.getDeviceUpdateLock: ensures device table updates
+     * @implNote WAWebApiGetDeviceUpdateLock.getDeviceUpdateLock: ensures device table updates
      * (device-list, session, sender-key, missing-keys, contact) are serialized.
      */
     private void withDeviceUpdateLock(Runnable task) {
@@ -262,7 +276,7 @@ public final class DeviceService {
      *
      * @return {@code true} if the feature is enabled
      *
-     * @apiNote WAWebBizCoexGatingUtils.hostedOverrideAdvAccountSignatureKeyEnabled: requires
+     * @implNote WAWebBizCoexGatingUtils.hostedOverrideAdvAccountSignatureKeyEnabled: requires
      * both adv_accept_hosted_devices AND override_adv_account_signature_key_enabled AB props
      * to be true. Used in WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey.
      */
@@ -289,38 +303,40 @@ public final class DeviceService {
      * @param shouldMergeAltDevices whether to merge PN/LID alternate device lists for the same user
      * @return the device lists, one per user JID
      *
-     * @apiNote WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: if local phash matches
+     * @implNote WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: if local phash matches
      * expectedPhash (l===d), the function returns early without sending USync request.
      */
     public Set<DeviceList> getDeviceLists(Collection<Jid> userJids, String context, String expectedPhash, boolean shouldMergeAltDevices) {
-        // WAWebAdvSyncDeviceListApi.syncDeviceList: if phash is provided (l!=null), check local match
+        // WAWebAdvSyncDeviceListApi.syncDeviceList: if phash is provided (a!=null), check local match
         if (expectedPhash != null && !expectedPhash.isEmpty()) {
-            // WAWebApiDeviceList.getDeviceIds: get cached device lists for all requested JIDs
-            var cachedLists = userJids.stream()
-                    .map(store::findDeviceList)
-                    .flatMap(Optional::stream)
-                    .toList();
+            try {
+                // WAWebApiDeviceList.getDeviceIds: get cached device lists for all requested JIDs
+                // WA Web returns null for missing/deleted records; null entries contribute no devices
+                var cachedLists = userJids.stream()
+                        .map(jid -> store.findDeviceList(jid).orElse(null))
+                        .toList();
 
-            // WAWebAdvSyncDeviceListApi.syncDeviceList: if all cached, compute local phash and compare
-            if (cachedLists.size() == userJids.size()) {
-                try {
-                    // WAWebPhashUtils.phashV2: extract device JIDs from cached lists
-                    var allDeviceJids = cachedLists.stream()
-                            .map(DeviceList::deviceJids)
-                            .flatMap(Collection::stream)
-                            .collect(Collectors.toUnmodifiableSet());
+                // WAWebAdvSyncDeviceListApi.syncDeviceList: compute phash from all device JIDs
+                // Null/deleted entries map to empty device lists in WA Web
+                var allDeviceJids = cachedLists.stream()
+                        .filter(list -> list != null && !list.deleted())
+                        .map(DeviceList::deviceJids)
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toUnmodifiableSet());
 
-                    // WAWebPhashUtils.phashV2: compute local phash (allowIncludeMetaBot=true for AB check)
-                    var localPhash = phashCalculator.calculate(allDeviceJids, DevicePhashVersion.V2, true);
+                // WAWebPhashUtils.phashV2: compute local phash
+                var localPhash = phashCalculator.calculate(allDeviceJids, DevicePhashVersion.V2, true);
 
-                    // WAWebAdvSyncDeviceListApi.syncDeviceList: if (l === d) return early
-                    if (localPhash.equals(expectedPhash)) {
-                        LOGGER.log(System.Logger.Level.DEBUG, "Phash pre-check passed, skipping device sync");
-                        return mergeAlternateDeviceLists(cachedLists);
-                    }
-                } catch (NoSuchAlgorithmException e) {
-                    // WAWebAdvSyncDeviceListApi: fall through to normal sync on error
+                // WAWebAdvSyncDeviceListApi.syncDeviceList: if (a === m) return early
+                if (localPhash.equals(expectedPhash)) {
+                    LOGGER.log(System.Logger.Level.DEBUG, "Phash pre-check passed, skipping device sync");
+                    var nonNullLists = cachedLists.stream()
+                            .filter(Objects::nonNull)
+                            .toList();
+                    return mergeAlternateDeviceLists(nonNullLists);
                 }
+            } catch (NoSuchAlgorithmException e) {
+                // WAWebAdvSyncDeviceListApi: fall through to normal sync on error
             }
         }
 
@@ -375,7 +391,7 @@ public final class DeviceService {
      * @param deviceLists the device lists to merge
      * @return merged device lists with one entry per canonical user
      *
-     * @apiNote WAWebLidMigrationUtils: during migration, both PN and LID may have device records.
+     * @implNote WAWebLidMigrationUtils: during migration, both PN and LID may have device records.
      * The PN identity is preferred as the canonical representation.
      */
     private Set<DeviceList> mergeAlternateDeviceLists(Collection<DeviceList> deviceLists) {
@@ -411,7 +427,7 @@ public final class DeviceService {
      * @param userJids the user JIDs to check
      * @param caller   the caller context for logging (e.g., "device_sync_request")
      *
-     * @apiNote WAWebApiContact.checkPnToLidMapping: diagnostic check that logs warnings
+     * @implNote WAWebApiContact.checkPnToLidMapping: diagnostic check that logs warnings
      * for phone number JIDs missing LID mappings. Called before USync requests.
      */
     private void checkPnToLidMapping(Collection<Jid> userJids, String caller) {
@@ -454,7 +470,7 @@ public final class DeviceService {
      * @param context  the sync context (e.g., "message", "interactive", "adv_expiration")
      * @return list of device lists fetched or resolved from cache
      *
-     * @apiNote WAWebAdvSyncDeviceListApi.syncDeviceList: uses a Map (_) to deduplicate
+     * @implNote WAWebAdvSyncDeviceListApi.syncDeviceList: uses a Map (_) to deduplicate
      * requests. Builds USync query via WAWebUsync.USyncQuery with device protocol.
      * Processes results via WAWebAdvHandlerApi.handleADVDeviceSyncResult.
      */
@@ -734,33 +750,51 @@ public final class DeviceService {
                         // preserve rawId/validIndexes but reset devices to primary only
                         var cachedList = omitted.userJid()
                                 .flatMap(store::findDeviceList);
-                        if (cachedList.isEmpty()) {
-                            // WAWebHandleAdvOmittedResultApi: no cached list (!t || t.deleted) => return null
+                        // WAWebHandleAdvOmittedResultApi: if (!t || t.deleted) return null
+                        if (cachedList.isEmpty() || cachedList.get().deleted()) {
                             yield null;
                         }
 
                         var oldList = cachedList.get();
-                        var newTimestamp = omitted.timestamp().orElse(oldList.timestamp());
-                        var newExpectedTs = omitted.expectedTimestamp().orElse(null);
 
-                        // WAWebAdvExpectedTsApi: track expectedTimestamp changes
-                        var finalExpectedTs = newExpectedTs;
-                        var newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
-                        var newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
+                        // WAWebHandleAdvOmittedResultApi: if (e != null && e < t.timestamp) return null
+                        if (omitted.timestamp().isPresent()
+                                && omitted.timestamp().get().isBefore(oldList.timestamp())) {
+                            yield null;
+                        }
+                        // WAWebHandleAdvOmittedResultApi: if (e != null) a.timestamp = e
+                        // Only update timestamp and check expectedTs clearing when ts is present
+                        Instant newTimestamp;
+                        Instant finalExpectedTs;
+                        Instant newExpectedTsUpdateTs;
+                        Instant newExpectedTsLastDeviceJobTs;
+                        if (omitted.timestamp().isPresent()) {
+                            // WAWebHandleAdvOmittedResultApi: timestamp is present, update it
+                            newTimestamp = omitted.timestamp().get();
+                            var newExpectedTs = omitted.expectedTimestamp().orElse(null);
+                            finalExpectedTs = newExpectedTs;
+                            newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
+                            newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
 
-                        // WAWebAdvExpectedTsApi.shouldClearExpectedTs: check staleness
-                        if (DeviceExpectedTsUtils.shouldClearExpectedTimestamp(newTimestamp, finalExpectedTs, oldList, lastADVCheckTime)) {
-                            finalExpectedTs = null;
-                            newExpectedTsUpdateTs = null;
-                            newExpectedTsLastDeviceJobTs = null;
-                        } else {
-                            // WAWebAdvExpectedTsApi.computeNewExpectedTs: check if changed
-                            var oldExpectedTs = oldList.expectedTimestamp();
-                            if (DeviceExpectedTsUtils.hasExpectedTimestampChanged(oldExpectedTs, newExpectedTs)) {
-                                // WAWebAdvExpectedTsApi: expectedTs changed - update tracking fields
-                                newExpectedTsUpdateTs = Instant.now();
-                                newExpectedTsLastDeviceJobTs = lastADVCheckTime;
+                            // WAWebAdvExpectedTsApi.shouldClearExpectedTs: check staleness
+                            if (DeviceExpectedTsUtils.shouldClearExpectedTimestamp(newTimestamp, finalExpectedTs, oldList, lastADVCheckTime)) {
+                                finalExpectedTs = null;
+                                newExpectedTsUpdateTs = null;
+                                newExpectedTsLastDeviceJobTs = null;
+                            } else {
+                                // WAWebAdvExpectedTsApi.computeNewExpectedTs: check if changed
+                                var oldExpectedTs = oldList.expectedTimestamp();
+                                if (DeviceExpectedTsUtils.hasExpectedTimestampChanged(oldExpectedTs, newExpectedTs)) {
+                                    newExpectedTsUpdateTs = Instant.now();
+                                    newExpectedTsLastDeviceJobTs = lastADVCheckTime;
+                                }
                             }
+                        } else {
+                            // WAWebHandleAdvOmittedResultApi: when ts is null, preserve all existing values
+                            newTimestamp = oldList.timestamp();
+                            finalExpectedTs = oldList.expectedTimestamp();
+                            newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
+                            newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
                         }
 
                         // WAWebHandleAdvOmittedResultApi.handleOmittedResult: reset devices to PRIMARY ONLY
@@ -909,7 +943,7 @@ public final class DeviceService {
      * @param newType the new account type
      * @param oldList the cached device list before the transition
      *
-     * @apiNote WAWebBizCoexHostedAddVerification: requires users transitioning to HOSTED to
+     * @implNote WAWebBizCoexHostedAddVerification: requires users transitioning to HOSTED to
      * be in the verification cache (populated during USync). WAWebIdentityUpdateDeviceTableApi:
      * clears Signal sessions when account type changes. WAWebBizCoexUtils: creates system messages.
      */
@@ -955,7 +989,7 @@ public final class DeviceService {
      * @param userJid the user JID whose account type changed
      * @param newType the new account type
      *
-     * @apiNote WAWebBizCoexUtils: creates system messages for account type transitions.
+     * @implNote WAWebBizCoexUtils: creates system messages for account type transitions.
      * Uses shouldDedupInitialHostedSystemMsg to prevent duplicate messages within the same second.
      */
     private void createAccountTypeChangeSystemMessage(Jid userJid, ADVEncryptionType newType) {
@@ -1004,20 +1038,22 @@ public final class DeviceService {
      * @param userJid the user JID
      * @return {@code true} if the message should be skipped (duplicate)
      *
-     * @apiNote WAWebBizCoexUtils.shouldDedupInitialHostedSystemMsg: returns true if a
+     * @implNote WAWebBizCoexUtils.shouldDedupInitialHostedSystemMsg: returns true if a
      * system message was already created for this user within the same second.
      */
     private boolean shouldDedupInitialHostedSystemMsg(Jid userJid) {
-        var currentSecond = Instant.now();
+        // WAWebBizCoexUtils.shouldDedupInitialHostedSystemMsg: uses unixTime() (seconds granularity)
+        // Creates key from jid + "_" + unixTime, dedup within same second
+        var currentSecond = Instant.now().getEpochSecond();
         var lastMsgSecond = hostedSystemMsgDedupCache.get(userJid);
 
-        if (lastMsgSecond != null && lastMsgSecond.equals(currentSecond)) {
-            // Message was already created this second - deduplicate
+        if (lastMsgSecond != null && lastMsgSecond.getEpochSecond() == currentSecond) {
+            // WAWebBizCoexUtils: message already created this second - deduplicate
             return true;
         }
 
-        // Update the cache with current timestamp
-        hostedSystemMsgDedupCache.put(userJid, currentSecond);
+        // WAWebBizCoexUtils: add to dedup set and return false (not a duplicate)
+        hostedSystemMsgDedupCache.put(userJid, Instant.ofEpochSecond(currentSecond));
         return false;
     }
 
@@ -1027,7 +1063,7 @@ public final class DeviceService {
      * @param userJid the user JID
      * @param oldList the device list containing devices to clean up
      *
-     * @apiNote WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: clears Signal sessions
+     * @implNote WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: clears Signal sessions
      * for all non-primary devices when cleaning up a device record.
      */
     private void cleanupAllSessionsForUser(Jid userJid, DeviceList oldList) {
@@ -1048,7 +1084,7 @@ public final class DeviceService {
      * @param newRawId   the new rawId from the server
      * @return {@code true} if a full list reset is required
      *
-     * @apiNote WAWebHandleAdvListResetApi.handleListReset: when rawId changes (l.rawId!==f),
+     * @implNote WAWebHandleAdvListResetApi.handleListReset: when rawId changes (l.rawId!==f),
      * all Signal sessions must be cleared and the device list rebuilt from scratch.
      * This is the "clearRecord" path in WAWebHandleAdvKeyIndexResultApi.
      */
@@ -1072,7 +1108,7 @@ public final class DeviceService {
      * @param oldRawId   the old rawId
      * @param newRawId   the new rawId
      *
-     * @apiNote WAWebHandleAdvListResetApi.handleListReset: clears all existing Signal
+     * @implNote WAWebHandleAdvListResetApi.handleListReset: clears all existing Signal
      * sessions for the user when rawId changes. Called via clearDeviceRecord path.
      */
     private void handleListReset(Jid userJid, DeviceList cachedList, String oldRawId, String newRawId) {
@@ -1095,7 +1131,7 @@ public final class DeviceService {
      * @return the merged device list
      * @throws IllegalStateException if out-of-order timestamp detected with unknown keyIndex
      *
-     * @apiNote WAWebHandleAdvNoListResetApi.handleNoListReset: validates incoming keyIndex
+     * @implNote WAWebHandleAdvNoListResetApi.handleNoListReset: validates incoming keyIndex
      * against cached validIndexes. Throws error if timestamp is not newer but keyIndex is
      * not in validIndexes (indicates replay attack or corrupted state).
      */
@@ -1149,7 +1185,7 @@ public final class DeviceService {
      * @param results       the results returned from the server
      * @return the results with backfilled entries for missing PNs
      *
-     * @apiNote WAWebContactSyncUtils.backfillMissingDeviceSyncEntries: if a PN entry was requested
+     * @implNote WAWebContactSyncUtils.backfillMissingDeviceSyncEntries: if a PN entry was requested
      * but server only returned the LID entry, duplicate the LID result as if it were the PN entry.
      * Uses getCurrentLid() to find LID mappings and isRegularUserPn() to filter applicable JIDs.
      */
@@ -1242,7 +1278,7 @@ public final class DeviceService {
      *
      * @return the last check time, or empty if never checked
      *
-     * @apiNote WAWebLastADVCheckTimeApi.getLastADVDeviceInfoCheckTime: returns the timestamp
+     * @implNote WAWebLastADVCheckTimeApi.getLastADVDeviceInfoCheckTime: returns the timestamp
      * of the last scheduled ADV device info check job.
      */
     public Optional<Instant> lastAdvCheckTime() {
@@ -1252,7 +1288,7 @@ public final class DeviceService {
     /**
      * Updates the ADV check time in WhatsAppStore to the current time.
      *
-     * @apiNote WAWebLastADVCheckTimeApi: stores the timestamp when the ADV device info
+     * @implNote WAWebLastADVCheckTimeApi: stores the timestamp when the ADV device info
      * check job runs, used for expected timestamp staleness calculations.
      */
     public void updateAdvCheckTime() {
@@ -1267,7 +1303,7 @@ public final class DeviceService {
      * @param userJid the user JID
      * @return a device list with only the primary device
      *
-     * @apiNote WAWebDBDeviceListFanout.getFanOutList: when no device record is found,
+     * @implNote WAWebDBDeviceListFanout.getFanOutList: when no device record is found,
      * sends to primary device only (l.toString()).
      */
     private DeviceList createPrimaryOnlyDeviceList(Jid userJid) {
@@ -1289,7 +1325,7 @@ public final class DeviceService {
      * @param changedToHost whether the deletion is due to a HOSTED transition
      * @return a deleted device list marker
      *
-     * @apiNote WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: marks device list
+     * @implNote WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: marks device list
      * as deleted=true. WAWebBizCoexUtils: sets deletedChangedToHost for HOSTED transitions.
      */
     private DeviceList createDeletedDeviceList(Jid userJid, boolean changedToHost) {
@@ -1306,7 +1342,7 @@ public final class DeviceService {
     /**
      * Starts the ADV device info check scheduler.
      *
-     * @apiNote WAWebAdvDeviceInfoCheckJob.scheduleAdvDeviceInfoCheck: schedules periodic
+     * @implNote WAWebAdvDeviceInfoCheckJob.scheduleAdvDeviceInfoCheck: schedules periodic
      * check that runs every 24 hours to verify device list freshness.
      */
     public void startAdvCheckScheduler() {
@@ -1329,7 +1365,7 @@ public final class DeviceService {
      * <p>Should be called after client reconnects to complete any device syncs
      * that failed due to connection issues. Respects retry limits and expiration.
      *
-     * @apiNote WAWebApiPendingDeviceSync.doPendingDeviceSync: called during
+     * @implNote WAWebApiPendingDeviceSync.doPendingDeviceSync: called during
      * RESUME_WITH_OPEN_TAB to retry pending device syncs.
      */
     public void retryPendingSyncs() {
@@ -1369,7 +1405,7 @@ public final class DeviceService {
      * entries that were waiting for that device need to be updated. If a key is
      * missing on all remaining devices, it triggers a fatal sync error.
      *
-     * @apiNote WAWebSyncdStoreMissingKeys.updateMissingKeyDevices: when companion devices
+     * @implNote WAWebSyncdStoreMissingKeys.updateMissingKeyDevices: when companion devices
      * are removed, update missing sync key entries to remove the device from tracking.
      * If all devices report missing, triggers SyncdFatalErrorType.MISSING_KEY_ON_ALL_CLIENTS.
      */
@@ -1427,7 +1463,7 @@ public final class DeviceService {
      *                      or {@code null} for an unconditional sync
      * @return the fanout device JIDs
      *
-     * @apiNote WAWebSendUserMsgJob.encryptAndSendUserMsg: calls
+     * @implNote WAWebSendUserMsgJob.encryptAndSendUserMsg: calls
      * getFanOutList({wids: [to, meDevice],
      * chatWidSetToIncludeHostedInFanoutOneToOneChatOnly: to}).
      * WAWebDBDeviceListFanout.getFanOutList: filters self, includes hosted
@@ -1446,7 +1482,25 @@ public final class DeviceService {
         return fanoutCalculator.filterIdentityChanges(fanoutDevices, changedIdentities);
     }
 
-    public DeviceGroupFanoutResult getGroupFanout(Jid groupJid) {
+    /**
+     * Computes the fanout device list and participant hash for a group chat.
+     *
+     * <p>The returned {@link DeviceGroupFanoutResult} contains the target
+     * devices (excluding the sender) and the phash computed over those
+     * devices <em>plus</em> the sender's own device JID, matching the
+     * WA Web pattern {@code phashV2([].concat(M, [F]))}.
+     *
+     * @param groupJid the group JID
+     * @param senderDeviceJid the sender's own device JID to include in the phash
+     *                        but <em>not</em> in the returned device list
+     * @return the fanout result with devices and phash
+     *
+     * @implNote WAWebSendGroupSkmsgJob.encryptAndSendSenderKeyMsg: computes
+     * {@code phashV2([].concat(M, [F]))} where M is the device list (excluding
+     * sender) and F is the sender's own device JID
+     * ({@code isCagAddon || isLidAddressingMode ? getMeDeviceLidOrThrow() : getMeDevicePnOrThrow_DO_NOT_USE()}).
+     */
+    public DeviceGroupFanoutResult getGroupFanout(Jid groupJid, Jid senderDeviceJid) {
         var myDeviceJid = resolveMyDeviceJid(groupJid);
         try {
             // WAWebDBDeviceListFanout.getFanOutList: get devices for all participants
@@ -1464,9 +1518,11 @@ public final class DeviceService {
             var changedIdentities = store.unconfirmedIdentityChanges();
             var filteredDevices = fanoutCalculator.filterIdentityChanges(fanoutDevices, changedIdentities);
 
-            // WAWebPhashUtils.phashV2: calculate phash for message integrity verification
-            // allowIncludeMetaBot=true lets the service check AB props for group fanout
-            var phash = phashCalculator.calculate(filteredDevices, DevicePhashVersion.V2, true);
+            // WAWebSendGroupSkmsgJob.encryptAndSendSenderKeyMsg: phash is computed on
+            // [].concat(M, [F]) where M = filteredDevices and F = sender's own device JID
+            var phashDevices = new java.util.HashSet<>(filteredDevices);
+            phashDevices.add(senderDeviceJid); // WAWebSendGroupSkmsgJob: concat(M, [F])
+            var phash = phashCalculator.calculate(phashDevices, DevicePhashVersion.V2, true);
             return new DeviceGroupFanoutResult(filteredDevices, phash);
         } catch (NoSuchAlgorithmException exception) {
             throw new InternalError("Missing SHA-256 implementation", exception);
@@ -1480,7 +1536,7 @@ public final class DeviceService {
      * @return the ICDC result, or {@code Optional.empty()} if no device list is cached
      *         or the list is marked as deleted
      *
-     * @apiNote WAWebIdentityIcdcApi.getICDCMeta: retrieves the device record
+     * @implNote WAWebIdentityIcdcApi.getICDCMeta: retrieves the device record
      * and delegates to {@code getICDCMetaFromDeviceRecord}.
      */
     public Optional<IcdcResult> computeIcdc(Jid userJid) {
@@ -1496,7 +1552,7 @@ public final class DeviceService {
      *
      * @param deviceJids the device JIDs to ensure sessions for
      *
-     * @apiNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza:
+     * @implNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza:
      * calls {@code ensureE2ESessions(devices)} before encrypting.
      * WAWebE2ESessionService: deduplicates concurrent session
      * establishment requests.
@@ -1515,7 +1571,7 @@ public final class DeviceService {
      * @return the sender's device JID
      * @throws IllegalStateException if not logged in
      *
-     * @apiNote WAWebSendUserMsgJob: uses getMeDeviceLid for LID chats,
+     * @implNote WAWebSendUserMsgJob: uses getMeDeviceLid for LID chats,
      * getMeDevicePn otherwise.
      * WAWebSendGroupSkmsgJob: uses getMeDeviceLid for LID groups,
      * getMeDevicePn otherwise.
@@ -1534,7 +1590,7 @@ public final class DeviceService {
      *
      * @return {@code true} if hosted devices are enabled
      *
-     * @apiNote WAWebBizCoexGatingUtils.bizHostedDevicesEnabled: returns
+     * @implNote WAWebBizCoexGatingUtils.bizHostedDevicesEnabled: returns
      * getABPropConfigValue("adv_accept_hosted_devices"), defaulting to false.
      */
     private boolean isBizHostedDevicesEnabled() {
@@ -1552,7 +1608,7 @@ public final class DeviceService {
      * @param results the original results
      * @return filtered results with hosted devices removed from Full results
      *
-     * @apiNote WAWebAdvHandlerApi.handleADVDeviceSyncResult: when bizHostedDevicesEnabled
+     * @implNote WAWebAdvHandlerApi.handleADVDeviceSyncResult: when bizHostedDevicesEnabled
      * is false, filters out devices where id === HOSTED_DEVICE_ID (99).
      */
     private static List<DeviceListResult> filterHostedDevicesFromResults(List<DeviceListResult> results) {
@@ -1571,7 +1627,7 @@ public final class DeviceService {
      * @param action  the action type ("add" or "remove")
      * @param userJid the user JID whose device list changed
      *
-     * @apiNote WAWebHandleAdvDeviceNotificationApi.handleDeviceNotification: dispatches to
+     * @implNote WAWebHandleAdvDeviceNotificationApi.handleDeviceNotification: dispatches to
      * handleDeviceAddNotification or handleDeviceRemoveNotification based on action type.
      * Uses device update lock to serialize table updates.
      */
@@ -1599,7 +1655,7 @@ public final class DeviceService {
         withDeviceUpdateLock(() -> {
             switch (action) {
                 case "add" -> handleDeviceAddNotification(userJid, deviceListNode, keyIndexListNode.get(), timestamp);
-                case "remove" -> handleDeviceRemoveNotification(userJid, keyIndexListNode.get(), timestamp);
+                case "remove" -> handleDeviceRemoveNotification(userJid, deviceListNode, keyIndexListNode.get(), timestamp);
                 default -> LOGGER.log(System.Logger.Level.WARNING, "Unknown device action: {0}", action);
             }
         });
@@ -1614,7 +1670,7 @@ public final class DeviceService {
      * @param keyIndexListNode the key-index-list node from notification
      * @param timestamp        the notification timestamp (Unix seconds)
      *
-     * @apiNote WAWebHandleAdvDeviceNotificationApi.handleDeviceAddNotification: if no cached
+     * @implNote WAWebHandleAdvDeviceNotificationApi.handleDeviceAddNotification: if no cached
      * record exists or it's deleted, triggers USync via triggerUsyncForCoexDeviceAdd.
      * Otherwise validates and merges devices following WAWebHandleAdvKeyIndexResultApi logic.
      */
@@ -1639,17 +1695,12 @@ public final class DeviceService {
             return;
         }
 
-        // WAWebHandleAdvDeviceNotificationApi: validate signed key index bytes (i == null) check
+        // WAWebHandleAdvDeviceNotificationApi: if (r < l.timestamp || i == null) return null
+        // i = signedKeyIndexBytes; when null for add notification, skip update
         var signedKeyIndexBytes = keyIndexListNode.toContentBytes();
         if (signedKeyIndexBytes.isEmpty()) {
-            LOGGER.log(System.Logger.Level.WARNING, "Device add notification missing signedKeyIndexBytes for {0}", userJid);
-            // WAWebSyncdMetricFatalError: warn when trying to delete own device list
-            var myJid = store.jid().map(Jid::toUserJid).orElse(null);
-            if (myJid != null && myJid.equals(userJid.toUserJid())) {
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "syncd: trying to delete own device list for {0}", userJid);
-            }
-            store.removeDeviceList(userJid);
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Device add notification missing signedKeyIndexBytes for {0}, ignoring", userJid);
             return;
         }
 
@@ -1667,8 +1718,9 @@ public final class DeviceService {
             return;
         }
 
-        // WAWebHandleAdvDeviceNotificationApi: build key index map from notification
-        var keyIndexMap = buildKeyIndexMap(keyIndexListNode);
+        // WAWebHandleAdvDeviceNotificationApi: build key index map from notification devices
+        // The device children (with jid and key-index attrs) are under device-list, not key-index-list
+        var keyIndexMap = buildKeyIndexMap(deviceListNode);
 
         // WAWebHandleAdvDeviceNotificationUtils.decodeSignedKeyIndexBytes: validate key index list
         // from protobuf; stored account signature key used as fallback when embedded key missing
@@ -1882,14 +1934,15 @@ public final class DeviceService {
      * Handles a device remove notification.
      *
      * @param userJid          the user JID
-     * @param keyIndexListNode the key-index-list node containing devices being removed
+     * @param deviceListNode   the device-list node containing devices being removed
+     * @param keyIndexListNode the key-index-list node from the notification
      * @param timestamp        the notification timestamp (Unix seconds)
      *
-     * @apiNote WAWebHandleAdvDeviceNotificationApi.handleDeviceRemoveNotification: the
+     * @implNote WAWebHandleAdvDeviceNotificationApi.handleDeviceRemoveNotification: the
      * notification contains devices being REMOVED. Filter logic at line:
      * {@code n.devices.filter(e => e.id !== DEFAULT_DEVICE_ID && (t=r.get(e.id), t==null || t!==e.keyIndex))}
      */
-    private void handleDeviceRemoveNotification(Jid userJid, Node keyIndexListNode, long timestamp) {
+    private void handleDeviceRemoveNotification(Jid userJid, Node deviceListNode, Node keyIndexListNode, long timestamp) {
         // WAWebHandleAdvDeviceNotificationApi: need cached list to filter against
         var cachedList = store.findDeviceList(userJid);
         if (cachedList.isEmpty() || cachedList.get().deleted()) {
@@ -1908,7 +1961,10 @@ public final class DeviceService {
         }
 
         // WAWebHandleAdvDeviceNotificationApi: build map of devices being REMOVED
-        var removedDevicesMap = buildKeyIndexMap(keyIndexListNode);
+        // Device info (jid, key-index) comes from the notification's device children
+        var removedDevicesMap = deviceListNode != null
+                ? buildKeyIndexMap(deviceListNode)
+                : Map.<Integer, Integer>of();
 
         // WAWebHandleAdvDeviceNotificationApi: keep devices NOT in notification OR with different keyIndex
         // n.devices.filter(e => e.id !== DEFAULT_DEVICE_ID && (t=r.get(e.id), t==null || t!==e.keyIndex))
@@ -1978,7 +2034,7 @@ public final class DeviceService {
      * @param keyIndexListNode the key-index-list node to parse
      * @return map of device ID to key index
      *
-     * @apiNote WAWebHandleAdvDeviceNotificationApi: builds map from notification devices
+     * @implNote WAWebHandleAdvDeviceNotificationApi: builds map from notification devices
      * using {@code new Map(e.map(e => [e.id, e.keyIndex]))}.
      */
     private static Map<Integer, Integer> buildKeyIndexMap(Node keyIndexListNode) {
@@ -2007,7 +2063,7 @@ public final class DeviceService {
      * @param keyIndexListNode the key-index-list node from the notification
      * @return the validated key index list data, or {@code null} if validation fails
      *
-     * @apiNote WAWebHandleAdvDeviceNotificationUtils.decodeSignedKeyIndexBytes: validates
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.decodeSignedKeyIndexBytes: validates
      * Curve25519 signature using embedded or stored accountSignatureKey.
      */
     private ValidatedKeyIndexListResult validateKeyIndexList(Node keyIndexListNode) {
@@ -2034,7 +2090,7 @@ public final class DeviceService {
      * @param deviceListNode the device-list node from the notification, or {@code null}
      * @param userJid        the user JID
      *
-     * @apiNote WAWebBizCoexUtils.triggerUsyncForCoexDeviceAdd: checks resumeFromRestartComplete
+     * @implNote WAWebBizCoexUtils.triggerUsyncForCoexDeviceAdd: checks resumeFromRestartComplete
      * flag to determine whether to trigger immediate sync or queue for doPendingDeviceSync.
      */
     private void triggerUsyncForCoexDeviceAdd(Node deviceListNode, Jid userJid) {
@@ -2066,13 +2122,643 @@ public final class DeviceService {
     }
 
     /**
+     * Synchronises the device lists for the current user's PN and LID identities.
+     *
+     * <p>This is equivalent to WhatsApp Web's "sync my device list" operation which ensures
+     * the local device cache is up-to-date for the current user's own devices. It requests
+     * device lists for both the phone number (PN) JID and the linked ID (LID) JID.
+     *
+     * @implNote WAWebAdvSyncDeviceListApi.syncMyDeviceList: calls syncDeviceList with
+     * {@code wids: getMePNandLIDWids(), context: null, phash: null}.
+     */
+    public void syncMyDeviceList() {
+        // WAWebAdvSyncDeviceListApi.syncMyDeviceList: getMePNandLIDWids returns both PN and LID JIDs
+        var myJids = new ArrayList<Jid>();
+        store.jid().ifPresent(jid -> myJids.add(jid.toUserJid()));
+        store.lid().ifPresent(myJids::add);
+        if (myJids.isEmpty()) {
+            return;
+        }
+        // WAWebAdvSyncDeviceListApi.syncMyDeviceList: context=null, phash=null
+        getDeviceLists(myJids, null, null, false);
+    }
+
+    /**
+     * Synchronises and returns device lists for the specified user JIDs.
+     *
+     * <p>First performs a device list sync (equivalent to {@link #getDeviceLists}), then
+     * returns the cached device ID information for the requested JIDs.
+     *
+     * @param userJids the user JIDs to sync and retrieve device lists for
+     * @return the device lists, one per user JID; entries may be {@code null} if no device list is cached
+     *
+     * @implNote WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: calls
+     * {@code syncDeviceList({wids, context: null, phash: null})} then returns
+     * {@code getDeviceIds(wids)}.
+     */
+    public List<DeviceList> syncAndGetDeviceList(Collection<Jid> userJids) {
+        // WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: sync first, then return device IDs
+        getDeviceLists(userJids, null, null, false);
+        // WAWebApiDeviceList.getDeviceIds: return cached device lists
+        return userJids.stream()
+                .map(jid -> store.findDeviceList(jid).orElse(null))
+                .toList();
+    }
+
+    /**
+     * Checks whether a user has a specific device ID in their device list.
+     *
+     * <p>If the requested device ID is the primary device (device 0), returns {@code true}
+     * immediately since every user has a primary device. Otherwise, looks up the cached
+     * device list and checks if any device matches the requested ID.
+     *
+     * @param userJid  the user JID to check
+     * @param deviceId the device ID to look for
+     * @return {@code true} if the device exists in the user's device list
+     *
+     * @implNote WAWebApiDeviceList.hasDevice: if {@code deviceId === DEFAULT_DEVICE_ID} returns
+     * {@code true} immediately. Otherwise calls {@code getDeviceIds([userJid])} and checks
+     * if any device in the result has the matching ID.
+     */
+    public boolean hasDevice(Jid userJid, int deviceId) {
+        // WAWebApiDeviceList.hasDevice: primary device always exists
+        if (deviceId == DeviceConstants.PRIMARY_DEVICE_ID) {
+            return true;
+        }
+        // WAWebApiDeviceList.hasDevice: check cached device list
+        var deviceList = store.findDeviceList(userJid).orElse(null);
+        if (deviceList == null || deviceList.deleted()) {
+            return false;
+        }
+        return deviceList.devices().stream()
+                .anyMatch(device -> device.id() == deviceId);
+    }
+
+    /**
+     * Returns the device list for the current user's PN identity.
+     *
+     * <p>Throws if no device list is found for the current user, which indicates
+     * a critical synchronisation failure.
+     *
+     * @return the current user's device list
+     * @throws IllegalStateException if the device list cannot be found
+     *
+     * @implNote WAWebApiDeviceList.getMyDeviceList: gets the device list for
+     * {@code getMeDevicePnOrThrow()}. If not found or deleted, falls back to LID
+     * via {@code getMeDeviceLidOrThrow()}. Throws if both are missing.
+     */
+    public DeviceList getMyDeviceList() {
+        // WAWebApiDeviceList.getMyDeviceList: try PN first
+        var pnJid = store.jid().map(Jid::toUserJid).orElse(null);
+        if (pnJid != null) {
+            var pnList = store.findDeviceList(pnJid).orElse(null);
+            if (pnList != null && !pnList.deleted()) {
+                return pnList;
+            }
+        }
+
+        // WAWebApiDeviceList.getMyDeviceList: fall back to LID
+        var lidJid = store.lid().orElse(null);
+        if (lidJid != null) {
+            var lidList = store.findDeviceList(lidJid).orElse(null);
+            if (lidList != null && !lidList.deleted()) {
+                return lidList;
+            }
+        }
+
+        // WAWebApiDeviceList.getMyDeviceList: throw if both are missing
+        var hasPn = pnJid != null && store.findDeviceList(pnJid).isPresent();
+        var isPnDeleted = pnJid != null && store.findDeviceList(pnJid).map(DeviceList::deleted).orElse(false);
+        var hasLid = lidJid != null && store.findDeviceList(lidJid).isPresent();
+        var isLidDeleted = lidJid != null && store.findDeviceList(lidJid).map(DeviceList::deleted).orElse(false);
+        LOGGER.log(System.Logger.Level.WARNING,
+                "[syncd] no device list pn={0}/{1} lid={2}/{3}",
+                hasPn, isPnDeleted, hasLid, isLidDeleted);
+        throw new IllegalStateException("syncd: cannot find my device list");
+    }
+
+    /**
+     * Returns all device lists currently stored in the cache.
+     *
+     * @return an unmodifiable collection of all cached device lists
+     *
+     * @implNote WAWebApiDeviceList.getAllDeviceLists: returns all records from the
+     * device list table via {@code getDeviceListTable().all()}.
+     */
+    public Collection<DeviceList> getAllDeviceLists() {
+        // WAWebApiDeviceList.getAllDeviceLists: return all device lists from store
+        return store.deviceLists();
+    }
+
+    /**
+     * Handles ICDC (Identity Change Detection Consistency) data from an incoming message.
+     *
+     * <p>Processes the device list metadata from a message's context info to update expected
+     * timestamps for device records. This allows detecting stale device lists without requiring
+     * a full device sync.
+     *
+     * <p>For messages from the primary device (device 0) with a sender timestamp but no sender
+     * key hash, performs a minimal ADV sync to update the device record timestamp.
+     *
+     * @param senderJid        the sender's JID (with device information)
+     * @param recipientUserJid the recipient user JID for 1:1 chats, or {@code null} for group chats
+     * @param metadata         the device list metadata from the message's context info
+     *
+     * @implNote WAWebIcdcHandlerApi.handleICDCData: enqueues processing via a PromiseQueue.
+     * Handles two cases: (1) primary device with timestamp-only metadata triggers a minimal
+     * ADV sync result, (2) normal case updates expectedTs for both sender and recipient records.
+     */
+    public void handleICDCData(Jid senderJid, Jid recipientUserJid, DeviceListMetadata metadata) {
+        // WAWebIcdcHandlerApi.handleICDCData: if metadata is null, return
+        if (metadata == null) {
+            return;
+        }
+
+        // WAWebIcdcHandlerApi.handleICDCData: check for primary device with timestamp-only update
+        // (e.device==null || e.device===DEFAULT_DEVICE_ID) && r.senderTimestamp!=null && r.senderKeyHash==null
+        if ((senderJid.device() == DeviceConstants.PRIMARY_DEVICE_ID)
+                && metadata.senderTimestamp().isPresent()
+                && metadata.senderKeyHash().isEmpty()) {
+            // WAWebIcdcHandlerApi.handleICDCData: minimal ADV sync with timestamp+1
+            var senderTimestamp = metadata.senderTimestamp().get();
+            var adjustedTimestamp = senderTimestamp.plusSeconds(1);
+            // WAWebHandleAdvForUsyncApi.handleADVSyncResult: process with primary-only device list
+            handleMinimalTimestampOnlySync(senderJid.toUserJid(), adjustedTimestamp);
+            return;
+        }
+
+        // WAWebIcdcHandlerApi.handleICDCData: build list of entries to check
+        var entries = new ArrayList<IcdcTimestampEntry>();
+        entries.add(new IcdcTimestampEntry(senderJid.toUserJid(), metadata.senderTimestamp().orElse(null)));
+
+        // WAWebIcdcHandlerApi.handleICDCData: add recipient entry if sender is self and recipient is present
+        var myUser = store.jid().map(jid -> jid.user()).orElse(null);
+        var isSelf = myUser != null && senderJid.user().equals(myUser);
+        if (isSelf && recipientUserJid != null) {
+            entries.add(new IcdcTimestampEntry(recipientUserJid, metadata.recipientTimestamp().orElse(null)));
+        }
+
+        // WAWebIcdcHandlerApi.handleICDCData: get last ADV check time
+        var lastADVCheckTime = store.lastAdvCheckTime().orElse(null);
+
+        // WAWebIcdcHandlerApi.handleICDCData: bulk get device records and compute expected timestamps
+        var updatedRecords = new ArrayList<DeviceList>();
+        for (var entry : entries) {
+            if (entry.timestamp() == null) {
+                continue;
+            }
+
+            var cached = store.findDeviceList(entry.jid()).orElse(null);
+            if (cached == null || cached.deleted()) {
+                continue;
+            }
+
+            // WAWebAdvExpectedTsApi.computeExpectedTsForDeviceRecord: compute new expected timestamp
+            var computed = DeviceExpectedTsUtils.computeExpectedTimestampForDeviceRecord(
+                    entry.timestamp(), cached, lastADVCheckTime);
+
+            // WAWebIcdcHandlerApi.handleICDCData: only update if any tracking field changed
+            var expectedTsChanged = !Objects.equals(
+                    computed.expectedTimestamp().orElse(null), cached.expectedTimestamp());
+            var lastJobTsChanged = !Objects.equals(
+                    computed.expectedTimestampLastDeviceJobTimestamp().orElse(null),
+                    cached.expectedTimestampLastDeviceJobTimestamp());
+            var updateTsChanged = !Objects.equals(
+                    computed.expectedTimestampUpdateTimestamp().orElse(null),
+                    cached.expectedTimestampUpdateTimestamp());
+
+            if (expectedTsChanged || lastJobTsChanged || updateTsChanged) {
+                var updated = new DeviceListBuilder()
+                        .userJid(cached.userJid())
+                        .devices(cached.devices())
+                        .timestamp(cached.timestamp())
+                        .rawId(cached.rawId())
+                        .deleted(cached.deleted())
+                        .deletedChangedToHost(cached.deletedChangedToHost())
+                        .advAccountType(cached.advAccountType())
+                        .expectedTimestamp(computed.expectedTimestamp().orElse(null))
+                        .expectedTimestampLastDeviceJobTimestamp(computed.expectedTimestampLastDeviceJobTimestamp().orElse(null))
+                        .expectedTimestampUpdateTimestamp(computed.expectedTimestampUpdateTimestamp().orElse(null))
+                        .currentIndex(cached.currentIndex())
+                        .validIndexes(cached.validIndexes())
+                        .build();
+                updatedRecords.add(updated);
+            }
+        }
+
+        // WAWebApiDeviceList.bulkCreateOrReplaceDeviceRecord: persist updated records
+        if (!updatedRecords.isEmpty()) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "handleICDCData: updated expected timestamp for {0} records",
+                    updatedRecords.size());
+            for (var record : updatedRecords) {
+                store.addDeviceList(record);
+            }
+        }
+    }
+
+    /**
+     * Handles a minimal timestamp-only sync for ICDC primary device updates.
+     *
+     * <p>When a message from the primary device contains only a sender timestamp
+     * (no key hash), this creates a minimal device update with just the primary
+     * device and the adjusted timestamp. This is used for identity update detection.
+     *
+     * @param userJid           the user JID to update
+     * @param adjustedTimestamp the sender timestamp + 1 second
+     *
+     * @implNote WAWebIcdcHandlerApi.handleICDCData: calls handleADVSyncResult with a minimal
+     * device list containing only the primary device and the adjusted timestamp.
+     */
+    private void handleMinimalTimestampOnlySync(Jid userJid, Instant adjustedTimestamp) {
+        // WAWebIcdcHandlerApi.handleICDCData: handleADVSyncResult(e, {deviceList: [{id: 0, keyIndex: 0}],
+        // keyIndex: {ts: castToUnixTime(senderTimestamp+1), signedKeyIndexBytes: null}}, null, null)
+        var cachedList = store.findDeviceList(userJid).orElse(null);
+
+        // WAWebHandleAdvForUsyncApi.handleADVSyncResultSync: when signedKeyIndexBytes is null
+        // and no companion devices, falls through to handleOmittedResult
+        // WAWebHandleAdvOmittedResultApi.handleOmittedResult: update timestamp
+        if (cachedList == null || cachedList.deleted()) {
+            return;
+        }
+
+        if (adjustedTimestamp.isBefore(cachedList.timestamp())) {
+            return;
+        }
+
+        var lastADVCheckTime = store.lastAdvCheckTime().orElse(null);
+
+        // WAWebHandleAdvOmittedResultApi: update timestamp and check expectedTs clearing
+        Instant finalExpectedTs = cachedList.expectedTimestamp();
+        Instant finalUpdateTs = cachedList.expectedTimestampUpdateTimestamp();
+        Instant finalLastJobTs = cachedList.expectedTimestampLastDeviceJobTimestamp();
+
+        if (DeviceExpectedTsUtils.shouldClearExpectedTimestamp(
+                adjustedTimestamp, null, cachedList, lastADVCheckTime)) {
+            finalExpectedTs = null;
+            finalUpdateTs = null;
+            finalLastJobTs = null;
+        }
+
+        // WAWebHandleAdvOmittedResultApi: reset to primary only
+        var updated = new DeviceListBuilder()
+                .userJid(cachedList.userJid())
+                .devices(List.of(DeviceInfo.ofE2EE(DeviceConstants.PRIMARY_DEVICE_ID, 0)))
+                .timestamp(adjustedTimestamp)
+                .rawId(cachedList.rawId())
+                .deleted(cachedList.deleted())
+                .deletedChangedToHost(cachedList.deletedChangedToHost())
+                .advAccountType(cachedList.advAccountType())
+                .expectedTimestamp(finalExpectedTs)
+                .expectedTimestampLastDeviceJobTimestamp(finalLastJobTs)
+                .expectedTimestampUpdateTimestamp(finalUpdateTs)
+                .currentIndex(cachedList.currentIndex())
+                .validIndexes(cachedList.validIndexes())
+                .build();
+
+        store.addDeviceList(updated);
+    }
+
+    /**
+     * Internal entry for ICDC timestamp processing.
+     *
+     * @implNote WAWebIcdcHandlerApi.handleICDCData: constructs entries with
+     * {@code {id: senderJid, ts: senderTimestamp}} and optionally
+     * {@code {id: recipientJid, ts: recipientTimestamp}}.
+     */
+    private record IcdcTimestampEntry(Jid jid, Instant timestamp) {
+    }
+
+    /**
+     * Handles hosted ICDC metadata inline during message processing.
+     *
+     * <p>Processes the device list metadata from an incoming message to detect whether
+     * the sender or recipient account type is HOSTED (business coexistence). When a
+     * HOSTED transition is detected, clears the existing device record and triggers
+     * a device sync to get the updated device list.
+     *
+     * @param chatJid   the chat JID (must be a user chat, not group)
+     * @param authorJid the message author JID
+     * @param metadata  the device list metadata from the message's context info
+     * @return the result indicating whether hosted mismatch was detected
+     *
+     * @implNote WAWebIcdcHandlerApi.handleHostedIcdcMetadataInline: checks business hosted
+     * device gating, determines sender/receiver account type, detects HOSTED transitions,
+     * and triggers device sync when account type changes from E2EE to HOSTED.
+     */
+    public HostedIcdcResult handleHostedIcdcMetadataInline(Jid chatJid, Jid authorJid, DeviceListMetadata metadata) {
+        // WAWebIcdcHandlerApi.handleHostedIcdcMetadataInline: check gating
+        if (!isBizHostedDevicesEnabled()) {
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        // WAWebIcdcHandlerApi: skip if sender is self or not a user JID
+        if (store.jid().map(myJid -> myJid.toUserJid().equals(chatJid.toUserJid())).orElse(false)) {
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        if (!chatJid.hasUserServer()) {
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        // WAWebIcdcHandlerApi.handleHostedIcdcMetadataInline: get deviceListMetadata
+        if (metadata == null) {
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        // WAWebIcdcHandlerApi: determine account type based on who is "me"
+        // var d=isMeAccount(n), m=d?c.receiverAccountType:c.senderAccountType, p=d?t:n
+        var isAuthorMe = store.jid().map(myJid -> myJid.toUserJid().equals(authorJid.toUserJid())).orElse(false);
+        var accountType = isAuthorMe
+                ? metadata.receiverAccountType().orElse(null)
+                : metadata.senderAccountType().orElse(null);
+        var relevantJid = isAuthorMe ? chatJid.toUserJid() : authorJid.toUserJid();
+
+        if (accountType == null) {
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        // WAWebIcdcHandlerApi: if E2EE, remove from offline cache and return default
+        if (accountType == ADVEncryptionType.E2EE) {
+            // WAWebBizCoexOfflineICDCHandledCache.removeFromOfflineBizHostedSenderICDCProcessedCache
+            offlineBizHostedSenderICDCProcessedCache.remove(relevantJid);
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        // WAWebIcdcHandlerApi: if not HOSTED, return default
+        if (accountType != ADVEncryptionType.HOSTED) {
+            return HostedIcdcResult.DEFAULT;
+        }
+
+        // WAWebBizCoexOfflineICDCHandledCache.hasOfflineBizHostedSenderICDCProcessedForSender: check dedup
+        if (offlineBizHostedSenderICDCProcessedCache.contains(relevantJid)) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "[handleHostedIcdcMetadataInline] skip, already processed {0}", relevantJid);
+            return new HostedIcdcResult(false, true);
+        }
+
+        // WAWebBizCoexOfflineICDCHandledCache.addToOfflineBizHostedSenderICDCProcessedCache
+        offlineBizHostedSenderICDCProcessedCache.add(relevantJid);
+        LOGGER.log(System.Logger.Level.DEBUG,
+                "handleIcdcMetadataInline: add to coex cache for {0}", relevantJid);
+
+        // WAWebBizCoexHostedAddVerification.addToCoexHostedVerificationCache
+        store.addToCoexHostedVerificationCache(relevantJid);
+
+        // WAWebIcdcHandlerApi: get existing device record and compare timestamps
+        var existingRecord = store.findDeviceList(relevantJid).orElse(null);
+        var senderTimestamp = metadata.senderTimestamp()
+                .map(Instant::getEpochSecond)
+                .orElse(0L);
+        var existingTimestamp = existingRecord != null ? existingRecord.timestamp().getEpochSecond() : 0L;
+
+        // WAWebIcdcHandlerApi: if senderTimestamp >= existingTimestamp
+        if (senderTimestamp >= existingTimestamp) {
+            // WAWebIcdcHandlerApi: if existing record is NOT HOSTED, trigger transition
+            if (existingRecord == null || existingRecord.advAccountType() != ADVEncryptionType.HOSTED) {
+                // WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: clear sessions
+                if (existingRecord != null) {
+                    cleanupAllSessionsForUser(relevantJid, existingRecord);
+                }
+
+                // WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: mark as deleted with HOSTED transition
+                store.addDeviceList(createDeletedDeviceList(relevantJid, false));
+
+                // WAWebIcdcHandlerApi: trigger device sync
+                if (store.isResumeFromRestartComplete()) {
+                    // WAWebSyncDeviceAdvDeviceListJob.syncDeviceListJob: immediate sync
+                    Thread.startVirtualThread(() -> {
+                        try {
+                            getDeviceLists(List.of(relevantJid), null, null, false);
+                        } catch (Exception e) {
+                            LOGGER.log(System.Logger.Level.WARNING,
+                                    "Failed to sync device list for hosted transition: {0}", e.getMessage());
+                        }
+                    });
+                } else {
+                    // WAWebApiPendingDeviceSync.addUserToPendingDeviceSync: queue for later
+                    var pendingSync = PendingDeviceSync.of(List.of(relevantJid), null);
+                    store.addPendingDeviceSync(pendingSync);
+                }
+
+                LOGGER.log(System.Logger.Level.DEBUG,
+                        "handleHostedIcdcMetadataInline: update ADV type for {0}", relevantJid);
+
+                // WAWebIcdcHandlerApi: hostedBizEncMismatch is true when existing was E2EE or not deletedChangedToHost
+                var mismatch = (existingRecord != null && existingRecord.advAccountType() == ADVEncryptionType.E2EE)
+                        || (existingRecord == null || !existingRecord.deletedChangedToHost());
+                return new HostedIcdcResult(mismatch, true);
+            }
+
+            // WAWebIcdcHandlerApi: existing is already HOSTED, no mismatch
+            return new HostedIcdcResult(false, true);
+        }
+
+        // WAWebIcdcHandlerApi: senderTimestamp < existingTimestamp, return default
+        return HostedIcdcResult.DEFAULT;
+    }
+
+    /**
+     * Handles an ADV device update for an incoming message from a companion device.
+     *
+     * <p>When a companion device sends a message containing a signed device identity,
+     * this method verifies the identity matches the expected account and updates the
+     * device list accordingly. It detects identity changes (new primary identity) and
+     * performs either a list reset or an incremental update.
+     *
+     * <p>This is called during message decryption when a PKMSG contains a device-identity
+     * node with signed device identity data.
+     *
+     * @param deviceJid       the full device JID (with device component, must NOT be primary)
+     * @param rawId           the rawId from the signed device identity
+     * @param timestamp       the timestamp from the signed device identity (Unix seconds)
+     * @param keyIndex        the key index from the signed device identity
+     * @param identityKey     the identity key from the message (from PKMSG), or {@code null}
+     * @param accountType     the ADV account type from the signed identity, or {@code null}
+     *
+     * @implNote WAWebAdvHandlerApi.handleADVDeviceUpdateForMessage: delegates to
+     * WAWebHandleAdvForMessageApi.handleADVDeviceUpdateForMessage which checks rawId, timestamp,
+     * keyIndex assertions, retrieves the device record, determines if primary identity changed,
+     * and dispatches to handleListReset or handleNoListReset.
+     */
+    public void handleADVDeviceUpdateForMessage(
+            Jid deviceJid,
+            String rawId,
+            long timestamp,
+            int keyIndex,
+            byte[] identityKey,
+            ADVEncryptionType accountType
+    ) {
+        // WAWebHandleAdvForMessageApi: assertions
+        Objects.requireNonNull(rawId, "rawId cannot be null");
+
+        // WAWebHandleAdvForMessageApi: device must NOT be primary
+        if (deviceJid.device() == DeviceConstants.PRIMARY_DEVICE_ID) {
+            throw new IllegalArgumentException(
+                    "handleADVDeviceUpdateForMessage: device must not be primary: " + deviceJid);
+        }
+
+        // WAWebHandleAdvForMessageApi: get existing device record
+        var userJid = deviceJid.toUserJid();
+        var existingRecord = store.findDeviceList(userJid).orElse(null);
+
+        // WAWebHandleAdvForMessageApi: get stored identity key for comparison
+        var storedIdentityKey = store.findIdentityByAddress(userJid.toSignalAddress())
+                .map(SignalIdentityPublicKey::toEncodedPoint)
+                .orElse(null);
+
+        // WAWebHandleAdvForMessageApi: check if this is a new primary identity
+        // isNewPrimaryIdentity = identityKey == null || (storedIdentityKey != null && !bufferEqual(identityKey, storedIdentityKey))
+        var isNewPrimaryIdentity = identityKey == null
+                || (storedIdentityKey != null && !Arrays.equals(identityKey, storedIdentityKey));
+
+        // WAWebHandleAdvForMessageApi: check existing record timestamp
+        if (existingRecord != null && !existingRecord.deleted()
+                && existingRecord.timestamp() != null
+                && timestamp < existingRecord.timestamp().getEpochSecond()) {
+            // WAWebHandleAdvKeyIndexResultApi: r < l.timestamp => return null
+            return;
+        }
+
+        var lastADVCheckTime = store.lastAdvCheckTime().orElse(null);
+
+        // WAWebHandleAdvForMessageApi: dispatch to list reset or no-list-reset
+        // if (!h || h.deleted || h.rawId !== m || isNewPrimaryIdentity) => handleListReset
+        // else => handleNoListReset
+        if (existingRecord == null || existingRecord.deleted()
+                || !rawId.equals(existingRecord.rawId()) || isNewPrimaryIdentity) {
+            // WAWebHandleAdvListResetApi.handleListReset: full reset path
+            LOGGER.log(System.Logger.Level.INFO,
+                    "ADV device update for message: list reset for {0} (rawId={1}, isNewPrimary={2})",
+                    userJid, rawId, isNewPrimaryIdentity);
+
+            // WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: cleanup existing sessions
+            if (existingRecord != null && !existingRecord.deleted()) {
+                cleanupAllSessionsForUser(userJid, existingRecord);
+            }
+
+            // WAWebHandleAdvListResetApi: create device list with single companion device
+            var devices = List.of(
+                    DeviceInfo.ofE2EE(DeviceConstants.PRIMARY_DEVICE_ID, 0),
+                    DeviceInfo.ofE2EE(deviceJid.device(), keyIndex)
+            );
+
+            // WAWebHandleAdvListResetApi: compute timestamp
+            Instant listTimestamp;
+            if (existingRecord != null && existingRecord.timestamp() != null) {
+                listTimestamp = existingRecord.timestamp();
+            } else {
+                var expirationDays = abPropsService.getInt(ABProp.NUM_DAYS_KEY_INDEX_LIST_EXPIRATION);
+                var pastSeconds = (expirationDays - 1) * 24 * 60 * 60L;
+                listTimestamp = Instant.now().minusSeconds(pastSeconds);
+            }
+
+            var newList = new DeviceListBuilder()
+                    .userJid(userJid)
+                    .devices(devices)
+                    .timestamp(listTimestamp)
+                    .rawId(rawId)
+                    .deleted(false)
+                    .advAccountType(accountType)
+                    .build();
+            store.addDeviceList(newList);
+
+            // WAWebHandleAdvNoListResetApi: save identity key
+            if (storedIdentityKey != null && isNewPrimaryIdentity) {
+                try {
+                    store.saveIdentity(
+                            userJid.toSignalAddress(),
+                            SignalIdentityPublicKey.ofDirect(storedIdentityKey)
+                    );
+                } catch (Exception e) {
+                    LOGGER.log(System.Logger.Level.WARNING,
+                            "Failed to save identity for {0}: {1}", userJid, e.getMessage());
+                }
+            }
+
+            store.markKeyRotation(userJid);
+        } else {
+            // WAWebHandleAdvNoListResetApi.handleNoListReset: incremental update
+            var existingDevices = new LinkedHashMap<Integer, DeviceInfo>();
+            for (var device : existingRecord.devices()) {
+                existingDevices.put(device.id(), device);
+            }
+
+            // WAWebHandleAdvNoListResetApi: out-of-order timestamp validation
+            var cachedValidIndexes = existingRecord.validIndexes();
+            if (!cachedValidIndexes.isEmpty()
+                    && existingRecord.timestamp().getEpochSecond() >= timestamp
+                    && !cachedValidIndexes.contains(keyIndex)) {
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "handleADVDeviceIdentity:handleNoListReset: out-of-order timestamp detected " +
+                                "for {0}: incomingTs={1}, cachedTs={2}, keyIndex={3}, validIndexes={4}",
+                        userJid, timestamp, existingRecord.timestamp(), keyIndex, cachedValidIndexes);
+                throw new IllegalStateException(
+                        "handleADVDeviceIdentity:handleNoListReset: out-of-order timestamp detected");
+            }
+
+            // WAWebHandleAdvNoListResetApi: update if keyIndex changed
+            var currentKeyIndex = existingDevices.containsKey(deviceJid.device())
+                    ? existingDevices.get(deviceJid.device()).keyIndex()
+                    : -1;
+            if (currentKeyIndex != keyIndex) {
+                existingDevices.put(deviceJid.device(), DeviceInfo.ofE2EE(deviceJid.device(), keyIndex));
+
+                var updatedDevices = new ArrayList<>(existingDevices.values());
+
+                // WAWebAdvExpectedTsApi.computeExpectedTsForDeviceRecord
+                var computedExpectedTs = DeviceExpectedTsUtils.computeExpectedTimestampForDeviceRecord(
+                        Instant.ofEpochSecond(timestamp), existingRecord, lastADVCheckTime);
+
+                var updatedList = new DeviceListBuilder()
+                        .userJid(userJid)
+                        .devices(updatedDevices)
+                        .timestamp(existingRecord.timestamp())
+                        .rawId(existingRecord.rawId())
+                        .deleted(false)
+                        .advAccountType(accountType != null ? accountType : existingRecord.advAccountType())
+                        .expectedTimestamp(computedExpectedTs.expectedTimestamp().orElse(null))
+                        .expectedTimestampLastDeviceJobTimestamp(computedExpectedTs.expectedTimestampLastDeviceJobTimestamp().orElse(null))
+                        .expectedTimestampUpdateTimestamp(computedExpectedTs.expectedTimestampUpdateTimestamp().orElse(null))
+                        .currentIndex(existingRecord.currentIndex())
+                        .validIndexes(existingRecord.validIndexes())
+                        .build();
+
+                // WAWebIdentityUpdateDeviceTableApi.bulkApplyDeviceUpdate: detect changes and store
+                var changes = updatedList.mismatch(existingRecord);
+                if (!changes.identityChangedDevices().isEmpty()) {
+                    for (var changedDevice : changes.identityChangedDevices()) {
+                        store.markIdentityChange(changedDevice);
+                        store.cleanupSignalSessions(changedDevice);
+                    }
+                }
+                store.addDeviceList(updatedList);
+                store.markKeyRotation(userJid);
+
+                // WAWebHandleAdvNoListResetApi: save identity key for the companion device
+                if (identityKey != null) {
+                    try {
+                        store.saveIdentity(
+                                deviceJid.toSignalAddress(),
+                                SignalIdentityPublicKey.ofDirect(identityKey)
+                        );
+                    } catch (Exception e) {
+                        LOGGER.log(System.Logger.Level.WARNING,
+                                "Failed to save identity for {0}: {1}", deviceJid, e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Extracts and validates a local device identity from a pairing response.
      *
      * @param deviceIdentityNode the device identity node from pairing response
      * @return the validated signed device identity with generated device signature
      * @throws IllegalStateException          if required store values are missing
      *
-     * @apiNote WAWebHandlePairSuccess: validates SignedDeviceIdentityHMAC during pairing,
+     * @implNote WAWebHandlePairSuccess: validates SignedDeviceIdentityHMAC during pairing,
      * verifies account signature, and generates device signature using local identity key.
      * Uses advSecretKey (not companion public key) for HMAC verification.
      */

@@ -14,7 +14,7 @@ import java.util.Optional;
  * This class captures the parsed attributes and raw ciphertext of one such
  * node.
  *
- * @apiNote WAWebHandleMsgParser.incomingMsgParser: maps each {@code <enc>}
+ * @implNote WAWebHandleMsgParser.incomingMsgParser: maps each {@code <enc>}
  * child to an object with e2eType, encMediaType, ciphertext, retryCount,
  * and hideFail fields.
  */

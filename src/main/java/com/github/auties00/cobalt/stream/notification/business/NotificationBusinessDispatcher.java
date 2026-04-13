@@ -24,7 +24,7 @@ public final class NotificationBusinessDispatcher implements SocketStream.Handle
         }
 
         switch (type) {
-            case "business" -> businessHandler.handle(node);
+            case "business", "digital_commerce_subscription", "fb:update" -> businessHandler.handle(node);
             case "mex" -> mexHandler.handle(node);
             case "pay" -> paymentHandler.handle(node);
             default -> {

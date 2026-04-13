@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.*;
 import com.github.auties00.cobalt.message.send.token.ContentBindingToken;
+import com.github.auties00.cobalt.model.chat.ChatMessageContextInfoBuilder;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
@@ -23,6 +24,7 @@ import com.github.auties00.cobalt.model.message.event.EncEventResponseMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
+import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -129,13 +131,13 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
             // WAWebSendGroupMsgJob.encryptAndSendGroupMsg: enqueue per group to
             // serialise sender-key encryption (monotonic counter requirement)
             return enqueue(groupJid.toString(), () -> {
-                var container = messageInfo.message();
+                var rawContainer = messageInfo.message();
 
                 // WAWebSendGroupSkmsgJob: resolve group metadata for addressing mode
                 var chatMetadata = store.findChatMetadata(groupJid).orElse(null);
                 var isCag = chatMetadata instanceof GroupMetadata gm
                         && gm.isDefaultSubgroup();
-                var isCagAddon = isCag && isCagAddonMessage(container);
+                var isCagAddon = isCag && isCagAddonMessage(rawContainer);
                 var isLidAddressingMode = (chatMetadata != null && chatMetadata.isLidAddressingMode())
                         || isCagAddon;
                 var addressingMode = isLidAddressingMode ? "lid" : "pn";
@@ -145,7 +147,9 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 var senderJid = isLidAddressingMode ? selfLidOrPn() : requireSelfJid();
 
                 // WAWebSendGroupSkmsgJob: get group fanout (all devices + phash)
-                var fanout = deviceService.getGroupFanout(groupJid);
+                // WAWebSendGroupSkmsgJob.encryptAndSendSenderKeyMsg: phash includes
+                // sender's own device JID via [].concat(M, [F])
+                var fanout = deviceService.getGroupFanout(groupJid, senderJid);
                 var allDevices = fanout.devices();
                 var phash = fanout.phash();
 
@@ -162,14 +166,28 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 }
 
                 // WAWebSendGroupMsgJob.filterIncorrectlyAddressedDevices:
-                // filter devices by addressing mode for LID groups
+                // filter devices by addressing mode - LID groups keep only
+                // LID-addressed devices, non-LID groups keep only
+                // PN-addressed devices
                 if (isLidAddressingMode) {
                     skDistribDevices.removeIf(d -> !d.hasLidServer());
                     skExistingDevices.removeIf(d -> !d.hasLidServer());
-                } else if (isCag) {
+                } else {
+                    // WAWebSendGroupMsgJob.filterIncorrectlyAddressedDevices:
+                    // non-LID groups (including non-CAG) filter out LID devices
                     skDistribDevices.removeIf(Jid::hasLidServer);
                     skExistingDevices.removeIf(Jid::hasLidServer);
                 }
+
+                // WAWebSendGroupMsgJob.encryptAndSendGroupMsg: apply CAPI flag
+                // WAWebE2EProtoGenerator.updateGroupMsgProtoWithCapiFlag:
+                // sets capiCreatedGroup=true on messageContextInfo when group
+                // has CAPI capabilities
+                var isCapiGroup = chatMetadata instanceof GroupMetadata gm2
+                        && gm2.hasCapi();
+                var container = isCapiGroup
+                        ? applyCapiFlag(rawContainer)
+                        : rawContainer;
 
                 // WAWebSendGroupSkmsgJob: rotate sender key if needed
                 // (triggered when participants are removed from the group)
@@ -189,8 +207,11 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                         .toList();
                 var contentBindings = generateContentBindings(messageInfo, participantUserJids);
 
-                // WAWebSendGroupSkmsgJob: create receipt records for all devices
-                store.createOrMergeReceiptRecords(messageInfo.key().id().orElseThrow(), allDevices);
+                // WAWebSendGroupSkmsgJob: create receipt records for
+                // all filtered SK devices (skList + skDistribList)
+                var allSkDevices = Stream.concat(skDistribDevices.stream(), skExistingDevices.stream())
+                        .toList();
+                store.createOrMergeReceiptRecords(messageInfo.key().id().orElseThrow(), allSkDevices);
 
                 // WAWebSendGroupSkmsgJob: get sender key bytes and encrypt SK distribution
                 // WAWebGetGroupKeyDistributionMsg: populates ICDC per device
@@ -199,16 +220,30 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                         ? List.<MessageEncryptedPayload>of()
                         : senderKeyDistribution.encrypt(groupJid, senderKeyBytes, skDistribDevices);
 
+                // WAWebSendGroupSkmsgJob: bot feedback messages skip SKMSG
+                // encryption and phash (delivered only via <bot> node)
+                var isBotFeedback = container.content() instanceof ProtocolMessage pm
+                        && pm.type().orElse(null) == ProtocolMessage.Type.BOT_FEEDBACK_MESSAGE;
+
                 // WAWebEncryptMsgProtobuf.encryptMsgSenderKey: encrypt with sender key
-                var plaintext = MessageContainerSpec.encode(container);
-                var skmsgPayload = encryption.encryptForGroup(groupJid, senderJid, plaintext);
+                // WAWebSendGroupSkmsgJob: E = g ? null : enc(...) — skip for bot feedback
+                byte[] skmsgCiphertext;
+                if (isBotFeedback) {
+                    skmsgCiphertext = null;
+                } else {
+                    var plaintext = MessageContainerSpec.encode(container);
+                    skmsgCiphertext = encryption.encryptForGroup(groupJid, senderJid, plaintext)
+                            .ciphertext();
+                }
 
                 // WAWebSendGroupSkmsgJob: build participants node
                 // SK distribution → <to> with <enc> + optional <content_binding>
                 // No distribution but bindings → <to> with just <content_binding>
+                // WAWebSendGroupSkmsgJob: for bot feedback, skip SK distribution
+                // participants but keep content binding participants if applicable
                 var decryptFail = resolveDecryptFail(container);
                 Node participantsNode;
-                if (!skDistPayloads.isEmpty()) {
+                if (!isBotFeedback && !skDistPayloads.isEmpty()) {
                     participantsNode = ParticipantsStanza.buildSenderKeyDistribution(
                             skDistPayloads, contentBindings, decryptFail);
                 } else if (contentBindings != null) {
@@ -249,12 +284,14 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 var botNode = openBotNode != null
                         ? openBotNode
                         : botStanza.build(messageInfo, groupJid);
+                // WAWebSendGroupSkmsgJob: phash is dropped for bot feedback messages
+                var stanzaPhash = isBotFeedback ? null : phash;
                 var stanza = GroupSkmsgFanoutStanza.build(
                         messageInfo.key().id().orElseThrow(),
                         groupJid,
                         resolveStanzaType(container),
-                        phash,
-                        skmsgPayload.ciphertext(),
+                        stanzaPhash,
+                        skmsgCiphertext,
                         mediaType,
                         decryptFail,
                         resolveEditAttribute(container),
@@ -267,6 +304,10 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                         reportingStanza.build(messageInfo, requireSelfJid(), groupJid),
                         SenderContentBindingStanza.build(senderJid, contentBindings)
                 );
+
+                // WAWebSendMsgCommonApi.updateIdentityRange: track identity keys
+                // for all participant devices (skList + skDistribList)
+                store.updateIdentityRange(allSkDevices);
 
                 flushStore();
                 var ackNode = client.sendNode(stanza);
@@ -300,12 +341,13 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
                 }
 
                 // WAWebSendGroupSkmsgJob: handle phash mismatch → resend as group direct
+                // WAWebResendGroupMsg: uses the filtered SK device list (oldList = M)
                 var serverPhash = ack.phash().orElse(null);
                 if (serverPhash != null && !serverPhash.equals(phash)) {
                     LOGGER.log(System.Logger.Level.DEBUG,
                             "encryptAndSendSenderKeyMsg: phash mismatch for {0}, server: {1}",
                             messageInfo.key().id(), serverPhash);
-                    resendAsGroupDirect(groupJid, messageInfo, allDevices, addressingMode);
+                    resendAsGroupDirect(groupJid, messageInfo, allSkDevices, addressingMode);
                 }
 
                 // WAWebSendGroupSkmsgJob: handle addressing mode mismatch
@@ -325,6 +367,151 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException("Failed to send group message to " + groupJid, e);
+        }
+    }
+
+    /**
+     * Sends a standalone sender-key distribution to the group without
+     * any message content.
+     *
+     * <p>This is used to pre-distribute sender keys to group participants
+     * that do not yet possess them, independent of sending an actual
+     * message.  The stanza carries only the per-device encrypted
+     * {@code SenderKeyDistributionMessage} payloads with
+     * {@code device_fanout="false"} and {@code type="text"}.
+     *
+     * <p>If all devices already possess the sender key (the distribution
+     * list is empty), this method returns immediately without sending
+     * anything.
+     *
+     * @param groupJid the group JID to distribute keys for
+     * @param msgId    the message ID to use for the distribution stanza
+     * @throws NullPointerException if any argument is {@code null}
+     *
+     * @implNote WAWebSendMsgJob.encryptAndSendKeyDistributionMsg: validates
+     * {@code id} and {@code remote}, then delegates to
+     * WAWebSendGroupKeyDistributionMsgJob.encryptAndSendGroupKeyDistributionMsg
+     * for group JIDs.
+     * WAWebSendGroupKeyDistributionMsgJob.encryptAndSendGroupKeyDistributionMsg:
+     * gets participant table, resolves SK distribution list, rotates key
+     * if needed, encrypts distribution messages, builds a minimal stanza
+     * with {@code device_fanout="false"}, sends and marks SK as distributed.
+     */
+    void sendKeyDistribution(Jid groupJid, String msgId) {
+        Objects.requireNonNull(groupJid, "groupJid");
+        Objects.requireNonNull(msgId, "msgId");
+
+        // WAWebSendMsgJob.encryptAndSendKeyDistributionMsg: wait for offline delivery
+        waitForOfflineDelivery();
+
+        try {
+            // WAWebSendGroupKeyDistributionMsgJob: enqueue per group
+            enqueue(groupJid.toString(), () -> {
+                // WAWebSendGroupKeyDistributionMsgJob: get group fanout
+                // WAWebSendGroupKeyDistributionMsgJob: phash always uses
+                // getMeDevicePnOrThrow_DO_NOT_USE() (PN device JID)
+                var fanout = deviceService.getGroupFanout(groupJid, requireSelfJid());
+                var allDevices = fanout.devices();
+
+                // WAWebSendGroupKeyDistributionMsgJob: split into SK distribution and existing
+                // WAWebApiParticipantStore.getGroupSenderKeyListFromParticipantRecord
+                var skDistribDevices = new ArrayList<Jid>();
+                var skExistingDevices = new ArrayList<Jid>();
+                for (var device : allDevices) {
+                    if (store.hasSenderKeyDistributed(groupJid, device)) {
+                        skExistingDevices.add(device);
+                    } else {
+                        skDistribDevices.add(device);
+                    }
+                }
+
+                // WAWebSendGroupKeyDistributionMsgJob: if skDistribList is empty, skip
+                if (skDistribDevices.isEmpty()) {
+                    LOGGER.log(System.Logger.Level.DEBUG,
+                            "encryptAndSendGroupKeyDistributionMsg: skip sending {0}: " +
+                                    "sender key distribution list is empty", groupJid);
+                    return null;
+                }
+
+                // WAWebSendGroupKeyDistributionMsgJob: create receipt records
+                var allSkDevices = Stream.concat(skDistribDevices.stream(), skExistingDevices.stream())
+                        .toList();
+                store.createOrMergeReceiptRecords(msgId, allSkDevices);
+
+                // WAWebSendGroupKeyDistributionMsgJob: determine sender JID
+                // from addressing mode (all LID → getMeDeviceLid, else getMeDevicePn)
+                var allLid = skDistribDevices.stream().allMatch(Jid::hasLidServer);
+                var senderJid = allLid ? selfLidOrPn() : requireSelfJid();
+
+                // WAWebSendGroupKeyDistributionMsgJob: rotate sender key if needed
+                var rotateKey = store.clearKeyRotation(groupJid);
+                if (rotateKey) {
+                    encryption.rotateSenderKey(groupJid, senderJid);
+                }
+
+                // WAWebSendGroupKeyDistributionMsgJob: get sender key info
+                // and encrypt distribution messages
+                var senderKeyBytes = encryption.getSenderKeyBytes(groupJid, senderJid);
+                var skDistPayloads = senderKeyDistribution.encrypt(
+                        groupJid, senderKeyBytes, skDistribDevices);
+
+                // WAWebSendGroupKeyDistributionMsgJob: compute phash
+                var phash = fanout.phash();
+
+                // WAWebSendGroupKeyDistributionMsgJob: build participants node
+                Node participantsNode = null;
+                if (!skDistPayloads.isEmpty()) {
+                    participantsNode = ParticipantsStanza.buildSenderKeyDistribution(
+                            skDistPayloads, null, "hide");
+                }
+
+                // WAWebSendGroupKeyDistributionMsgJob: build identity node
+                var needsIdentity = ParticipantsStanza.requiresIdentityNode(skDistPayloads);
+                var identityNode = needsIdentity ? buildIdentityNode() : null;
+
+                // WAWebSendGroupKeyDistributionMsgJob: build stanza
+                // type="text", device_fanout="false", decrypt-fail not set on stanza
+                var metaNode = new NodeBuilder()
+                        .description("meta")
+                        .attribute("appdata", "default")
+                        .build();
+                var encNode = new NodeBuilder()
+                        .description("enc")
+                        .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
+                        .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
+                        .attribute("decrypt-fail", "hide")
+                        .build();
+                var stanza = new NodeBuilder()
+                        .description("message")
+                        .attribute("id", msgId)
+                        .attribute("to", groupJid)
+                        .attribute("phash", phash)
+                        .attribute("type", "text")
+                        .attribute("device_fanout", "false")
+                        .content(metaNode, encNode, participantsNode, identityNode);
+
+                // WAWebSendGroupKeyDistributionMsgJob: flush and send
+                flushStore();
+                var ackNode = client.sendNode(stanza);
+                var ack = AckParser.parse(ackNode);
+
+                // WAWebSendGroupKeyDistributionMsgJob: if error, throw
+                if (ack.error().isPresent()) {
+                    throw new WhatsAppMessageException.Send.Unknown(
+                            "encryptAndSendSenderKeyMsg: Invalid ack from server for " + groupJid, null);
+                }
+
+                // WAWebSendGroupKeyDistributionMsgJob: mark SK as distributed
+                for (var device : skDistribDevices) {
+                    store.markSenderKeyDistributed(groupJid, device);
+                }
+
+                return ack;
+            });
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to send key distribution to " + groupJid, e);
         }
     }
 
@@ -376,6 +563,34 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
+     * Returns a copy of the container with {@code capiCreatedGroup = true}
+     * set on the message context info.
+     *
+     * <p>If the container already has a message context info, the flag
+     * is set in place on the mutable context info object.  Otherwise,
+     * a new context info is created with only the flag set.
+     *
+     * @param container the original message container
+     * @return the container with the CAPI flag applied
+     *
+     * @implNote WAWebE2EProtoGenerator.updateGroupMsgProtoWithCapiFlag:
+     * deep-clones the proto and sets
+     * {@code messageContextInfo.capiCreatedGroup = true}.
+     */
+    private static MessageContainer applyCapiFlag(MessageContainer container) {
+        var existingCtxInfo = container.messageContextInfo().orElse(null);
+        if (existingCtxInfo != null) {
+            existingCtxInfo.setCapiCreatedGroup(true);
+            return container;
+        }
+
+        return container.withMessageContextInfo(
+                new ChatMessageContextInfoBuilder()
+                        .capiCreatedGroup(true)
+                        .build());
+    }
+
+    /**
      * Determines whether a message is a CAG addon type that should be
      * sent to LID-addressed participants.
      *
@@ -409,7 +624,9 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
             String addressingMode
     ) {
         // WAWebResendGroupMsg: re-query group, get refreshed fanout
-        var refreshedFanout = deviceService.getGroupFanout(groupJid);
+        // Sender JID for phash: resend path does not emit phash in
+        // the stanza, so the exact sender is not critical here
+        var refreshedFanout = deviceService.getGroupFanout(groupJid, requireSelfJid());
 
         // WAWebResendGroupMsg: delta = refreshed - original
         var originalJids = originalDevices.stream()

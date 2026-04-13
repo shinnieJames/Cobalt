@@ -24,7 +24,7 @@ public final class StorePathUtils {
     @SuppressWarnings({"ConstantValue"}) // I prefer the readability like this
     public static Optional<Path> getLatestSessionDirectory(WhatsAppClientType clientType, Path baseDirectory) throws IOException {
         var sessionsDirectory = getHomeDirectory(clientType, baseDirectory);
-        try(var walker = Files.walk(sessionsDirectory, 0)) {
+        try(var walker = Files.walk(sessionsDirectory, 0).skip(1)) {
             return walker.reduce((first, second) -> {
                 var firstTimestamp = getLastModifiedTime(first);
                 var secondTimestamp = getLastModifiedTime(second);

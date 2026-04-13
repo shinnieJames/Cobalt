@@ -43,16 +43,104 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.zip.GZIPInputStream;
 
+/**
+ * Handles incoming {@code <message>} stanzas from the WhatsApp server.
+ *
+ * <p>This is the top-level entry point for all incoming message stanzas.
+ * It routes messages through three paths:
+ * <ul>
+ *   <li><b>Media notify:</b> stanzas with {@code type="medianotify"} are
+ *       acknowledged immediately without parsing or decryption.</li>
+ *   <li><b>Newsletter:</b> stanzas from newsletter JIDs are routed to
+ *       a separate processing path that does not send receipts.</li>
+ *   <li><b>Normal messages:</b> parsed, decrypted via {@link MessageService},
+ *       then receipts (delivery, retry, nack, or bot ack) are sent based
+ *       on the processing result.</li>
+ * </ul>
+ *
+ * <p>After successful processing, the handler stores the message, handles
+ * protocol messages (key shares, key requests, snapshot recovery, LID
+ * migration), resolves orphan payment notifications, and notifies
+ * registered listeners.
+ *
+ * @implNote WAWebHandleMsg.default: the main entry point for incoming
+ * message stanzas.  WAWebCommsHandleWorkerCompatibleStanza: routes
+ * newsletter messages to WAWebHandleNewsletterMsg before WAWebHandleMsg.
+ * WAWebCommsHandleMessagingStanza.handleMessagingStanza: wraps
+ * WAWebHandleMsg with error handling.
+ */
 public final class MessageStreamHandler implements SocketStream.Handler {
+    /**
+     * Logger for this handler.
+     *
+     * @implNote NO_WA_BASIS
+     */
     private static final System.Logger LOGGER = System.getLogger(MessageStreamHandler.class.getName());
 
+    /**
+     * The WhatsApp client used for sending stanzas, accessing the store,
+     * and notifying listeners.
+     *
+     * @implNote ADAPTED: constructor-based DI instead of module-level imports
+     */
     private final WhatsAppClient whatsapp;
+
+    /**
+     * The message service that coordinates parsing, decryption, and
+     * processing of incoming message payloads.
+     *
+     * @implNote ADAPTED: WAWebMsgProcessingDecryptApi.decryptE2EPayload,
+     * WAWebHandleMsgProcess.processDecryptedMessageProto
+     */
     private final MessageService messageService;
+
+    /**
+     * The receipt handler that sends delivery, retry, nack, and bot ack
+     * receipts after message processing.
+     *
+     * @implNote WAWebHandleMsgSendReceipt.sendReceipt
+     */
     private final MessageReceiptHandler receiptHandler;
+
+    /**
+     * The snapshot recovery service for handling syncd snapshot fatal
+     * recovery responses in peer data operation messages.
+     *
+     * @implNote WAWebNonMessageDataRequestHandler.handlePeerDataOperationRequestResponse
+     */
     private final SnapshotRecoveryService snapshotRecoveryService;
+
+    /**
+     * The sync key rotation service for handling app state sync key
+     * shares and requests in protocol messages.
+     *
+     * @implNote WAWebKeyManagementHandleKeyShareApi, WAWebSyncdHandleKeyShare
+     */
     private final SyncKeyRotationService syncKeyRotationService;
+
+    /**
+     * The LID migration service for processing LID migration mapping
+     * sync payloads in protocol messages.
+     *
+     * @implNote WAWebProcessMsgInfoForLid.maybeProcesMsgInfoForLid
+     */
     private final LidMigrationService lidMigrationService;
 
+    /**
+     * Constructs a new message stream handler with the specified
+     * dependencies.
+     *
+     * @param whatsapp                the WhatsApp client
+     * @param messageService          the message processing service
+     * @param snapshotRecoveryService the snapshot recovery service
+     * @param webAppStateService      the web app state service (provides
+     *                                the sync key rotation service)
+     * @param lidMigrationService     the LID migration service
+     * @implNote ADAPTED: constructor-based DI instead of module-level
+     * imports.  The handler only depends on the key rotation service
+     * exposed by WebAppStateService; the parameter type is kept as
+     * WebAppStateService to make the dependency direction explicit.
+     */
     public MessageStreamHandler(
             WhatsAppClient whatsapp,
             MessageService messageService,
@@ -64,15 +152,29 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         this.messageService = Objects.requireNonNull(messageService, "messageService cannot be null");
         this.receiptHandler = new MessageReceiptHandler(whatsapp);
         this.snapshotRecoveryService = Objects.requireNonNull(snapshotRecoveryService, "snapshotRecoveryService cannot be null");
-        // The handler only depends on the key rotation service exposed by WebAppStateService;
-        // keep the parameter type as WebAppStateService to make the dependency direction explicit
-        // and avoid leaking ownership of SyncKeyRotationService outside of WebAppStateService.
         this.syncKeyRotationService = Objects.requireNonNull(webAppStateService, "webAppStateService cannot be null").syncKeyRotationService();
         this.lidMigrationService = Objects.requireNonNull(lidMigrationService, "lidMigrationService cannot be null");
     }
 
+    /**
+     * Handles an incoming {@code <message>} stanza.
+     *
+     * <p>Dispatches the stanza through the appropriate processing path
+     * based on the message type and sender, then sends the appropriate
+     * receipt (delivery, retry, nack, or bot ack).
+     *
+     * @param node the raw {@code <message>} stanza node
+     * @implNote WAWebHandleMsg.default: the main entry point function
+     * {@code y(t)} that parses, queues, and processes incoming messages.
+     * WAWebCommsHandleWorkerCompatibleStanza: routes newsletters before
+     * this handler.
+     */
     @Override
     public void handle(Node node) {
+        // ADAPTED: WAWebHandleMsgSendReceipt.sendReceipt: for medianotify
+        // type with SUCCESS result, sends ack instead of delivery receipt.
+        // Cobalt short-circuits here since medianotify stanzas don't carry
+        // actual message content requiring decryption.
         if ("medianotify".equals(node.getAttributeAsString("type", null))) {
             sendAck(node);
             return;
@@ -80,7 +182,8 @@ public final class MessageStreamHandler implements SocketStream.Handler {
 
         var from = node.getAttributeAsJid("from").orElse(null);
         if (from == null) {
-            sendNack(node, "400");
+            // WAWebCreateNackFromStanza.createNackFromStanza: returns "NO_ACK" when
+            // from is null, meaning no response is sent to the server
             return;
         }
 
@@ -96,7 +199,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Failed to parse incoming message stanza: {0}",
                     exception.getMessage());
-            sendNack(node, "400");
+            sendNack(node, "487"); // WAWebCreateNackFromStanza.NackReason.ParsingError
             return;
         }
 
@@ -141,10 +244,23 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                     "Incoming message {0} failed unexpectedly: {1}",
                     stanza.id(),
                     exception.getMessage());
-            sendNack(node, "500");
+            sendNack(node, "500"); // WAWebCreateNackFromStanza.NackReason.UnhandledError
         }
     }
 
+    /**
+     * Handles a newsletter message stanza separately from normal E2E
+     * messages.
+     *
+     * <p>Newsletter messages are not end-to-end encrypted and do not
+     * require receipts.  They are processed, stored, and listeners
+     * are notified.
+     *
+     * @param node the raw newsletter message stanza
+     * @implNote ADAPTED: WAWebCommsHandleWorkerCompatibleStanza routes
+     * newsletter messages to WAWebHandleNewsletterMsg before
+     * WAWebHandleMsg.  Cobalt combines this routing here.
+     */
     private void handleNewsletterMessage(Node node) {
         try {
             var info = messageService.process(node);
@@ -163,11 +279,40 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Handles a message decryption failure by sending the appropriate
+     * receipt based on the exception type.
+     *
+     * <p>The receipt type is determined by the exception:
+     * <ul>
+     *   <li>{@link WhatsAppMessageException.Receive.HsmMismatch} ->
+     *       no receipt sent (WA Web silently drops)</li>
+     *   <li>Exceptions with an error code -> NACK receipt</li>
+     *   <li>Retryable exceptions -> retry receipt</li>
+     *   <li>All other exceptions -> delivery receipt (or bot ack)</li>
+     * </ul>
+     *
+     * @param stanza    the parsed incoming stanza
+     * @param exception the decryption exception
+     * @implNote WAWebHandleMsgSendReceipt.sendReceipt: routes to the
+     * appropriate receipt based on E2EProcessResult.  HSM_MISMATCH
+     * sends no receipt.  RETRY sends retry receipt.  PARSE_ERROR and
+     * PARSE_VALIDATION_ERROR send nack.  SUCCESS and
+     * SIGNAL_OLD_COUNTER_ERROR send delivery receipt.
+     */
     private void handleReceiveFailure(
             MessageReceiveStanza stanza,
             WhatsAppMessageException.Receive exception
     ) {
         if (!whatsapp.store().automaticMessageReceipts()) {
+            return;
+        }
+
+        // WAWebHandleMsgSendReceipt.sendReceipt: HSM_MISMATCH -> no receipt sent at all
+        if (exception instanceof WhatsAppMessageException.Receive.HsmMismatch) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "HSM mismatch for message {0}, no receipt sent", // WAWebHandleMsgSendReceipt.sendReceipt
+                    stanza.id());
             return;
         }
 
@@ -193,6 +338,16 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Sends a plain acknowledgment for the given message stanza.
+     *
+     * <p>Used for stanzas that do not require full message processing
+     * (e.g. {@code medianotify} type messages).
+     *
+     * @param node the raw message stanza to acknowledge
+     * @implNote WAWebHandleMsgSendAck.sendAck: sends an ack with
+     * class="message" and the original type/participant attributes.
+     */
     private void sendAck(Node node) {
         if (!whatsapp.store().automaticMessageReceipts()) {
             return;
@@ -215,6 +370,17 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         whatsapp.sendNodeWithNoResponse(ack);
     }
 
+    /**
+     * Sends a negative acknowledgment (NACK) for the given message stanza.
+     *
+     * <p>Includes an integer error code matching the
+     * {@code WAWebCreateNackFromStanza.NackReason} constants.
+     *
+     * @param node      the raw message stanza to nack
+     * @param errorCode the string representation of the error code
+     * @implNote WAWebCreateNackFromStanza.createNackFromStanza: builds
+     * an ack node with the error attribute set to the NackReason value.
+     */
     private void sendNack(Node node, String errorCode) {
         var id = node.getAttributeAsString("id", null);
         var from = node.getAttributeAsJid("from").orElse(null);
@@ -234,6 +400,15 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         whatsapp.sendNodeWithNoResponse(ack);
     }
 
+    /**
+     * Parses a string error code into an integer, defaulting to 500
+     * ({@code NackReason.UnhandledError}) if parsing fails.
+     *
+     * @param value the string error code
+     * @return the parsed integer error code
+     * @implNote WAWebCreateNackFromStanza.NackReason: error codes are
+     * integer constants (e.g. ParsingError=487, UnhandledError=500).
+     */
     private static int parseErrorCode(String value) {
         try {
             return Integer.parseInt(value);
@@ -242,6 +417,18 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Stores the processed message info in the appropriate store
+     * collection (newsletter, status, or chat).
+     *
+     * <p>For chat messages, also updates the chat's last message
+     * timestamp, conversation timestamp, and unread count.
+     *
+     * @param info the processed message info to store
+     * @implNote ADAPTED: WAWebHandleMsgProcess.processDecryptedMessageProto
+     * stores messages via WAWebModelStorageInitialize; Cobalt stores
+     * directly in AbstractWhatsAppStore.
+     */
     private void storeIncomingMessage(MessageInfo info) {
         switch (info) {
             case NewsletterMessageInfo newsletterInfo -> {
@@ -284,6 +471,19 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Notifies all registered listeners about a received message.
+     *
+     * <p>Each listener is invoked on its own virtual thread.  Status
+     * messages trigger an additional {@code onNewStatus} callback.
+     * If the message quotes another message, {@code onMessageReply}
+     * is also invoked.
+     *
+     * @param info          the received message info
+     * @param quotedMessage the quoted message, if any
+     * @implNote ADAPTED: WAWebBackendEventBus.BackendEventBus: Cobalt
+     * uses listener callbacks instead of event bus dispatch.
+     */
     private void notifyMessageReceived(MessageInfo info, Optional<? extends MessageInfo> quotedMessage) {
         var statusMessage = isStatusMessage(info);
         for (var listener : whatsapp.store().listeners()) {
@@ -297,6 +497,14 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Returns whether the message is a status broadcast message.
+     *
+     * @param info the message info to check
+     * @return {@code true} if the parent JID is the status broadcast account
+     * @implNote WAWebHandleMsg.default: checks
+     * {@code getFrom(x).isStatus() || isGroupStatus === true}.
+     */
     private boolean isStatusMessage(MessageInfo info) {
         return info.key()
                 .parentJid()
@@ -304,6 +512,18 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 .orElse(false);
     }
 
+    /**
+     * Resolves a previously stored orphan payment notification for
+     * the given message, if one exists.
+     *
+     * <p>When a payment transaction notification arrives before the
+     * corresponding message, it is stored as an orphan.  When the
+     * message arrives later, this method matches and resolves it.
+     *
+     * @param info the received message info
+     * @implNote ADAPTED: WAWebHandlePaymentNotification: resolves
+     * orphan payment notifications against incoming messages.
+     */
     private void resolveOrphanPayment(MessageInfo info) {
         if (!(info instanceof ChatMessageInfo chatMessageInfo)) {
             return;
@@ -331,6 +551,16 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         handlePaymentTransaction(transactionNode);
     }
 
+    /**
+     * Processes a payment transaction node by locating the associated
+     * message and updating its payment info.
+     *
+     * <p>If the associated message is not found, the transaction data
+     * is stored as an orphan payment notification for later resolution.
+     *
+     * @param transaction the transaction node containing payment attributes
+     * @implNote ADAPTED: WAWebHandlePaymentNotification.handlePaymentTransaction
+     */
     private void handlePaymentTransaction(Node transaction) {
         var sender = transaction.getAttributeAsJid("sender").orElse(null);
         var receiver = transaction.getAttributeAsJid("receiver").orElse(null);
@@ -377,6 +607,20 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         whatsapp.store().removeOrphanPaymentNotification(messageId);
     }
 
+    /**
+     * Finds the message associated with a payment transaction.
+     *
+     * <p>First attempts a key-based lookup, then falls back to an
+     * ID-based search within the chat.
+     *
+     * @param remote      the remote JID (chat or contact)
+     * @param participant the participant JID for group messages
+     * @param messageId   the message ID to search for
+     * @param fromMe      whether the message was sent by us
+     * @return the matching message info, or {@code null} if not found
+     * @implNote ADAPTED: WAWebHandlePaymentNotification: looks up
+     * messages by key and ID.
+     */
     private MessageInfo findPaymentMessage(Jid remote, Jid participant, String messageId, boolean fromMe) {
         var direct = whatsapp.store()
                 .findMessageByKey(new MessageKeyBuilder()
@@ -395,6 +639,13 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 .orElse(null);
     }
 
+    /**
+     * Creates a new payment info with default unknown status values.
+     *
+     * @return a new {@link PaymentInfo} with unknown status
+     * @implNote ADAPTED: WAWebHandlePaymentNotification: default
+     * payment info initialization.
+     */
     private PaymentInfo newPaymentInfo() {
         return new PaymentInfoBuilder()
                 .status(PaymentInfo.Status.UNKNOWN_STATUS)
@@ -402,7 +653,18 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 .build();
     }
 
+    /**
+     * Maps a payment transaction type and status to a
+     * {@link PaymentInfo.Status} value.
+     *
+     * @param type   the transaction type string
+     * @param status the transaction status string
+     * @param fromMe whether the transaction was initiated by us
+     * @return the mapped payment status
+     * @implNote WAWebPaymentStatusUtils.getPaymentWebStatus
+     */
     private PaymentInfo.Status mapPaymentStatus(String type, String status, boolean fromMe) {
+        // WAWebPaymentStatusUtils.getPaymentWebStatus
         return switch (paymentMessageStatus(type, status, fromMe)) {
             case SEND_PAY_INIT, SEND_PAY_PENDING, RECV_PAY_INIT, RECV_PAY_PENDING, RECV_PAY_RETRY_ON_FAILURE, REQUEST_PAY_INIT -> PaymentInfo.Status.PROCESSING;
             case SEND_PAY_PENDING_RECEIVER, SEND_PAY_FAILURE_RECEIVER -> PaymentInfo.Status.SENT;
@@ -411,14 +673,25 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             case SEND_PAY_SUCCESS, RECV_PAY_SUCCESS, REQUEST_PAY_FULFILLED -> PaymentInfo.Status.COMPLETE;
             case SEND_PAY_FAILURE, SEND_PAY_FAILURE_RISK, SEND_PAY_PENDING_REFUND, SEND_PAY_REFUND_PENDING, SEND_PAY_REFUND_FAILED, SEND_PAY_REFUND_FAILED_PROCESSING, RECV_PAY_FAILURE, REQUEST_PAY_FAILED, REQUEST_PAY_FAILED_RISK -> PaymentInfo.Status.COULD_NOT_COMPLETE;
             case SEND_PAY_REFUNDED -> PaymentInfo.Status.REFUNDED;
-            case RECV_PAY_EXPIRED, REQUEST_PAY_EXPIRED, SEND_PAY_AUTH_CANCELED, SEND_PAY_AUTH_CANCEL_FAILED, SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING, SEND_PAY_EXPIRED -> PaymentInfo.Status.EXPIRED;
+            case RECV_PAY_EXPIRED, REQUEST_PAY_EXPIRED, SEND_PAY_AUTH_CANCELED, SEND_PAY_AUTH_CANCEL_FAILED, SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING -> PaymentInfo.Status.EXPIRED; // WAWebPaymentStatusUtils: SEND_PAY_EXPIRED is NOT in EXPIRED
             case REQUEST_PAY_REJECTED -> PaymentInfo.Status.REJECTED;
             case REQUEST_PAY_CANCELLED -> PaymentInfo.Status.CANCELLED;
             case null, default -> PaymentInfo.Status.UNKNOWN_STATUS;
         };
     }
 
+    /**
+     * Maps a payment transaction type and status to a
+     * {@link PaymentInfo.TxnStatus} value.
+     *
+     * @param type   the transaction type string
+     * @param status the transaction status string
+     * @param fromMe whether the transaction was initiated by us
+     * @return the mapped transaction status
+     * @implNote WAWebPaymentStatusUtils.getPaymentTxnWebStatus
+     */
     private PaymentInfo.TxnStatus mapTxnStatus(String type, String status, boolean fromMe) {
+        // WAWebPaymentStatusUtils.getPaymentTxnWebStatus
         return switch (paymentMessageStatus(type, status, fromMe)) {
             case RECV_PAY_EXPIRED, SEND_PAY_EXPIRED -> PaymentInfo.TxnStatus.EXPIRED_TXN;
             case RECV_PAY_FAILURE, SEND_PAY_FAILURE -> PaymentInfo.TxnStatus.FAILED;
@@ -451,10 +724,21 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         };
     }
 
+    /**
+     * Determines the internal payment message status from the transaction
+     * type, raw status string, and direction.
+     *
+     * @param type   the transaction type string
+     * @param status the raw status string from the transaction node
+     * @param fromMe whether the payment was sent by us
+     * @return the resolved payment message status
+     * @implNote WAWebPaymentStatusUtils.getNotificationTransactionStatus
+     */
     private PaymentMessageStatus paymentMessageStatus(String type, String status, boolean fromMe) {
+        // WAWebPaymentStatusUtils.getNotificationTransactionStatus
         var statusValue = status == null ? "" : status.toUpperCase();
         return switch (paymentMessageTransactionType(type, fromMe)) {
-            case TYPE_P2M_PAYOUT -> null;
+            case TYPE_P2M_PAYOUT -> PaymentMessageStatus.STATUS_UNSET; // WAWebPaymentStatusUtils: falls through to STATUS_UNSET
             case TYPE_P2P_SENT, TYPE_P2M_SENT, TYPE_DEPOSIT -> switch (statusValue) {
                 case "PENDING_RECEIVER_SETUP" -> PaymentMessageStatus.SEND_PAY_PENDING_RECEIVER;
                 case "FAILED_DA" -> PaymentMessageStatus.SEND_PAY_PENDING;
@@ -470,7 +754,8 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 case "FAILED_DA_FINAL" -> PaymentMessageStatus.SEND_PAY_PENDING_REFUND;
                 case "AUTH_CANCEL_FAILED_PROCESSING" -> PaymentMessageStatus.SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING;
                 case "AUTH_CANCEL_FAILED" -> PaymentMessageStatus.SEND_PAY_AUTH_CANCEL_FAILED;
-                case "AUTH_CANCELED", "CANCELED" -> PaymentMessageStatus.SEND_PAY_AUTH_CANCELED;
+                case "AUTH_CANCELED" -> PaymentMessageStatus.SEND_PAY_AUTH_CANCELED; // WAWebPaymentStatusUtils: d.AUTH_CANCELED = "AUTH_CANCELED"
+                case "CANCELLED" -> PaymentMessageStatus.SEND_PAY_USER_CANCELED; // WAWebPaymentStatusUtils: d.CANCELED = "CANCELLED" -> SEND_PAY_USER_CANCELED
                 case "EXPIRED" -> PaymentMessageStatus.SEND_PAY_EXPIRED;
                 case "IN_REVIEW" -> PaymentMessageStatus.SEND_PAY_IN_REVIEW;
                 case "PENDING" -> PaymentMessageStatus.SEND_PAY_PENDING_PROCESSING;
@@ -478,7 +763,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             };
             case TYPE_P2P_RCVD, TYPE_P2M_RCVD -> switch (statusValue) {
                 case "PENDING_SETUP" -> PaymentMessageStatus.RECV_PAY_PENDING_SETUP;
-                case "FAILED_DA", "PENDING" -> PaymentMessageStatus.RECV_PAY_PENDING;
+                case "FAILED_DA" -> PaymentMessageStatus.RECV_PAY_PENDING; // WAWebPaymentStatusUtils: only FAILED_DA, no PENDING
                 case "FAILED_PROCESSING" -> PaymentMessageStatus.RECV_PAY_RETRY_ON_FAILURE;
                 case "SUCCESS", "COMPLETED" -> PaymentMessageStatus.RECV_PAY_SUCCESS;
                 case "FAILURE", "FAILED" -> PaymentMessageStatus.RECV_PAY_FAILURE;
@@ -487,7 +772,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 case "WITHDRAWAL_PROCESSING" -> PaymentMessageStatus.RECV_PAY_WITHDRAWAL_PROCESSING;
                 case "WITHDRAWAL_FAILURE" -> PaymentMessageStatus.RECV_PAY_WITHDRAWAL_FAILURE;
                 case "WITHDRAWAL_PERMANENT_FAILED" -> PaymentMessageStatus.RECV_PAY_WITHDRAWAL_PERMANENT_FAILED;
-                case "CANCELED" -> PaymentMessageStatus.RECV_PAY_SENDER_CANCELED;
+                case "CANCELLED" -> PaymentMessageStatus.RECV_PAY_SENDER_CANCELED; // WAWebPaymentStatusUtils: d.CANCELED = "CANCELLED"
                 default -> PaymentMessageStatus.STATUS_UNSET;
             };
             case TYPE_P2P_REQ_SENT, TYPE_P2P_REQ_RCVD -> switch (statusValue) {
@@ -513,7 +798,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 case "IN_REVIEW" -> PaymentMessageStatus.WITHDRAWAL_IN_REVIEW;
                 case "SUCCESS", "COMPLETED" -> PaymentMessageStatus.WITHDRAWAL_SUCCESS;
                 case "FAILED", "DECLINED" -> PaymentMessageStatus.WITHDRAWAL_FAILED;
-                case "CANCELED" -> PaymentMessageStatus.WITHDRAWAL_USER_CANCELED;
+                case "CANCELLED" -> PaymentMessageStatus.WITHDRAWAL_USER_CANCELED; // WAWebPaymentStatusUtils: d.CANCELED = "CANCELLED"
                 case "EXPIRED" -> PaymentMessageStatus.WITHDRAWAL_EXPIRED;
                 case "WITHDRAWAL_ACTIVE" -> PaymentMessageStatus.WITHDRAWAL_ACTIVE;
                 default -> PaymentMessageStatus.STATUS_UNSET;
@@ -521,7 +806,17 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         };
     }
 
+    /**
+     * Determines the payment transaction type from the raw type string
+     * and direction.
+     *
+     * @param type   the raw transaction type string, or {@code null}
+     * @param fromMe whether the payment was sent by us
+     * @return the resolved transaction type
+     * @implNote WAWebPaymentStatusUtils.getPaymentTransactionType
+     */
     private PaymentMessageTransactionType paymentMessageTransactionType(String type, boolean fromMe) {
+        // WAWebPaymentStatusUtils.getPaymentTransactionType
         if (type == null) {
             return fromMe ? PaymentMessageTransactionType.TYPE_P2P_SENT : PaymentMessageTransactionType.TYPE_P2P_RCVD;
         }
@@ -537,6 +832,23 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         };
     }
 
+    /**
+     * Handles protocol messages embedded within chat messages.
+     *
+     * <p>Processes the following protocol message types:
+     * <ul>
+     *   <li>LID migration mapping sync</li>
+     *   <li>Peer data operation request/response (snapshot recovery)</li>
+     *   <li>App state sync key share</li>
+     *   <li>App state sync key request</li>
+     * </ul>
+     *
+     * @param info the chat message info containing a protocol message
+     * @implNote WAWebHandleMsg.default: after successful decryption,
+     * protocol messages are dispatched to their respective handlers.
+     * WAWebNonMessageDataRequestHandler.handlePeerDataOperationRequestResponse,
+     * WAWebKeyManagementHandleKeyShareApi, WAWebSyncdHandleKeyShare.
+     */
     private void handleProtocolMessage(ChatMessageInfo info) {
         var content = info.message().content();
         if (!(content instanceof ProtocolMessage protocolMessage)) {
@@ -557,6 +869,17 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 .ifPresent(request -> processAppStateSyncKeyRequest(info, request));
     }
 
+    /**
+     * Processes an app state sync key share protocol message.
+     *
+     * <p>Validates key IDs (must be exactly 6 bytes) and delegates
+     * the validated keys to the sync key rotation service.
+     *
+     * @param info     the chat message info containing the key share
+     * @param keyShare the key share containing the shared keys
+     * @implNote WAWebKeyManagementHandleKeyShareApi: validates key IDs
+     * before delegating to WAWebSyncdHandleKeyShare.handleKeyShare.
+     */
     private void processAppStateSyncKeyShare(ChatMessageInfo info, AppStateSyncKeyShare keyShare) {
         // WAWebKeyManagementHandleKeyShareApi: caller-side validation before delegating
         // to WAWebSyncdHandleKeyShare.handleKeyShare. Sender device ID is extracted from
@@ -594,6 +917,19 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         syncKeyRotationService.handleKeyShare(senderDeviceId, validatedKeys);
     }
 
+    /**
+     * Processes an app state sync key request protocol message by
+     * sending the requested keys back to the requester.
+     *
+     * <p>Looks up each requested key ID in the store.  If a key is
+     * not found, a placeholder entry with just the key ID is included.
+     * The response is sent as a peer message.
+     *
+     * @param info    the chat message info containing the key request
+     * @param request the key request listing the requested key IDs
+     * @implNote WAWebKeyManagementHandleKeyRequestApi: handles key
+     * request by looking up keys and sending a key share response.
+     */
     private void processAppStateSyncKeyRequest(
             ChatMessageInfo info,
             AppStateSyncKeyRequest request
@@ -660,6 +996,19 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
     }
 
+    /**
+     * Resolves a syncd snapshot fatal recovery response from a peer
+     * data operation message.
+     *
+     * <p>Only processes responses of type
+     * {@code COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY}.  Decodes the
+     * recovery snapshot and passes it to the snapshot recovery service.
+     *
+     * @param response the peer data operation response message
+     * @implNote WAWebNonMessageDataRequestHandler.handlePeerDataOperationRequestResponse:
+     * decodes the SyncDSnapshotFatalRecoveryResponse and resolves the
+     * recovery promise.
+     */
     private void resolveSnapshotRecovery(PeerDataOperationRequestResponseMessage response) {
         if (response.peerDataOperationRequestType().orElse(null)
                 != PeerDataOperationRequestType.COMPANION_SYNCD_SNAPSHOT_FATAL_RECOVERY) {
@@ -701,6 +1050,15 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 .ifPresent(collectionName -> snapshotRecoveryService.resolveRecovery(collectionName, decoded));
     }
 
+    /**
+     * Decodes a GZIP-compressed LID migration mapping sync payload.
+     *
+     * @param payload the GZIP-compressed protobuf payload bytes
+     * @return the decoded payload, or empty if decoding fails
+     * @implNote WAWebProcessMsgInfoForLid.maybeProcesMsgInfoForLid:
+     * decodes the encoded mapping payload from the LID migration
+     * mapping sync message.
+     */
     private Optional<LIDMigrationMappingSyncPayload> decodeLidMappingPayload(byte[] payload) {
         if (payload == null || payload.length == 0) {
             return Optional.empty();

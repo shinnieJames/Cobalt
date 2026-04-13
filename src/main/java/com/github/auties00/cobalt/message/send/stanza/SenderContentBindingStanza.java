@@ -15,7 +15,7 @@ import java.util.Map;
  * Builds the {@code <sender_content_binding>} stanza child node
  * containing the sender's own RCAT content-binding tag.
  *
- * @apiNote WAWebSendMsgCreateFanoutStanza: includes
+ * @implNote WAWebSendMsgCreateFanoutStanza: includes
  * {@code <sender_content_binding>} with the sender's own RCAT tag
  * looked up from the content binding map.
  * WAWebSendGroupSkmsgJob: same logic for group SKMSG stanzas.
@@ -24,8 +24,18 @@ import java.util.Map;
  * {@code <sender_content_binding>}.
  */
 public final class SenderContentBindingStanza {
+    /**
+     * Logger for warning on RCAT generation failures.
+     *
+     * @implNote NO_WA_BASIS: Java logging infrastructure.
+     */
     private static final System.Logger LOGGER = System.getLogger(SenderContentBindingStanza.class.getName());
 
+    /**
+     * Prevents instantiation of this utility class.
+     *
+     * @implNote NO_WA_BASIS: Java utility class pattern.
+     */
     private SenderContentBindingStanza() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
@@ -41,8 +51,11 @@ public final class SenderContentBindingStanza {
      * @param selfJid     the sender's user JID
      * @return the sender content binding node, or {@code null}
      *
-     * @apiNote WAWebMsgRcatUtils.genContentBindingForMsg: checks
+     * @implNote WAWebMsgRcatUtils.genContentBindingForMsg: checks
      * messageSecret, URL message, generates per-recipient HMAC tags.
+     * ADAPTED: the guard checks from {@code genContentBindingForMsg}
+     * (type=CHAT, isUrlMessage, isSentByMe) are applied here at the
+     * call site instead of inside the token generator.
      */
     public static Node buildForUser(ChatMessageInfo messageInfo, Jid selfJid) {
         var messageSecret = messageInfo.messageSecret().orElse(null);
@@ -81,7 +94,7 @@ public final class SenderContentBindingStanza {
      * @return the sender content binding node, or {@code null} if no
      *         binding exists for the sender
      *
-     * @apiNote WAWebSendGroupSkmsgJob: looks up the sender's content
+     * @implNote WAWebSendGroupSkmsgJob: looks up the sender's content
      * binding from the RCAT map using
      * {@code widToUserJid(asUserWidOrThrow(senderJid))}.
      */

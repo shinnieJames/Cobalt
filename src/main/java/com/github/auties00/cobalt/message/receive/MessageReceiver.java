@@ -26,13 +26,30 @@ import java.util.Objects;
 abstract sealed class MessageReceiver<T extends MessageInfo>
         permits ChatMessageReceiver, NewsletterMessageReceiver {
 
+    /**
+     * Logger for diagnostic messages during message processing.
+     *
+     * @implNote ADAPTED: WAWebHandleMsg uses WALogger; Cobalt uses
+     * {@code System.Logger} instead.
+     */
     private static final System.Logger LOGGER = System.getLogger(MessageReceiver.class.getName());
 
     /**
      * The central session data repository.
+     *
+     * @implNote ADAPTED: WAWebHandleMsg and WASmaxInMessageDeliverNewsletterRequest
+     * access store via module-level imports; Cobalt uses constructor DI.
      */
     final WhatsAppStore store;
 
+    /**
+     * Constructs a new message receiver with the required store dependency.
+     *
+     * @param store the central session data store
+     *
+     * @implNote ADAPTED: WAWebHandleMsg uses module-level imports for
+     * store access; Cobalt uses constructor-based DI.
+     */
     MessageReceiver(WhatsAppStore store) {
         this.store = Objects.requireNonNull(store, "store");
     }
@@ -45,6 +62,9 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * @param fromJid the JID from the {@code from} attribute
      * @return the processed message info, or {@code null} for messages
      *         that should be silently acknowledged (e.g. unavailable)
+     *
+     * @implNote WAWebHandleMsg.default: the main entry point for incoming
+     * E2E message handling.
      */
     abstract T receive(Node node, Jid fromJid);
 
@@ -53,6 +73,8 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      *
      * @return the self JID
      * @throws IllegalStateException if not logged in
+     *
+     * @implNote NO_WA_BASIS: Java-specific convenience accessor.
      */
     Jid requireSelfJid() {
         return store.jid().orElseThrow(() ->
@@ -71,7 +93,7 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * @param plaintext the raw protobuf bytes
      * @return the decoded container, or {@code null} on failure
      *
-     * @apiNote WAWebHandleMsgProcess.processDecryptedMessageProto:
+     * @implNote WAWebHandleMsgProcess.processDecryptedMessageProto:
      * decodes the protobuf after removing PKCS#7 padding.
      */
     MessageContainer decodeProtobuf(String messageId, byte[] plaintext) {
@@ -91,6 +113,9 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      *
      * @param stanza the parsed stanza
      * @return {@code true} if the sender matches the logged-in user
+     *
+     * @implNote WAWebMsgProcessingApiUtils: {@code fromMe = isMeAccount(author)},
+     * delegating to the JID comparison overload.
      */
     boolean isFromMe(MessageReceiveStanza stanza) {
         return isFromMe(stanza.senderJid());
@@ -103,7 +128,7 @@ abstract sealed class MessageReceiver<T extends MessageInfo>
      * @param senderJid the sender JID to check
      * @return {@code true} if the sender matches the logged-in user
      *
-     * @apiNote WAWebMsgProcessingApiUtils: {@code fromMe = isMeAccount(author)}
+     * @implNote WAWebMsgProcessingApiUtils: {@code fromMe = isMeAccount(author)}
      */
     boolean isFromMe(Jid senderJid) {
         var selfJid = store.jid().orElse(null);

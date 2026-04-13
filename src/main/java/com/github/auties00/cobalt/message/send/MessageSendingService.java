@@ -14,6 +14,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
+import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.props.ABPropsService;
 
@@ -41,17 +42,68 @@ import java.util.Objects;
  *
  * @apiNote WAWebSendMsgJob.encryptAndSendMsg: main entry point that
  * routes to encryptAndSendUserMsg (user) or encryptAndSendGroupMsg (group).
+ * WAWebSendMsgJob.encryptAndSendKeyDistributionMsg: standalone sender-key
+ * distribution to groups (no message content).
  * WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg: status sending.
  * WAWebNewsletterSendMessageQueryJob.querySendNewsletterMessage: newsletter sending.
  * WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg: peer message sending.
  */
 public final class MessageSendingService {
+    /**
+     * Prepares raw {@link MessageContainer} instances into fully populated
+     * {@link MessageInfo} objects before they enter the send pipeline.
+     *
+     * @implNote ADAPTED: WAWebOutgoingMessage.createOutgoingMessageProtobuf
+     * is an inline function; Cobalt extracts it into a dedicated class.
+     */
     private final MessagePreparer preparer;
+
+    /**
+     * Tracks in-flight message IDs to prevent duplicate sends.
+     *
+     * @implNote WAWebMessageDedupUtils: checks and registers message IDs
+     * to prevent the same message from being sent concurrently.
+     */
     private final MessageDedup messageDedup;
+
+    /**
+     * Sender for 1:1 user chats (PN and LID addressed).
+     *
+     * @implNote WAWebSendUserMsgJob.encryptAndSendUserMsg: per-device
+     * Signal encryption with chat fanout.
+     */
     private final UserMessageSender userSender;
+
+    /**
+     * Sender for group chats (sender-key encryption).
+     *
+     * @implNote WAWebSendGroupMsgJob.encryptAndSendGroupMsg: sender-key
+     * encryption serialised per group.
+     */
     private final GroupMessageSender groupSender;
+
+    /**
+     * Sender for status updates (sender-key encryption to status audience).
+     *
+     * @implNote WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg:
+     * sender-key encryption to the status audience list.
+     */
     private final StatusMessageSender statusSender;
+
+    /**
+     * Sender for newsletter messages (plaintext via SMAX).
+     *
+     * @implNote WAWebNewsletterSendMessageQueryJob.querySendNewsletterMessage:
+     * plaintext via SMAX RPC.
+     */
     private final NewsletterMessageSender newsletterSender;
+
+    /**
+     * Sender for peer protocol messages (app state sync, key shares).
+     *
+     * @implNote WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg:
+     * per-device Signal encryption with category="peer".
+     */
     private final PeerMessageSender peerSender;
 
     /**
@@ -61,6 +113,9 @@ public final class MessageSendingService {
      * @param encryption     the message encryption service
      * @param deviceService  the device service for device list resolution
      * @param abPropsService the AB props service for feature gating
+     *
+     * @implNote ADAPTED: WAWebSendMsgJob uses module-level imports for all
+     * dependencies; Cobalt uses constructor-based DI and creates all sub-senders.
      */
     public MessageSendingService(
             WhatsAppClient client,
@@ -115,8 +170,10 @@ public final class MessageSendingService {
      * @return the server ack result
      * @throws NullPointerException if any argument is {@code null}
      *
-     * @apiNote WAWebOutgoingMessage.createOutgoingMessageProtobuf:
-     * prepares the protobuf before passing to encryptAndSendMsg.
+     * @implNote ADAPTED: WAWebSendMsgJob.encryptAndSendMsg calls
+     * WAWebOutgoingMessage.createOutgoingMessageProtobuf inline before
+     * routing; Cobalt separates preparation (via {@link MessagePreparer})
+     * from routing (via {@link #send(MessageInfo)}).
      */
     public AckResult send(Jid chatJid, MessageContainer container) {
         Objects.requireNonNull(chatJid, "chatJid");
@@ -149,7 +206,12 @@ public final class MessageSendingService {
      * @throws WhatsAppMessageException.Send.InvalidRecipient if the chat JID type is unsupported
      *         or the message info type does not match the JID type
      *
-     * @apiNote WAWebSendMsgJob.encryptAndSendMsg: routes based on JID type.
+     * @implNote WAWebSendMsgJob.encryptAndSendMsg: validates {@code id}
+     * and {@code to}, waits for offline delivery end, calls
+     * {@code createOutgoingMessageProtobuf}, then routes to
+     * {@code encryptAndSendUserMsg} (user) or
+     * {@code encryptAndSendGroupMsg} (group) based on JID type.
+     * Cobalt extends routing to also handle status and newsletter JIDs.
      */
     public AckResult send(MessageInfo messageInfo) {
         Objects.requireNonNull(messageInfo, "messageInfo");
@@ -193,6 +255,55 @@ public final class MessageSendingService {
     }
 
     /**
+     * Sends a standalone sender-key distribution to a group chat without
+     * any message content.
+     *
+     * <p>This is used to pre-distribute sender keys to group participants
+     * that do not yet possess them, independent of sending an actual
+     * message.  It is the counterpart to
+     * {@code WAWebSendKeyDistributionMsgAction.sendKeyDistributionMsg},
+     * which is triggered by group membership changes or periodic key
+     * refresh operations.
+     *
+     * <p>If the group JID is not a group, this method throws.  If all
+     * devices already possess the sender key, this method returns without
+     * sending anything.
+     *
+     * @param groupJid the group JID to distribute keys for
+     * @param key      the message key containing the ID and remote JID
+     * @throws NullPointerException                          if any argument is {@code null}
+     * @throws WhatsAppMessageException.Send.InvalidRecipient if the JID is not a group
+     *
+     * @implNote WAWebSendMsgJob.encryptAndSendKeyDistributionMsg: validates
+     * {@code id} and {@code remote}, checks {@code remote.isGroup()},
+     * then delegates to
+     * WAWebSendGroupKeyDistributionMsgJob.encryptAndSendGroupKeyDistributionMsg.
+     * WAWebSendKeyDistributionMsgAction.sendKeyDistributionMsg: constructs
+     * the MsgKey with the sender's JID, generates a new message ID, fetches
+     * group metadata, and calls {@code encryptAndSendKeyDistributionMsg}.
+     */
+    public void sendKeyDistribution(Jid groupJid, MessageKey key) {
+        Objects.requireNonNull(groupJid, "groupJid");
+        Objects.requireNonNull(key, "key");
+
+        // WAWebSendMsgJob.encryptAndSendKeyDistributionMsg: validate id
+        var messageId = key.id()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "messageId is required for key distribution"));
+
+        // WAWebSendMsgJob.encryptAndSendKeyDistributionMsg: validate remote
+        // and check remote.isGroup()
+        if (!groupJid.hasGroupOrCommunityServer()) {
+            throw new WhatsAppMessageException.Send.InvalidRecipient(
+                    groupJid, "Key distribution is only supported for group chats");
+        }
+
+        // WAWebSendMsgJob.encryptAndSendKeyDistributionMsg:
+        // delegates to encryptAndSendGroupKeyDistributionMsg
+        groupSender.sendKeyDistribution(groupJid, messageId);
+    }
+
+    /**
      * Sends a peer protocol message to the user's own primary device.
      *
      * <p>Peer messages include app state sync, key shares, and fatal
@@ -204,7 +315,7 @@ public final class MessageSendingService {
      * @return the server ack result
      * @throws NullPointerException if any argument is {@code null}
      *
-     * @apiNote WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg: sends peer
+     * @implNote WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg: sends peer
      * messages via createUserDeviceMsgStanza with category="peer".
      */
     public AckResult sendPeer(Jid targetDevice, ChatMessageInfo messageInfo) {

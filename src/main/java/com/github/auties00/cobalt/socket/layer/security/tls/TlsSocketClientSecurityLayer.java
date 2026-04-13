@@ -30,6 +30,11 @@ import java.security.NoSuchAlgorithmException;
  */
 public final class TlsSocketClientSecurityLayer implements SocketClientTunnelSecurityLayer, SocketClientTransportSecurityLayer {
     /**
+     * A reasonable amount of time in ms before the handshake times out.
+     */
+    private static final int HANDSHAKE_TIMEOUT = 30_000;
+
+    /**
      * The inner layer that provides raw I/O.
      */
     private final SocketClientLayer innerLayer;
@@ -61,36 +66,7 @@ public final class TlsSocketClientSecurityLayer implements SocketClientTunnelSec
             var tlsLayerContext = new TlsLayerContext(null);
             tlsLayerContext.initSsl(engine);
             innerLayer.registerLayerContext(TlsSocketClientSecurityLayer.class, tlsLayerContext);
-            innerLayer.startHandshake(tlsLayerContext, 30_000);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IOException("Failed to create SSL context", e);
-        }
-    }
-
-    /**
-     * Starts a TLS handshake with the given next layer context for the
-     * inbound pipeline.
-     *
-     * <p>This variant is used when TLS sits below another protocol layer
-     * that needs to receive decoded data (for example, WebSocket or
-     * WhatsApp datagram framing).
-     *
-     * @param nextLayerContext the layer context above TLS in the inbound
-     *                        pipeline
-     * @throws IOException if the handshake fails
-     */
-    public void startHandshake(SocketClientLayerContext nextLayerContext) throws IOException {
-        try {
-            var sslContext = SSLContext.getDefault();
-            var engine = sslContext.createSSLEngine(peerAddress.getHostString(), peerAddress.getPort());
-            engine.setUseClientMode(true);
-            var params = engine.getSSLParameters();
-            params.setEndpointIdentificationAlgorithm("HTTPS");
-            engine.setSSLParameters(params);
-            var tlsLayerContext = new TlsLayerContext(nextLayerContext);
-            tlsLayerContext.initSsl(engine);
-            innerLayer.registerLayerContext(TlsSocketClientSecurityLayer.class, tlsLayerContext);
-            innerLayer.startHandshake(tlsLayerContext, 30_000);
+            innerLayer.startHandshake(tlsLayerContext, HANDSHAKE_TIMEOUT);
         } catch (NoSuchAlgorithmException e) {
             throw new IOException("Failed to create SSL context", e);
         }

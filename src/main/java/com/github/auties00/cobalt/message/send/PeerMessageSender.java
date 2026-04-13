@@ -8,7 +8,6 @@ import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
-import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
 import java.util.List;
@@ -38,11 +37,40 @@ import java.util.Objects;
  * single-device stanza for peer messages.
  */
 final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
+    /**
+     * Logger for peer message sending diagnostics.
+     *
+     * @implNote ADAPTED: WAWebSendAppStateSyncMsgJob uses WALogger;
+     * Cobalt uses {@link System.Logger}.
+     */
     private static final System.Logger LOGGER = System.getLogger(PeerMessageSender.class.getName());
 
+    /**
+     * The encryption service for per-device Signal encryption.
+     *
+     * @implNote WAWebSendMsgCreateDeviceStanza.createUserDeviceMsgStanza:
+     * delegates to WAWebEncryptMsgProtobuf.encryptMsgProtobuf.
+     */
     private final MessageEncryption encryption;
+
+    /**
+     * The device service for ensuring E2E sessions before encryption.
+     *
+     * @implNote WAWebSendMsgCreateDeviceStanza.createUserDeviceMsgStanza:
+     * calls WAWebManageE2ESessionsJob.ensureE2ESessions.
+     */
     private final DeviceService deviceService;
 
+    /**
+     * Creates a new peer message sender.
+     *
+     * @param client        the WhatsApp client for sending stanzas
+     * @param encryption    the message encryption service
+     * @param deviceService the device service for session management
+     *
+     * @implNote ADAPTED: WAWebSendAppStateSyncMsgJob uses module-level
+     * imports; Cobalt uses constructor-based DI instead.
+     */
     PeerMessageSender(
             WhatsAppClient client,
             MessageEncryption encryption,
@@ -53,8 +81,31 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService");
     }
 
+    /**
+     * Sends a peer protocol message to a single target device.
+     *
+     * <p>Encrypts the message container using the Signal session cipher
+     * for the target device, wraps it in a {@code <message>} stanza with
+     * {@code category="peer"} and {@code push_priority="high"}, and
+     * waits for the server acknowledgement.
+     *
+     * @param targetDevice the target device JID (typically the user's
+     *                     own primary device)
+     * @param messageInfo  the outgoing peer protocol message
+     * @return the server ack result
+     *
+     * @implNote WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg:
+     * waits for offline delivery end, calls createPeerMsgProtobuf,
+     * then delegates to createUserDeviceMsgStanza with
+     * {@code MsgType.AppStateSync}, which sets {@code category="peer"},
+     * {@code push_priority="high"}, and {@code appdata="default"} on
+     * the meta node. Finally sends via deprecatedSendStanzaAndWaitForAck.
+     */
     @Override
     AckResult send(Jid targetDevice, ChatMessageInfo messageInfo) {
+        // WAWebSendAppStateSyncMsgJob: yield waitForOfflineDeliveryEnd()
+        waitForOfflineDelivery();
+
         var container = messageInfo.message();
         var plaintext = MessageContainerSpec.encode(container);
 
@@ -83,12 +134,16 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
                 .attribute("appdata", "default")
                 .build();
 
+        // WAWebSendMsgCreateDeviceStanza: the edit attribute comes from
+        // editAttribute(n, d.subtype) — returns DROP_ATTR for peer messages
+        // since none of the edit/revoke conditions apply.
+        // There is NO "subtype" attribute on the wire stanza.
+        // WAWebE2EProtoUtils.typeAttributeFromProtobuf: protocolMessage → "text"
         var stanza = new NodeBuilder()
                 .description("message")
                 .attribute("id", messageInfo.key().id().orElseThrow())
                 .attribute("to", targetDevice)
-                .attribute("type", resolvePeerStanzaType(container))
-                .attribute("subtype", resolvePeerStanzaSubtype(container))
+                .attribute("type", resolveStanzaType(container))
                 .attribute("category", "peer")
                 .attribute("push_priority", "high")
                 .content(
@@ -102,28 +157,4 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
         return AckParser.parse(ackNode);
     }
 
-    private String resolvePeerStanzaType(com.github.auties00.cobalt.model.message.MessageContainer container) {
-        return container.content() instanceof ProtocolMessage ? "protocol" : resolveStanzaType(container);
-    }
-
-    private String resolvePeerStanzaSubtype(com.github.auties00.cobalt.model.message.MessageContainer container) {
-        if (!(container.content() instanceof ProtocolMessage protocolMessage)) {
-            return null;
-        }
-
-        var type = protocolMessage.type()
-                .orElse(null);
-        if(type == null) {
-            return null;
-        }
-
-        return switch (type) {
-            case APP_STATE_SYNC_KEY_SHARE -> "app_state_sync_key_share";
-            case APP_STATE_SYNC_KEY_REQUEST -> "app_state_sync_key_request";
-            case APP_STATE_FATAL_EXCEPTION_NOTIFICATION -> "app_state_fatal_exception_notification";
-            case PEER_DATA_OPERATION_REQUEST_MESSAGE -> "peer_data_operation_request_message";
-            case PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE -> "peer_data_operation_request_response_message";
-            default -> null;
-        };
-    }
 }

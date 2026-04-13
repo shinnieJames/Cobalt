@@ -4,7 +4,8 @@ import com.github.auties00.cobalt.client.info.WhatsAppClientInfo;
 import com.github.auties00.cobalt.client.info.WhatsAppMobileClientInfo;
 import org.junit.jupiter.api.Test;
 
-import static com.github.auties00.cobalt.model.auth.UserAgent.PlatformType.*;
+
+import static com.github.auties00.cobalt.model.device.pairing.ClientPlatformType.*;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 public class ClientsTests {

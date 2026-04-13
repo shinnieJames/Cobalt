@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.socket.layer.threading.SocketClientLayerContex
 import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayer;
 import com.github.auties00.cobalt.socket.layer.tunnel.TunnelLayerContext;
 import com.github.auties00.cobalt.socket.layer.tunnel.http.HttpResponseReader;
+import com.github.auties00.cobalt.util.FastRandomUtils;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -17,7 +18,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Objects;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A standalone WebSocket client that wraps a {@link SocketClientLayer}
@@ -150,7 +150,7 @@ public final class WebSocketClient {
 
         var port = address.getPort() != -1 ? address.getPort() : 443;
         transportLayer.connect(
-                InetSocketAddress.createUnresolved(address.getHost(), port),
+                new InetSocketAddress(address.getHost(), port),
                 listener
         );
 
@@ -241,8 +241,7 @@ public final class WebSocketClient {
      * @return the Base64-encoded key as ASCII bytes
      */
     private static byte[] createWebSocketKey() {
-        var raw = new byte[16];
-        ThreadLocalRandom.current().nextBytes(raw);
+        var raw = FastRandomUtils.randomByteArray(16);
         return Base64.getEncoder().encode(raw);
     }
 

@@ -14,9 +14,10 @@ import java.util.Optional;
  * the recipient JID and optional LID/PN mapping information used for
  * the phone-number-to-LID migration.
  *
- * @apiNote WAWebHandleMsgParser: parses each {@code <to>} child to
- * extract jid, eph_setting, peer_recipient_lid, peer_recipient_pn,
- * peer_recipient_username, and recipient_latest_lid.
+ * @implNote WAWebHandleMsgParser function y(): parses each {@code <to>}
+ * child within {@code <participants>} to extract jid, eph_setting,
+ * peer_recipient_lid, peer_recipient_pn, peer_recipient_username,
+ * and recipient_latest_lid.
  */
 public final class MessageReceiveBroadcastParticipant {
     private final Jid jid;

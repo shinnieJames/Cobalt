@@ -35,8 +35,11 @@ public final class GroupSkmsgFanoutStanza {
      * @param messageId            the message stanza ID
      * @param groupJid             the group JID
      * @param type                 the stanza type attribute
-     * @param phash                the participant hash (V2)
-     * @param skmsgCiphertext      the SKMSG-encrypted ciphertext
+     * @param phash                the participant hash (V2), or {@code null}
+     *                             for bot feedback messages where phash is dropped
+     * @param skmsgCiphertext      the SKMSG-encrypted ciphertext, or {@code null}
+     *                             for bot feedback messages where the enc node
+     *                             is omitted (delivery only via {@code <bot>})
      * @param mediaType            the enc mediatype, or {@code null}
      * @param decryptFail          the decrypt-fail attribute, or {@code null}
      * @param editAttribute        the edit attribute, or {@code null}
@@ -74,22 +77,27 @@ public final class GroupSkmsgFanoutStanza {
         Objects.requireNonNull(messageId, "messageId");
         Objects.requireNonNull(groupJid, "groupJid");
         Objects.requireNonNull(type, "type");
-        Objects.requireNonNull(phash, "phash");
-        Objects.requireNonNull(skmsgCiphertext, "skmsgCiphertext");
         Objects.requireNonNull(addressingMode, "addressingMode");
 
         // WAWebSendGroupSkmsgJob: SKMSG <enc> node
-        var skmsgEncNode = new NodeBuilder()
-                .description("enc")
-                .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
-                .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
-                .attribute("mediatype", mediaType)
-                .attribute("decrypt-fail", decryptFail)
-                .content(skmsgCiphertext)
-                .build();
+        // When skmsgCiphertext is null (bot feedback messages), the enc
+        // node is omitted and the message is delivered only via <bot>
+        Node skmsgEncNode = skmsgCiphertext != null
+                ? new NodeBuilder()
+                        .description("enc")
+                        .attribute("v", String.valueOf(MessageEncryption.CIPHERTEXT_VERSION))
+                        .attribute("type", MessageEncryptionType.SKMSG.protocolValue())
+                        .attribute("mediatype", mediaType)
+                        .attribute("decrypt-fail", decryptFail)
+                        .content(skmsgCiphertext)
+                        .build()
+                : null;
 
         // WAWebSendGroupSkmsgJob: build the <message> stanza
         // NodeBuilder.content(Node...) silently skips nulls
+        // WAWebSendGroupSkmsgJob: child order matches WA Web stanza:
+        // V (participants), H (skmsg enc), U (identity), b(t,e) (biz),
+        // meta, q (bot), z (sender_content_binding), K (reporting)
         return new NodeBuilder()
                 .description("message")
                 .attribute("id", messageId)
@@ -104,8 +112,8 @@ public final class GroupSkmsgFanoutStanza {
                         identityNode,
                         bizNode,
                         metaNode,
-                        senderContentBinding,
                         botNode,
+                        senderContentBinding,
                         reportingNode
                 )
                 ;

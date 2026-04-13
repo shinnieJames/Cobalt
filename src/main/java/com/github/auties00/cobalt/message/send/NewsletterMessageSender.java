@@ -65,20 +65,49 @@ import java.util.Optional;
  * newsletterRevoke, newsletterPollCreation, etc.
  */
 final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo> {
+    /**
+     * Logger for newsletter message sending diagnostics.
+     *
+     * @implNote ADAPTED: WA Web uses WALogger; Cobalt uses {@link System.Logger}.
+     */
     private static final System.Logger LOGGER = System.getLogger(NewsletterMessageSender.class.getName());
 
     /**
      * The edit attribute value for newsletter message edits.
      *
-     * @apiNote WAWebAck.EDIT_ATTR.NEWSLETTER_MSG_EDIT = 3,
+     * @implNote WAWebAck.EDIT_ATTR.NEWSLETTER_MSG_EDIT = 3,
      * distinct from MESSAGE_EDIT (1) and PIN_IN_CHAT (2).
      */
     private static final String NEWSLETTER_MSG_EDIT = "3";
 
+    /**
+     * Creates a new newsletter message sender.
+     *
+     * @param client the WhatsApp client for sending stanzas
+     *
+     * @implNote ADAPTED: WAWebNewsletterSendMessageQueryJob uses module-level
+     * imports; Cobalt uses constructor-based DI instead.
+     */
     NewsletterMessageSender(WhatsAppClient client) {
         super(client);
     }
 
+    /**
+     * Sends a message to a newsletter channel via the SMAX protocol.
+     *
+     * <p>Dispatches to content-type-specific stanza builders based on
+     * the message type: text, media, poll, revoke, edit, reaction,
+     * poll vote, and question response. Newsletter messages are NOT
+     * end-to-end encrypted.
+     *
+     * @param newsletterJid the newsletter JID
+     * @param messageInfo   the outgoing newsletter message
+     * @return the server ack result
+     *
+     * @implNote WAWebNewsletterSendMessageQueryJob.querySendNewsletterMessage:
+     * validates the newsletter JID, builds the content-type-specific mixin
+     * arguments, and sends via WASmaxMessagePublishNewsletterRPC.sendNewsletterRPC.
+     */
     @Override
     AckResult send(Jid newsletterJid, NewsletterMessageInfo messageInfo) {
         var container = messageInfo.message();
@@ -305,7 +334,10 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
             NewsletterMessageInfo info, Jid newsletterJid, ReactionMessage reaction
     ) {
 
+        // WAWebNewsletterSendMessageQueryJob.c: reactionCode != null && reactionCode !== ""
+        // treats empty string as revoke, same as null
         Node reactionNode = reaction.text()
+                .filter(t -> !t.isEmpty())
                 .map(this::buildReactionContent)
                 .orElseGet(this::buildReactionRevoke);
 
@@ -317,6 +349,15 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 .content(reactionNode);
     }
 
+    /**
+     * Builds a {@code <reaction code="...">} node for a non-empty reaction.
+     *
+     * @param s the reaction emoji code
+     * @return the reaction node
+     *
+     * @implNote WAWebNewsletterSendMessageQueryJob.c:
+     * {@code {newsletterReaction: {reactionCode: t}}}.
+     */
     private Node buildReactionContent(String s) {
         return new NodeBuilder()
                 .description("reaction")
@@ -324,6 +365,14 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
                 .build();
     }
 
+    /**
+     * Builds a {@code <reaction_revoke/>} node for revoking a reaction.
+     *
+     * @return the reaction revoke node
+     *
+     * @implNote WAWebNewsletterSendMessageQueryJob.c:
+     * {@code {isNewsletterReactionRevoke: true}}.
+     */
     private Node buildReactionRevoke() {
         return new NodeBuilder()
                 .description("reaction_revoke")
@@ -390,6 +439,8 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
             case AudioMessage a -> a.ptt() ? "ptt" : "audio";
             case DocumentMessage _ -> "document";
             case StickerMessage _ -> "sticker";
+            // WAWebNewsletterSendMessageQueryJob.p: sticker_pack type
+            case StickerPackMessage _ -> "sticker_pack";
             case ContactMessage _ -> "vcard";
             case ExtendedTextMessage t when t.matchedText().isPresent() -> "url";
             default -> "text";

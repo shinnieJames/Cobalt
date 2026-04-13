@@ -7,19 +7,25 @@ package com.github.auties00.cobalt.message.receive.crypto;
  * produces one of these results.  The result determines what receipt is
  * sent back to the sender and whether the message is stored locally.
  *
- * @apiNote WAWebHandleMsgTypes.flow.E2EProcessResult: the exact set of
- * result values used in WA Web.
+ * @implNote WAWebHandleMsgTypes.flow.E2EProcessResult: the Mirrored
+ * enum {@code c} with values {@code ["SUCCESS", "RETRY", "HSM_MISMATCH",
+ * "BACKFILL", "PARSE_ERROR", "PARSE_VALIDATION_ERROR",
+ * "SIGNAL_OLD_COUNTER_ERROR"]}.
  */
 public enum MessageDecryptionResult {
     /**
      * At least one encrypted payload was successfully decrypted and
      * the protobuf content was processed.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.SUCCESS}.
      */
     SUCCESS,
 
     /**
      * Decryption failed with a retryable Signal error — a retry receipt
      * should be sent so the sender re-encrypts and resends.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.RETRY}.
      */
     RETRY,
 
@@ -27,18 +33,24 @@ public enum MessageDecryptionResult {
      * HSM template mismatch — the stanza indicated HSM but the protobuf
      * did not contain a highly structured message, or vice versa.
      * No receipt is sent.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.HSM_MISMATCH}.
      */
     HSM_MISMATCH,
 
     /**
      * The message payload was not available (fanout placeholder from a
      * companion device).  An ack is sent but no content is stored.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.BACKFILL}.
      */
     BACKFILL,
 
     /**
      * The decrypted protobuf could not be parsed or contained
      * unrecognised content.  A NACK with ParsingError is sent.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.PARSE_ERROR}.
      */
     PARSE_ERROR,
 
@@ -46,7 +58,9 @@ public enum MessageDecryptionResult {
      * The decrypted protobuf failed structural validation (e.g.
      * stanza type vs protobuf content mismatch, invalid DSM).
      * A NACK with InvalidProtobuf is sent, optionally with an
-     * e2eFailureReason.
+     * {@code e2eFailureReason}.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.PARSE_VALIDATION_ERROR}.
      */
     PARSE_VALIDATION_ERROR,
 
@@ -55,6 +69,8 @@ public enum MessageDecryptionResult {
      * counter error).  The message was already decrypted previously.
      * Handled specially: if dedup-eligible, cached for receipt; otherwise
      * treated like a normal delivery.
+     *
+     * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.SIGNAL_OLD_COUNTER_ERROR}.
      */
     SIGNAL_OLD_COUNTER_ERROR
 }

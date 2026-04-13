@@ -125,12 +125,4 @@ public final class TcpSocketClientTransportLayer implements SocketClientTranspor
         }
         context.createLayerContext(key, layerContext);
     }
-
-    static boolean shouldWaitForRead(
-            SocketClientTransportLayerContext.PendingRead read,
-            boolean fully,
-            boolean connected
-    ) {
-        return connected && (read.length == -1 || (fully && read.length >= 0 && read.buffer.hasRemaining()));
-    }
 }

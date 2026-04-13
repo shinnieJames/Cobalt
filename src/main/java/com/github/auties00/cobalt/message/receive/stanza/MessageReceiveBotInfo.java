@@ -11,7 +11,7 @@ import java.util.OptionalLong;
  * (either a Meta AI bot or a business bot).  It carries timing
  * information, edit metadata, and the bot's business classification.
  *
- * @apiNote WAWebHandleMsgParser function v(e): parses the {@code <bot>}
+ * @implNote WAWebHandleMsgParser function b(): parses the {@code <bot>}
  * node to extract botSenderTimestampMs, botEditTargetId, botEditType,
  * botMsgBodyType, and bizBotType.
  */

@@ -29,21 +29,45 @@ import java.util.Objects;
  *   <li>The message has a messageSecret</li>
  * </ul>
  *
- * @apiNote WAWebReportingTokenUtils.genReportingTokenBody: derives
- * the key from messageSecret, computes HMAC over the reporting token
- * content, wraps in
+ * @implNote WAWebReportingTokenUtils.genReportingTokenBody: delegates to
+ * {@code genReportingToken} to derive the key from messageSecret, compute
+ * HMAC over the reporting token content, then wraps the result in
  * {@code <reporting><reporting_token v="...">token</reporting_token></reporting>}.
+ * WAWebReportingTokenUtils.genReportingTokenBodyForStanza: wraps
+ * {@code genReportingTokenBody} with MESSAGE_HISTORY_BUNDLE handling.
  * WAWebMessagingGatingUtils.isReportingTokenSendingEnabled: checks
- * rt_sender_reporting_token_version &gt; 0.
+ * {@code rt_sender_reporting_token_version > 0}.
  * WAWebMessagePluginGenerateReportingTokenContent.isMsgTypeReportingTokenCompatible:
  * excludes reactions, encrypted reactions, event responses, and poll votes.
  */
 public final class ReportingStanza {
+    /**
+     * Logger for reporting token generation failures.
+     *
+     * @implNote WAWebReportingTokenUtils.genReportingTokenBody: logs
+     * {@code "unexpected exception in generating reporting token body"}
+     * on failure.
+     */
     private static final System.Logger LOGGER = System.getLogger(ReportingStanza.class.getName());
 
-
+    /**
+     * The AB props service used to query the sender reporting token version.
+     *
+     * @implNote WAWebMessagingGatingUtils.getSenderReportingTokenVersion:
+     * reads {@code rt_sender_reporting_token_version} from AB props.
+     */
     private final ABPropsService abPropsService;
 
+    /**
+     * Creates a new reporting stanza builder.
+     *
+     * @param abPropsService the AB props service for version lookup
+     * @throws NullPointerException if {@code abPropsService} is {@code null}
+     *
+     * @implNote ADAPTED: WAWebReportingTokenUtils: module-level functions
+     * use {@code WAWebMessagingGatingUtils} which reads AB props;
+     * Cobalt injects the AB props service via constructor.
+     */
     public ReportingStanza(ABPropsService abPropsService) {
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService");
     }
@@ -60,7 +84,10 @@ public final class ReportingStanza {
      *                    for groups, status JID for broadcasts)
      * @return the reporting node, or {@code null}
      *
-     * @apiNote WAWebReportingTokenUtils.genReportingTokenBody
+     * @implNote WAWebReportingTokenUtils.genReportingTokenBody: calls
+     * {@code genReportingToken(msg, proto)} and wraps in WAP nodes.
+     * WAWebReportingTokenUtils.genReportingTokenBodyForStanza: delegates
+     * to {@code genReportingTokenBody} for non-history-bundle messages.
      */
     public Node build(ChatMessageInfo messageInfo, Jid selfJid, Jid remoteJid) {
         // WAWebMessagingGatingUtils.isReportingTokenSendingEnabled:
@@ -129,8 +156,11 @@ public final class ReportingStanza {
     /**
      * Checks whether the message type is compatible with reporting tokens.
      *
-     * @apiNote WAWebMessagePluginGenerateReportingTokenContent.isMsgTypeReportingTokenCompatible:
-     * returns false for REACTION, REACTION_ENC, EVENT_RESPONSE, POLL_UPDATE.
+     * @param message the message content to check
+     * @return {@code true} if the message type supports reporting tokens
+     *
+     * @implNote WAWebMessagePluginGenerateReportingTokenContent.isMsgTypeReportingTokenCompatible:
+     * returns {@code false} for REACTION, REACTION_ENC, EVENT_RESPONSE, POLL_UPDATE.
      */
     private static boolean isMsgTypeCompatible(Message message) {
         return switch (message) {

@@ -21,12 +21,22 @@ import java.util.Objects;
  * node is placed directly under {@code <message>}; otherwise all
  * {@code <enc>} nodes are wrapped in a {@code <participants>} container.
  *
- * @apiNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza: builds
- * the stanza for CHAT and GROUP_DIRECT fanout types.
+ * @implNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza: builds
+ * the stanza for CHAT and GROUP_DIRECT fanout types. The token child
+ * is {@code (yield S(K)) ?? (yield T(K, l))} -- tctoken from
+ * {@link TcTokenStanza} with cstoken from {@link CsTokenStanza} as
+ * fallback.
  * @see GroupSkmsgFanoutStanza
  * @see ParticipantsStanza
+ * @see TcTokenStanza
+ * @see CsTokenStanza
  */
 public final class ChatFanoutStanza {
+    /**
+     * Prevents instantiation of this utility class.
+     *
+     * @implNote NO_WA_BASIS: Java utility class pattern.
+     */
     private ChatFanoutStanza() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
@@ -58,7 +68,11 @@ public final class ChatFanoutStanza {
      * @param botNode                optional {@code <bot>}
      * @param reportingNode          optional {@code <reporting>}
      * @param senderContentBinding   optional {@code <sender_content_binding>}
+     * @param botMetadataNode        optional metadata-only {@code <bot>} with
+     *                               type/local_automated_type/client_thread_id
      * @param tctokenNode            optional {@code <tctoken>}
+     * @param cstokenNode            optional {@code <cstoken>}, used as fallback
+     *                               when {@code tctokenNode} is {@code null}
      * @param ctwaNode               optional {@code <ctwa_attribution>}
      * @param groupDirectSkmsgNode   optional empty {@code <enc type="skmsg">} for
      *                               group-direct fanout (signals to the server
@@ -66,7 +80,10 @@ public final class ChatFanoutStanza {
      * @return a {@link NodeBuilder} for the {@code <message>} stanza,
      *         ready to be passed to {@code WhatsAppClient.sendNode}
      *
-     * @apiNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza
+     * @implNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza:
+     * builds the message stanza with all child nodes.
+     * The token node is {@code (yield S(K)) ?? (yield T(K, l))} -- tctoken
+     * with cstoken fallback.
      * WAWebSendDirectMsgToDeviceList: includes an empty
      * {@code <enc type="skmsg">} for GROUP_DIRECT fanout type.
      */
@@ -95,6 +112,7 @@ public final class ChatFanoutStanza {
             Node senderContentBinding,
             Node botMetadataNode,
             Node tctokenNode,
+            Node cstokenNode,
             Node ctwaNode,
             Node groupDirectSkmsgNode
     ) {
@@ -138,7 +156,10 @@ public final class ChatFanoutStanza {
         // WAWebSendMsgCreateFanoutStanza: optional children
         // NodeBuilder.content(Node...) silently skips nulls
         // WAWebSendMsgCreateFanoutStanza: child order matches
-        // A.body, A.botBody, F, B, V, Z, te, oe, ae, ie, se
+        // B.body, B.botBody, W, U, z, ne, oe, me, pe, _e, ge
+        // WAWebSendMsgCreateFanoutStanza: _e = (yield S(K)) ?? (yield T(K, l))
+        // tctoken with cstoken fallback
+        var tokenNode = tctokenNode != null ? tctokenNode : cstokenNode;
         builder.content(
                 botNode,
                 groupDirectSkmsgNode,
@@ -148,7 +169,7 @@ public final class ChatFanoutStanza {
                 senderContentBinding,
                 botMetadataNode,
                 reportingNode,
-                tctokenNode,
+                tokenNode,
                 ctwaNode
         );
 
@@ -156,10 +177,65 @@ public final class ChatFanoutStanza {
     }
 
     /**
+     * Builds the {@code <message>} stanza for chat or group-direct fanout
+     * without a {@code <cstoken>} fallback.
+     *
+     * <p>Convenience overload that delegates to the full
+     * {@link #build(String, Jid, String, List, String, String, String,
+     * String, String, String, Map, boolean, Jid, Jid, Jid, String,
+     * Node, Node, Node, Node, Node, Node, Node, Node, Node, Node, Node)}
+     * with {@code null} for the {@code cstokenNode} parameter.
+     *
+     * @implNote WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza:
+     * backward-compatible overload for callers that do not provide a
+     * cstoken node.
+     */
+    public static NodeBuilder build(
+            String messageId,
+            Jid chatJid,
+            String type,
+            List<MessageEncryptedPayload> payloads,
+            String editAttribute,
+            String addressingMode,
+            String deviceFanout,
+            String mediaType,
+            String decryptFail,
+            String nativeFlowName,
+            Map<Jid, byte[]> contentBindings,
+            boolean isBotRelated,
+            Jid peerRecipientLid,
+            Jid peerRecipientPn,
+            Jid recipientPn,
+            String peerRecipientUsername,
+            Node identityNode,
+            Node metaNode,
+            Node bizNode,
+            Node botNode,
+            Node reportingNode,
+            Node senderContentBinding,
+            Node botMetadataNode,
+            Node tctokenNode,
+            Node ctwaNode,
+            Node groupDirectSkmsgNode
+    ) {
+        return build(
+                messageId, chatJid, type, payloads,
+                editAttribute, addressingMode, deviceFanout,
+                mediaType, decryptFail, nativeFlowName,
+                contentBindings, isBotRelated,
+                peerRecipientLid, peerRecipientPn, recipientPn,
+                peerRecipientUsername,
+                identityNode, metaNode, bizNode, botNode,
+                reportingNode, senderContentBinding, botMetadataNode,
+                tctokenNode, null, ctwaNode, groupDirectSkmsgNode
+        );
+    }
+
+    /**
      * Builds an {@code <enc>} node for a single device payload with all
      * protocol attributes.
      *
-     * @apiNote WAWebSendMsgCreateFanoutStanza: creates
+     * @implNote WAWebSendMsgCreateFanoutStanza: creates
      * {@code <enc v="2" type="pkmsg|msg" mediatype="..." decrypt-fail="..."
      * native_flow_name="...">ciphertext</enc>}.
      */
@@ -184,7 +260,7 @@ public final class ChatFanoutStanza {
      * Builds the {@code <participants>} node for multi-device chat fanout,
      * including per-device content bindings when present.
      *
-     * @apiNote WAWebSendMsgCreateFanoutStanza: wraps each payload in
+     * @implNote WAWebSendMsgCreateFanoutStanza: wraps each payload in
      * {@code <to jid=...><enc ...>ciphertext</enc><content_binding>tag</content_binding></to>}.
      */
     private static Node buildParticipantsNode(

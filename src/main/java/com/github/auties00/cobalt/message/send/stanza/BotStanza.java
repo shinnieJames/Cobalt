@@ -125,7 +125,8 @@ public final class BotStanza {
 
     /**
      * Builds the metadata-only {@code <bot>} node that carries bot
-     * invocation type, business bot classification, and AI thread ID.
+     * invocation type, business bot classification, AI thread ID,
+     * and AI mode selection attributes.
      *
      * <p>This node is separate from the encrypted bot body built by
      * {@link #build(ChatMessageInfo, Jid)}.  It carries stanza-level
@@ -137,18 +138,29 @@ public final class BotStanza {
      * @param bizBotType the business bot type: {@code "1p_partial"},
      *                   {@code "3p_full"}, or {@code null}
      * @param clientThreadId the AI thread ID, or {@code null}
+     * @param modeSelection the user's AI mode selection:
+     *                      {@code "default"} or {@code "think_hard"},
+     *                      or {@code null} if not applicable
+     * @param modeSelected  the dynamic mode override string, or
+     *                      {@code null} if not applicable
      * @return the bot metadata node, or {@code null} if no metadata applies
      *
-     * @apiNote WAWebSendMsgCreateFanoutStanza: builds {@code oe} node with
+     * @implNote WAWebSendMsgCreateFanoutStanza: builds {@code me} node with
      * type (prompt/command/request_welcome), local_automated_type
-     * (1p_partial/3p_full), client_thread_id from AI thread.
+     * (1p_partial/3p_full), client_thread_id from AI thread,
+     * mode_selection (default/think_hard), and mode_selected (dynamic
+     * override from botModeOverride).
      */
     public static Node buildMetadata(
             String botMsgBodyType,
             String bizBotType,
-            String clientThreadId
+            String clientThreadId,
+            String modeSelection,
+            String modeSelected
     ) {
-        if (botMsgBodyType == null && bizBotType == null && clientThreadId == null) {
+        // WAWebSendMsgCreateFanoutStanza: only emit if any attribute is present
+        if (botMsgBodyType == null && bizBotType == null && clientThreadId == null
+                && modeSelection == null && modeSelected == null) {
             return null;
         }
 
@@ -157,7 +169,34 @@ public final class BotStanza {
                 .attribute("type", botMsgBodyType)
                 .attribute("local_automated_type", bizBotType)
                 .attribute("client_thread_id", clientThreadId)
+                .attribute("mode_selection", modeSelection)
+                .attribute("mode_selected", modeSelected)
                 .build();
+    }
+
+    /**
+     * Builds the metadata-only {@code <bot>} node without AI mode
+     * selection attributes.
+     *
+     * <p>Convenience overload that delegates to the full
+     * {@link #buildMetadata(String, String, String, String, String)}
+     * with {@code null} for {@code modeSelection} and
+     * {@code modeSelected}.
+     *
+     * @param botMsgBodyType the bot message body type, or {@code null}
+     * @param bizBotType     the business bot type, or {@code null}
+     * @param clientThreadId the AI thread ID, or {@code null}
+     * @return the bot metadata node, or {@code null} if no metadata applies
+     *
+     * @implNote WAWebSendMsgCreateFanoutStanza: delegates to the
+     * five-parameter variant with {@code null} mode attributes.
+     */
+    public static Node buildMetadata(
+            String botMsgBodyType,
+            String bizBotType,
+            String clientThreadId
+    ) {
+        return buildMetadata(botMsgBodyType, bizBotType, clientThreadId, null, null);
     }
 
     /**

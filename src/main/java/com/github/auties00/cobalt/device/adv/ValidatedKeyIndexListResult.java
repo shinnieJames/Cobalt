@@ -10,8 +10,10 @@ import java.util.SequencedSet;
 /**
  * Result of validating a signed key index list protobuf.
  *
- * @apiNote WAWebHandleAdvDeviceNotificationUtils.decodeSignedKeyIndexBytes: decodes
+ * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey: decodes
  * and validates the signed key index list, extracting these fields after signature verification.
+ * The WA Web return value also includes an {@code identityUpdatePromise} for saving the identity
+ * key, which in Cobalt is handled by the caller ({@code DeviceService}).
  */
 public final class ValidatedKeyIndexListResult {
     private final long rawId;
@@ -24,6 +26,9 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Creates a new validated key index list result.
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey: constructs
+     * the return object from decoded {@code ADVKeyIndexListSpec} fields plus the
+     * {@code accountSignatureKey} from the outer {@code ADVSignedKeyIndexListSpec}.
      * @param rawId               the raw identity ID from the key index list
      * @param timestamp           the timestamp from the key index list
      * @param validIndexes        the list of valid key indexes for device validation
@@ -50,6 +55,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the raw identity ID from the key index list.
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey:
+     * {@code rawId} field from decoded {@code ADVKeyIndexListSpec}.
      * @return the raw identity ID
      */
     public long rawId() {
@@ -59,6 +66,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the timestamp from the key index list.
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey:
+     * {@code timestamp} field from decoded {@code ADVKeyIndexListSpec}.
      * @return the timestamp
      */
     public Instant timestamp() {
@@ -68,6 +77,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the list of valid key indexes for device validation.
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey:
+     * {@code validIndexes} field from decoded {@code ADVKeyIndexListSpec}.
      * @return an unmodifiable view of the valid indexes
      */
     public SequencedSet<Integer> validIndexes() {
@@ -77,6 +88,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the current key index counter.
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey:
+     * {@code currentIndex} field from decoded {@code ADVKeyIndexListSpec}.
      * @return the current index
      */
     public int currentIndex() {
@@ -86,6 +99,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the account type (E2EE or HOSTED).
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey:
+     * {@code accountType} field from decoded {@code ADVKeyIndexListSpec}.
      * @return the account type
      */
     public ADVEncryptionType accountType() {
@@ -95,6 +110,8 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the account signature key (32 bytes).
      *
+     * @implNote WAWebHandleAdvDeviceNotificationUtils.verifySKeyIndexWithAccSigKey:
+     * {@code accountSignatureKey} field from outer {@code ADVSignedKeyIndexListSpec}.
      * @return the account signature key
      */
     public byte[] accountSignatureKey() {

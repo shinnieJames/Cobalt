@@ -13,7 +13,7 @@ import java.util.Objects;
  * {@code <ack>} node containing delivery metadata, an optional participant
  * hash for group-message verification, and an optional error code.
  *
- * @apiNote WAWebSendMsgCommonApi.sendMsgAckSyncParser: parses the ack
+ * @implNote WAWebSendMsgCommonApi.sendMsgAckSyncParser: parses the ack
  * stanza asserting tag {@code "ack"}, then extracts {@code t},
  * {@code sync}, {@code phash}, {@code refresh_lid}, {@code addressing_mode},
  * {@code count}, and {@code error} attributes.
@@ -21,6 +21,12 @@ import java.util.Objects;
  * @see NackReason
  */
 public final class AckParser {
+    /**
+     * Prevents instantiation of this utility class.
+     *
+     * @implNote WAWebSendMsgCommonApi.sendMsgAckSyncParser: static parser,
+     * no instances needed.
+     */
     private AckParser() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
@@ -28,13 +34,12 @@ public final class AckParser {
     /**
      * Parses a server ack node into a structured result.
      *
+     * @implNote WAWebSendMsgCommonApi.sendMsgAckSyncParser.parse:
+     * asserts tag "ack" then extracts each attribute.
      * @param ack the ack node returned by the server
      * @return the parsed result
      * @throws NullPointerException     if {@code ack} is {@code null}
      * @throws IllegalArgumentException if the node tag is not {@code "ack"}
-     *
-     * @apiNote WAWebSendMsgCommonApi.sendMsgAckSyncParser.parse:
-     * asserts tag "ack" then extracts each attribute.
      */
     public static AckResult parse(Node ack) {
         Objects.requireNonNull(ack, "ack");

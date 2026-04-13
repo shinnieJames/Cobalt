@@ -168,12 +168,21 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
                     // WAWebDeviceSentMessageProtoUtils.wrapDeviceSentMessage:
                     // wraps the message in a DeviceSentMessage with the
                     // destination JID so companion devices know who the
-                    // message was sent to
+                    // message was sent to.
+                    // If the message has messageContextInfo, it is lifted to
+                    // the outer container and removed from the inner message.
+                    var innerContextInfo = companionContainer.messageContextInfo().orElse(null);
+                    var innerContainer = innerContextInfo != null
+                            ? companionContainer.withMessageContextInfo(null)
+                            : companionContainer;
                     var deviceSentMessage = new DeviceSentMessageBuilder()
                             .destinationJid(destinationJid)
-                            .messageContainer(companionContainer)
+                            .messageContainer(innerContainer)
                             .build();
                     var wrapped = MessageContainer.of(deviceSentMessage);
+                    if (innerContextInfo != null) {
+                        wrapped = wrapped.withMessageContextInfo(innerContextInfo);
+                    }
                     devicePlaintext = MessageContainerSpec.encode(wrapped);
                 } else {
                     devicePlaintext = MessageContainerSpec.encode(recipientContainer);
@@ -253,7 +262,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * @param container the message container
      * @return the edit attribute value, or {@code null} for normal messages
      *
-     * @apiNote WAWebSendMsgCommonApi.editAttribute: checks protobuf
+     * @implNote WAWebSendMsgCommonApi.editAttribute: checks protobuf
      * message type to determine if this is a revoke (7), admin revoke (8),
      * edit (1), or pin (2).
      * WAWebAck.EDIT_ATTR: the constant values.
@@ -271,8 +280,10 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      *                       admin revoking another participant's message
      * @return the edit attribute value, or {@code null} for normal messages
      *
-     * @apiNote WAWebSendMsgCommonApi.editAttribute: uses
+     * @implNote WAWebSendMsgCommonApi.editAttribute: uses
      * {@code subtype === "admin_revoke"} to return 8 instead of 7.
+     * Also handles secretEncryptedMessage with EVENT_EDIT or MESSAGE_EDIT
+     * secretEncType, mapping both to "1" (MESSAGE_EDIT).
      */
     String resolveEditAttribute(MessageContainer container, boolean isAdminRevoke) {
         var message = container.content();
@@ -285,6 +296,12 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             // WAWebSendMsgCommonApi: protocolMessage MESSAGE_EDIT → 1
             case ProtocolMessage p when p.type().orElse(null) == ProtocolMessage.Type.MESSAGE_EDIT -> "1";
 
+            // WAWebSendMsgCommonApi: secretEncryptedMessage with EVENT_EDIT or
+            // MESSAGE_EDIT secretEncType → 1 (MESSAGE_EDIT)
+            case SecretEncMessage s
+                    when s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.EVENT_EDIT
+                    || s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.MESSAGE_EDIT -> "1";
+
             // WAWebSendMsgCommonApi: keepInChatMessage UNDO_KEEP_FOR_ALL → 7
             case KeepInChatMessage keep when isUndoKeepForAll(keep) -> "7";
 
@@ -292,7 +309,8 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             case PinInChatMessage _ -> "2";
 
             // WAWebSendMsgCommonApi: reactionMessage with revoked text → 7
-            case ReactionMessage r when r.text().isEmpty() -> "7";
+            // WAWebReactionsBEUtils.REVOKED_REACTION_TEXT is "" (empty string)
+            case ReactionMessage r when r.text().orElse("").isEmpty() -> "7";
 
             default -> null;
         };
@@ -404,12 +422,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * Checks whether a KeepInChatMessage represents an "undo keep for all"
      * operation, which uses the sender_revoke edit attribute.
      *
-     * @apiNote WAWebSendMsgCommonApi: keepInChatMessage with
-     * keepType=UNDO_KEEP_FOR_ALL and fromMe=true → SENDER_REVOKE (7).
+     * @implNote WAWebSendMsgCommonApi: keepInChatMessage with
+     * {@code key != null}, {@code key.fromMe === true}, and
+     * {@code keepType === UNDO_KEEP_FOR_ALL} maps to SENDER_REVOKE (7).
      */
     private boolean isUndoKeepForAll(KeepInChatMessage keep) {
-        // WAWebSendMsgCommonApi: keepInChatMessage.key.fromMe === true
+        // WAWebSendMsgCommonApi: keepInChatMessage.key != null
+        // && keepInChatMessage.key.fromMe === true
         // && keepType === UNDO_KEEP_FOR_ALL
-        return keep.keepType().orElse(null) == ChatKeepType.UNDO_KEEP_FOR_ALL;
+        return keep.key().isPresent()
+                && keep.key().get().fromMe()
+                && keep.keepType().orElse(null) == ChatKeepType.UNDO_KEEP_FOR_ALL;
     }
 }

@@ -11,7 +11,7 @@ import java.util.OptionalInt;
  * attribute.  This metadata identifies verified business accounts and
  * carries privacy mode information for business-hosted messaging.
  *
- * @apiNote WAWebHandleMsgParser function S(): parses verified_name,
+ * @implNote WAWebHandleMsgParser function v(): parses verified_name,
  * verified_level, biz node (actual_actors, host_storage, privacy_mode_ts,
  * native_flow_name, campaign_id, button/list/hsm envelope flags).
  */

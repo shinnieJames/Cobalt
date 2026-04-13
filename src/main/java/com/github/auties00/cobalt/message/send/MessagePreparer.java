@@ -6,7 +6,6 @@ import com.github.auties00.cobalt.model.chat.ChatMessageContextInfoBuilder;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
-import com.github.auties00.cobalt.model.device.DeviceListMetadataBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.*;
@@ -34,50 +33,62 @@ import java.util.Optional;
  * <ol>
  *   <li>Generate a unique message ID</li>
  *   <li>Generate a 32-byte {@code messageSecret}</li>
- *   <li>Generate random padding bytes</li>
  *   <li>Validate addon encryption (encrypted addons must have
  *       their {@code encPayload}/{@code encIv} populated)</li>
  *   <li>Auto-convert {@link ReactionMessage} to
  *       {@link EncReactionMessage} when targeting a CAG group</li>
- *   <li>Populate {@code DeviceContextInfo} with messageSecret,
- *       paddingBytes, and device list metadata</li>
+ *   <li>Populate {@code messageContextInfo} with messageSecret</li>
  *   <li>Wrap everything into the appropriate {@link MessageInfo}</li>
  * </ol>
  *
- * @apiNote WAWebOutgoingMessage.createOutgoingMessageProtobuf: creates
- * the protobuf from message data, populating messageContextInfo with
- * messageSecret, paddingBytes, and device metadata.
- * WAWebE2EProtoGenerator.populateMessageContextInfo: sets the
- * messageContextInfo fields on the outgoing protobuf.
+ * <p>Device list metadata (ICDC) is populated later by
+ * {@code IcdcEnricher.enrich()} in the send pipeline.
+ * Random padding is applied at the Signal binary level by
+ * {@code MessageEncryption} via {@code WACryptoPkcs7.writeRandomPadMax16}.
+ *
+ * @implNote WAWebOutgoingMessage.createOutgoingMessageProtobuf: creates
+ * the protobuf from message data.
+ * WAWebE2EProtoGenerator.getProtobufMessage: sets messageSecret on
+ * messageContextInfo.
  * WAWebAddonEncryptAddonMsgData.encryptAddOn: applies inner AES-GCM
  * encryption for addon message types.
  */
 final class MessagePreparer {
+    /**
+     * Logger for diagnostic output during message preparation.
+     *
+     * @implNote NO_WA_BASIS: Java logging infrastructure.
+     */
     private static final System.Logger LOGGER = System.getLogger(MessagePreparer.class.getName());
 
     /**
      * Size of the message secret in bytes.
      *
-     * @apiNote WAWebAddonEncryptionError.getValidatedMessageSecret:
+     * <p>WA Web generates the 32-byte message secret via
+     * {@code self.crypto.getRandomValues(new Uint8Array(32))} in
+     * various message creation actions.
+     *
+     * @implNote WAWebAddonEncryptionError.getValidatedMessageSecret:
      * validates that messageSecret is exactly 32 bytes.
      */
     private static final int MESSAGE_SECRET_SIZE = 32;
 
     /**
-     * Minimum padding size in bytes.
+     * The store used for JID lookups, newsletter resolution, and group
+     * metadata queries.
      *
-     * @apiNote WAWebE2EProtoGenerator.populateMessageContextInfo:
-     * adds random padding bytes to messageContextInfo.
+     * @implNote ADAPTED: WAWebE2EProtoGenerator uses module-level imports;
+     * Cobalt uses constructor-injected store.
      */
-    private static final int MIN_PADDING_SIZE = 1;
-
-    /**
-     * Maximum padding size in bytes.
-     */
-    private static final int MAX_PADDING_SIZE = 16;
-
     private final WhatsAppStore store;
 
+    /**
+     * Creates a new message preparer with the specified store.
+     *
+     * @param store the store for JID lookups and metadata queries
+     * @implNote ADAPTED: WAWebE2EProtoGenerator uses module-level imports;
+     * Cobalt uses constructor-injected store.
+     */
     MessagePreparer(WhatsAppStore store) {
         this.store = Objects.requireNonNull(store, "store");
     }
@@ -86,13 +97,21 @@ final class MessagePreparer {
      * Prepares a {@link MessageContainer} for sending to a chat,
      * producing a fully populated {@link ChatMessageInfo}.
      *
+     * <p>The messageSecret is generated here and set on both the
+     * {@code messageContextInfo} of the container and the
+     * {@link ChatMessageInfo} itself. Device list metadata (ICDC) is
+     * populated later by {@code IcdcEnricher.enrich()} during the
+     * per-device encryption phase.
+     *
      * @param chatJid   the recipient chat JID
      * @param container the raw message container
      * @return the prepared message info, ready for the send pipeline
      *
-     * @apiNote WAWebOutgoingMessage.createOutgoingMessageProtobuf:
+     * @implNote WAWebOutgoingMessage.createOutgoingMessageProtobuf:
      * generates the message ID, populates messageContextInfo, and
      * applies addon encryption.
+     * WAWebE2EProtoGenerator.getProtobufMessage: sets messageSecret
+     * on messageContextInfo when not invoking a bot.
      */
     ChatMessageInfo prepareChat(Jid chatJid, MessageContainer container) {
         Objects.requireNonNull(chatJid, "chatJid");
@@ -100,26 +119,23 @@ final class MessagePreparer {
 
         var localJid = store.jid()
                 .orElseThrow(() -> new IllegalStateException("Not logged in"));
-        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, chatJid);
+        // WAWebMsgKeyNewId.genMsgKeyUint: uses getMePnUserOrThrow_DO_NOT_USE()
+        // (the sender's own PN user JID), not the chat/recipient JID
+        var messageId = MessageIdGenerator.generate(MessageIdVersion.V2, localJid);
         var timestamp = Instant.now();
 
-        // WAWebOutgoingMessage: generate 32-byte message secret
+        // WAWebSendTextMsgChatAction / WAWebChatForwardMessage:
+        // generate 32-byte message secret via crypto.getRandomValues(new Uint8Array(32))
         var messageSecret = FastRandomUtils.randomByteArray(MESSAGE_SECRET_SIZE);
 
         // WAWebAddonEncryptAddonMsgData: validate or convert addon content
         var preparedContainer = prepareAddonContent(container, chatJid, localJid);
 
-        // WAWebE2EProtoGenerator.populateMessageContextInfo: attach
-        // messageSecret and paddingBytes to the container's deviceInfo
-        var paddingBytes = FastRandomUtils.randomByteArray(MIN_PADDING_SIZE, MAX_PADDING_SIZE);
-        var deviceInfoMetadata = new DeviceListMetadataBuilder()
-                .senderTimestamp(timestamp)
-                .build();
+        // WAWebE2EProtoGenerator.getProtobufMessage: sets messageSecret on
+        // messageContextInfo. Device list metadata is populated later by
+        // IcdcEnricher.enrich() in the per-device encryption phase.
         var deviceInfo = new ChatMessageContextInfoBuilder()
-                .deviceListMetadata(deviceInfoMetadata)
-                .deviceListMetadataVersion(2)
                 .messageSecret(messageSecret)
-                .paddingBytes(paddingBytes)
                 .build();
         preparedContainer = preparedContainer.withMessageContextInfo(deviceInfo);
 
@@ -149,21 +165,25 @@ final class MessagePreparer {
      * @param container     the raw message container
      * @return the prepared message info, ready for the send pipeline
      *
-     * @apiNote WAWebNewsletterSendMessageQueryJob: newsletters don't use
-     *          E2E encryption or messageSecret, so the container is sent as plaintext.
+     * @implNote WAWebNewsletterSendMessageQueryJob: newsletters don't use
+     *           E2E encryption or messageSecret, so the container is sent as plaintext.
      */
     NewsletterMessageInfo prepareNewsletter(Jid newsletterJid, MessageContainer container) {
         Objects.requireNonNull(newsletterJid, "newsletterJid");
         Objects.requireNonNull(container, "container");
 
+        var localJid = store.jid()
+                .orElseThrow(() -> new IllegalStateException("Not logged in"));
         var newsletter = store.findNewsletterByJid(newsletterJid)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Cannot send to a newsletter that you didn't join: " + newsletterJid));
         var oldServerId = newsletter.newestMessage()
                 .map(NewsletterMessageInfo::serverId)
                 .orElse(0);
+        // WAWebMsgKeyNewId.genMsgKeyUint: uses getMePnUserOrThrow_DO_NOT_USE()
+        // (the sender's own PN user JID), not the newsletter JID
         var key = new MessageKeyBuilder()
-                .id(MessageIdGenerator.generate(MessageIdVersion.V2, newsletterJid))
+                .id(MessageIdGenerator.generate(MessageIdVersion.V2, localJid))
                 .parentJid(newsletterJid)
                 .fromMe(true)
                 .build();
@@ -186,7 +206,7 @@ final class MessagePreparer {
      * @param selfJid   the sender's JID
      * @return the container, potentially with converted addon content
      *
-     * @apiNote WAWebAddonEncryptAddonMsgData.encryptAddOn: validates
+     * @implNote WAWebAddonEncryptAddonMsgData.encryptAddOn: validates
      * and encrypts addon content before the outer Signal encryption.
      * WAWebSendGroupMsgJob.isCagAddon: detects CAG context for
      * auto-conversion of reactions to encrypted reactions.
@@ -287,7 +307,10 @@ final class MessagePreparer {
      * <p>Encrypted reactions are required for CAG (Community Announcement
      * Group) default subgroups that use LID addressing.
      *
-     * @apiNote WAWebSendGroupMsgJob.isCagAddon: returns true for
+     * @param chatJid the target chat JID
+     * @return {@code true} if the chat requires encrypted addon messages
+     *
+     * @implNote WAWebSendGroupMsgJob.isCagAddon: returns true for
      * reaction_enc in linked groups with LID addressing.
      */
     private boolean requiresEncryptedReaction(Jid chatJid) {
@@ -302,6 +325,13 @@ final class MessagePreparer {
 
     /**
      * Resolves the parent message referenced by a message key.
+     *
+     * @param parentJid the chat JID containing the parent message
+     * @param key       the message key referencing the parent, or {@code null}
+     * @return the resolved parent message, or empty if not found
+     *
+     * @implNote ADAPTED: WAWebAddonEncryptAddonMsgData.encryptAddOn resolves
+     * the parent message from the MsgCollection; Cobalt uses the store.
      */
     private Optional<ChatMessageInfo> resolveParentMessage(Jid parentJid, MessageKey key) {
         return key == null ? Optional.empty() : key.id()

@@ -53,6 +53,13 @@ public final class MessageReceiveStanza {
     public static final int EDIT_ADMIN_REVOKE = 8;
 
     /**
+     * The constant context source value for channel invitations.
+     *
+     * @implNote WAWebHandleMsgCommon.CONTEXT_SOURCE
+     */
+    public static final String CONTEXT_SOURCE_CHANNELS_INVITATION = "channels_invitation";
+
+    /**
      * The stanza {@code id} attribute.
      *
      * @apiNote WAWebHandleMsgParser: {@code e.attrString("id")}
@@ -116,9 +123,10 @@ public final class MessageReceiveStanza {
     private final String pushName;
 
     /**
-     * The message category (e.g. "peer" for peer protocol messages).
+     * The message category.  The only defined value is {@code "peer"}
+     * for peer protocol messages.
      *
-     * @apiNote WAWebHandleMsgParser: {@code e.maybeAttrString("category")}
+     * @implNote WAWebHandleMsgCommon.MSG_CATEGORY
      */
     private final String category;
 
@@ -131,9 +139,10 @@ public final class MessageReceiveStanza {
     private final String offline;
 
     /**
-     * The addressing mode for group messages ("pn" or "lid").
+     * The addressing mode for group messages.  Valid values are
+     * {@code "pn"} (phone number) and {@code "lid"} (LID).
      *
-     * @apiNote WAWebHandleMsgParser: {@code e.attrEnumOrDefault("addressing_mode", ...)}
+     * @implNote WAWebHandleMsgCommon.STANZA_MSG_ADDRESSING_MODE
      */
     private final String addressingMode;
 
@@ -254,10 +263,12 @@ public final class MessageReceiveStanza {
     private final String displayName;
 
     /**
-     * The stanza {@code type} attribute (e.g. "text", "media", "reaction",
-     * "poll", "event").
+     * The stanza {@code type} attribute.  Valid values are
+     * {@code "text"}, {@code "media"}, {@code "medianotify"},
+     * {@code "pay"}, {@code "poll"}, {@code "reaction"}, and
+     * {@code "event"}.
      *
-     * @apiNote WAWebHandleMsgCommon.STANZA_MSG_TYPES
+     * @implNote WAWebHandleMsgCommon.STANZA_MSG_TYPES
      */
     private final String stanzaType;
 
@@ -286,26 +297,28 @@ public final class MessageReceiveStanza {
     private final boolean viewOnceUnavailable;
 
     /**
-     * The {@code polltype} from the {@code <meta>} node (e.g. "creation",
-     * "vote", "result_snapshot").
+     * The {@code polltype} from the {@code <meta>} node.  Valid values are
+     * {@code "creation"}, {@code "quiz_creation"}, {@code "vote"},
+     * {@code "result_snapshot"}, and {@code "edit"}.
      *
-     * @apiNote WAWebHandleMsgCommon.POLL_TYPES
+     * @implNote WAWebHandleMsgCommon.POLL_TYPES
      */
     private final String pollType;
 
     /**
-     * The {@code event_type} from the {@code <meta>} node (e.g. "creation",
-     * "edit", "response").
+     * The {@code event_type} from the {@code <meta>} node.  Valid values are
+     * {@code "creation"}, {@code "response"}, and {@code "edit"}.
+     * Only populated when the stanza type is {@code "event"}.
      *
-     * @apiNote WAWebHandleMsgCommon.EVENT_TYPES
+     * @implNote WAWebHandleMsgCommon.EVENT_TYPES
      */
     private final String eventType;
 
     /**
-     * The {@code origin} from the {@code <meta>} node (e.g. "ctwa" for
-     * click-to-WhatsApp ads).
+     * The {@code origin} from the {@code <meta>} node.  The only defined
+     * value is {@code "ctwa"} (click-to-WhatsApp ads).
      *
-     * @apiNote WAWebHandleMsgCommon.STANZA_MSG_ORIGIN
+     * @implNote WAWebHandleMsgCommon.STANZA_MSG_ORIGIN
      */
     private final String origin;
 
@@ -331,17 +344,19 @@ public final class MessageReceiveStanza {
     private final boolean statusMentioned;
 
     /**
-     * The {@code appdata} attribute from the {@code <meta>} node
-     * (e.g. "default", "member_tag", "group_history").
+     * The {@code appdata} attribute from the {@code <meta>} node.
+     * Valid values are {@code "default"}, {@code "member_tag"}, and
+     * {@code "group_history"}.
      *
-     * @apiNote WAWebHandleMsgCommon.APPDATA
+     * @implNote WAWebHandleMsgCommon.APPDATA
      */
     private final String appdata;
 
     /**
      * The {@code biz_source} attribute from the {@code <meta>} node.
+     * The attribute name is defined as the constant {@code "biz_source"}.
      *
-     * @apiNote WAWebHandleMsgCommon.BIZ_SOURCE_ATTR
+     * @implNote WAWebHandleMsgCommon.BIZ_SOURCE_ATTR
      */
     private final String bizSource;
 
@@ -398,8 +413,10 @@ public final class MessageReceiveStanza {
 
     /**
      * The {@code context_source} from the {@code <meta>} node.
+     * The known constant value is {@code "channels_invitation"},
+     * defined by {@code WAWebHandleMsgCommon.CONTEXT_SOURCE}.
      *
-     * @apiNote WAWebHandleMsgParser: {@code meta.attrString("context_source")}
+     * @implNote WAWebHandleMsgCommon.CONTEXT_SOURCE
      */
     private final String contextSource;
 
@@ -955,7 +972,8 @@ public final class MessageReceiveStanza {
     /**
      * Returns whether this is a peer message ({@code category="peer"}).
      *
-     * @apiNote WAWebHandleMsgCommon.CATEGORY_PEER = "peer"
+     * @return {@code true} if the category is {@code "peer"}
+     * @implNote WAWebHandleMsgCommon.MSG_CATEGORY.peer
      */
     public boolean isPeer() {
         return "peer".equals(category);

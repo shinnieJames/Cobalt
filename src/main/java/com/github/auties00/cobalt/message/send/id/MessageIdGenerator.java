@@ -25,27 +25,30 @@ import java.util.Objects;
  *       (20 total)</li>
  * </ul>
  *
- * @apiNote WAWebMsgKey.newId: primary entry point; tries
+ * @implNote WAWebMsgKey.newId: primary entry point; tries
  * WAWebMsgKeyNewId.getMsgKeyNewSHA256Id then falls back to newId_DEPRECATED.
  * @see MessageIdVersion
  */
 public final class MessageIdGenerator {
     /**
      * The 4-character prefix shared by all WhatsApp Web message IDs.
+     *
+     * @implNote WAWebMsgKey.newId / WAWebMsgKey.newId_DEPRECATED:
+     * both hard-code the literal {@code "3EB0"} as the message ID prefix.
      */
     public static final String PREFIX = "3EB0";
 
     /**
      * Number of leading SHA-256 digest bytes used for the V2 hex suffix.
      *
-     * @apiNote WAWebMsgKeyNewId: {@code new Uint8Array(digest, 0, 9)}
+     * @implNote WAWebMsgKeyNewId: {@code new Uint8Array(digest, 0, 9)}
      */
     private static final int V2_DIGEST_SLICE = 9;
 
     /**
      * Number of random bytes fed into the V2 pre-image payload.
      *
-     * @apiNote WAWebMsgKeyNewId.genMsgKeyUint: uses
+     * @implNote WAWebMsgKeyNewId.genMsgKeyUint: uses
      * {@code parseHex(randomHex(16))}, which yields 16 random bytes.
      */
     private static final int V2_RANDOM_BYTES = 16;
@@ -53,7 +56,7 @@ public final class MessageIdGenerator {
     /**
      * Number of random bytes used for the V1 hex suffix.
      *
-     * @apiNote WAWebMsgKey.newId_DEPRECATED: uses {@code randomHex(8)},
+     * @implNote WAWebMsgKey.newId_DEPRECATED: uses {@code randomHex(8)},
      * which generates 8 random bytes then hex-encodes them.
      */
     private static final int V1_RANDOM_BYTES = 8;
@@ -62,6 +65,10 @@ public final class MessageIdGenerator {
      * Uppercase hex formatter matching the output of
      * {@code WAHex.toHex}, which uses the uppercase alphabet
      * {@code [0-9A-F]}.
+     *
+     * @implNote WAHex.toHex: uses lookup table
+     * {@code [48,49,...,65,66,67,68,69,70]} which maps to
+     * {@code 0123456789ABCDEF}.
      */
     private static final HexFormat HEX = HexFormat.of().withUpperCase();
 
@@ -69,13 +76,18 @@ public final class MessageIdGenerator {
      * VarHandle for writing a {@code long} in big-endian order into a
      * {@code byte[]}.
      *
-     * @apiNote WABinary.writeInt64: writes a 64-bit signed integer
+     * @implNote WABinary.writeInt64: writes a 64-bit signed integer
      * in big-endian byte order.
      */
     private static final VarHandle LONG_BE = MethodHandles.byteArrayViewVarHandle(
             long[].class, ByteOrder.BIG_ENDIAN
     );
 
+    /**
+     * Prevents instantiation of this utility class.
+     *
+     * @implNote NO_WA_BASIS: Java utility class pattern.
+     */
     private MessageIdGenerator() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
@@ -87,11 +99,19 @@ public final class MessageIdGenerator {
      * is unavailable, this method silently falls back to V1.
      *
      * @param version   the algorithm version
-     * @param senderJid the JID of the sending device
+     * @param senderJid the sender's own user JID (i.e. the logged-in
+     *                   user's phone number JID, not the chat JID).
+     *                   This is used as part of the V2 SHA-256 pre-image.
      * @return a new message ID string
      * @throws NullPointerException if any argument is {@code null}
      *
-     * @apiNote WAWebMsgKey.newId / WAWebMsgKey.newId_DEPRECATED
+     * @implNote WAWebMsgKey.newId: tries
+     * {@code WAWebMsgKeyNewId.getMsgKeyNewSHA256Id()} (V2), catches errors
+     * and falls back to {@code newId_DEPRECATED()} (V1).
+     * WAWebMsgKeyNewId.genMsgKeyUint: uses
+     * {@code getMePnUserOrThrow_DO_NOT_USE().toString()} as the JID
+     * component of the SHA-256 pre-image, which is always the sender's
+     * own PN user JID.
      */
     public static String generate(MessageIdVersion version, Jid senderJid) {
         Objects.requireNonNull(version, "version");
@@ -111,7 +131,7 @@ public final class MessageIdGenerator {
     /**
      * V1 (random-only): {@code "3EB0"} + 16 uppercase hex chars from 8 random bytes.
      *
-     * @apiNote WAWebMsgKey.newId_DEPRECATED: {@code "3EB0" + randomHex(8)},
+     * @implNote WAWebMsgKey.newId_DEPRECATED: {@code "3EB0" + randomHex(8)},
      * where {@code randomHex(n)} produces {@code 2n} uppercase hex characters
      * from {@code n} random bytes.
      */
@@ -125,7 +145,7 @@ public final class MessageIdGenerator {
      * V2 (SHA-256): {@code "3EB0"} + 18 uppercase hex chars from
      * {@code SHA256(int64(time) || utf8(jid) || random(16))[0:9]}.
      *
-     * @apiNote WAWebMsgKeyNewId.getMsgKeyNewSHA256Id: builds pre-image via
+     * @implNote WAWebMsgKeyNewId.getMsgKeyNewSHA256Id: builds pre-image via
      * genMsgKeyUint (WABinary.writeInt64 + writeString + writeBuffer),
      * then {@code "3EB0" + toHex(SHA256(payload)[0:9])}.
      */

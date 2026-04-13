@@ -20,14 +20,27 @@ import java.util.Objects;
  *
  * <p>All transforms mutate the container in place via setters.
  *
- * @apiNote WAWebE2EProtoGenerator: provides
+ * @implNote WAWebE2EProtoGenerator: provides
  * {@code updateBotInvokeMsgProtoCopyForCapi},
  * {@code updateFbidBotProtobuf}, {@code updateBotProtobuf}, and
  * {@code updateFbidBotInvokeProtobuf}.
  */
 public final class BotProtobufTransform {
+    /**
+     * The store used for LID-to-phone lookups during FBID bot transforms.
+     *
+     * @implNote ADAPTED: WAWebE2EProtoGenerator uses
+     * {@code WAWebLidMigrationUtils.toLid} directly; Cobalt uses
+     * constructor-injected store.
+     */
     private final WhatsAppStore store;
 
+    /**
+     * Creates a new bot protobuf transform with the specified store.
+     *
+     * @param store the store for JID lookups
+     * @implNote ADAPTED: WAWebE2EProtoGenerator.updateFbidBotProtobuf
+     */
     public BotProtobufTransform(WhatsAppStore store) {
         this.store = Objects.requireNonNull(store, "store");
     }
@@ -42,7 +55,7 @@ public final class BotProtobufTransform {
      * @param botMessageSecret the derived bot message secret, or
      *                         {@code null} to just clear the secret
      *
-     * @apiNote WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi
+     * @implNote WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi
      */
     public void transformForCapi(MessageContainer container, byte[] botMessageSecret) {
         // Replace messageSecret with botMessageSecret
@@ -64,7 +77,7 @@ public final class BotProtobufTransform {
      *
      * @param container the message container (mutated in place)
      *
-     * @apiNote WAWebE2EProtoGenerator.updateFbidBotProtobuf
+     * @implNote WAWebE2EProtoGenerator.updateFbidBotProtobuf
      */
     public void transformForFbidBot(MessageContainer container) {
         var contextInfo = resolveInnerContextInfo(container);
@@ -87,7 +100,7 @@ public final class BotProtobufTransform {
      *
      * @param container the message container (mutated in place)
      *
-     * @apiNote WAWebE2EProtoGenerator.updateFbidBotInvokeProtobuf
+     * @implNote WAWebE2EProtoGenerator.updateFbidBotInvokeProtobuf
      */
     public void transformForFbidBotInvoke(MessageContainer container) {
         if (!(container.content() instanceof ProtocolMessage pm)) {
@@ -113,7 +126,7 @@ public final class BotProtobufTransform {
      *
      * @param container the message container (mutated in place)
      *
-     * @apiNote WAWebE2EProtoGenerator.updateBotProtobuf
+     * @implNote WAWebE2EProtoGenerator.updateBotProtobuf
      */
     public void transformForBot(MessageContainer container) {
         if (!(container.content() instanceof ProtocolMessage pm)) {
@@ -129,6 +142,15 @@ public final class BotProtobufTransform {
     /**
      * Resolves the inner {@link ContextInfo}, handling the
      * botInvokeMessage {@link FutureProofMessage} wrapper.
+     *
+     * @param container the message container to resolve from
+     * @return the inner context info, or {@code null} if not present
+     * @implNote ADAPTED: WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi
+     * and updateFbidBotProtobuf both resolve contextInfo from
+     * {@code botInvokeMessage.message.extendedTextMessage.contextInfo}
+     * or {@code extendedTextMessage.contextInfo}. Cobalt's
+     * {@code MessageContainer.content()} already unwraps through
+     * the botInvokeMessage FutureProofMessage wrapper.
      */
     private static ContextInfo resolveInnerContextInfo(MessageContainer container) {
         return container.content() instanceof ContextualMessage contextualMessage
@@ -140,7 +162,7 @@ public final class BotProtobufTransform {
      * Strips the quoted message from the inner context info if the
      * quoted participant is not a bot.
      *
-     * @apiNote WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi:
+     * @implNote WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi:
      * deletes quotedMessage, stanzaId, remoteJid, participant when
      * the participant is not a bot.
      */
@@ -161,7 +183,7 @@ public final class BotProtobufTransform {
     /**
      * Strips remoteJid from protocol message keys (feedback and revoke).
      *
-     * @apiNote WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi:
+     * @implNote WAWebE2EProtoGenerator.updateBotInvokeMsgProtoCopyForCapi:
      * deletes botFeedbackMessage.messageKey.remoteJid and
      * protocolMessage.key.remoteJid for revoke messages.
      */

@@ -4,22 +4,30 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.libsignal.SignalProtocolAddress;
 import com.github.auties00.libsignal.groups.SignalSenderKeyName;
 
-import java.util.Objects;
 
 /**
- * Factory for creating SignalSenderKeyName objects from JIDs.
+ * Factory for creating {@link SignalSenderKeyName} objects from JIDs.
  * <p>
  * Used by both message sending (for encryption and sender key distribution)
  * and message receiving (for decryption and processing received sender keys).
+ *
+ * @implNote WAWebSignalCommonUtils.createSignalLikeSenderKeyName: constructs
+ * a sender key name as {@code groupJid + "::" + createSignalAddress(senderJid)}.
+ * In Cobalt, the SignalSenderKeyName record handles the internal format.
  */
 public final class SenderKeyNameFactory {
 
+    /**
+     * Prevents instantiation of this utility class.
+     *
+     * @implNote NO_WA_BASIS
+     */
     private SenderKeyNameFactory() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
     /**
-     * Creates a SignalSenderKeyName from group and sender JIDs.
+     * Creates a {@link SignalSenderKeyName} from group and sender JIDs.
      * <p>
      * The sender key name uniquely identifies a sender's key within a group,
      * combining:
@@ -30,24 +38,16 @@ public final class SenderKeyNameFactory {
      *
      * @param groupJid  the group JID
      * @param senderJid the sender's device JID
-     * @return the SignalSenderKeyName for use with the Signal group cipher
+     * @return the {@link SignalSenderKeyName} for use with the Signal group cipher
+     *
+     * @implNote WAWebSignalCommonUtils.createSignalLikeSenderKeyName: constructs
+     * {@code groupJid + "::" + createSignalAddress(senderJid, deviceId)}.
+     * In Cobalt, the sender address is created from the JID's
+     * {@code user()} and {@code device()} components.
      */
     public static SignalSenderKeyName create(Jid groupJid, Jid senderJid) {
         var senderAddress = new SignalProtocolAddress(senderJid.user(), senderJid.device());
         return new SignalSenderKeyName(groupJid.toString(), senderAddress);
     }
 
-    /**
-     * Creates a SignalSenderKeyName from group JID and Signal protocol address.
-     *
-     * @param groupJid      the group JID
-     * @param senderAddress the sender's Signal protocol address
-     * @return the SignalSenderKeyName for use with the Signal group cipher
-     */
-    public static SignalSenderKeyName create(Jid groupJid, SignalProtocolAddress senderAddress) {
-        Objects.requireNonNull(groupJid, "groupJid cannot be null");
-        Objects.requireNonNull(senderAddress, "senderAddress cannot be null");
-
-        return new SignalSenderKeyName(groupJid.toString(), senderAddress);
-    }
 }

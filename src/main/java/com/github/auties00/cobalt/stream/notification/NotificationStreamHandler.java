@@ -41,7 +41,7 @@ public final class NotificationStreamHandler implements SocketStream.Handler {
         switch (type) {
             case "account_sync", "contacts", "disappearing_mode", "picture", "privacy_token", "status" ->
                     accountHandler.handle(node);
-            case "business", "mex", "pay" ->
+            case "business", "digital_commerce_subscription", "fb:update", "mex", "pay" ->
                     businessHandler.handle(node);
             case "companion_reg_refresh", "devices", "encrypt", "hosted", "link_code_companion_reg",
                     "mediaretry", "newsletter", "psa", "registration", "server", "server_sync",

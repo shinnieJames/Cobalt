@@ -9,7 +9,13 @@ import com.github.auties00.cobalt.model.jid.Jid;
  * @param type         the Signal encryption type (pkmsg, msg, or skmsg)
  * @param ciphertext   the encrypted message bytes
  * @param recipientJid the recipient device JID, or {@code null} for group messages
- * @apiNote WAWebBackendJobs.flow.CiphertextType
+ *
+ * @implNote WAWebEncryptMsgProtobuf.encryptMsgProtobuf returns
+ * {@code {type, ciphertext}} for 1:1 encryption;
+ * WAWebEncryptMsgProtobuf.encryptMsgSenderKey returns
+ * {@code {ciphertext, senderKeyBytes}} for group encryption.
+ * In Cobalt, both are unified into this record; the {@code recipientJid}
+ * field is a Cobalt-specific convenience (NO_WA_BASIS).
  */
 public record MessageEncryptedPayload(
         MessageEncryptionType type,
@@ -20,8 +26,9 @@ public record MessageEncryptedPayload(
      * Returns whether this message establishes a new session.
      *
      * @return {@code true} if this is a PreKeySignalMessage
-     * @apiNote WAWebSendMsgCreateFanoutStanza: sets shouldHaveIdentity when any
-     * encryption result has type Pkmsg
+     *
+     * @implNote WAWebSendMsgCreateFanoutStanza: sets {@code shouldHaveIdentity}
+     * when any encryption result has type {@code Pkmsg}.
      */
     public boolean isPreKeyMessage() {
         return type.isPreKeyMessage();
@@ -31,6 +38,9 @@ public record MessageEncryptedPayload(
      * Returns whether this is a group sender key message.
      *
      * @return {@code true} if this is a SenderKeyMessage
+     *
+     * @implNote NO_WA_BASIS: convenience predicate for checking
+     * SenderKeyMessage type.
      */
     public boolean isSenderKeyMessage() {
         return type.isSenderKeyMessage();

@@ -67,7 +67,7 @@ import java.util.Objects;
  * intercepts assembled datagrams from the {@link WhatsAppLayerContext}.
  */
 public final class WhatsAppSocketClient {
-    private static final InetSocketAddress SOCKET_ENDPOINT = InetSocketAddress.createUnresolved("g.whatsapp.net", 443);
+    private static final InetSocketAddress SOCKET_ENDPOINT = new InetSocketAddress("g.whatsapp.net", 443);
     private static final URI WEB_SOCKET_ENDPOINT = URI.create("wss://web.whatsapp.com/ws/chat");
     private static final byte[] WHATSAPP_VERSION_HEADER = "WA".getBytes(StandardCharsets.UTF_8);
     private static final byte[] WEB_VERSION = new byte[]{6, NodeTokens.DICTIONARY_VERSION};

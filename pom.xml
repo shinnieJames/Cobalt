@@ -249,8 +249,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <source>25</source>
-                    <target>25</target>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
                     <compilerArgs>--enable-preview</compilerArgs>
                 </configuration>
             </plugin>

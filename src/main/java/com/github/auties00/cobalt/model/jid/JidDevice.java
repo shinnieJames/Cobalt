@@ -1,9 +1,10 @@
 package com.github.auties00.cobalt.model.jid;
 
 import com.github.auties00.cobalt.client.WhatsAppClientType;
-import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.DevicePlatformType;
+import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
+import com.github.auties00.cobalt.util.FastRandomUtils;
 import com.github.auties00.cobalt.wam.type.PlatformType;
 import it.auties.protobuf.annotation.ProtobufMessage;
 import it.auties.protobuf.annotation.ProtobufProperty;
@@ -11,7 +12,6 @@ import it.auties.protobuf.model.ProtobufType;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A protobuf model that describes the physical device and platform characteristics of a
@@ -367,7 +367,7 @@ public final class JidDevice {
         return new JidDevice(
                 "Surface Pro 4",
                 "Microsoft",
-                ClientPlatformType.WEB,
+                ClientPlatformType.MACOS,
                 ClientAppVersion.of("10.0"),
                 null,
                 null,
@@ -388,7 +388,7 @@ public final class JidDevice {
      * @return a new iOS-configured device descriptor
      */
     public static JidDevice ios(boolean business) {
-        var device = IOS_DEVICES.get(ThreadLocalRandom.current().nextInt(IOS_DEVICES.size()));
+        var device = IOS_DEVICES.get(FastRandomUtils.randomInt(IOS_DEVICES.size()));
         return new JidDevice(
                 device.model,
                 device.manufacturer,
@@ -413,12 +413,12 @@ public final class JidDevice {
      * @return a new Android-configured device descriptor
      */
     public static JidDevice android(boolean business) {
-        var model = "Pixel_" + ThreadLocalRandom.current().nextInt(2, 9);
+        var model = "Pixel_" + FastRandomUtils.randomInt(2, 9);
         return new JidDevice(
                 model,
                 "Google",
                 business ? ClientPlatformType.ANDROID_BUSINESS : ClientPlatformType.ANDROID,
-                ClientAppVersion.of(String.valueOf(ThreadLocalRandom.current().nextInt(11, 16))),
+                ClientAppVersion.of(String.valueOf(FastRandomUtils.randomInt(11, 16))),
                 null,
                 model,
                 WhatsAppClientType.MOBILE

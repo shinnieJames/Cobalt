@@ -65,7 +65,7 @@ public final class MessageReceiveStanzaParser {
      * @return the parsed stanza with all extracted metadata
      * @throws NullPointerException     if {@code node} is null
      * @throws IllegalArgumentException if required attributes are missing
-     * @apiNote WAWebHandleMsgParser.incomingMsgParser: extracts msgInfo,
+     * @implNote WAWebHandleMsgParser.incomingMsgParser: extracts msgInfo,
      * msgMeta, encs, deviceIdentity, bizInfo, hsmInfo, paymentInfo,
      * rcat, msgBotInfo, and reportingTokenInfo.
      */
@@ -150,8 +150,14 @@ public final class MessageReceiveStanzaParser {
         String contextSource = null;
         String senderCountryCode = null;
         if (metaNode != null) {
-            pollType = metaNode.getAttributeAsString("polltype", null);
-            eventType = metaNode.getAttributeAsString("event_type", null);
+            // WAWebHandleMsgParser.C: pollType only populated when stanza type is "poll"
+            if ("poll".equals(stanzaType)) {
+                pollType = metaNode.getAttributeAsString("polltype", null);
+            }
+            // WAWebHandleMsgParser.C: eventType only populated when stanza type is "event"
+            if ("event".equals(stanzaType)) {
+                eventType = metaNode.getAttributeAsString("event_type", null);
+            }
             origin = metaNode.getAttributeAsString("origin", null);
             statusMentioned = "true".equals(
                     metaNode.getAttributeAsString("status_mentioned").orElse(null));
@@ -280,8 +286,8 @@ public final class MessageReceiveStanzaParser {
      * @return the resolved sender JID
      * @throws IllegalArgumentException if a group/broadcast message is
      *                                  missing its participant attribute
-     * @apiNote WAWebHandleMsgParser: sender = (from.isGroup() ||
-     * from.isBroadcast()) ? participant : from
+     * @implNote WAWebHandleMsgParser function y(): sender =
+     * (from.isGroup() || from.isBroadcast()) ? participant : from
      */
     private static Jid resolveSender(Jid fromJid, Jid participant) {
         if (fromJid.hasGroupOrCommunityServer() || fromJid.hasBroadcastServer()) {
@@ -310,7 +316,7 @@ public final class MessageReceiveStanzaParser {
      *                    isDirect check on status messages
      * @param category    the category of the message
      * @return the classified message type
-     * @apiNote WAWebHandleMsgParser function C(): determines CHAT, GROUP,
+     * @implNote WAWebHandleMsgParser function y(): determines CHAT, GROUP,
      * PEER_BROADCAST, OTHER_BROADCAST, DIRECT_PEER_STATUS, or OTHER_STATUS
      * based on the from JID type and participant presence.
      */
@@ -360,8 +366,9 @@ public final class MessageReceiveStanzaParser {
      * @param participant the participant JID to check (nullable)
      * @param selfJid     the current user's JID (nullable)
      * @return {@code true} if participant is the same account as selfJid
-     * @apiNote WAWebHandleMsgParser: uses isMeAccount(participant) which
-     * compares the participant's user JID against the logged-in user.
+     * @implNote WAWebHandleMsgParser function y(): uses
+     * isMeAccount(participant) which compares the participant's user JID
+     * against the logged-in user.
      */
     private static boolean isMeAccount(Jid participant, Jid selfJid) {
         return selfJid != null
@@ -378,8 +385,9 @@ public final class MessageReceiveStanzaParser {
      *
      * @param node the parent {@code <message>} node
      * @return the list of parsed encrypted payloads
-     * @apiNote WAWebHandleMsgParser: maps each enc child extracting
-     * type, mediatype, ciphertext bytes, count, and decrypt-fail.
+     * @implNote WAWebHandleMsgParser.incomingMsgParser: maps each enc
+     * child extracting type, mediatype, ciphertext bytes, count, and
+     * decrypt-fail.
      */
     private static List<MessageReceiveEncryptedPayload> parseEncryptedPayloads(Node node) {
         var encNodes = node.getChildren("enc");
@@ -411,7 +419,7 @@ public final class MessageReceiveStanzaParser {
      *
      * @param node the parent {@code <message>} node
      * @return the parsed bot info, or {@code null} if no bot child exists
-     * @apiNote WAWebHandleMsgParser function v(): parses the bot node
+     * @implNote WAWebHandleMsgParser function b(): parses the bot node
      * to extract botSenderTimestampMs, botEditTargetId, botEditType,
      * botMsgBodyType, and bizBotType.
      */
@@ -422,9 +430,9 @@ public final class MessageReceiveStanzaParser {
         }
 
         var senderTimestampMs = botNode.getAttributeAsString("sender_timestamp_ms", null);
-        var editTargetId = botNode.getAttributeAsString("edit", null);
-        var editType = botNode.getAttributeAsString("type", null);
-        var bodyType = botNode.getAttributeAsString("body_type", null);
+        var editTargetId = botNode.getAttributeAsString("edit_target_id", null); // WAWebHandleMsgParser.b
+        var editType = botNode.getAttributeAsString("edit", null); // WAWebHandleMsgParser.b
+        var bodyType = botNode.getAttributeAsString("type", null); // WAWebHandleMsgParser.b
         var bizBotType = botNode.getAttributeAsString("biz_bot", null);
         return new MessageReceiveBotInfo(
                 senderTimestampMs,
@@ -451,7 +459,7 @@ public final class MessageReceiveStanzaParser {
      * @return the parsed biz info, or {@code null} if neither a
      *         {@code verified_name} attribute nor a {@code <biz>} child
      *         is present
-     * @apiNote WAWebHandleMsgParser function S(): parses verified_name,
+     * @implNote WAWebHandleMsgParser function v(): parses verified_name,
      * verified_level, biz node (actual_actors, host_storage,
      * privacy_mode_ts, native_flow_name, campaign_id, button/list/hsm
      * envelope flags).
@@ -486,12 +494,12 @@ public final class MessageReceiveStanzaParser {
             nativeFlowName = resolveNativeFlowName(bizNode);
             verifiedButtonsEnvelope = bizNode.getChild("buttons").isPresent();
             verifiedListEnvelope = bizNode.getChild("list").isPresent();
-            verifiedHsmEnvelope = bizNode.getChild("hsm").isPresent();
+            verifiedHsmEnvelope = node.getChild("hsm").isPresent(); // WAWebHandleMsgParser.v: e.hasChild("hsm") checks message node
         }
 
         return new MessageReceiveBizInfo(
                 verifiedNameCert,
-                verifiedNameSerial != null ? verifiedNameSerial : 0,
+                verifiedNameSerial != null ? verifiedNameSerial : -1, // WAWebHandleMsgParser.v: default -1
                 verifiedLevel,
                 nativeFlowName,
                 campaignId,
@@ -514,7 +522,7 @@ public final class MessageReceiveStanzaParser {
      *
      * @param bizNode the {@code <biz>} child node
      * @return the native flow name, or {@code null} if not present
-     * @apiNote WAWebHandleMsgParser function S(): resolves native_flow_name
+     * @implNote WAWebHandleMsgParser function v(): resolves native_flow_name
      * from either the nested interactive/native_flow structure or the
      * direct attribute.
      */
@@ -543,15 +551,18 @@ public final class MessageReceiveStanzaParser {
      * @param node the parent {@code <message>} node
      * @return the parsed reporting info, or {@code null} if no
      *         reporting child exists
-     * @apiNote WAWebHandleMsgParser function I(): parses the reporting
-     * node to extract reporting_token (bytes + version) and
-     * reporting_tag (bytes).
+     * @implNote WAWebHandleMsgParser function k(): parses the reporting
+     * node to extract reporting_token (bytes + version),
+     * reporting_tag (bytes), and stanzaTs.
      */
     private static MessageReceiveReportingInfo parseReportingInfo(Node node) {
         var reportingNode = node.getChild("reporting", null);
         if (reportingNode == null) {
             return null;
         }
+
+        // WAWebHandleMsgParser function k(): stanzaTs = e.attrTime("t")
+        var stanzaTs = Instant.ofEpochSecond(node.getRequiredAttributeAsLong("t"));
 
         var tokenNode = reportingNode.getChild("reporting_token", null);
         byte[] reportingToken = null;
@@ -566,10 +577,76 @@ public final class MessageReceiveStanzaParser {
                 .orElse(null);
 
         return new MessageReceiveReportingInfo(
+                stanzaTs,
                 reportingToken,
                 version,
                 reportingTag
         );
+    }
+
+    /**
+     * Parses payment information from the {@code <pay>} and/or
+     * {@code <transaction>} children of the message stanza.
+     *
+     * <p>Both {@code <pay>} and {@code <transaction>} are direct children
+     * of the message node (siblings, not nested).  The function returns
+     * {@code null} when neither is present.
+     *
+     * @param node the parent {@code <message>} node
+     * @return the parsed payment info, or {@code null} if neither pay nor
+     *         transaction child exists
+     * @implNote WAWebHandleMsgParser function R(): parses pay node type,
+     * receiver JID string, transaction currency/amount/status/timestamp,
+     * and novi/futureproof detection.
+     */
+    private static MessageReceivePaymentInfo parsePaymentInfo(Node node) {
+        // WAWebHandleMsgParser.R: pay and transaction are siblings on the message node
+        var payNode = node.getChild("pay", null);
+        var transactionNode = node.getChild("transaction", null);
+
+        if (payNode == null && transactionNode == null) {
+            return null;
+        }
+
+        // WAWebHandleMsgParser.R: transaction node takes precedence over pay node
+        if (transactionNode != null) {
+            var currency = transactionNode.getAttributeAsString("currency", null);
+            var amount1000 = transactionNode.getAttributeAsLong("amount_1000", null);
+            var status = transactionNode.getAttributeAsString("status", null);
+            var ts = transactionNode.getAttributeAsLong("t", null);
+            var receiver = transactionNode.getAttributeAsString("receiver", null);
+            return new MessageReceivePaymentInfo(
+                    false,
+                    receiver,
+                    currency,
+                    amount1000,
+                    status,
+                    ts
+            );
+        }
+
+        // WAWebHandleMsgParser.R: pay node processing by type
+        var payType = payNode.getAttributeAsString("type", null);
+        if ("send".equals(payType)) {
+            var currency = payNode.getAttributeAsString("currency", null);
+            var amount1000 = payNode.getAttributeAsLong("amount_1000", null);
+            var receiver = payNode.getAttributeAsString("receiver", null);
+            if (receiver == null) {
+                receiver = node.getAttributeAsString("recipient", null);
+            }
+            var ts = node.getAttributeAsLong("t", null);
+            return new MessageReceivePaymentInfo(
+                    false,
+                    receiver,
+                    currency,
+                    amount1000,
+                    null,
+                    ts
+            );
+        }
+
+        // WAWebHandleMsgParser.R: request and invite types have no payment data
+        return null;
     }
 
     /**
@@ -582,55 +659,11 @@ public final class MessageReceiveStanzaParser {
      * @param node the parent {@code <message>} node
      * @return the list of broadcast participants (empty if no
      *         participants child exists)
-     * @apiNote WAWebHandleMsgParser: maps each {@code <to>} child
-     * within {@code <participants>} to extract jid, eph_setting,
+     * @implNote WAWebHandleMsgParser function y(): maps each {@code <to>}
+     * child within {@code <participants>} to extract jid, eph_setting,
      * peer_recipient_lid, peer_recipient_pn, peer_recipient_username,
      * and recipient_latest_lid.
      */
-    /**
-     * Parses payment information from the {@code <pay>} and
-     * {@code <transaction>} children of the message stanza.
-     *
-     * @param node the parent {@code <message>} node
-     * @return the parsed payment info, or {@code null} if no pay child exists
-     *
-     * @apiNote WAWebHandleMsgParser function L(): parses pay node type,
-     * receiver JID, transaction amount/currency/status/timestamp.
-     * WAWebHandleMsgCommon.PAY_NODE_TYPES: send, request, futureproof,
-     * request-decline, request-cancel, invite.
-     */
-    private static MessageReceivePaymentInfo parsePaymentInfo(Node node) {
-        var payNode = node.getChild("pay", null);
-        if (payNode == null) {
-            return null;
-        }
-
-        var payType = payNode.getAttributeAsString("type", null);
-        var receiverJid = payNode.getAttributeAsJid("jid", null);
-
-        String currency = null;
-        Long amount1000 = null;
-        String transactionStatus = null;
-        Long transactionTimestamp = null;
-
-        var transactionNode = payNode.getChild("transaction", null);
-        if (transactionNode != null) {
-            currency = transactionNode.getAttributeAsString("currency", null);
-            amount1000 = transactionNode.getAttributeAsLong("amount_1000", null);
-            transactionStatus = transactionNode.getAttributeAsString("status", null);
-            transactionTimestamp = transactionNode.getAttributeAsLong("t", null);
-        }
-
-        return new MessageReceivePaymentInfo(
-                payType,
-                receiverJid,
-                currency,
-                amount1000,
-                transactionStatus,
-                transactionTimestamp
-        );
-    }
-
     private static List<MessageReceiveBroadcastParticipant> parseBroadcastParticipants(Node node) {
         var participantsNode = node.getChild("participants", null);
         if (participantsNode == null) {
