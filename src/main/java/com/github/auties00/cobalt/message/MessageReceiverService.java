@@ -49,6 +49,10 @@ public final class MessageReceiverService {
     }
     
     public SequencedCollection<? extends MessageInfo> readMessages(Node node) {
+        if (whatsapp.store().jid().isEmpty()) {
+            return List.of();
+        }
+
         var businessName = getBusinessNameFromAttribute(node);
         if (node.hasChild("unavailable")) {
             return decodeChatMessage(node, null, businessName)

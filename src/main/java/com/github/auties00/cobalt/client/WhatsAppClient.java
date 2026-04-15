@@ -1125,6 +1125,7 @@ public final class WhatsAppClient {
      */
     public Collection<BusinessCatalogEntry> queryBusinessCatalog(int productsLimit) {
         var localJid = store.jid()
+                .or(() -> store.phoneNumber().stream().mapToObj(Jid::of).findFirst())
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
         return queryBusinessCatalog(localJid.withoutData(), productsLimit);
     }

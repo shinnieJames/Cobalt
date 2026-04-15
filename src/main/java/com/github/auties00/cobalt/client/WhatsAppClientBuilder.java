@@ -515,8 +515,8 @@ public sealed class WhatsAppClientBuilder {
              * @return the same instance for chaining
              */
             @Override
-            public Mobile name(String name) {
-                return (Mobile) super.name(name);
+            public Web name(String name) {
+                return (Web) super.name(name);
             }
 
             /**
@@ -586,17 +586,6 @@ public sealed class WhatsAppClientBuilder {
             @Override
             public Web clientVersion(Version clientVersion) {
                 return (Web) super.clientVersion(clientVersion);
-            }
-
-            /**
-             * Sets the display name for the WhatsApp account
-             *
-             * @param name the name to set, can be null
-             * @return the same instance for chaining
-             */
-            public Web name(String name) {
-                store.setName(name);
-                return this;
             }
 
             /**

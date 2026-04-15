@@ -25,10 +25,13 @@ public final class SocketStream {
     private final Map<String, SequencedCollection<Handler>> handlers;
 
     public SocketStream(WhatsAppClient whatsapp, DeviceService deviceService, MessageReceiverService messageReceiverService, LidMigrationService lidMigrationService, WhatsAppClientVerificationHandler.Web webVerificationHandler) {
-        var pairingCode = switch (webVerificationHandler) {
-            case WhatsAppClientVerificationHandler.Web.PairingCode _ -> new SocketPhonePairing();
-            case WhatsAppClientVerificationHandler.Web.QrCode _ -> null;
-        };
+        SocketPhonePairing pairingCode = null;
+        if (whatsapp.store().clientType() == com.github.auties00.cobalt.client.WhatsAppClientType.WEB) {
+            pairingCode = switch (webVerificationHandler) {
+                case WhatsAppClientVerificationHandler.Web.PairingCode ignored -> new SocketPhonePairing();
+                case WhatsAppClientVerificationHandler.Web.QrCode ignored -> null;
+            };
+        }
 
         var result = new HashMap<String, SequencedCollection<Handler>>();
 

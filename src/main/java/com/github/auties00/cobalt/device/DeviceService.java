@@ -159,10 +159,6 @@ public final class DeviceService {
         var localJid = client.store()
                 .jid()
                 .orElseThrow(() -> new IllegalStateException("Local jid is not available"));
-        var companionIdentity = client.store()
-                .companionIdentity()
-                .orElseThrow(() -> new IllegalStateException("Companion identity is not available"));
-
         var remoteJid = userNode.getRequiredAttributeAsJid("jid");
         var registrationId = userNode.getChild("registration")
                 .flatMap(Node::toContentBytes)
@@ -181,7 +177,9 @@ public final class DeviceService {
             return;
         }
 
-        DeviceADVValidator.extractAndValidateRemoteSignedDeviceIdentity(localJid, remoteJid, companionIdentity, userNode, identityKeyBytes);
+        client.store()
+                .companionIdentity()
+                .ifPresent(companionIdentity -> DeviceADVValidator.extractAndValidateRemoteSignedDeviceIdentity(localJid, remoteJid, companionIdentity, userNode, identityKeyBytes));
 
         var signedPreKeyId = signedPreKey.getChild("id")
                 .flatMap(Node::toContentBytes)
