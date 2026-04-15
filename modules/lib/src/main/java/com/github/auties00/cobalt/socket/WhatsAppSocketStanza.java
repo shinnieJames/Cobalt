@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.application.whatsapp;
+package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.node.Node;

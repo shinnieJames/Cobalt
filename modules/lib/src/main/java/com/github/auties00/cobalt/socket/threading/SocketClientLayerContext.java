@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.socket.threading;
 
-import com.github.auties00.cobalt.socket.application.SocketClientApplicationLayerContext;
+import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayerContext;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientSecurityLayerContext;
 import com.github.auties00.cobalt.socket.layer.transport.SocketClientTransportLayerContext;
 import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayerContext;

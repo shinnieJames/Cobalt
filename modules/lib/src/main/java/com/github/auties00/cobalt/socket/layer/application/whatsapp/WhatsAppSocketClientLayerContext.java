@@ -1,8 +1,8 @@
-package com.github.auties00.cobalt.socket.application.whatsapp;
+package com.github.auties00.cobalt.socket.layer.application.whatsapp;
 
 import com.github.auties00.cobalt.socket.threading.SocketClientInboundResult;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayerListener;
-import com.github.auties00.cobalt.socket.application.SocketClientApplicationLayerContext;
+import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayerContext;
 import com.github.auties00.cobalt.socket.threading.SocketClientPendingRead;
 
 import java.nio.ByteBuffer;
@@ -41,7 +41,7 @@ import java.util.concurrent.Executors;
  *     Cobalt because frames are processed one at a time from the selector
  *     thread rather than buffered in a binary accumulator.
  */
-public final class WhatsAppLayerContext implements SocketClientApplicationLayerContext {
+public final class WhatsAppSocketClientLayerContext implements SocketClientApplicationLayerContext {
     /**
      * The size in bytes of the int24 length prefix (3 bytes).
      *
@@ -167,7 +167,7 @@ public final class WhatsAppLayerContext implements SocketClientApplicationLayerC
      *     callbacks.
      * @param listener the non-null listener to receive datagrams
      */
-    private WhatsAppLayerContext(SocketClientLayerListener listener) {
+    private WhatsAppSocketClientLayerContext(SocketClientLayerListener listener) {
         this.listener = Objects.requireNonNull(listener, "listener cannot be null");
         this.datagramLengthBuffer = ByteBuffer.allocate(INT24_BYTE_SIZE);
         this.executorLock = new Object();
@@ -181,10 +181,10 @@ public final class WhatsAppLayerContext implements SocketClientApplicationLayerC
      *     a raw socket and optional initial data; Cobalt creates via this
      *     factory method and integrates into the NIO layer context chain.
      * @param listener the non-null listener to receive datagrams and close events
-     * @return a new {@code WhatsAppLayerContext}
+     * @return a new {@code WhatsAppSocketClientLayerContext}
      */
-    public static WhatsAppLayerContext newAppContext(SocketClientLayerListener listener) {
-        return new WhatsAppLayerContext(listener);
+    public static WhatsAppSocketClientLayerContext newAppContext(SocketClientLayerListener listener) {
+        return new WhatsAppSocketClientLayerContext(listener);
     }
 
     /**

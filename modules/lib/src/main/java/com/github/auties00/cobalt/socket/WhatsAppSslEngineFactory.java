@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.application.whatsapp.ssl;
+package com.github.auties00.cobalt.socket;
 
 import javax.net.ssl.SSLEngine;
 import java.net.InetSocketAddress;

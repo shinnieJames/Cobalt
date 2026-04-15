@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.application.websocket.frame;
+package com.github.auties00.cobalt.socket.layer.application.websocket.frame;
 
 /**
  * Constants for WebSocket frame encoding and decoding as defined by

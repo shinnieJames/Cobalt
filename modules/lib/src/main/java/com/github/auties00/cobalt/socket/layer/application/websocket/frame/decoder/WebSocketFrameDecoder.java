@@ -1,7 +1,6 @@
-package com.github.auties00.cobalt.socket.application.websocket.frame.decoder;
+package com.github.auties00.cobalt.socket.layer.application.websocket.frame.decoder;
 
-import com.github.auties00.cobalt.socket.application.websocket.frame.encoder.WebSocketFrameEncoder;
-import com.github.auties00.cobalt.socket.application.websocket.frame.WebSocketFrameConstants;
+import com.github.auties00.cobalt.socket.layer.application.websocket.frame.WebSocketFrameConstants;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.VectorOperators;

@@ -1,12 +1,12 @@
-package com.github.auties00.cobalt.socket.application.websocket;
+package com.github.auties00.cobalt.socket.layer.application.websocket;
 
 import com.github.auties00.cobalt.socket.threading.SocketClientInboundResult;
 import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
-import com.github.auties00.cobalt.socket.application.SocketClientApplicationLayerContext;
-import com.github.auties00.cobalt.socket.application.websocket.frame.WebSocketFrameConstants;
-import com.github.auties00.cobalt.socket.application.websocket.frame.decoder.WebSocketDecodedFrame;
-import com.github.auties00.cobalt.socket.application.websocket.frame.decoder.WebSocketFrameDecoder;
-import com.github.auties00.cobalt.socket.application.websocket.frame.encoder.WebSocketFrameEncoder;
+import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayerContext;
+import com.github.auties00.cobalt.socket.layer.application.websocket.frame.WebSocketFrameConstants;
+import com.github.auties00.cobalt.socket.layer.application.websocket.frame.decoder.WebSocketDecodedFrame;
+import com.github.auties00.cobalt.socket.layer.application.websocket.frame.decoder.WebSocketFrameDecoder;
+import com.github.auties00.cobalt.socket.layer.application.websocket.frame.encoder.WebSocketFrameEncoder;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -14,13 +14,15 @@ import java.nio.ByteBuffer;
 /**
  * A layer context that handles WebSocket frame decoding and encoding.
  */
-public final class WebSocketLayerContext implements SocketClientApplicationLayerContext {
+public final class WebSocketClientLayerContext implements SocketClientApplicationLayerContext {
     private static final int READ_BUFFER_SIZE = 16384;
 
     /**
      * The next layer context in the chain (the layer above WebSocket).
+     * Set via {@link #setNextLayer(SocketClientLayerContext)} by the
+     * selector's chain rebuilding.
      */
-    private final SocketClientLayerContext nextLayer;
+    private volatile SocketClientLayerContext nextLayer;
 
     /**
      * Buffer for raw or TLS-decrypted bytes before WebSocket frame
@@ -43,24 +45,15 @@ public final class WebSocketLayerContext implements SocketClientApplicationLayer
 
     /**
      * Creates a WebSocket layer context.
-     *
-     * @param nextLayer the layer above in the read pipeline
      */
-    private WebSocketLayerContext(SocketClientLayerContext nextLayer) {
-        this.nextLayer = nextLayer;
+    public WebSocketClientLayerContext() {
         this.readBuffer = ByteBuffer.allocateDirect(READ_BUFFER_SIZE);
         this.frameDecoder = new WebSocketFrameDecoder();
     }
 
-    /**
-     * Creates a new WebSocket layer context chained to the given next layer.
-     *
-     * @param nextLayer the layer above in the read pipeline, receives
-     *                  decoded WebSocket data frame payloads
-     * @return a new {@code WebSocketLayerContext}
-     */
-    public static WebSocketLayerContext newWebSocketContext(SocketClientLayerContext nextLayer) {
-        return new WebSocketLayerContext(nextLayer);
+    @Override
+    public void setNextLayer(SocketClientLayerContext next) {
+        this.nextLayer = next;
     }
 
     /**

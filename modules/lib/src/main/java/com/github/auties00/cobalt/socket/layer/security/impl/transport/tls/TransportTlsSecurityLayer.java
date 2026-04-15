@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.socket.layer.SocketClientLayer;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientTransportSecurityLayer;
 import com.github.auties00.cobalt.socket.layer.security.impl.TlsSocketClientLayerContext;
 import com.github.auties00.cobalt.socket.layer.security.impl.TlsSocketClientSecurityLayer;
-import com.github.auties00.cobalt.socket.application.whatsapp.ssl.WhatsAppSslEngineFactory;
+import com.github.auties00.cobalt.socket.WhatsAppSslEngineFactory;
 
 /**
  * Transport-level TLS security layer implementation.

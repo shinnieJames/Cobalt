@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.socket.layer.security;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayer;
 import com.github.auties00.cobalt.socket.layer.security.impl.transport.plain.TransportPlainSecurityLayer;
 import com.github.auties00.cobalt.socket.layer.security.impl.transport.tls.TransportTlsSecurityLayer;
-import com.github.auties00.cobalt.socket.application.whatsapp.ssl.WhatsAppSslEngineFactory;
+import com.github.auties00.cobalt.socket.WhatsAppSslEngineFactory;
 
 import java.util.Objects;
 

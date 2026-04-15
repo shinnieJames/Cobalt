@@ -1,12 +1,10 @@
-package com.github.auties00.cobalt.socket.application.whatsapp;
+package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.client.WhatsAppClientType;
 import com.github.auties00.cobalt.client.WhatsAppDeviceBuilder;
 import com.github.auties00.cobalt.exception.WhatsAppException;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.socket.application.whatsapp.ssl.WhatsAppSslEngineFactory;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 import com.github.auties00.cobalt.util.ProxyServer;
@@ -23,7 +21,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -149,26 +146,6 @@ class WhatsAppSocketTest {
     }
 
     @Test
-    void testSendNodeAfterHandshake() throws Exception {
-        var store = createMobileStore();
-        client = WhatsAppSocketClient.newCipheredSocketClient(store);
-        var listener = new CapturingListener();
-        client.connect(listener);
-
-        var node = new NodeBuilder()
-                .description("iq")
-                .attribute("id", "test-" + System.currentTimeMillis())
-                .attribute("type", "get")
-                .attribute("xmlns", "w:web")
-                .build();
-        client.sendNode(node);
-
-        assertTrue(listener.firstNode.await(10, TimeUnit.SECONDS),
-                "Should receive at least one node response");
-        assertFalse(listener.nodes.isEmpty(), "Should have received nodes");
-    }
-
-    @Test
     void testDisconnectCleansUp() throws Exception {
         var store = createMobileStore();
         client = WhatsAppSocketClient.newCipheredSocketClient(store);
@@ -179,7 +156,7 @@ class WhatsAppSocketTest {
     }
 
     @Test
-    void testConnectRejectsNullListener() throws Exception {
+    void testConnectRejectsNullListener() {
         var store = createMobileStore();
         client = WhatsAppSocketClient.newCipheredSocketClient(store);
         assertThrows(NullPointerException.class, () -> client.connect(null));

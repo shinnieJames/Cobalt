@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.application.whatsapp.ssl;
+package com.github.auties00.cobalt.socket;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
  * <p>The engine is configured with ALPN ({@code http/1.1}), HTTPS
  * hostname verification, and Chrome's cipher suite ordering.
  */
-public final class ChromeSslEngineFactory implements WhatsAppSslEngineFactory {
+final class ChromeSslEngineFactory implements WhatsAppSslEngineFactory {
     /**
      * Chrome cipher suite ordering extracted from a live Chrome 136 instance.
      *
@@ -46,7 +46,7 @@ public final class ChromeSslEngineFactory implements WhatsAppSslEngineFactory {
             "TLS_RSA_WITH_AES_256_CBC_SHA"
     };
 
-    public static final ChromeSslEngineFactory INSTANCE = new ChromeSslEngineFactory();
+    static final ChromeSslEngineFactory INSTANCE = new ChromeSslEngineFactory();
 
     static {
         // Java 25 disables TLS_RSA_* cipher suites by default (no forward secrecy).

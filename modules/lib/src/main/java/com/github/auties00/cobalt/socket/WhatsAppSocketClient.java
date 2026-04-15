@@ -1,10 +1,13 @@
-package com.github.auties00.cobalt.socket.application.whatsapp;
+package com.github.auties00.cobalt.socket;
 
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
 import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
-import com.github.auties00.cobalt.model.device.*;
+import com.github.auties00.cobalt.model.device.DevicePlatformType;
+import com.github.auties00.cobalt.model.device.DevicePropsBuilder;
+import com.github.auties00.cobalt.model.device.DevicePropsHistorySyncConfigBuilder;
+import com.github.auties00.cobalt.model.device.DevicePropsSpec;
 import com.github.auties00.cobalt.model.device.pairing.*;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload.DevicePairingRegistrationData;
 import com.github.auties00.cobalt.model.device.pairing.ClientPayload.UserAgent;
@@ -18,15 +21,14 @@ import com.github.auties00.cobalt.node.binary.NodeEncoder;
 import com.github.auties00.cobalt.node.binary.NodeTokens;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayer;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayerListener;
-import com.github.auties00.cobalt.socket.application.websocket.WebSocketClient;
-import com.github.auties00.cobalt.socket.application.whatsapp.ssl.WhatsAppSslEngineFactory;
+import com.github.auties00.cobalt.socket.layer.application.websocket.WebSocketClientLayer;
+import com.github.auties00.cobalt.socket.layer.application.whatsapp.WhatsAppSocketClientLayerContext;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientTransportSecurityLayer;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientTunnelSecurityLayer;
 import com.github.auties00.cobalt.socket.layer.transport.SocketClientTransportLayer;
-import com.github.auties00.cobalt.socket.threading.SocketClientPendingRead;
 import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayer;
+import com.github.auties00.cobalt.socket.threading.SocketClientPendingRead;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.GcmUtils;
 import com.github.auties00.curve25519.Curve25519;
@@ -42,7 +44,6 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.security.auth.DestroyFailedException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.nio.charset.StandardCharsets;
@@ -71,7 +72,7 @@ import java.util.Objects;
  * <p>The Noise XX handshake derives separate read and write AES-GCM keys.
  * Outbound messages are encrypted at {@code sendBinary()} call time.
  * Inbound decryption is performed through a listener wrapper that
- * intercepts assembled datagrams from the {@link WhatsAppLayerContext}.
+ * intercepts assembled datagrams from the {@link WhatsAppSocketClientLayerContext}.
  */
 public sealed abstract class WhatsAppSocketClient {
     /**
@@ -119,7 +120,6 @@ public sealed abstract class WhatsAppSocketClient {
      * @param store            the WhatsApp store
      * @param sslEngineFactory the factory for creating {@link javax.net.ssl.SSLEngine} instances
      * @return a new WhatsApp socket client
-     * @throws IOException if transport creation fails
      */
     static WhatsAppSocketClient newCipheredSocketClient(WhatsAppStore store, WhatsAppSslEngineFactory sslEngineFactory) {
         Objects.requireNonNull(store, "store cannot be null");
@@ -132,21 +132,13 @@ public sealed abstract class WhatsAppSocketClient {
 
         if (store.device().platform() == ClientPlatformType.WEB) {
             var userAgent = store.device().toUserAgent(store.clientVersion());
-            return new Web(store, WebSocketClient.newWebSocketClient(transportSecurity, userAgent));
+            var webSocket = new WebSocketClientLayer(transportSecurity, "/ws/chat", userAgent);
+            return new Web(store, webSocket);
         } else {
             return new Mobile(store, transportSecurity);
         }
     }
 
-    /**
-     * Creates the base transport layer.
-     *
-     * <p>Always returns raw TCP.  TLS is added above the tunnel layer
-     * by the caller, so that encrypted traffic flows through the tunnel
-     * to the target rather than to the proxy.
-     *
-     * @return a raw TCP transport layer
-     */
     private static SocketClientLayer<?> createTransport() {
         return SocketClientTransportLayer.newTcpTransport();
     }
@@ -275,7 +267,7 @@ public sealed abstract class WhatsAppSocketClient {
         this.listener = listener;
 
         var decryptingListener = new DecryptingListener();
-        var appContext = WhatsAppLayerContext.newAppContext(decryptingListener);
+        var appContext = WhatsAppSocketClientLayerContext.newAppContext(decryptingListener);
         connectImpl(appContext, decryptingListener);
     }
 
@@ -286,7 +278,7 @@ public sealed abstract class WhatsAppSocketClient {
      * @param decryptingListener  the decrypting listener wrapper
      * @throws IOException if the connection or handshake fails
      */
-    abstract void connectImpl(WhatsAppLayerContext appContext, DecryptingListener decryptingListener) throws IOException;
+    abstract void connectImpl(WhatsAppSocketClientLayerContext appContext, DecryptingListener decryptingListener) throws IOException;
 
     /**
      * Disconnects and destroys cipher keys.
@@ -319,13 +311,13 @@ public sealed abstract class WhatsAppSocketClient {
         }
         writeCounter = 0;
 
-        disconnectTransport();
+        disconnectImpl();
     }
 
     /**
      * Disconnects the underlying transport layer.
      */
-    abstract void disconnectTransport();
+    abstract void disconnectImpl();
 
     /**
      * Returns whether the connection is active.
@@ -511,13 +503,11 @@ public sealed abstract class WhatsAppSocketClient {
      *                   or {@code null} for raw transport reads
      * @throws IOException if the handshake fails
      */
-    void performNoiseHandshake(WhatsAppLayerContext appContext) throws IOException {
+    void performNoiseHandshake(WhatsAppSocketClientLayerContext appContext) throws IOException {
         var ephemeralKeyPair = SignalIdentityKeyPair.random();
         var prologue = getHandshakePrologue();
-        var prologueBytes = new byte[prologue.remaining()];
-        prologue.duplicate().get(prologueBytes);
 
-        try (var handshake = new WhatsAppSocketHandshake(prologueBytes)) {
+        try (var handshake = new WhatsAppSocketHandshake(prologue)) {
             // Send client hello
             var clientHello = new HandshakeMessageClientHelloBuilder()
                     .ephemeral(ephemeralKeyPair.publicKey().toEncodedPoint())
@@ -527,7 +517,7 @@ public sealed abstract class WhatsAppSocketClient {
                     .build();
             var requestBytes = HandshakeMessageSpec.encode(handshakeMessage);
             handshake.updateHash(ephemeralKeyPair.publicKey().toEncodedPoint());
-            sendHandshakeMessage(prologue, requestBytes);
+            sendHandshakeMessage(ByteBuffer.wrap(prologue), requestBytes);
 
             // Read server hello
             var serverHelloPayload = readHandshakeMessage(appContext);
@@ -633,7 +623,7 @@ public sealed abstract class WhatsAppSocketClient {
      * @return the message payload as a {@link ByteBuffer} in read mode
      * @throws IOException if the read fails or yields an invalid length
      */
-    private ByteBuffer readHandshakeMessage(WhatsAppLayerContext appContext) throws IOException {
+    private ByteBuffer readHandshakeMessage(WhatsAppSocketClientLayerContext appContext) throws IOException {
         var lengthBuf = ByteBuffer.allocate(INT24_BYTE_SIZE);
         var bytesRead = readHandshakeRaw(lengthBuf, true, appContext);
         if (bytesRead < INT24_BYTE_SIZE) {
@@ -676,7 +666,7 @@ public sealed abstract class WhatsAppSocketClient {
      * @return bytes read, or {@code -1} on end-of-stream
      * @throws IOException if reading fails
      */
-    private int readHandshakeRaw(ByteBuffer buffer, boolean fully, WhatsAppLayerContext appContext) throws IOException {
+    private int readHandshakeRaw(ByteBuffer buffer, boolean fully, WhatsAppSocketClientLayerContext appContext) throws IOException {
         if (appContext != null) {
             var read = new SocketClientPendingRead(buffer, fully);
             if (!appContext.setPendingRead(read)) {
@@ -761,7 +751,7 @@ public sealed abstract class WhatsAppSocketClient {
      *
      * @return a read-only buffer containing the prologue bytes
      */
-    abstract ByteBuffer getHandshakePrologue();
+    abstract byte[] getHandshakePrologue();
 
     /**
      * Builds the serialized client payload for the Noise handshake.
@@ -899,7 +889,7 @@ public sealed abstract class WhatsAppSocketClient {
          *     read queue to drain, then invokes the application's
          *     {@code onClose} callback.  In Cobalt, the queue drain is
          *     handled by the listener executor shutdown in
-         *     {@link WhatsAppLayerContext#onDisconnect()}.
+         *     {@link WhatsAppSocketClientLayerContext#onDisconnect()}.
          */
         @Override
         public void onClose() {
@@ -916,19 +906,17 @@ public sealed abstract class WhatsAppSocketClient {
      */
     static final class Web extends WhatsAppSocketClient {
         private static final byte[] WEB_VERSION = new byte[]{6, NodeTokens.DICTIONARY_VERSION};
-        private static final ByteBuffer WEB_PROLOGUE = ByteBuffer.wrap(
-                DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, WEB_VERSION)
-        ).asReadOnlyBuffer();
+        private static final byte[] WEB_PROLOGUE = DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, WEB_VERSION);
 
         /**
          * The WebSocket endpoint for WEB connections.
          */
-        private static final URI WEB_SOCKET_ENDPOINT = URI.create("wss://web.whatsapp.com/ws/chat");
+        private static final InetSocketAddress WEB_SOCKET_ENDPOINT = new InetSocketAddress("web.whatsapp.com", 443);
 
         /**
          * The WebSocket client for this connection.
          */
-        private final WebSocketClient webSocketClient;
+        private final WebSocketClientLayer webSocketClient;
 
         /**
          * Constructs a new WEB socket client.
@@ -936,7 +924,7 @@ public sealed abstract class WhatsAppSocketClient {
          * @param store           the WhatsApp store
          * @param webSocketClient the WebSocket client
          */
-        Web(WhatsAppStore store, WebSocketClient webSocketClient) {
+        Web(WhatsAppStore store, WebSocketClientLayer webSocketClient) {
             super(store);
             this.webSocketClient = webSocketClient;
         }
@@ -955,8 +943,10 @@ public sealed abstract class WhatsAppSocketClient {
          * @throws IOException if the connection or handshake fails
          */
         @Override
-        void connectImpl(WhatsAppLayerContext appContext, DecryptingListener decryptingListener) throws IOException {
-            webSocketClient.connect(WEB_SOCKET_ENDPOINT, appContext, decryptingListener);
+        void connectImpl(WhatsAppSocketClientLayerContext appContext, DecryptingListener decryptingListener) throws IOException {
+            webSocketClient.connect(WEB_SOCKET_ENDPOINT, decryptingListener);
+            webSocketClient.registerLayerContext(appContext);
+            webSocketClient.finishConnect();
             performNoiseHandshake(appContext);
             appContext.markHandshakeComplete();
             appContext.startListenerExecutor();
@@ -966,7 +956,7 @@ public sealed abstract class WhatsAppSocketClient {
          * Disconnects the WebSocket client.
          */
         @Override
-        void disconnectTransport() {
+        void disconnectImpl() {
             webSocketClient.disconnect();
         }
 
@@ -1063,11 +1053,11 @@ public sealed abstract class WhatsAppSocketClient {
         /**
          * Returns the WEB handshake prologue.
          *
-         * @return the WEB prologue as a read-only buffer
+         * @return a copy of the WEB prologue
          */
         @Override
-        ByteBuffer getHandshakePrologue() {
-            return WEB_PROLOGUE.duplicate();
+        byte[] getHandshakePrologue() {
+            return WEB_PROLOGUE.clone();
         }
 
         /**
@@ -1225,9 +1215,7 @@ public sealed abstract class WhatsAppSocketClient {
      */
     static final class Mobile extends WhatsAppSocketClient {
         private static final byte[] MOBILE_VERSION = new byte[]{5, NodeTokens.DICTIONARY_VERSION};
-        private static final ByteBuffer MOBILE_PROLOGUE = ByteBuffer.wrap(
-                DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, MOBILE_VERSION)
-        ).asReadOnlyBuffer();
+        private static final byte[] MOBILE_PROLOGUE = DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, MOBILE_VERSION);
 
         /**
          * The TCP endpoint for mobile connections.
@@ -1260,7 +1248,7 @@ public sealed abstract class WhatsAppSocketClient {
          * @throws IOException if the connection or handshake fails
          */
         @Override
-        void connectImpl(WhatsAppLayerContext appContext, DecryptingListener decryptingListener) throws IOException {
+        void connectImpl(WhatsAppSocketClientLayerContext appContext, DecryptingListener decryptingListener) throws IOException {
             mobileLayer.connect(SOCKET_ENDPOINT, decryptingListener);
             mobileLayer.registerLayerContext(appContext);
             performNoiseHandshake(null);
@@ -1272,7 +1260,7 @@ public sealed abstract class WhatsAppSocketClient {
          * Disconnects the raw transport layer.
          */
         @Override
-        void disconnectTransport() {
+        void disconnectImpl() {
             mobileLayer.disconnect();
         }
 
@@ -1343,11 +1331,11 @@ public sealed abstract class WhatsAppSocketClient {
         /**
          * Returns the mobile handshake prologue.
          *
-         * @return the mobile prologue as a read-only buffer
+         * @return a copy of the mobile prologue
          */
         @Override
-        ByteBuffer getHandshakePrologue() {
-            return MOBILE_PROLOGUE.duplicate();
+        byte[] getHandshakePrologue() {
+            return MOBILE_PROLOGUE.clone();
         }
 
         /**

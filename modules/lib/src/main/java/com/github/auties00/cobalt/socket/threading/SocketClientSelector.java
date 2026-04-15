@@ -1,7 +1,6 @@
 package com.github.auties00.cobalt.socket.threading;
 
-import com.github.auties00.cobalt.socket.application.websocket.WebSocketLayerContext;
-import com.github.auties00.cobalt.socket.application.whatsapp.WhatsAppLayerContext;
+import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayerContext;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientTransportSecurityLayerContext;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientTunnelSecurityLayerContext;
 import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayerContext;
@@ -14,8 +13,7 @@ import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
@@ -585,9 +583,9 @@ public final class SocketClientSelector implements Runnable {
      *
      * <p>Layer contexts are stored as explicit typed fields in a fixed
      * bottom-to-top order: transport security, tunnel security, tunnel,
-     * websocket, app.  When a new context is registered, the chain is
-     * rebuilt automatically so the inbound processing pipeline is wired
-     * correctly.
+     * then application layers. When a new context is registered, the
+     * chain is rebuilt automatically so the inbound processing pipeline
+     * is wired correctly.
      */
     private static final class AttachmentData {
         /**
@@ -611,14 +609,9 @@ public final class SocketClientSelector implements Runnable {
         private SocketClientTunnelLayerContext tunnel;
 
         /**
-         * WebSocket framing layer context.
+         * Application layer contexts in registration order (bottom-to-top).
          */
-        private WebSocketLayerContext websocket;
-
-        /**
-         * WhatsApp application layer context (Noise protocol).
-         */
-        private WhatsAppLayerContext app;
+        private final SequencedCollection<SocketClientApplicationLayerContext> applicationLayers = new ArrayList<>();
 
         /**
          * Creates a context with the given transport context.
@@ -674,8 +667,8 @@ public final class SocketClientSelector implements Runnable {
             if (transportSecurity != null) return transportSecurity;
             if (tunnelSecurity != null) return tunnelSecurity;
             if (tunnel != null) return tunnel;
-            if (websocket != null) return websocket;
-            return app;
+            if (!applicationLayers.isEmpty()) return applicationLayers.getFirst();
+            return null;
         }
 
         /**
@@ -693,8 +686,7 @@ public final class SocketClientSelector implements Runnable {
                 case SocketClientTransportSecurityLayerContext ctx -> this.transportSecurity = ctx;
                 case SocketClientTunnelSecurityLayerContext ctx -> this.tunnelSecurity = ctx;
                 case SocketClientTunnelLayerContext t -> this.tunnel = t;
-                case WebSocketLayerContext ws -> this.websocket = ws;
-                case WhatsAppLayerContext wa -> this.app = wa;
+                case SocketClientApplicationLayerContext ctx -> this.applicationLayers.add(ctx);
                 default -> throw new IllegalArgumentException("Unknown layer context type: " + layerContext.getClass());
             }
             rebuildChain();
@@ -751,8 +743,9 @@ public final class SocketClientSelector implements Runnable {
             if (transportSecurity != null && !transportSecurity.drainToNextLayer()) return false;
             if (tunnelSecurity != null && !tunnelSecurity.drainToNextLayer()) return false;
             if (tunnel != null && !tunnel.drainToNextLayer()) return false;
-            if (websocket != null && !websocket.drainToNextLayer()) return false;
-            if (app != null && !app.drainToNextLayer()) return false;
+            for (var appLayer : applicationLayers) {
+                if (!appLayer.drainToNextLayer()) return false;
+            }
             return true;
         }
 
@@ -761,7 +754,13 @@ public final class SocketClientSelector implements Runnable {
          * bottom-to-top order and linking each context to the next.
          */
         private void rebuildChain() {
-            linkLayers(transportContext, transportSecurity, tunnelSecurity, tunnel, websocket, app);
+            var layers = new ArrayList<SocketClientLayerContext>();
+            layers.add(transportContext);
+            if (transportSecurity != null) layers.add(transportSecurity);
+            if (tunnelSecurity != null) layers.add(tunnelSecurity);
+            if (tunnel != null) layers.add(tunnel);
+            layers.addAll(applicationLayers);
+            linkLayers(layers.toArray(SocketClientLayerContext[]::new));
         }
 
         /**
@@ -788,8 +787,9 @@ public final class SocketClientSelector implements Runnable {
             if (transportSecurity != null && predicate.test(transportSecurity)) return Optional.of(transportSecurity);
             if (tunnelSecurity != null && predicate.test(tunnelSecurity)) return Optional.of(tunnelSecurity);
             if (tunnel != null && predicate.test(tunnel)) return Optional.of(tunnel);
-            if (websocket != null && predicate.test(websocket)) return Optional.of(websocket);
-            if (app != null && predicate.test(app)) return Optional.of(app);
+            for (var appLayer : applicationLayers) {
+                if (predicate.test(appLayer)) return Optional.of(appLayer);
+            }
             return Optional.empty();
         }
     }

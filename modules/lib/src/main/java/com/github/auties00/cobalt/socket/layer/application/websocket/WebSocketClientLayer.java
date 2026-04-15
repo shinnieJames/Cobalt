@@ -1,6 +1,7 @@
-package com.github.auties00.cobalt.socket.application.websocket;
+package com.github.auties00.cobalt.socket.layer.application.websocket;
 
-import com.github.auties00.cobalt.socket.application.websocket.frame.encoder.WebSocketFrameEncoder;
+import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayer;
+import com.github.auties00.cobalt.socket.layer.application.websocket.frame.encoder.WebSocketFrameEncoder;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayer;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayerListener;
 import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
@@ -9,7 +10,6 @@ import com.github.auties00.cobalt.util.DataUtils;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -24,7 +24,7 @@ import java.util.Objects;
  * <p>This client performs the HTTP/1.1 WebSocket upgrade handshake over
  * the transport layer, then provides WebSocket binary frame encoding for
  * outbound messages.  Inbound WebSocket frame decoding is handled by the
- * {@link WebSocketLayerContext} registered with the selector pipeline.
+ * {@link WebSocketClientLayerContext} registered with the selector pipeline.
  *
  * <p>After the upgrade completes, the connection transitions to
  * asynchronous data flow: the selector delivers decoded WebSocket data
@@ -39,7 +39,7 @@ import java.util.Objects;
  * all.  The slow path (line spans buffers) is split into a separate
  * method so the JIT always inlines the fast path.
  */
-public final class WebSocketClient {
+public final class WebSocketClientLayer implements SocketClientApplicationLayer<WebSocketClientLayerContext> {
     private static final byte[] WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11".getBytes(StandardCharsets.US_ASCII);
     private static final byte CARRIAGE_RETURN = '\r';
     private static final byte LINE_FEED = '\n';
@@ -98,9 +98,14 @@ public final class WebSocketClient {
     private static final byte[] REQ_END = "\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * The transport layer stack (TCP + optional TLS + optional proxy).
+     * The inner layer stack (TCP + optional TLS + optional proxy).
      */
-    private final SocketClientLayer<?> transportLayer;
+    private final SocketClientLayer<?> innerLayer;
+
+    /**
+     * The WebSocket endpoint path for the HTTP upgrade request.
+     */
+    private final String path;
 
     /**
      * The User-Agent header value for the WebSocket upgrade request.
@@ -113,16 +118,26 @@ public final class WebSocketClient {
     private final HttpResponseReader responseReader;
 
     /**
-     * Creates a WebSocket client wrapping the given transport layer.
-     *
-     * @param transportLayer the transport layer stack
-     * @param userAgent      the User-Agent string for the upgrade request
+     * Leftover bytes from the HTTP upgrade response, to be fed into the
+     * pipeline when {@link #finishConnect()} is called.
      */
-    private WebSocketClient(SocketClientLayer<?> transportLayer, String userAgent) {
-        this.transportLayer = transportLayer;
+    private ByteBuffer upgradeLeftover;
+
+    /**
+     * Creates a WebSocket application layer wrapping the given inner layer.
+     *
+     * @param innerLayer the inner layer stack (TCP + optional TLS
+     *                   + optional proxy tunnel)
+     * @param path       the WebSocket endpoint path (e.g. {@code "/ws"})
+     * @param userAgent  the User-Agent string sent in the HTTP upgrade
+     *                   request
+     */
+    public WebSocketClientLayer(SocketClientLayer<?> innerLayer, String path, String userAgent) {
+        this.innerLayer = innerLayer;
+        this.path = path;
         this.userAgent = ("\r\nUser-Agent: " + userAgent).getBytes(StandardCharsets.US_ASCII);
         this.responseReader = new HttpResponseReader(
-                transportLayer,
+                innerLayer,
                 "WebSocket HTTP upgrade timed out",
                 "WebSocket response headers exceed maximum size",
                 "Unexpected end of stream during WebSocket upgrade",
@@ -131,93 +146,63 @@ public final class WebSocketClient {
         );
     }
 
-    /**
-     * Creates a new WebSocket client wrapping the given transport layer.
-     *
-     * @param transportLayer the transport layer stack (TCP + optional TLS
-     *                       + optional proxy tunnel)
-     * @param userAgent      the User-Agent string sent in the HTTP upgrade
-     *                       request
-     * @return a new {@code WebSocketClient}
-     */
-    public static WebSocketClient newWebSocketClient(SocketClientLayer<?> transportLayer, String userAgent) {
-        return new WebSocketClient(transportLayer, userAgent);
-    }
-
-    /**
-     * Connects to the specified WebSocket URI and performs the upgrade
-     * handshake.
-     *
-     * <p>First connects the transport layer to the target host, then
-     * performs the HTTP/1.1 WebSocket upgrade.  After a successful
-     * upgrade, registers the WebSocket layer context with the selector
-     * pipeline (chained above the caller-provided {@code nextLayer}),
-     * transitions to asynchronous mode, and feeds any leftover bytes
-     * from the HTTP response into the pipeline.
-     *
-     * @param address   the WebSocket URI (e.g. {@code wss://host/path})
-     * @param nextLayer the layer context above WebSocket in the inbound
-     *                  pipeline (receives decoded data frame payloads)
-     * @param listener  the callback for events (used only for connect)
-     * @throws IOException if the connection or upgrade fails
-     */
-    public void connect(URI address, SocketClientLayerContext nextLayer, SocketClientLayerListener listener) throws IOException {
+    @Override
+    public void connect(InetSocketAddress address, SocketClientLayerListener listener) throws IOException {
         Objects.requireNonNull(address, "address cannot be null");
-        Objects.requireNonNull(nextLayer, "nextLayer cannot be null");
         Objects.requireNonNull(listener, "listener cannot be null");
 
-        var port = address.getPort() != -1 ? address.getPort() : 443;
-        transportLayer.connect(
-                new InetSocketAddress(address.getHost(), port),
-                listener
-        );
+        innerLayer.connect(address, listener);
+        innerLayer.registerLayerContext(new WebSocketClientLayerContext());
 
-        var wsContext = WebSocketLayerContext.newWebSocketContext(nextLayer);
-        transportLayer.registerLayerContext(wsContext);
-
-        performUpgrade(address.getHost(), port, address.getRawPath());
+        performUpgrade(address.getHostString(), address.getPort(), path);
     }
 
-    /**
-     * Disconnects the WebSocket connection.
-     */
+    @Override
     public void disconnect() {
-        transportLayer.disconnect();
+        innerLayer.disconnect();
     }
 
-    /**
-     * Returns whether the WebSocket connection is active.
-     *
-     * @return {@code true} if connected
-     */
+    @Override
     public boolean isConnected() {
-        return transportLayer.isConnected();
+        return innerLayer.isConnected();
     }
 
-    /**
-     * Wraps all provided buffers into one WebSocket binary message and
-     * sends it through the transport layer.
-     *
-     * @param buffers the message payload buffers
-     * @throws IOException if the write fails
-     */
+    @Override
     public void sendBinary(ByteBuffer... buffers) throws IOException {
         var encoded = WebSocketFrameEncoder.encodeBinaryMessage(buffers);
         if (encoded.length != 0) {
-            transportLayer.sendBinary(encoded);
+            innerLayer.sendBinary(encoded);
         }
     }
 
-    /**
-     * Reads binary bytes from the transport layer.
-     *
-     * @param buffer the destination buffer
-     * @param fully  {@code true} to fill the buffer completely
-     * @return bytes read, or {@code -1} on end-of-stream
-     * @throws IOException if reading fails
-     */
+    @Override
     public int readBinary(ByteBuffer buffer, boolean fully) throws IOException {
-        return transportLayer.readBinary(buffer, fully);
+        return innerLayer.readBinary(buffer, fully);
+    }
+
+    @Override
+    public void finishConnect() throws IOException {
+        if (upgradeLeftover != null) {
+            innerLayer.finishConnect(upgradeLeftover);
+            upgradeLeftover = null;
+        } else {
+            innerLayer.finishConnect();
+        }
+    }
+
+    @Override
+    public void finishConnect(ByteBuffer leftover) throws IOException {
+        innerLayer.finishConnect(leftover);
+    }
+
+    @Override
+    public void startHandshake(SocketClientLayerContext tlsContext, long timeout) throws IOException {
+        innerLayer.startHandshake(tlsContext, timeout);
+    }
+
+    @Override
+    public void registerLayerContext(SocketClientLayerContext context) throws IOException {
+        innerLayer.registerLayerContext(context);
     }
 
     /**
@@ -246,9 +231,8 @@ public final class WebSocketClient {
         }
 
         consumeAndValidateHeaders(deadline, expectedAccept);
-        var leftover = responseReader.buffered();
+        this.upgradeLeftover = responseReader.buffered();
         responseReader.reset();
-        transportLayer.finishConnect(leftover);
     }
 
     /**
@@ -347,7 +331,7 @@ public final class WebSocketClient {
 
         System.arraycopy(REQ_END, 0, request, pos, REQ_END.length);
 
-        transportLayer.sendBinary(ByteBuffer.wrap(request));
+        innerLayer.sendBinary(ByteBuffer.wrap(request));
     }
 
     /**
@@ -385,7 +369,7 @@ public final class WebSocketClient {
 
         var flags = 0;
 
-        while (transportLayer.isConnected()) {
+        while (innerLayer.isConnected()) {
             if (responseReader.bufferedRemaining() == 0) {
                 responseReader.refillBuffered(deadline);
             }

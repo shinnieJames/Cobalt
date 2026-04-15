@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.socket.layer.security.impl;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayer;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayerListener;
 import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
-import com.github.auties00.cobalt.socket.application.whatsapp.ssl.WhatsAppSslEngineFactory;
+import com.github.auties00.cobalt.socket.WhatsAppSslEngineFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

@@ -1,4 +1,4 @@
-package com.github.auties00.cobalt.socket.application.websocket.frame.decoder;
+package com.github.auties00.cobalt.socket.layer.application.websocket.frame.decoder;
 
 import java.nio.ByteBuffer;
 
