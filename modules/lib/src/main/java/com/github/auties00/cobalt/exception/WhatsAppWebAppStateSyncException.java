@@ -36,9 +36,11 @@ import java.util.Objects;
  *       <li>{@link IndexMacMismatch} - Mutation index integrity check failed</li>
  *     </ul>
  *   </li>
- *   <li><b>Key errors (retryable):</b>
+ *   <li><b>Key errors:</b>
  *     <ul>
- *       <li>{@link MissingKey} - Required encryption key not yet available</li>
+ *       <li>{@link MissingKey} - Required encryption key not yet available (retryable)</li>
+ *       <li>{@link MissingKeyOnAllDevices} - Key missing on every companion device (fatal)</li>
+ *       <li>{@link TimeoutWhileWaitingForMissingKey} - Wait for missing key expired (fatal)</li>
  *     </ul>
  *   </li>
  *   <li><b>Decryption errors (fatal):</b>
@@ -55,6 +57,21 @@ import java.util.Objects;
  *   <li><b>Computation errors (fatal):</b>
  *     <ul>
  *       <li>{@link MacComputationFailed} - HMAC computation failed</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Patch/mutation structure errors (fatal):</b>
+ *     <ul>
+ *       <li>{@link MissingPatches} - Gap in received patch sequence</li>
+ *       <li>{@link TerminalPatch} - Server signaled collection is unrecoverable</li>
+ *       <li>{@link MissingActionTimestamp} - SET mutation missing timestamp</li>
+ *       <li>{@link DuplicateIndexInPatch} - Duplicate index within a patch</li>
+ *       <li>{@link DuplicatePatchVersion} - Two patches share the same version</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>Server response errors:</b>
+ *     <ul>
+ *       <li>{@link Conflict} - Server returned 409 (retryable)</li>
+ *       <li>{@link RetryableServerError} - Other retryable server codes (retryable)</li>
  *     </ul>
  *   </li>
  *   <li><b>Unknown errors (fatal):</b>
@@ -79,12 +96,29 @@ import java.util.Objects;
  * @see ValueMacMismatch
  * @see IndexMacMismatch
  * @see MissingKey
+ * @see MissingKeyOnAllDevices
+ * @see TimeoutWhileWaitingForMissingKey
+ * @see MissingPatches
+ * @see TerminalPatch
+ * @see Conflict
+ * @see RetryableServerError
  * @see DecryptionFailed
  * @see ExternalDownloadFailed
  * @see ExternalDecodeFailed
  * @see MacComputationFailed
+ * @see MissingActionTimestamp
+ * @see DuplicateIndexInPatch
+ * @see DuplicatePatchVersion
  * @see UnexpectedError
- * @implNote WAWebSyncdError.SyncdMissingKeyError, WAWebSyncdError.SyncdRetryableError, WAWebSyncdError.SyncdFatalError
+ * @implNote Base class for all three WA Web syncd error classes:
+ *           {@code SyncdMissingKeyError} (retryable marker, no fields),
+ *           {@code SyncdRetryableError(message, backoff)} (retryable with optional
+ *           server-suggested backoff), and {@code SyncdFatalError(message)} (fatal
+ *           with descriptive message). Cobalt's sealed hierarchy is intentionally
+ *           richer than WA Web's three-class model: each distinct WA-Web throw site
+ *           gets its own typed subtype so callers can pattern-match. Per CLAUDE.md,
+ *           recovery is delegated to the pluggable {@code WhatsAppClientErrorHandler}
+ *           instead of being hard-coded inline.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdError")
 public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppException
@@ -537,15 +571,18 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * </ul>
      *
      * <h2>Recovery</h2>
-     * This is a non-fatal error. The sync state can be recovered by retrying
-     * the key request or waiting for the device to come online. The configurable
-     * error handler may choose to reconnect, re-request, or log out.
+     * This is a fatal error: WA Web classifies the timeout as fatal in
+     * {@code WAWebSyncdStoreMissingKeys._timeoutWhileWaitingForMissingKey}
+     * via {@code reportSyncdFatalError(TIMEOUT_WHILE_WAITING_FOR_MISSING_KEY)}
+     * followed by {@code handleSyncdFatal}. Per CLAUDE.md, the specific
+     * recovery action (reconnect, log out, etc.) is delegated to the
+     * pluggable {@code WhatsAppClientErrorHandler} instead of being hard-coded.
      *
      * @implNote WAWebSyncdMetricFatalError.SyncdFatalErrorType.TIMEOUT_WHILE_WAITING_FOR_MISSING_KEY
      *           - WA Web reports this specific metric via
      *           {@code reportSyncdFatalError(TIMEOUT_WHILE_WAITING_FOR_MISSING_KEY)}
      *           in {@code WAWebSyncdStoreMissingKeys._timeoutWhileWaitingForMissingKey}
-     *           as a distinct cause separate from {@code MISSING_KEY_ON_ALL_CLIENTS}.
+     *           as a distinct fatal cause separate from {@code MISSING_KEY_ON_ALL_CLIENTS}.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
     @WhatsAppWebModule(moduleName = "WAWebSyncdMetricFatalError")
@@ -588,16 +625,18 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         /**
          * Returns whether this exception represents a fatal error.
          *
-         * @return {@code false} - a wait-timeout is recoverable via retry or
-         *         the configurable error handler policy
+         * @return {@code true} - WA Web classifies the wait-for-missing-key timeout
+         *         as a fatal error via {@code reportSyncdFatalError} and
+         *         {@code handleSyncdFatal}; Cobalt mirrors the fatal classification
+         *         and delegates the concrete recovery action to the pluggable
+         *         {@code WhatsAppClientErrorHandler}.
          * @implNote WAWebSyncdMetricFatalError.SyncdFatalErrorType.TIMEOUT_WHILE_WAITING_FOR_MISSING_KEY
-         *           - WA Web reports this as a distinct metric; Cobalt treats it
-         *           as non-fatal and delegates recovery to the pluggable error
-         *           handler per Cobalt's redesigned error model.
+         *           - fatal in WA Web per {@code WAWebSyncdStoreMissingKeys._timeoutWhileWaitingForMissingKey}
+         *           which reports a fatal metric and triggers {@code handleSyncdFatal}.
          */
         @Override
         public boolean isFatal() {
-            return false;
+            return true;
         }
     }
 
@@ -680,9 +719,15 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *   <li>If the URL has expired, request fresh sync data</li>
      * </ol>
      *
-     * @implNote WAWebSyncdError.SyncdRetryableError - download failures are retryable in WA Web
+     * @implNote WAWebSyncdNetCallbacksApi.downloadSyncBlob - ADAPTED: WA Web rethrows
+     *           the raw network error for non-404 failures and throws
+     *           {@code SyncdFatalError("external patch expired")} on {@code MediaNotFoundError}.
+     *           Cobalt splits these two cases: {@link UnexpectedError} for the 404/expired path
+     *           (matching the WA-Web fatal classification) and this type for transient
+     *           network failures (retryable per Cobalt's adaptation, since WA Web lets
+     *           the generic error bubble and the caller decides).
      */
-    @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebModule(moduleName = "WAWebSyncdNetCallbacksApi")
     public static final class ExternalDownloadFailed extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new external download failed exception.
@@ -723,9 +768,17 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * This is a retryable error. If decoding consistently fails, the blob
      * may be corrupted and a fresh sync request may be needed.
      *
-     * @implNote WAWebSyncdError.SyncdRetryableError - decode failures are retryable in WA Web
+     * @implNote WAWebNonMessageDataRequestHandler.m - ADAPTED: WA Web's
+     *           {@code WAWebSyncdDecode.decodeSyncdMutations} throws
+     *           {@code SyncdFatalError} for inline mutation decode failures,
+     *           but this Cobalt type is used specifically for the snapshot
+     *           recovery decode path ({@code SyncdSnapshotRecoverySpec}) which
+     *           in WA Web is not wrapped in any {@code Syncd*Error} class.
+     *           Cobalt marks it retryable because recovery snapshots can be
+     *           re-requested from the primary device; the pluggable
+     *           {@code WhatsAppClientErrorHandler} decides the final action.
      */
-    @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebModule(moduleName = "WAWebNonMessageDataRequestHandler")
     public static final class ExternalDecodeFailed extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new external decode failed exception.

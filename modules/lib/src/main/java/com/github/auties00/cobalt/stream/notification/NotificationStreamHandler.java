@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.stream.notification;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.props.ABPropsService;
@@ -77,29 +77,29 @@ public final class NotificationStreamHandler implements SocketStream.Handler {
      * Constructs a new notification dispatcher and wires each of the four
      * sub-dispatchers with their own dependencies.
      *
-     * @param whatsapp               the WhatsApp client used by every
-     *                               sub-dispatcher
-     * @param webVerificationHandler the verification handler used for
-     *                               companion pairing prompts
-     * @param lidMigrationService    service used to reconcile LID/PN
-     *                               addressing during business-related
-     *                               notifications
-     * @param abPropsService         service used to retrieve feature flags
-     *                               during device notification handling
-     * @param deviceService          service used to reconcile linked-device
-     *                               state during device and account
-     *                               notifications
+     * @param whatsapp                the WhatsApp client used by every
+     *                                sub-dispatcher
+     * @param deviceLinkingService the alt-device-linking service that owns
+     *                                the pairing-code handshake state
+     * @param lidMigrationService     service used to reconcile LID/PN
+     *                                addressing during business-related
+     *                                notifications
+     * @param abPropsService          service used to retrieve feature flags
+     *                                during device notification handling
+     * @param deviceService           service used to reconcile linked-device
+     *                                state during device and account
+     *                                notifications
      */
     public NotificationStreamHandler(
             WhatsAppClient whatsapp,
-            WhatsAppClientVerificationHandler.Web webVerificationHandler,
+            CompanionPairingService deviceLinkingService,
             LidMigrationService lidMigrationService,
             ABPropsService abPropsService,
             DeviceService deviceService
     ) {
         this.accountHandler = new NotificationAccountDispatcher(whatsapp, deviceService);
         this.businessHandler = new NotificationBusinessDispatcher(whatsapp, lidMigrationService);
-        this.deviceHandler = new NotificationDeviceDispatcher(whatsapp, webVerificationHandler, abPropsService, deviceService);
+        this.deviceHandler = new NotificationDeviceDispatcher(whatsapp, deviceLinkingService, abPropsService, deviceService);
         this.groupHandler = new NotificationGroupStreamHandler(whatsapp);
     }
 

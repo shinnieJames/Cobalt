@@ -3,7 +3,9 @@ package com.github.auties00.cobalt.stream.control;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.exception.WhatsAppStreamException;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
 
@@ -40,14 +42,16 @@ public final class StreamErrorStreamHandler implements SocketStream.Handler {
     /**
      * Stream error code indicating the server requests the client to reconnect and re-login.
      *
-     * @implNote WAWebHandleStreamError.default -- code 515 triggers startLogin
+     * @implNote WAWebHandleStreamError.default: {@code if (a.code === 515) ... yield WAWebCompanionRegUtils.startLogin()}.
+     *           Inline literal in WA Web; promoted to a named constant in Cobalt for readability.
      */
     private static final int STREAM_ERROR_RESTART_LOGIN = 515;
 
     /**
      * Stream error code indicating the server forces logout of the companion device.
      *
-     * @implNote WAWebHandleStreamError.default -- code 516 triggers startLogout
+     * @implNote WAWebHandleStreamError.default: {@code if (a.code === 516) ... yield WAWebCompanionRegUtils.startLogout()}.
+     *           Inline literal in WA Web; promoted to a named constant in Cobalt for readability.
      */
     private static final int STREAM_ERROR_LOGOUT = 516;
 
@@ -87,41 +91,52 @@ public final class StreamErrorStreamHandler implements SocketStream.Handler {
      * @implNote WAWebHandleStreamError.default
      */
     @Override
+    @WhatsAppWebExport(moduleName = "WAWebHandleStreamError", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public void handle(Node node) {
-        // WAWebHandleStreamError.default -- parser checks conflict child first
+        // WAWebHandleStreamError.streamErrorParser: t.assertTag("stream:error")
+        // (already enforced by SocketStream tag-routing)
+
+        // WAWebHandleStreamError.streamErrorParser: if (t.hasChild("conflict"))
         var conflict = node.getChild("conflict").orElse(null);
         if (conflict != null) {
+            // WAWebHandleStreamError.streamErrorParser: var n = t.child("conflict"), r = n.attrString("type")
             handleConflict(conflict.getAttributeAsString("type", null));
             return;
         }
 
-        // WAWebHandleStreamError.default -- parser checks code attribute second
+        // WAWebHandleStreamError.streamErrorParser: else return t.hasAttr("code") ? {type:"code", code: t.attrInt("code")} : ...
         var code = node.getAttributeAsInt("code", (Integer) null);
         if (code != null) {
             handleCode(code);
             return;
         }
 
-        // WAWebHandleStreamError.default -- parser checks ack child third
+        // WAWebHandleStreamError.streamErrorParser: t.hasChild("ack") ? {type:"ack", id: ...} : ...
         var ack = node.getChild("ack").orElse(null);
         if (ack != null) {
+            // ADAPTED: WA Web's dispatcher has no specific handler for "ack" type and falls through to
+            // resolve("CLOSE_SOCKET"). Cobalt logs the ack id for diagnostics before closing the socket.
             LOGGER.log(System.Logger.Level.WARNING,
                     "Received stream:error ack for id={0}",
                     ack.getAttributeAsString("id", null));
-            // WAWebHandleStreamError.default -- ack type falls through to CLOSE_SOCKET
+            // WAWebHandleStreamError.default: falls through to Promise.resolve("CLOSE_SOCKET")
             whatsapp.handleFailure(new WhatsAppSessionException.Closed("Stream error: ack"));
             return;
         }
 
-        // WAWebHandleStreamError.default -- parser checks xml-not-well-formed child fourth
+        // WAWebHandleStreamError.streamErrorParser: t.hasChild("xml-not-well-formed") ? {type:"xml-not-well-formed"} : ...
         if (node.hasChild("xml-not-well-formed")) {
-            // ADAPTED: WAWebHandleStreamError.default -- mapped to MalformedNode exception
+            // WAWebHandleStreamError.default: a.type === "xml-not-well-formed" -> WALogger.WARN("[handleStreamError] bad xml, closing socket")
+            //                                                                    then falls through to resolve("CLOSE_SOCKET")
+            // ADAPTED: mapped to MalformedNode (a fatal WhatsAppStreamException) so the client error handler
+            // can distinguish a server-reported bad-XML close from a generic session close.
             whatsapp.handleFailure(new WhatsAppStreamException.MalformedNode("Server reported xml-not-well-formed"));
             return;
         }
 
-        // WAWebHandleStreamError.default -- unrecognized type falls through to CLOSE_SOCKET
+        // WAWebHandleStreamError.streamErrorParser: WALogger.WARN("Unrecognized stream:error: ...", t.toString()), {type:"other"}
         LOGGER.log(System.Logger.Level.WARNING, "Received unrecognized stream:error stanza: {0}", node);
+        // WAWebHandleStreamError.default: "other" has no specific dispatcher branch -> resolve("CLOSE_SOCKET")
         whatsapp.handleFailure(new WhatsAppSessionException.Closed("Stream error: unrecognized"));
     }
 

@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.sync.crypto;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.util.DataUtils;
 
@@ -29,34 +32,185 @@ import java.util.Objects;
  *           WAWebSyncdCryptoConst (HKDF_INFO, DERIVED_KEY_LENGTH, key offset constants),
  *           WAWebSyncdCrypto.generateEncryptionKeys (memoized wrapper),
  *           WAWebSyncdMutationsCryptoUtils (generateAssociatedData, generatePadding,
- *           generateCipherText, generateMac, decryptCipherText)
+ *           generateCipherText, generateMac, decryptCipherText).
+ *
+ *           WAWebSyncdKeyCache is also folded into this class's ecosystem: the WA Web
+ *           module maintains a process-wide {@code Map<base64(keyId), AppStateSyncKey>}
+ *           in front of an IndexedDB {@code SyncKeyStore} and exposes two exports,
+ *           {@code getKeyData(keyId)} and {@code clearSyncKeysCache()}. Cobalt collapses
+ *           this cache into {@code AbstractWhatsAppStore.appStateKeys} (a hex-keyed
+ *           {@code LinkedHashMap<String, AppStateSyncKey>}) so lookups already hit an
+ *           in-memory structure and no separate cache layer is needed:
+ *           <ul>
+ *             <li>{@code WAWebSyncdKeyCache.getKeyData(keyId)} maps to
+ *                 {@code WhatsAppStore.findWebAppStateKeyById(byte[])} followed by
+ *                 {@link com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey#keyData()};</li>
+ *             <li>{@code WAWebSyncdKeyCache.clearSyncKeysCache()} has no Cobalt
+ *                 counterpart: there is no secondary cache to invalidate — the store
+ *                 map IS the cache, and it is cleared as part of normal store
+ *                 teardown, not via a dedicated API.</li>
+ *           </ul>
+ *           Per-batch memoization inside a single mutation round is achieved by
+ *           deriving a {@link MutationKeys} instance once from the looked-up sync
+ *           key data and reusing it for all mutations in the batch.
  */
+@WhatsAppWebModule(moduleName = "WAWebSyncdCryptoConst")
+@WhatsAppWebModule(moduleName = "WAWebSyncdMutationsCryptoUtils")
+@WhatsAppWebModule(moduleName = "WAWebSyncdCryptoHelper")
+@WhatsAppWebModule(moduleName = "WAWebSyncdCrypto")
+@WhatsAppWebModule(moduleName = "WAWebSyncdEncryptionManager")
+@WhatsAppWebModule(moduleName = "WAWebSyncdKeyCache")
 public final class MutationKeys implements AutoCloseable {
+    /**
+     * HKDF info string used for mutation key derivation.
+     *
+     * @implNote WAWebSyncdCryptoConst.HKDF_INFO — raw string literal
+     *           {@code "WhatsApp Mutation Keys"} passed as the HKDF-SHA256 info
+     *           parameter when expanding a sync key into the five mutation keys.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "HKDF_INFO", adaptation = WhatsAppAdaptation.DIRECT)
     private static final String HKDF_INFO = "WhatsApp Mutation Keys"; // WAWebSyncdCryptoConst.HKDF_INFO
+
+    /**
+     * Total length of the HKDF-expanded key material, in bytes.
+     *
+     * <p>Equals the sum of the five 32-byte mutation keys (indexKey,
+     * valueEncryptionKey, valueMacKey, snapshotMacKey, patchMacKey).
+     *
+     * @implNote WAWebSyncdCryptoConst.DERIVED_KEY_LENGTH — {@code l = 160}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "DERIVED_KEY_LENGTH", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int DERIVED_KEY_LENGTH = 160; // WAWebSyncdCryptoConst.DERIVED_KEY_LENGTH
+
+    /**
+     * End offset (exclusive) of the {@code indexKey} slice within the derived key bytes.
+     *
+     * <p>The index key occupies bytes {@code [0, INDEX_KEY_END)} of the 160-byte HKDF output.
+     *
+     * @implNote WAWebSyncdCryptoConst.INDEX_KEY_END — {@code p = s = 32} (first 32-byte segment).
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "INDEX_KEY_END", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final int INDEX_KEY_END = 32; // WAWebSyncdCryptoConst.INDEX_KEY_END
+
+    /**
+     * End offset (exclusive) of the {@code valueEncryptionKey} slice within the derived key bytes.
+     *
+     * <p>The value encryption key occupies bytes {@code [INDEX_KEY_END, VALUE_ENCRYPTION_KEY_END)}
+     * of the 160-byte HKDF output.
+     *
+     * @implNote WAWebSyncdCryptoConst.VALUE_ENCRYPTION_KEY_END — {@code _ = p + u = 64}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "VALUE_ENCRYPTION_KEY_END", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final int VALUE_ENCRYPTION_KEY_END = 64; // WAWebSyncdCryptoConst.VALUE_ENCRYPTION_KEY_END
+
+    /**
+     * End offset (exclusive) of the {@code valueMacKey} slice within the derived key bytes.
+     *
+     * <p>The value MAC key occupies bytes {@code [VALUE_ENCRYPTION_KEY_END, VALUE_MAC_KEY_END)}
+     * of the 160-byte HKDF output.
+     *
+     * @implNote WAWebSyncdCryptoConst.VALUE_MAC_KEY_END — {@code f = _ + c = 96}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "VALUE_MAC_KEY_END", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final int VALUE_MAC_KEY_END = 96; // WAWebSyncdCryptoConst.VALUE_MAC_KEY_END
+
+    /**
+     * End offset (exclusive) of the {@code snapshotMacKey} slice within the derived key bytes.
+     *
+     * <p>The snapshot MAC key occupies bytes {@code [VALUE_MAC_KEY_END, SNAPSHOT_MAC_KEY_END)}
+     * of the 160-byte HKDF output.
+     *
+     * @implNote WAWebSyncdCryptoConst.SNAPSHOT_MAC_KEY_END — {@code g = f + d = 128}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "SNAPSHOT_MAC_KEY_END", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final int SNAPSHOT_MAC_KEY_END = 128; // WAWebSyncdCryptoConst.SNAPSHOT_MAC_KEY_END
+
+    /**
+     * End offset (exclusive) of the {@code patchMacKey} slice within the derived key bytes.
+     *
+     * <p>The patch MAC key occupies bytes {@code [SNAPSHOT_MAC_KEY_END, PATCH_MAC_KEY_END)}
+     * of the 160-byte HKDF output. This is also the total derived key length.
+     *
+     * @implNote WAWebSyncdCryptoConst.PATCH_MAC_KEY_END — {@code h = g + m = 160}, equal to
+     *           {@link #DERIVED_KEY_LENGTH}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "PATCH_MAC_KEY_END", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final int PATCH_MAC_KEY_END = 160; // WAWebSyncdCryptoConst.PATCH_MAC_KEY_END
+
+    /**
+     * Hex-encoded operation byte for {@link SyncdOperation#SET} mutations.
+     *
+     * <p>Used in {@code WAWebSyncdMutationsCryptoUtils.generateAssociatedData} where it is
+     * parsed via {@code parseInt(OPERATION_SET_HEX, 16)} to produce the byte {@code 0x01}
+     * prepended to the associated data for authenticated encryption.
+     *
+     * <p>Retained for provenance only: the actual byte used by
+     * {@link #generateAssociatedData(SyncdOperation, byte[])} is obtained directly from
+     * {@link SyncdOperation#content()} ({@code 0x01} for {@code SET}), which bypasses the
+     * hex-string parsing step from WA Web.
+     *
+     * @implNote WAWebSyncdCryptoConst.OPERATION_SET_HEX — {@code y = "0x01"}. Cobalt reads
+     *           the operation byte from {@link SyncdOperation#content()} instead of parsing
+     *           this hex string.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "OPERATION_SET_HEX", adaptation = WhatsAppAdaptation.ADAPTED)
+    @SuppressWarnings("unused") // kept for source provenance; actual byte comes from SyncdOperation.content()
+    private static final String OPERATION_SET_HEX = "0x01"; // WAWebSyncdCryptoConst.OPERATION_SET_HEX
+
+    /**
+     * Hex-encoded operation byte for {@link SyncdOperation#REMOVE} mutations.
+     *
+     * <p>Used in {@code WAWebSyncdMutationsCryptoUtils.generateAssociatedData} where it is
+     * parsed via {@code parseInt(OPERATION_REMOVE_HEX, 16)} to produce the byte {@code 0x02}
+     * prepended to the associated data for authenticated encryption.
+     *
+     * <p>Retained for provenance only: the actual byte used by
+     * {@link #generateAssociatedData(SyncdOperation, byte[])} is obtained directly from
+     * {@link SyncdOperation#content()} ({@code 0x02} for {@code REMOVE}), which bypasses the
+     * hex-string parsing step from WA Web.
+     *
+     * @implNote WAWebSyncdCryptoConst.OPERATION_REMOVE_HEX — {@code C = "0x02"}. Cobalt reads
+     *           the operation byte from {@link SyncdOperation#content()} instead of parsing
+     *           this hex string.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "OPERATION_REMOVE_HEX", adaptation = WhatsAppAdaptation.ADAPTED)
+    @SuppressWarnings("unused") // kept for source provenance; actual byte comes from SyncdOperation.content()
+    private static final String OPERATION_REMOVE_HEX = "0x02"; // WAWebSyncdCryptoConst.OPERATION_REMOVE_HEX
+
     /**
      * The length of the truncated HMAC value MAC, in bytes.
      *
-     * @implNote WAWebSyncdCryptoConst.MAC_LENGTH
+     * @implNote WAWebSyncdCryptoConst.MAC_LENGTH — {@code v = 32}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "MAC_LENGTH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int MAC_LENGTH = 32; // WAWebSyncdCryptoConst.MAC_LENGTH
+
     /**
      * The length of the length-suffix buffer used when computing the value MAC, in bytes.
      *
-     * @implNote WAWebSyncdCryptoConst.OCTET_LENGTH
+     * @implNote WAWebSyncdCryptoConst.OCTET_LENGTH — {@code S = 8}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "OCTET_LENGTH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int OCTET_LENGTH = 8; // WAWebSyncdCryptoConst.OCTET_LENGTH
+
     /**
      * The length of the initialization vector for AES-CBC encryption, in bytes.
      *
-     * @implNote WAWebSyncdCryptoConst.IV_LENGTH
+     * @implNote WAWebSyncdCryptoConst.IV_LENGTH — {@code R = 16}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "IV_LENGTH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int IV_LENGTH = 16; // WAWebSyncdCryptoConst.IV_LENGTH
+
     /**
      * The lower bound for the combined index and value data length before padding kicks in.
      *
-     * @implNote WAWebSyncdCryptoConst.MAX_OF_MIN_DATA_LENGTH
+     * <p>Currently {@code 0}, which means {@link #generatePadding(int, int)} always returns an
+     * empty array. Retained as a named constant for provenance and forward compatibility with
+     * future non-zero values in {@code WAWebSyncdCryptoConst}.
+     *
+     * @implNote WAWebSyncdCryptoConst.MAX_OF_MIN_DATA_LENGTH — {@code b = 0}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoConst", exports = "MAX_OF_MIN_DATA_LENGTH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int MAX_OF_MIN_DATA_LENGTH = 0; // WAWebSyncdCryptoConst.MAX_OF_MIN_DATA_LENGTH
 
     private final SecretKeySpec indexKey;
@@ -98,10 +252,16 @@ public final class MutationKeys implements AutoCloseable {
      * @throws NullPointerException     if {@code syncKey} is {@code null}
      * @throws IllegalArgumentException if {@code syncKey} is not 32 bytes
      * @implNote WAWebSyncdCryptoHelper.generateEncryptionKeysUnmemoized,
+     *           WAWebSyncdCrypto.generateEncryptionKeys (memoized wrapper over the helper),
      *           WACryptoHkdf.extractAndExpand,
      *           WAWebSyncdCryptoConst (INDEX_KEY_END=32, VALUE_ENCRYPTION_KEY_END=64,
-     *           VALUE_MAC_KEY_END=96, SNAPSHOT_MAC_KEY_END=128, PATCH_MAC_KEY_END=160)
+     *           VALUE_MAC_KEY_END=96, SNAPSHOT_MAC_KEY_END=128, PATCH_MAC_KEY_END=160).
+     *           The memoization performed by {@code WAMemoizeCache.memoizeWithArgs} in
+     *           {@code WAWebSyncdCrypto.generateEncryptionKeys} is a JS-specific performance
+     *           optimization and is not replicated in Cobalt.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCrypto", exports = "generateEncryptionKeys", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoHelper", exports = "generateEncryptionKeysUnmemoized", adaptation = WhatsAppAdaptation.DIRECT)
     public static MutationKeys ofSyncKey(byte[] syncKey) {
         if (syncKey == null) {
             throw new NullPointerException("Sync key cannot be null");
@@ -119,11 +279,11 @@ public final class MutationKeys implements AutoCloseable {
             var derivedBytes = kdf.deriveData(params);
 
             return new MutationKeys(
-                    new SecretKeySpec(derivedBytes, 0, 32, "HmacSHA256"), // WAWebSyncdCryptoConst: [0, INDEX_KEY_END)
-                    new SecretKeySpec(derivedBytes, 32, 32, "AES"), // WAWebSyncdCryptoConst: [INDEX_KEY_END, VALUE_ENCRYPTION_KEY_END)
-                    new SecretKeySpec(derivedBytes, 64, 32, "HmacSHA512"), // WAWebSyncdCryptoConst: [VALUE_ENCRYPTION_KEY_END, VALUE_MAC_KEY_END)
-                    new SecretKeySpec(derivedBytes, 96, 32, "HmacSHA256"), // WAWebSyncdCryptoConst: [VALUE_MAC_KEY_END, SNAPSHOT_MAC_KEY_END)
-                    new SecretKeySpec(derivedBytes, 128, 32, "HmacSHA256") // WAWebSyncdCryptoConst: [SNAPSHOT_MAC_KEY_END, PATCH_MAC_KEY_END)
+                    new SecretKeySpec(derivedBytes, 0, INDEX_KEY_END, "HmacSHA256"), // WAWebSyncdCryptoConst: [0, INDEX_KEY_END)
+                    new SecretKeySpec(derivedBytes, INDEX_KEY_END, VALUE_ENCRYPTION_KEY_END - INDEX_KEY_END, "AES"), // WAWebSyncdCryptoConst: [INDEX_KEY_END, VALUE_ENCRYPTION_KEY_END)
+                    new SecretKeySpec(derivedBytes, VALUE_ENCRYPTION_KEY_END, VALUE_MAC_KEY_END - VALUE_ENCRYPTION_KEY_END, "HmacSHA512"), // WAWebSyncdCryptoConst: [VALUE_ENCRYPTION_KEY_END, VALUE_MAC_KEY_END)
+                    new SecretKeySpec(derivedBytes, VALUE_MAC_KEY_END, SNAPSHOT_MAC_KEY_END - VALUE_MAC_KEY_END, "HmacSHA256"), // WAWebSyncdCryptoConst: [VALUE_MAC_KEY_END, SNAPSHOT_MAC_KEY_END)
+                    new SecretKeySpec(derivedBytes, SNAPSHOT_MAC_KEY_END, PATCH_MAC_KEY_END - SNAPSHOT_MAC_KEY_END, "HmacSHA256") // WAWebSyncdCryptoConst: [SNAPSHOT_MAC_KEY_END, PATCH_MAC_KEY_END)
             );
         } catch (GeneralSecurityException e) {
             throw new InternalError("Failed to derive keys", e);
@@ -143,6 +303,7 @@ public final class MutationKeys implements AutoCloseable {
      * @implNote WAWebSyncdCrypto.generateIndexMac,
      *           WACryptoHmac.hmacSha256
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCrypto", exports = "generateIndexMac", adaptation = WhatsAppAdaptation.DIRECT)
     public byte[] generateIndexMac(byte[] indexBytes) throws GeneralSecurityException {
         var mac = Mac.getInstance("HmacSHA256"); // WACryptoHmac.hmacSha256
         mac.init(indexKey);
@@ -162,6 +323,7 @@ public final class MutationKeys implements AutoCloseable {
      * @implNote WAWebSyncdCrypto.valueMacFromIndexAndValueCipherText,
      *           WAWebSyncdCryptoConst.MAC_LENGTH
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCrypto", exports = "valueMacFromIndexAndValueCipherText", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] valueMacFromIndexAndValueCipherText(byte[] encryptedValue) {
         if (encryptedValue.length < MAC_LENGTH) { // ADAPTED: Java defensive check
             throw new IllegalArgumentException("Encrypted value too short to contain a MAC");
@@ -191,6 +353,7 @@ public final class MutationKeys implements AutoCloseable {
      *           WAWebSyncdCryptoConst.OPERATION_REMOVE_HEX,
      *           WASyncdKeyTypes.fromSyncKeyId
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMutationsCryptoUtils", exports = "generateAssociatedData", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] generateAssociatedData(SyncdOperation operation, byte[] keyId) {
         Objects.requireNonNull(operation, "Operation cannot be null"); // ADAPTED: Java null-safety guard
         Objects.requireNonNull(keyId, "Key ID cannot be null"); // ADAPTED: Java null-safety guard
@@ -216,6 +379,7 @@ public final class MutationKeys implements AutoCloseable {
      *           WAWebSyncdCryptoConst.MAX_OF_MIN_DATA_LENGTH,
      *           WACryptoDependencies.getCrypto().getRandomValues
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMutationsCryptoUtils", exports = "generatePadding", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] generatePadding(int indexLength, int valueLength) {
         var paddingLength = Math.max(0, MAX_OF_MIN_DATA_LENGTH - indexLength - valueLength); // WAWebSyncdMutationsCryptoUtils.generatePadding: Math.max(0, MAX_OF_MIN_DATA_LENGTH - e - t)
         var padding = new byte[paddingLength]; // WAWebSyncdMutationsCryptoUtils.generatePadding: new Uint8Array(n)
@@ -239,6 +403,7 @@ public final class MutationKeys implements AutoCloseable {
      *           WACryptoAesCbc.aesCbcEncrypt,
      *           WAWebSyncdCryptoConst.IV_LENGTH
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMutationsCryptoUtils", exports = "generateCipherText", adaptation = WhatsAppAdaptation.ADAPTED)
     public byte[] generateCipherText(byte[] plaintext) throws GeneralSecurityException {
         var iv = new byte[IV_LENGTH]; // WAWebSyncdMutationsCryptoUtils.generateCipherText → WACryptoAesCbc.aesCbcEncrypt: getIv(optionalIv)
         DataUtils.randomByteArray(iv, 0, IV_LENGTH); // WACryptoDependencies.getCrypto().getRandomValues
@@ -260,6 +425,7 @@ public final class MutationKeys implements AutoCloseable {
      * @implNote WAWebSyncdMutationsCryptoUtils.generateCipherText,
      *           WACryptoAesCbc.aesCbcEncrypt
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMutationsCryptoUtils", exports = "generateCipherText", adaptation = WhatsAppAdaptation.DIRECT)
     public byte[] generateCipherText(byte[] iv, byte[] plaintext) throws GeneralSecurityException {
         var ivSpec = new IvParameterSpec(iv); // WAWebSyncdMutationsCryptoUtils.generateCipherText → WACryptoAesCbc.aesCbcEncrypt: _(iv)
         var cipher = Cipher.getInstance("AES/CBC/PKCS5Padding"); // ADAPTED: WACryptoAesCbc.aesCbcEncrypt uses WebCrypto AES-CBC
@@ -290,6 +456,7 @@ public final class MutationKeys implements AutoCloseable {
      *           WAWebSyncdCryptoUtils.combine,
      *           WACryptoHmac.hmacSha512
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMutationsCryptoUtils", exports = "generateMac", adaptation = WhatsAppAdaptation.DIRECT)
     public byte[] generateMac(byte[] associatedData, byte[] ciphertext) throws GeneralSecurityException {
         var lengthSuffix = new byte[OCTET_LENGTH]; // WAWebSyncdMutationsCryptoUtils.generateMac: new Uint8Array(OCTET_LENGTH)
         lengthSuffix[OCTET_LENGTH - 1] = (byte) associatedData.length; // WAWebSyncdMutationsCryptoUtils.generateMac: r.set([e.byteLength], r.byteLength - 1)
@@ -316,6 +483,7 @@ public final class MutationKeys implements AutoCloseable {
      * @implNote WAWebSyncdMutationsCryptoUtils.decryptCipherText,
      *           WACryptoAesCbc.aesCbcDecrypt
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdMutationsCryptoUtils", exports = "decryptCipherText", adaptation = WhatsAppAdaptation.DIRECT)
     public byte[] decryptCipherText(byte[] iv, byte[] ciphertext) throws GeneralSecurityException {
         var ivSpec = new IvParameterSpec(iv); // WAWebSyncdMutationsCryptoUtils.decryptCipherText → WACryptoAesCbc.aesCbcDecrypt: _(iv)
         var cipher = Cipher.getInstance("AES/CBC/PKCS5Padding"); // ADAPTED: WACryptoAesCbc.aesCbcDecrypt uses WebCrypto AES-CBC

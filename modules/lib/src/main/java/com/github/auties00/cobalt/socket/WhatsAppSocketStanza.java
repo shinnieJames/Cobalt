@@ -37,24 +37,21 @@ public final class WhatsAppSocketStanza {
     }
 
     public Node waitForResponse(Duration timeout) {
-        if (response == null) {
-            synchronized (this) {
-                if (response == null) {
-                    var end = Instant.now().plus(timeout);
-                    while (Instant.now().isBefore(end)) {
-                        try {
-                            wait(TIMEOUT.toMillis());
-                        } catch (InterruptedException exception) {
-                            Thread.currentThread().interrupt();
-                            throw new WhatsAppStreamException.NodeTimeout(body);
-                        }
-                    }
-                    if (response == null) {
-                        throw new WhatsAppStreamException.NodeTimeout(body);
-                    }
+        synchronized (this) {
+            var end = Instant.now().plus(timeout);
+            while (response == null) {
+                var remainingMs = Duration.between(Instant.now(), end).toMillis();
+                if (remainingMs <= 0) {
+                    throw new WhatsAppStreamException.NodeTimeout(body);
+                }
+                try {
+                    wait(remainingMs);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new WhatsAppStreamException.NodeTimeout(body);
                 }
             }
+            return response;
         }
-        return response;
     }
 }

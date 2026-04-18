@@ -1854,24 +1854,25 @@ public final class WebAppStateService {
      * returns the action name at index 0, or {@code null} if parsing fails.
      * Used in non-fatal paths like orphan retry, logging, and model ID extraction.
      *
+     * <p>Delegates to
+     * {@link com.github.auties00.cobalt.sync.handler.SyncdIndexUtils#getMutationNameFromIndex(String, String)};
+     * additionally treats a blank action name as {@code null} (the JS check
+     * {@code n == null} collapses to {@code undefined} in WA Web since a
+     * zero-element array cannot reach this branch; Cobalt keeps the blank
+     * guard as defensive behavior).
+     *
      * @implNote WAWebSyncdActionUtils.getMutationNameFromIndex
      * @param mutation the trusted mutation whose index to parse
      * @return the action name, or {@code null} if the index is invalid or action unknown
      */
     private String resolveActionNameSafe(DecryptedMutation.Trusted mutation) {
-        try {
-            var indexArray = JSON.parseArray(mutation.index()); // WAWebSyncdActionUtils.parseIndex
-            if (indexArray == null || indexArray.isEmpty()) {
-                return null; // WAWebSyncdActionUtils.parseIndex: r.length < 1 -> return null
-            }
-            var actionName = indexArray.getString(0); // WAWebSyncdActionUtils.getMutationNameFromIndex
-            if (actionName == null || actionName.isBlank()) {
-                return null; // WAWebSyncdActionUtils.getMutationNameFromIndex: n == null -> return undefined
-            }
-            return actionName;
-        } catch (Throwable throwable) {
-            return null; // WAWebSyncdActionUtils.parseIndex: catch(e) -> return null
+        // WAWebSyncdActionUtils.getMutationNameFromIndex: var n = parseIndex(e, t); return n == null ? void 0 : n[0]
+        var actionName = com.github.auties00.cobalt.sync.handler.SyncdIndexUtils
+                .getMutationNameFromIndex(null, mutation.index());
+        if (actionName == null || actionName.isBlank()) { // ADAPTED: blank guard preserves existing Cobalt behavior
+            return null; // WAWebSyncdActionUtils.getMutationNameFromIndex: n == null -> return undefined
         }
+        return actionName;
     }
 
     /**
@@ -1885,12 +1886,11 @@ public final class WebAppStateService {
      * @return the model ID, or {@code null} if the index is invalid or too short
      */
     private String extractModelId(String mutationIndex) {
-        try {
-            var indexArray = JSON.parseArray(mutationIndex);
-            if (indexArray != null && indexArray.size() >= 2) {
-                return indexArray.getString(1);
-            }
-        } catch (Throwable ignored) {
+        // WAWebSyncdActionUtils.parseIndex: JSON.parse(n); element 1 is the model ID
+        var indexArray = com.github.auties00.cobalt.sync.handler.SyncdIndexUtils
+                .parseIndex(null, mutationIndex);
+        if (indexArray != null && indexArray.size() >= 2) {
+            return indexArray.getString(1);
         }
         return null;
     }

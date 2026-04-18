@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.stream;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
@@ -98,10 +99,11 @@ public final class SocketStream {
      *                                         snapshot recovery
      * @param webAppStateService               service managing web app-state
      *                                         sync patches
+     * @param companionPairingService          companion pairing service
      */
-    public SocketStream(WhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService) {
+    public SocketStream(WhatsAppClient whatsapp, WhatsAppClientVerificationHandler.Web webVerificationHandler, LidMigrationService lidMigrationService, InactiveGroupLidMigrationService inactiveGroupLidMigrationService, MessageService messageService, ABPropsService abPropsService, DeviceService deviceService, WamService wamService, SnapshotRecoveryService snapshotRecoveryService, WebAppStateService webAppStateService, CompanionPairingService companionPairingService) {
         var result = new HashMap<String, Handler>();
-        addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService));
+        addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService, companionPairingService));
         addHandler(result, "message", new MessageStreamHandler(
                 whatsapp,
                 messageService,
@@ -115,7 +117,7 @@ public final class SocketStream {
         addHandler(result, "call", new CallStreamHandler(whatsapp));
         addHandler(result, "notification", new NotificationStreamHandler(
                 whatsapp,
-                webVerificationHandler,
+                companionPairingService,
                 lidMigrationService,
                 abPropsService,
                 deviceService

@@ -2,6 +2,9 @@ package com.github.auties00.cobalt.sync.exchange;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.media.ExternalBlobReference;
 import com.github.auties00.cobalt.model.media.ExternalBlobReferenceBuilder;
@@ -40,6 +43,9 @@ import java.util.logging.Logger;
  * @implNote WAWebSyncdRequestBuilder.default, WAWebSyncdRequestBuilderBuild.buildSyncIqNode,
  *           WAWebSyncdRequestBuilderBuild._generateMutationsToUpload
  */
+@WhatsAppWebModule(moduleName = "WAWebSyncdRequestBuilder")
+@WhatsAppWebModule(moduleName = "WAWebSyncdRequestBuilderBuild")
+@WhatsAppWebModule(moduleName = "WAWebSyncdRequestEncode")
 public final class MutationRequestBuilder {
     private static final Logger LOGGER = Logger.getLogger(MutationRequestBuilder.class.getName());
 
@@ -730,11 +736,16 @@ public final class MutationRequestBuilder {
      * failure into a fatal {@link WhatsAppWebAppStateSyncException.UnexpectedError},
      * matching WA Web's {@code SyncdFatalError("patch protobuf serialization failed")}.
      *
-     * @implNote WAWebSyncdRequestEncode.encodeSyncdPatch
+     * @implNote WAWebSyncdRequestEncode.encodeSyncdPatch — WAM fatal-error metric
+     *           {@code reportSyncdFatalError(PATCH_PROTOBUF_SERIALIZATION_FAILED)} is
+     *           skipped per Cobalt's telemetry policy; the thrown
+     *           {@link WhatsAppWebAppStateSyncException.UnexpectedError} matches WA Web's
+     *           {@code SyncdFatalError("patch protobuf serialization failed")}
      * @param patch the syncd patch to encode
      * @return the protobuf-encoded bytes
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError if protobuf serialization fails
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdRequestEncode", exports = "encodeSyncdPatch", adaptation = WhatsAppAdaptation.DIRECT)
     private static byte[] encodeSyncdPatch(SyncdPatch patch) {
         try {
             return SyncdPatchSpec.encode(patch); // WAWebSyncdRequestEncode.encodeSyncdPatch — encodeProtobuf(SyncdPatchSpec, e).readBuffer()
@@ -752,11 +763,16 @@ public final class MutationRequestBuilder {
      * failure into a fatal {@link WhatsAppWebAppStateSyncException.UnexpectedError},
      * matching WA Web's {@code SyncdFatalError("mutations protobuf serialization failed")}.
      *
-     * @implNote WAWebSyncdRequestEncode.encodeSyncdMutations
+     * @implNote WAWebSyncdRequestEncode.encodeSyncdMutations — WAM fatal-error metric
+     *           {@code reportSyncdFatalError(MUTATIONS_PROTOBUF_SERIALIZATION_FAILED)} is
+     *           skipped per Cobalt's telemetry policy; the thrown
+     *           {@link WhatsAppWebAppStateSyncException.UnexpectedError} matches WA Web's
+     *           {@code SyncdFatalError("mutations protobuf serialization failed")}
      * @param mutations the syncd mutations to encode
      * @return the protobuf-encoded bytes
      * @throws WhatsAppWebAppStateSyncException.UnexpectedError if protobuf serialization fails
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdRequestEncode", exports = "encodeSyncdMutations", adaptation = WhatsAppAdaptation.DIRECT)
     private static byte[] encodeSyncdMutations(SyncdMutations mutations) {
         try {
             return SyncdMutationsSpec.encode(mutations); // WAWebSyncdRequestEncode.encodeSyncdMutations — encodeProtobuf(SyncdMutationsSpec, e).readBuffer()

@@ -152,22 +152,33 @@ public final class FailureStreamHandler implements SocketStream.Handler {
      *   <li>{@code REASON_SERVICE_UNAVAILABLE} (503): logged as warning only</li>
      *   <li>Unrecognized reasons: throws {@link WhatsAppServerRuntimeException}</li>
      * </ul>
+     * <p>
+     * If the {@code reason} attribute is missing or out of the {@code [400, 599]} range
+     * accepted by WA Web's parser, a {@link WhatsAppServerRuntimeException} is dispatched
+     * to mirror WA Web's {@code Promise.reject(parseError)} behaviour without forcing
+     * a disconnect.
      *
      * @param node the {@code <failure>} stanza node received from the server
      * @implNote WAWebHandleFailure.default
      */
     @Override
     public void handle(Node node) {
-        // WAWebHandleFailure.default - parse stanza attributes
+        // WAWebHandleFailure.default - parse stanza attributes via failureParser:
+        // {reason: attrInt("reason", 400, 599), location: attrString("location"),
+        //  code: maybeAttrInt("code"), expire: maybeAttrInt("expire"),
+        //  message: maybeAttrString("message"), url: maybeAttrString("url"),
+        //  logoutMessageHeader: maybeAttrString("logout_message_header"),
+        //  logoutMessageSubtext: maybeAttrString("logout_message_subtext"),
+        //  logoutMessageLocale: maybeAttrString("logout_message_locale")}
         var reason = node.getAttributeAsInt("reason", (Integer) null);
-        var location = node.getAttributeAsString("location", null); // WAWebHandleFailure.default
+        var location = node.getAttributeAsString("location", null); // WAWebHandleFailure.default - attrString("location")
         var code = node.getAttributeAsInt("code", (Integer) null);
         var expire = node.getAttributeAsInt("expire", (Integer) null);
         var message = node.getAttributeAsString("message", null);
         var url = node.getAttributeAsString("url", null);
         var logoutMessageHeader = node.getAttributeAsString("logout_message_header", null);
         var logoutMessageSubtext = node.getAttributeAsString("logout_message_subtext", null);
-        var logoutMessageLocale = node.getAttributeAsString("logout_message_locale", null); // WAWebHandleFailure.default
+        var logoutMessageLocale = node.getAttributeAsString("logout_message_locale", null); // WAWebHandleFailure.default - maybeAttrString("logout_message_locale")
 
         LOGGER.log(System.Logger.Level.WARNING,
                 "Received failure stanza: reason={0}, location={1}, code={2}, expire={3}, message={4}, url={5}",
@@ -178,18 +189,28 @@ public final class FailureStreamHandler implements SocketStream.Handler {
                 message,
                 url);
 
+        // ADAPTED: WAWebHandleFailure.default - parser rejects malformed stanzas via
+        // Promise.reject(parseError); Cobalt surfaces this through the configurable
+        // error handler instead of an inline reject.
         if (reason == null) {
+            whatsapp.handleFailure(new WhatsAppServerRuntimeException(
+                    "Malformed failure stanza: missing reason attribute"));
             return;
         }
 
         // WAWebHandleFailure.default - switch on reason code
         switch (reason) {
             case REASON_LOCKED -> {
-                // WAWebHandleFailure.default - REASON_LOCKED: logout with optional custom message
+                // WAWebHandleFailure.default - REASON_LOCKED: clearCredentialsAndStoredData(LogoutReason.AccountLocked, customMessage), triggerLogout
+                // ADAPTED: WA Web only attaches the customMessage when logoutMessageLocale matches
+                // the browser locale (frontendSendAndReceive("getNormalizedLocale")). Cobalt has no
+                // browser locale concept, so the locale is surfaced verbatim for the user-supplied
+                // error handler to inspect.
                 whatsapp.handleFailure(new WhatsAppSessionException.LoggedOut(
                         "Account locked: reason=" + reason
                                 + (logoutMessageHeader != null ? ", header=" + logoutMessageHeader : "")
-                                + (logoutMessageSubtext != null ? ", subtext=" + logoutMessageSubtext : "")));
+                                + (logoutMessageSubtext != null ? ", subtext=" + logoutMessageSubtext : "")
+                                + (logoutMessageLocale != null ? ", locale=" + logoutMessageLocale : "")));
             }
             case REASON_NOT_AUTHORIZED, REASON_BANNED -> {
                 // WAWebHandleFailure.default - REASON_NOT_AUTHORIZED/REASON_BANNED: logout

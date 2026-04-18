@@ -1163,6 +1163,40 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<? extends MessageInfo> findQuotedMessage(MessageInfo info);
 
     /**
+     * Records a reaction (or reaction withdrawal) that the current account
+     * has just sent to the given target message.
+     *
+     * <p>An empty {@code emoji} records a withdrawal matching WA Web's
+     * {@code WAWebReactionsBEUtils.REVOKED_REACTION_TEXT}. This is
+     * invoked eagerly during
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient#addReaction}
+     * so local views reflect the in-flight state without waiting for the
+     * server ack.
+     *
+     * @param targetKey the key of the message being reacted to
+     * @param emoji     the reaction emoji, empty string to remove
+     * @throws NullPointerException if any argument is {@code null}
+     *
+     * @implNote WAWebReactionsCollection.addOrUpdateReaction: writes the
+     *           sender's current reaction into the in-memory reactions
+     *           collection so the UI reflects the change instantly.
+     */
+    void trackSentReaction(MessageKey targetKey, String emoji);
+
+    /**
+     * Returns the reaction emoji the current account is currently showing
+     * on the given target message, if any.
+     *
+     * @param targetKey the key of the message whose reaction is queried
+     * @return an {@link Optional} containing the emoji, or empty if the
+     *         account has not reacted to this message
+     *
+     * @implNote WAWebReactionsCollection.getExistingSenderModelFromReactionDetails:
+     *           looks up the sender's current reaction on a message.
+     */
+    Optional<String> findSentReaction(MessageKey targetKey);
+
+    /**
      * Returns all status updates stored in this session.
      *
      * @return an unmodifiable collection of status updates

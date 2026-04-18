@@ -120,6 +120,7 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
                     return;
                 }
                 case "blocklist" -> { // WAWebAccountSyncJob.AccountSyncType.BLOCKLIST
+                    applyBlocklistUsernames(child); // WAWebHandleAccountSyncNotification parser: p.forEachChildWithTag("item", ...) + setUsernamesJob
                     refreshBlockList();
                     return;
                 }
@@ -278,6 +279,40 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
         // and cleanupCampaignsWithInvalidDevices. Cobalt performs a full device list sync instead.
         // WA Web also has offline handler checks; Cobalt handles offline state at a higher level.
         deviceService.getDeviceLists(Set.of(self), "account_sync_notification", null, true);
+    }
+
+    /**
+     * Applies the usernames contained in a {@code blocklist} child's {@code <item>}
+     * entries to the local contact store.
+     *
+     * <p>WA Web gates this on {@code WAWebUsernameGatingUtils.usernameDisplayedEnabled()}
+     * and iterates each {@code item}, collecting pairs of {@code (userJid, username)}
+     * that it then forwards to {@code WAWebSetUsernameJob.setUsernamesJob}. Cobalt
+     * applies the username directly to the matching contact record.
+     *
+     * @implNote WAWebHandleAccountSyncNotification parser (BLOCKLIST item loop) + WAWebSetUsernameJob.setUsernamesJob
+     * @param blocklistNode the {@code blocklist} child element
+     */
+    private void applyBlocklistUsernames(Node blocklistNode) {
+        for (var item : blocklistNode.getChildren("item")) {
+            var username = item.getAttributeAsString("username", null); // WAWebHandleAccountSyncNotification parser: e.maybeAttrString("username")
+            if (username == null) {
+                continue;
+            }
+            var userJid = item.getAttributeAsJid("jid") // WAWebHandleAccountSyncNotification parser: e.attrUserJid("jid") via userJidToUserWid
+                    .map(Jid::toUserJid)
+                    .orElse(null);
+            if (userJid == null) {
+                continue;
+            }
+            // ADAPTED: WAWebSetUsernameJob.setUsernamesJob applies usernames to contact records;
+            // Cobalt updates the contact's username directly on the local store.
+            var contact = whatsapp.store()
+                    .findContactByJid(userJid)
+                    .orElseGet(() -> whatsapp.store().addNewContact(userJid));
+            contact.setUsername(username);
+            whatsapp.store().addContact(contact);
+        }
     }
 
     /**
@@ -485,21 +520,38 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
         var prevDhash = optOutListNode.getAttributeAsString("prev_dhash", null); // WAWebHandleAccountSyncNotification parser: L.maybeAttrString("prev_dhash")
         var storedHash = whatsapp.store().businessOptOutListHash().orElse(null); // WAWebUserPrefsMultiDevice.getOptOutListHash()
 
-        // WAWebHandleAccountSyncNotification: if (R !== k) -> full refresh
+        // WAWebHandleAccountSyncNotification: if (R !== k) { workerSafeFireAndForget("updateOptOutList"); break; }
+        // Hash mismatch triggers a full refresh and does NOT update the stored hash.
         if (!Objects.equals(storedHash, prevDhash)) {
             // ADAPTED: WAWebWorkerSafeBackendApi.workerSafeFireAndForget("updateOptOutList")
-            // Cobalt stores the new hash; a full refresh is not yet implemented
-            if (dhash != null) {
-                whatsapp.store().setBusinessOptOutListHash(dhash);
-            }
+            // Cobalt does not have a dedicated full opt-out list refresh job; the next
+            // sync will bring the store back in line. The hash is deliberately left
+            // untouched to match WA Web semantics (mismatch -> do not persist L).
             return;
         }
 
-        // WAWebHandleAccountSyncNotification: dhash != null -> process list items and update hash
+        // WAWebHandleAccountSyncNotification: else branch — L != null && (E == null || E.forEach(...)), then setOptOutlistHash(L)
         if (dhash != null) {
-            // WAWebHandleAccountSyncNotification: E.forEach(async ({action, biz_jid}) => ...)
-            // ADAPTED: Individual list item processing is not yet implemented in Cobalt
-            // WA Web processes each child item with action "block"/"unblock" and biz_jid
+            // WAWebHandleAccountSyncNotification: E.forEach(async ({action, biz_jid}) => workerSafeFireAndForget("updateOptOutListModelInCollection", {targetWid, isBlocked: action === "block"}))
+            for (var item : optOutListNode.children()) {
+                var action = item.getAttributeAsString("action", null); // WAWebHandleAccountSyncNotification: e.attrString("action")
+                var bizJid = item.getAttributeAsJid("biz_jid", null); // WAWebHandleAccountSyncNotification: e.attrUserJid("biz_jid") via WAWebJidToWid.userJidToUserWid
+                if (action == null || bizJid == null) {
+                    continue;
+                }
+                var isBlocked = "block".equals(action); // WAWebHandleAccountSyncNotification: r = t === "block"
+                // ADAPTED: WAWebWorkerSafeBackendApi.workerSafeFireAndForget("updateOptOutListModelInCollection", {targetWid, isBlocked})
+                // Cobalt flips the blocked flag on the contact record directly.
+                var userJid = bizJid.toUserJid();
+                var contact = whatsapp.store()
+                        .findContactByJid(userJid)
+                        .orElseGet(() -> whatsapp.store().addNewContact(userJid));
+                if (contact.blocked() != isBlocked) {
+                    contact.setBlocked(isBlocked);
+                    whatsapp.store().addContact(contact);
+                    fireListeners(listener -> listener.onContactBlocked(whatsapp, userJid));
+                }
+            }
             whatsapp.store().setBusinessOptOutListHash(dhash); // WAWebUserPrefsMultiDevice.setOptOutlistHash(L)
         }
     }

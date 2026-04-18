@@ -114,20 +114,23 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
         var status = "unavailable".equals(type) ? ContactStatus.UNAVAILABLE : ContactStatus.AVAILABLE;
         contact.setLastKnownPresence(status); // WAWebChangePresenceHandlerAction.default -- r.set(t)
 
-        // WAWebHandlePresence.default: deny: i.value.last === "deny" || void 0
         // WAWebHandlePresence.default: t: i.value.type === "unavailable" ? d(i.value.last) : void 0
+        // Only set lastSeen when type is "unavailable" and d(last) returns a value.
+        // When type is "available", the t property in the WA Web update object is
+        // undefined, and the Backbone-style setter r.set({t: undefined}) leaves the
+        // existing t field untouched. Similarly, deny/none/error sentinel values
+        // produce undefined from d(last) and do not modify the lastSeen field.
         var lastValue = node.getAttributeAsString("last", null);
-        var deny = "deny".equals(lastValue); // WAWebHandlePresence.default -- deny flag
         var lastSeen = resolveLastSeen(lastValue, status);
         if (lastSeen != null) {
             contact.setLastSeen(lastSeen); // WAWebPresenceModel.Chatstate -- t field
-        } else if (deny || status == ContactStatus.AVAILABLE) {
-            // WAWebPresenceModel.Chatstate -- deny: true clears last-seen display,
-            // and available status also clears the timestamp.
-            // Setting to Instant.EPOCH (0) causes Contact.lastSeen() to return
-            // Optional.empty() since lastSeenSeconds <= 0 is treated as absent.
-            contact.setLastSeen(Instant.EPOCH); // WAWebChangePresenceHandlerAction.default -- chatstate.set(t) with t=undefined
         }
+        // WAWebHandlePresence.default: deny: i.value.last === "deny" || void 0
+        // NO_WA_BASIS -- Cobalt's Contact model has no dedicated deny flag;
+        // in WA Web the deny flag only affects the forceDisplay UI hint
+        // (forceDisplay = ... || (isUser && !chatstate.deny)), which has no
+        // equivalent in Cobalt's headless model. The last="deny" sentinel is
+        // already handled correctly by resolveLastSeen returning null.
 
         whatsapp.store().addContact(contact); // ADAPTED: WAWebPresenceCollection store operations
         notifyPresence(contact.toJid(), contact.toJid()); // ADAPTED: WAWebChangePresenceHandlerAction.default -- non-group path

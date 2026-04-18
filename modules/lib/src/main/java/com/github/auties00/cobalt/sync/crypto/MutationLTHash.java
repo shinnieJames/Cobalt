@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.sync.crypto;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.SyncActionEntry;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -31,8 +34,15 @@ import java.util.logging.Logger;
  *
  * @implNote WACryptoLtHash.LtHash16 (LT-Hash primitive operations),
  *           WAWebSyncdAntiTamperingLtHash (checkLtHash, reportCollectionInconsistency —
- *           consistency verification against stored sync action entries)
+ *           consistency verification against stored sync action entries).
+ *           The WA Web {@code getLidMigrationStage} and {@code getPureSyncDSessionDetails}
+ *           exports are intentionally NOT ported: both are WAM telemetry helpers that
+ *           return enum constants used only as event properties on the
+ *           {@code WamSyncdHashMismatchDetection} and related telemetry events. Cobalt
+ *           does not emit these WAM events, so the helpers have no call sites.
  */
+@WhatsAppWebModule(moduleName = "WACryptoLtHash")
+@WhatsAppWebModule(moduleName = "WAWebSyncdAntiTamperingLtHash")
 public final class MutationLTHash {
     /**
      * Logger for LT-Hash consistency check diagnostics.
@@ -48,6 +58,7 @@ public final class MutationLTHash {
      *
      * @implNote WACryptoLtHash.KEY_LENGTH_BYTES — constant {@code u = 128}
      */
+    @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "KEY_LENGTH_BYTES", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int HASH_LENGTH = 128; // WACryptoLtHash: u = 128 (KEY_LENGTH_BYTES)
 
     /**
@@ -65,6 +76,7 @@ public final class MutationLTHash {
      *
      * @implNote WACryptoLtHash.EMPTY_LT_HASH — constant {@code c = new ArrayBuffer(u)}
      */
+    @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "EMPTY_LT_HASH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final byte[] EMPTY_HASH = new byte[HASH_LENGTH]; // WACryptoLtHash: c = new ArrayBuffer(u) (EMPTY_LT_HASH)
 
     /**
@@ -172,6 +184,7 @@ public final class MutationLTHash {
      * @param valueMacs the list of value MACs to add
      * @return new hash state after all additions
      */
+    @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "LT_HASH_ANTI_TAMPERING", adaptation = WhatsAppAdaptation.ADAPTED)
     public static byte[] add(byte[] currentHash, List<byte[]> valueMacs) {
         var result = currentHash; // WACryptoLtHash.LtHash16.add: Promise.resolve(r)
         for (var valueMac : valueMacs) { // WACryptoLtHash.LtHash16.add: o.reduce(...)
@@ -191,6 +204,7 @@ public final class MutationLTHash {
      * @param valueMacs the list of value MACs to subtract
      * @return new hash state after all removals
      */
+    @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "LT_HASH_ANTI_TAMPERING", adaptation = WhatsAppAdaptation.ADAPTED)
     public static byte[] subtract(byte[] currentHash, List<byte[]> valueMacs) {
         var result = currentHash; // WACryptoLtHash.LtHash16.subtract: Promise.resolve(r)
         for (var valueMac : valueMacs) { // WACryptoLtHash.LtHash16.subtract: o.reduce(...)
@@ -228,6 +242,7 @@ public final class MutationLTHash {
      * @param toRemove list of value MACs to remove (may be empty)
      * @return a {@link SubtractThenAddResult} containing both the final hash and intermediate subtract result
      */
+    @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "LT_HASH_ANTI_TAMPERING", adaptation = WhatsAppAdaptation.ADAPTED)
     public static SubtractThenAddResult subtractThenAdd(
         byte[] currentHash,
         List<byte[]> toAdd,
@@ -295,7 +310,15 @@ public final class MutationLTHash {
      * @implNote WAWebSyncdAntiTamperingLtHash.checkLtHash (function m/p) — reads
      *           CollectionVersionStore and SyncActionStore via runInTransaction,
      *           computes scratch LT-Hash via helper function d, compares against
-     *           stored ltHash per collection
+     *           stored ltHash per collection. ADAPTED: the WA Web employee
+     *           {@code isEmployee() ? 900 : a} threshold override is not applied —
+     *           Cobalt uses the caller-provided value directly since it has no
+     *           employee concept. The {@code runInTransaction} wrapper is replaced
+     *           by direct calls into {@link WhatsAppStore} which is the
+     *           single flattened store. {@code WALogger.ERROR(...).sendLogs(..)}
+     *           and the {@code CriticalBlock}-versus-employee sampling branch are
+     *           replaced by a plain JUL warning since Cobalt does not re-implement
+     *           the WA Web log-sampling infrastructure.
      * @param store the WhatsApp store providing sync action entries and collection metadata
      * @param collection the specific collection to check, or {@code null} to check all collections
      * @param maxMutations the maximum total mutation count threshold; if the total exceeds
@@ -304,6 +327,7 @@ public final class MutationLTHash {
      * @param context a context string for diagnostic logging
      * @return the {@link LtHashCheckResult} with consistency status and hash values
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTamperingLtHash", exports = "checkLtHash", adaptation = WhatsAppAdaptation.ADAPTED)
     public static LtHashCheckResult checkLtHash(WhatsAppStore store, SyncPatchType collection, Integer maxMutations, String context) {
         // WAWebSyncdAntiTamperingLtHash.checkLtHash: runInTransaction({SyncActionStore, CollectionVersionStore})
         // Collect collection metadata and their sync action entries
@@ -372,7 +396,15 @@ public final class MutationLTHash {
      *
      * @implNote WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency (function _/f) —
      *           calls checkLtHash(n, e, r) with default r=400, then logs
-     *           inconsistency/consistency/unknown status via WAWebSyncdDbCallbacksApi
+     *           inconsistency/consistency/unknown status. ADAPTED: WA Web persists
+     *           the diagnostic text to the sync database via
+     *           {@code WAWebSyncdDbCallbacksApi.writeSyncdLog(e, "...")} and
+     *           {@code printSyncdLog(e)}, and escalates to
+     *           {@code WALogger.ERROR(...).sendLogs(...)} with employee/critical-block
+     *           sampling. Cobalt mirrors the three branches (inconsistent/consistent/unknown)
+     *           and the hex-suffix formatting, but writes via {@link Logger} only; the
+     *           database persistence and remote log upload paths are intentionally
+     *           not reproduced.
      * @param store the WhatsApp store providing sync action entries and collection metadata
      * @param collection the collection to check
      * @param diagnosticContext a human-readable context string for log messages
@@ -382,6 +414,7 @@ public final class MutationLTHash {
      * @return {@code true} if the LT-Hash is inconsistent, {@code false} if consistent,
      *         or {@code null} if the check was skipped (unknown)
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTamperingLtHash", exports = "reportCollectionInconsistency", adaptation = WhatsAppAdaptation.ADAPTED)
     public static Boolean reportCollectionInconsistency(
             WhatsAppStore store,
             SyncPatchType collection,

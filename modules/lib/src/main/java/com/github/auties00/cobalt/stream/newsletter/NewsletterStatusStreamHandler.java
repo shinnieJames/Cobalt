@@ -108,6 +108,8 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
         }
 
         // WASmaxInStatusDeliverIncomingNewsletterStatusRequest: attrStanzaId(e, "id")
+        // The id is required by the RPC parser; Cobalt defensively guards
+        // against missing ids (WA Web would throw during parsing).
         var id = node.getAttributeAsString("id", null);
         if (id == null) {
             return;
@@ -123,13 +125,17 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
 
         // WASmaxInStatusDeliverStatusAdminRevokeMixin: literal(attrString, e, "edit", "8")
         // WAWebHandleNewsletterStatus.default: case "StatusNewsletterRevoke" ->
-        // mapStatusRevokeToMsgData which creates a PROTOCOL/ProtocolRevoke message
+        // mapStatusRevokeToMsgData (WAWebNewsletterStatusUtils.u):
+        //   new MsgKey({remote: t, fromMe: isSender, id: newId_DEPRECATED()})
+        //   type: MSG_TYPE.PROTOCOL, kind: MsgKind.ProtocolRevoke,
+        //   subtype: "admin_revoke", viewMode: NEWSLETTER_TOMBSTONE,
+        //   protocolMessageKey: new MsgKey({remote: t, fromMe: isSender, id: e.id})
         var edit = node.getAttributeAsString("edit", null);
         if ("8".equals(edit)) {
-            // Revoke handling: WA Web creates a protocol revoke message with
-            // type=PROTOCOL, kind=ProtocolRevoke, subtype="admin_revoke".
-            // In Cobalt, revoke processing for newsletters is handled at a
-            // higher layer; log and skip here.
+            // ADAPTED: Cobalt's newsletter model currently handles revoke
+            // tombstones at a higher layer (listener-level revoke notification).
+            // The handler logs and skips rather than materializing a synthetic
+            // PROTOCOL/ProtocolRevoke message with viewMode=NEWSLETTER_TOMBSTONE.
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Skipping newsletter status revoke for {0} from {1}", id, from);
             return;

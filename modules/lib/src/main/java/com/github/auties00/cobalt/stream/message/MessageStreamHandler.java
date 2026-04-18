@@ -69,6 +69,15 @@ import java.util.zip.GZIPInputStream;
  * newsletter messages to WAWebHandleNewsletterMsg before WAWebHandleMsg.
  * WAWebCommsHandleMessagingStanza.handleMessagingStanza: wraps
  * WAWebHandleMsg with error handling.
+ *
+ * <p>Not every WA Web module referenced by this entry point is adapted
+ * locally.  {@code WAWebProcessMsgInfoForLid.maybeProcesMsgInfoForLid}
+ * (per-incoming-message PN/LID JID remapping) belongs to
+ * {@code MessageService}'s pre-decrypt pipeline, not to this handler.
+ * {@code WAWebMsgProcessingDecryptApi.decryptE2EPayload} and
+ * {@code WAWebHandleMsgProcess.processDecryptedMessageProto} are also
+ * adapted by {@code MessageService}; the handler only observes their
+ * result through {@link MessageService#process}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsg")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleMessagingStanza")
@@ -126,7 +135,11 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * The LID migration service for processing LID migration mapping
      * sync payloads in protocol messages.
      *
-     * @implNote WAWebProcessMsgInfoForLid.maybeProcesMsgInfoForLid
+     * @implNote WAWebLid1X1ThreadAccountMigrations.setLidMigrationMappings:
+     * the protocol-message handler invoked with the decoded mapping payload.
+     * The per-incoming-message JID remapping (WAWebProcessMsgInfoForLid.
+     * maybeProcesMsgInfoForLid) is performed upstream by MessageService, not
+     * here.
      */
     private final LidMigrationService lidMigrationService;
 
@@ -859,9 +872,20 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        protocolMessage.lidMigrationMappingSyncMessage()
-                .flatMap(message -> message.encodedMappingPayload().flatMap(this::decodeLidMappingPayload))
-                .ifPresent(lidMigrationService::processProtocolMessage);
+        // WAWebHandleMsgProcess.processDecryptedMessageProto: when the decoded
+        // protobuf exposes a lidMigrationSyncMessage, WA Web invokes
+        // WAWebLid1X1ThreadAccountMigrations.setLidMigrationMappings with the
+        // raw encodedMappingPayload; the parser (WAWebLid1x1MigrationMsgParser.
+        // parseLidMigrationMappingSyncMsg) may yield {mappings: [], ...} for an
+        // empty or malformed buffer. Cobalt performs the decode here so the
+        // service receives a decoded payload or a {@code null} sentinel which it
+        // escalates via WhatsAppLidMigrationException.FailedToParseMappings.
+        protocolMessage.lidMigrationMappingSyncMessage().ifPresent(message -> {
+            var decoded = message.encodedMappingPayload()
+                    .flatMap(this::decodeLidMappingPayload)
+                    .orElse(null);
+            lidMigrationService.processProtocolMessage(decoded);
+        });
 
         protocolMessage.peerDataOperationRequestResponseMessage()
                 .ifPresent(this::resolveSnapshotRecovery);
@@ -901,10 +925,14 @@ public final class MessageStreamHandler implements SocketStream.Handler {
                 continue; // WAWebKeyManagementHandleKeyShareApi: skip keys with missing keyID
             }
 
-            // WAWebKeyManagementHandleKeyShareApi: key ID must be exactly 6 bytes
+            // WAWebKeyManagementHandleKeyShareApi: key ID must be exactly 6 bytes.
+            // WA Web treats this as a fatal error and reports a metric; Cobalt
+            // logs and skips the offending key (the error model elevates fatal
+            // states via WhatsAppClientErrorHandler rather than inline calls).
             if (keyId.length != 6) {
                 LOGGER.log(System.Logger.Level.ERROR,
-                        "syncd: key share key id has invalid bytelength of {0}", keyId.length);
+                        "syncd: fatal error: key share key id has invalid bytelength of {0}",
+                        keyId.length);
                 continue;
             }
 
@@ -1059,9 +1087,9 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      *
      * @param payload the GZIP-compressed protobuf payload bytes
      * @return the decoded payload, or empty if decoding fails
-     * @implNote WAWebProcessMsgInfoForLid.maybeProcesMsgInfoForLid:
-     * decodes the encoded mapping payload from the LID migration
-     * mapping sync message.
+     * @implNote WAWebLid1x1MigrationMsgParser.parseLidMigrationMappingSyncMsg:
+     * GZIP-inflates and protobuf-decodes the encodedMappingPayload carried
+     * inside the LID migration mapping sync protocol message.
      */
     private Optional<LIDMigrationMappingSyncPayload> decodeLidMappingPayload(byte[] payload) {
         if (payload == null || payload.length == 0) {

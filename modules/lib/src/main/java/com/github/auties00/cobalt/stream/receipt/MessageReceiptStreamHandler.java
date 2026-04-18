@@ -269,6 +269,13 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
      * @implNote WAWebHandleRetryRequest.handleRetryRequest, WAWebHandleRetryRequest.E (processRetryDetails)
      */
     private void processRetryRequest(Node node) {
+        // WAWebHandleRetryRequest.R: VoIP retry variants are dispatched to the VoIP stack,
+        // which Cobalt does not implement. Skip non-regular retry types.
+        var type = node.getAttributeAsString("type", null);
+        if ("enc_rekey_retry".equals(type) || "voip_1x1_retry".equals(type)) {
+            return; // ADAPTED: WAWebHandleRetryRequest — VoIP retry not supported in Cobalt
+        }
+
         var from = node.getAttributeAsJid("from").orElse(null);
         var participant = node.getAttributeAsJid("participant").orElse(null);
         var retryNode = node.getChild("retry").orElse(null);

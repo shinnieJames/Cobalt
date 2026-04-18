@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.sync.key;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyId;
 import com.github.auties00.cobalt.props.ABProp;
@@ -27,6 +30,11 @@ import java.util.Collection;
  *
  * @implNote WAWebSyncdCryptoUtils, WASyncdKeyManagementUtils, WAWebSyncdGatingUtils
  */
+@WhatsAppWebModule(moduleName = "WAWebSyncdCryptoUtils")
+@WhatsAppWebModule(moduleName = "WASyncdKeyManagementUtils")
+@WhatsAppWebModule(moduleName = "WAWebSyncdGatingUtils")
+@WhatsAppWebModule(moduleName = "WAWebSyncdRotateKey")
+@WhatsAppWebModule(moduleName = "WAWebSyncdKeyManagement")
 public final class SyncKeyUtils {
     /**
      * The expected length of a sync key ID in bytes.
@@ -53,6 +61,7 @@ public final class SyncKeyUtils {
      * @throws IllegalArgumentException if {@code buffers} is empty
      * @implNote WAWebSyncdCryptoUtils.combine (function e)
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "combine", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] combine(byte[]... buffers) {
         if (buffers.length == 0) { // WAWebSyncdCryptoUtils.combine: if (e.length === 0) throw err("buffers length is zero")
             throw new IllegalArgumentException("buffers length is zero");
@@ -94,6 +103,7 @@ public final class SyncKeyUtils {
      * @throws IllegalArgumentException if {@code offset} or {@code length} is negative
      * @implNote WAWebSyncdCryptoUtils.split (function s)
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "split", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[][] split(byte[] buffer, int offset, int length) {
         if (offset < 0 || length < 0) { // WAWebSyncdCryptoUtils.split: if (t < 0 || n < 0) throw err("buffers length is zero")
             throw new IllegalArgumentException("buffers length is zero");
@@ -116,6 +126,7 @@ public final class SyncKeyUtils {
      * @return the decoded byte array
      * @implNote WAWebSyncdCryptoUtils.hexToUint8Array (function u)
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "hexToUint8Array", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] hexToUint8Array(String hex) {
         var parts = hex.split(" "); // WAWebSyncdCryptoUtils.hexToUint8Array: e.split(" ")
         var result = new byte[parts.length]; // WAWebSyncdCryptoUtils.hexToUint8Array: Uint8Array.from(...)
@@ -134,8 +145,11 @@ public final class SyncKeyUtils {
      *
      * @param keyId the raw key ID bytes
      * @return the hex string (e.g., {@code "a 1f 0"})
-     * @implNote WAWebSyncdCryptoUtils.syncKeyIdToHex (function c)
+     * @implNote WAWebSyncdCryptoUtils.syncKeyIdToHex (function c);
+     *           {@code WASyncdKeyTypes.fromSyncKeyId} is the identity function,
+     *           so it reduces to a direct byte iteration here.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "syncKeyIdToHex", adaptation = WhatsAppAdaptation.DIRECT)
     public static String syncKeyIdToHex(byte[] keyId) {
         if (keyId == null || keyId.length == 0) { // ADAPTED: Java null-safety guard
             return "unknown";
@@ -164,6 +178,7 @@ public final class SyncKeyUtils {
      * @return the hex string, or {@code "unknown"} if the key ID is absent
      * @implNote ADAPTED: WAWebSyncdCryptoUtils.syncKeyIdToHex with Optional unwrapping
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "syncKeyIdToHex", adaptation = WhatsAppAdaptation.ADAPTED)
     public static String syncKeyIdToHex(AppStateSyncKey key) {
         var keyIdBytes = key.keyId() // ADAPTED: Optional unwrapping for Java protobuf model
                 .flatMap(AppStateSyncKeyId::keyId)
@@ -181,8 +196,12 @@ public final class SyncKeyUtils {
      *
      * @param data the byte array to convert
      * @return the zero-padded hex string (e.g., {@code "0a1f00"})
-     * @implNote WAWebSyncdCryptoUtils.arrayBufferToHexPadded (function d)
+     * @implNote WAWebSyncdCryptoUtils.arrayBufferToHexPadded (function d).
+     *           The JDK-native equivalent is {@code java.util.HexFormat.of().formatHex(data)};
+     *           the explicit loop is retained only to keep the {@code null}/empty guard
+     *           that returns the empty string instead of throwing.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "arrayBufferToHexPadded", adaptation = WhatsAppAdaptation.DIRECT)
     public static String arrayBufferToHexPadded(byte[] data) {
         if (data == null || data.length == 0) { // ADAPTED: Java null-safety guard
             return "";
@@ -208,8 +227,13 @@ public final class SyncKeyUtils {
      *
      * @param value the value to convert (treated as unsigned 32-bit)
      * @return an 8-byte array in big-endian network order
-     * @implNote WAWebSyncdCryptoUtils.to64BitNetworkOrder (function m)
+     * @implNote WAWebSyncdCryptoUtils.to64BitNetworkOrder (function m).
+     *           The JDK-native equivalent is
+     *           {@code ByteBuffer.allocate(8).putInt(4, (int) value).array()};
+     *           the manual byte writes are retained for clarity and to avoid allocating
+     *           a wrapper {@link ByteBuffer} per invocation.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "to64BitNetworkOrder", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] to64BitNetworkOrder(long value) {
         var buffer = new byte[8]; // WAWebSyncdCryptoUtils.to64BitNetworkOrder: new ArrayBuffer(8)
         // WAWebSyncdCryptoUtils.to64BitNetworkOrder: new DataView(t).setUint32(4, e, false)
@@ -233,8 +257,12 @@ public final class SyncKeyUtils {
      * @param keyId1 the first key ID bytes
      * @param keyId2 the second key ID bytes
      * @return {@code true} if both key IDs contain the same bytes
-     * @implNote WAWebSyncdCryptoUtils.syncKeyIdsEqual (function p)
+     * @implNote WAWebSyncdCryptoUtils.syncKeyIdsEqual (function p);
+     *           {@code WASyncdKeyTypes.fromSyncKeyId} is the identity function and
+     *           {@code WACryptoUtils.arrayBuffersEqual} is a constant-time byte comparison,
+     *           mapped to {@link MessageDigest#isEqual(byte[], byte[])} here.
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "syncKeyIdsEqual", adaptation = WhatsAppAdaptation.DIRECT)
     public static boolean syncKeyIdsEqual(byte[] keyId1, byte[] keyId2) {
         if (keyId1 == null && keyId2 == null) { // ADAPTED: Java null-safety guard
             return true;

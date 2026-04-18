@@ -531,6 +531,22 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     protected final ConcurrentMap<String, com.github.auties00.cobalt.model.chat.ChatMessageInfo> peerMessages;
 
+    /**
+     * Tracks the current account's pending outgoing reactions keyed by the
+     * target message key, so that callers can observe the in-flight state
+     * between {@link com.github.auties00.cobalt.client.WhatsAppClient#addReaction}
+     * and the server ack.
+     *
+     * <p>Holds the empty string when the account is withdrawing its
+     * previous reaction (matching WA Web's {@code REVOKED_REACTION_TEXT}).
+     *
+     * @implNote WAWebReactionsCollection.ReactionsCollection: the in-memory
+     *           reactive reactions collection. Cobalt collapses it to a
+     *           flat {@code ConcurrentMap} keyed by the parent message key
+     *           string because there is only one sender (this account).
+     */
+    protected final ConcurrentMap<String, String> sentReactions;
+
     protected final System.Logger logger;
 
     AbstractWhatsAppStore(java.util.UUID uuid, java.lang.Long phoneNumber, com.github.auties00.cobalt.client.WhatsAppClientType clientType, java.time.Instant initializationTimeStamp, com.github.auties00.cobalt.client.WhatsAppDevice device, com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel releaseChannel, boolean online, java.lang.String locale, java.lang.String name, java.lang.String verifiedName, java.net.URI profilePicture, java.lang.String about, com.github.auties00.cobalt.model.jid.Jid jid, com.github.auties00.cobalt.model.jid.Jid lid, java.lang.String businessAddress, java.lang.Double businessLongitude, java.lang.Double businessLatitude, java.lang.String businessDescription, java.lang.String businessWebsite, java.lang.String businessEmail, com.github.auties00.cobalt.model.business.profile.BusinessCategory businessCategory, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.Contact> contacts, java.util.concurrent.ConcurrentHashMap<java.lang.String,com.github.auties00.cobalt.model.call.CallOffer> calls, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.privacy.PrivacySettingType,com.github.auties00.cobalt.model.privacy.PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, com.github.auties00.cobalt.model.chat.ChatEphemeralTimer newChatsEphemeralTimer, com.github.auties00.cobalt.client.WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, java.lang.Integer registrationId, com.github.auties00.libsignal.key.SignalIdentityKeyPair noiseKeyPair, com.github.auties00.libsignal.key.SignalIdentityKeyPair identityKeyPair, com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity signedDeviceIdentity, com.github.auties00.libsignal.key.SignalSignedKeyPair signedKeyPair, java.util.LinkedHashMap<java.lang.Integer,com.github.auties00.libsignal.key.SignalPreKeyPair> preKeys, java.util.UUID fdid, byte[] deviceId, java.util.UUID advertisingId, byte[] identityId, byte[] backupToken, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.groups.SignalSenderKeyName,com.github.auties00.libsignal.groups.state.SignalSenderKeyRecord> senderKeys, java.util.LinkedHashMap<java.lang.String,com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey> appStateKeys, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.state.SignalSessionRecord> sessions, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.model.sync.SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> recentStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> favouriteStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.QuickReply> quickReplies, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Label> labels, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion clientVersion, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion companionVersion, java.time.Instant lastAdvCheckTime, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.key.SignalIdentityPublicKey> remoteIdentities, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.business.BusinessVerifiedName> verifiedBusinessNames, java.nio.file.Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, com.github.auties00.cobalt.model.setting.ChatLockSettings chatLockSettings, java.util.List<com.github.auties00.cobalt.model.jid.Jid> favoriteChats, java.util.List<java.lang.String> primaryFeatures, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.chat.ChatMute> mentionEveryoneMuteExpirations, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.store.AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.OutContact> outContacts) {
@@ -665,6 +681,73 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.offlineDeliveryLatch = new CountDownLatch(1);
         this.usersNeedingSenderKeyRotation = ConcurrentHashMap.newKeySet();
         this.peerMessages = new ConcurrentHashMap<>();
+        this.sentReactions = new ConcurrentHashMap<>();
+    }
+
+    /**
+     * Records that the current account has just sent (or withdrawn) a
+     * reaction to the given message.
+     *
+     * <p>An empty {@code emoji} records a reaction withdrawal matching
+     * WA Web's {@code REVOKED_REACTION_TEXT}. The entry is keyed by the
+     * string form of the target message key so lookups tolerate the key
+     * rehydration that happens when messages traverse the sync pipeline.
+     *
+     * @param targetKey the key of the message being reacted to
+     * @param emoji     the reaction emoji, empty string to remove
+     * @throws NullPointerException if any argument is {@code null}
+     *
+     * @implNote WAWebReactionsCollection.ReactionsCollection.addOrUpdateReaction:
+     *           records the locally sent reaction so the UI layer sees
+     *           the new state immediately.
+     */
+    public void trackSentReaction(com.github.auties00.cobalt.model.message.MessageKey targetKey, String emoji) {
+        Objects.requireNonNull(targetKey, "targetKey cannot be null"); // WAWebReactionsCollection.addOrUpdateReaction: parentMsgKey
+        Objects.requireNonNull(emoji, "emoji cannot be null"); // WAWebReactionsCollection.addOrUpdateReaction: reactionText
+        var keyString = serializeReactionKey(targetKey);
+        if (emoji.isEmpty()) { // WAWebReactionsBEUtils.REVOKED_REACTION_TEXT: empty string removes the reaction
+            sentReactions.remove(keyString);
+        } else {
+            sentReactions.put(keyString, emoji); // WAWebReactionsCollection.addOrUpdateReaction: model.reactionText = reactionText
+        }
+    }
+
+    /**
+     * Returns the reaction emoji the current account is currently showing
+     * on the given target message, if any.
+     *
+     * @param targetKey the key of the message whose reaction is queried
+     * @return an {@link Optional} containing the emoji, or empty if the
+     *         account has not reacted to this message
+     *
+     * @implNote WAWebReactionsCollection.getExistingSenderModelFromReactionDetails:
+     *           looks up the sender's current reaction on a message.
+     */
+    public Optional<String> findSentReaction(com.github.auties00.cobalt.model.message.MessageKey targetKey) {
+        Objects.requireNonNull(targetKey, "targetKey cannot be null");
+        return Optional.ofNullable(sentReactions.get(serializeReactionKey(targetKey)));
+    }
+
+    /**
+     * Serialises a {@link com.github.auties00.cobalt.model.message.MessageKey}
+     * into the canonical string form used as the reactions-map key.
+     *
+     * <p>Matches WA Web's {@code MsgKey.toString()} which collapses the
+     * {@code remote}, {@code id}, {@code fromMe}, and {@code participant}
+     * slots into a single stable key.
+     *
+     * @param key the message key to serialise
+     * @return the canonical key string
+     *
+     * @implNote WAWebMsgKey.toString: canonical stringification used as
+     *           lookup key throughout WA Web's in-memory collections.
+     */
+    private static String serializeReactionKey(com.github.auties00.cobalt.model.message.MessageKey key) {
+        var parent = key.parentJid().map(Jid::toString).orElse("");
+        var id = key.id().orElse("");
+        var fromMe = key.fromMe() ? "1" : "0";
+        var sender = key.senderJid().map(Jid::toString).orElse(""); // WAWebMsgKey.toString: participant slot
+        return parent + "_" + fromMe + "_" + id + "_" + sender;
     }
 
     @Override

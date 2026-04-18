@@ -6,13 +6,18 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.sync.ConflictResolution;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
+import java.time.Instant;
+import java.util.List;
 
 /**
  * Handles delete chat sync actions.
@@ -291,5 +296,72 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
                 yield ConflictResolution.merged(merged); // WAWebDeleteChatSync.resolveConflicts: return SkipRemoteAndDropLocal
             }
         };
+    }
+
+    /**
+     * Builds a pending mutation that deletes a chat.
+     *
+     * <p>Per WhatsApp Web {@code WAWebDeleteChatSync.getDeleteChatMutation}:
+     * <pre>{@code
+     * getDeleteChatMutation(timestamp, chatWid, deleteMediaFiles) {
+     *   var indexJid = yield getChatJidMutationIndexForChat(chatWid, Actions.DeleteChat);
+     *   var indexWid = createWid(indexJid);
+     *   var forwardRange = yield constructForwardMovingMessageRange(chatWid, indexJid);
+     *   var indexArgs = buildDeleteChatIndexArgs(indexWid, deleteMediaFiles);
+     *   // merges with any existing pending DeleteChat mutation for the same index
+     *   return buildDeleteChatMutation({timestamp, indexWid, mergedRange, deleteMediaFiles});
+     * }
+     * buildDeleteChatIndexArgs(t, n) { return [t.toJid(), n ? "1" : "0"] }
+     * }</pre>
+     *
+     * <p>The index format is {@code ["deleteChat", chatJid, deleteMedia]} where
+     * {@code deleteMedia} is written as {@code "1"} when {@code true} and
+     * {@code "0"} when {@code false}, matching {@code buildDeleteChatIndexArgs}.
+     *
+     * <p>In Cobalt the caller supplies the message range because Cobalt does
+     * not maintain the active-message-range infrastructure (browser-specific
+     * IndexedDB concern). The WAM telemetry commit
+     * ({@code MdSyncdDogfoodingFeatureUsageWamEvent}) is intentionally omitted.
+     *
+     * @implNote WAWebDeleteChatSync.getDeleteChatMutation,
+     *           WAWebDeleteChatSync.buildDeleteChatMutation,
+     *           WAWebDeleteChatSync.buildDeleteChatIndexArgs,
+     *           WAWebSyncdActionUtils.buildPendingMutation
+     * @param timestamp        the mutation timestamp
+     * @param chatJid          the JID of the chat to delete
+     * @param deleteMediaFiles whether media files should be deleted
+     * @param messageRange     the message range covering the messages to
+     *                         delete; may be {@code null} when the chat has
+     *                         no messages and the caller wants a full delete
+     * @return the pending mutation for the delete-chat action
+     */
+    public SyncPendingMutation getDeleteChatMutation(
+            Instant timestamp,
+            Jid chatJid,
+            boolean deleteMediaFiles,
+            SyncActionMessageRange messageRange
+    ) {
+        var actionBuilder = new DeleteChatActionBuilder(); // WAWebDeleteChatSync.buildDeleteChatMutation: value: {deleteChatAction: {messageRange: r}}
+        if (messageRange != null) { // WAWebDeleteChatSync.buildDeleteChatMutation: messageRange: r (mergedRange)
+            actionBuilder.messageRange(messageRange);
+        }
+        var action = actionBuilder.build();
+        var value = new SyncActionValueBuilder() // WAWebSyncdActionUtils.buildPendingMutation: encodeProtobuf(SyncActionValueSpec, {...l, timestamp: i})
+                .timestamp(timestamp) // WAWebSyncdActionUtils.buildPendingMutation: timestamp: e (encoder overlay)
+                .deleteChatAction(action) // WAWebDeleteChatSync.buildDeleteChatMutation: {deleteChatAction: ...}
+                .build();
+        var index = JSON.toJSONString(List.of( // WAWebSyncdActionUtils.buildIndex: JSON.stringify([action].concat(indexArgs))
+                actionName(), // WAWebDeleteChatSync.getAction: "deleteChat"
+                chatJid.toString(), // WAWebDeleteChatSync.buildDeleteChatIndexArgs: t.toJid()
+                deleteMediaFiles ? "1" : "0" // WAWebDeleteChatSync.buildDeleteChatIndexArgs: n ? "1" : "0"
+        ));
+        var mutation = new DecryptedMutation.Trusted( // WAWebSyncdActionUtils.buildPendingMutation: return {collection, index, binarySyncAction, version, operation, timestamp, action}
+                index,
+                value,
+                SyncdOperation.SET, // WAWebDeleteChatSync.buildDeleteChatMutation: operation: SyncdMutation$SyncdOperation.SET
+                timestamp,
+                version() // WAWebDeleteChatSync.buildDeleteChatMutation: version: this.getVersion()
+        );
+        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw mutation object; Cobalt wraps it in SyncPendingMutation for the outgoing queue
     }
 }

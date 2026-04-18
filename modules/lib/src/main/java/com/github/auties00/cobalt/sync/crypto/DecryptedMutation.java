@@ -1,6 +1,9 @@
 package com.github.auties00.cobalt.sync.crypto;
 
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.SyncActionData;
 import com.github.auties00.cobalt.model.sync.SyncActionDataSpec;
 import com.github.auties00.cobalt.model.sync.SyncActionValue;
@@ -19,10 +22,18 @@ import java.util.Arrays;
  * <p>Two variants exist: {@link Untrusted} (freshly decrypted with full MAC verification
  * metadata) and {@link Trusted} (validated and ready for application).
  *
+ * <p>{@link Untrusted#of(byte[], byte[], MutationKeys, SyncdOperation, byte[])} adapts
+ * {@code WAWebSyncdDecryptMutations.syncdDecryptMutation} and is invoked from the per-mutation
+ * loop that adapts {@code WAWebSyncdDecryptMutationsWrapper.tryDecryptSnapshot} and
+ * {@code WAWebSyncdDecryptMutationsWrapper.tryDecryptPatch}. The batch wrapper exports
+ * live in {@code WebAppStateService.decryptMutations}.
+ *
  * @implNote WAWebSyncdDecryptMutations.syncdDecryptMutation,
  *           WAWebSyncdDecryptMutationsWrapper.tryDecryptSnapshot,
  *           WAWebSyncdDecryptMutationsWrapper.tryDecryptPatch
  */
+@WhatsAppWebModule(moduleName = "WAWebSyncdDecryptMutations")
+@WhatsAppWebModule(moduleName = "WAWebSyncdDecryptMutationsWrapper")
 public sealed interface DecryptedMutation {
     /**
      * Returns the index string identifying this mutation's target.
@@ -103,6 +114,9 @@ public sealed interface DecryptedMutation {
          * @throws WhatsAppWebAppStateSyncException.ValueMacMismatch if value MAC verification fails
          * @throws WhatsAppWebAppStateSyncException.IndexMacMismatch if index MAC verification fails
          * @implNote WAWebSyncdDecryptMutations.syncdDecryptMutation,
+         *           WAWebSyncdDecryptMutationsWrapper (per-mutation body of {@code y}
+         *           after the missing-key branch, which in Cobalt is pre-scanned in the
+         *           calling batch loop),
          *           WAWebSyncdMutationsCryptoUtils.generateMac,
          *           WAWebSyncdMutationsCryptoUtils.generateAssociatedData,
          *           WAWebSyncdMutationsCryptoUtils.decryptCipherText,
@@ -111,6 +125,8 @@ public sealed interface DecryptedMutation {
          *           WAWebSyncdDecode.decodeSyncActionData,
          *           WAWebSyncdValidateSyncActionProtobuf.validateSyncActionDataProtobuf
          */
+        @WhatsAppWebExport(moduleName = "WAWebSyncdDecryptMutations", exports = "syncdDecryptMutation", adaptation = WhatsAppAdaptation.DIRECT)
+        @WhatsAppWebExport(moduleName = "WAWebSyncdDecryptMutationsWrapper", exports = {"tryDecryptSnapshot", "tryDecryptPatch"}, adaptation = WhatsAppAdaptation.ADAPTED)
         public static Untrusted of(
                 byte[] encryptedValue,
                 byte[] indexMac,

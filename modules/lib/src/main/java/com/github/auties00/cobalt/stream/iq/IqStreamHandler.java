@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.stream.iq;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.device.identity.ADVDeviceIdentitySpec;
 import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
@@ -102,6 +103,18 @@ public final class IqStreamHandler implements SocketStream.Handler {
     private final ScheduledExecutorService rotationExecutor;
 
     /**
+     * Shared service that owns the alt-device-linking (phone-number
+     * pairing-code) handshake state and IQs. When
+     * {@link CompanionPairingService#isEnabled()} returns {@code true}
+     * the {@code pair-device} stanza is acknowledged without scheduling
+     * QR ref rotation and the {@code companion_hello} flow is started
+     * instead.
+     *
+     * @implNote WAWebAltDeviceLinkingApi
+     */
+    private final CompanionPairingService deviceLinkingService;
+
+    /**
      * Lock protecting rotation state ({@link #rotationTask}).
      *
      * @implNote NO_WA_BASIS: Java concurrency adaptation
@@ -128,12 +141,14 @@ public final class IqStreamHandler implements SocketStream.Handler {
             WhatsAppClient whatsapp,
             WhatsAppClientVerificationHandler.Web webVerificationHandler,
             DeviceService deviceService,
-            SnapshotRecoveryService snapshotRecoveryService
+            SnapshotRecoveryService snapshotRecoveryService,
+            CompanionPairingService deviceLinkingService
     ) {
         this.whatsapp = whatsapp;
         this.webVerificationHandler = Objects.requireNonNull(webVerificationHandler, "webVerificationHandler cannot be null");
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService cannot be null");
         this.snapshotRecoveryService = Objects.requireNonNull(snapshotRecoveryService, "snapshotRecoveryService cannot be null");
+        this.deviceLinkingService = Objects.requireNonNull(deviceLinkingService, "altDeviceLinkingService cannot be null");
         this.rotationLock = new Object();
         this.rotationExecutor = Executors.newSingleThreadScheduledExecutor(runnable ->
                 Thread.ofPlatform()
@@ -217,6 +232,16 @@ public final class IqStreamHandler implements SocketStream.Handler {
         }
 
         whatsapp.store().setAdvSecretKey(DataUtils.randomByteArray(32)); // WAWebHandlePairDevice.g: yield o("WAWebAdvSignatureApi").generateADVSecretKey()
+        sendPairDeviceAck(iqNode); // WAWebHandlePairDevice._: u() -- makeSetToCompanionResponseClientResponse
+
+        if (deviceLinkingService.isEnabled()) { // WAWebAltDeviceLinkingApi.startAltLinkingFlow: issued client-side when pairing type is ALT_DEVICE_LINKING
+            try {
+                deviceLinkingService.start();
+            } catch (Throwable throwable) {
+                LOGGER.log(System.Logger.Level.WARNING, "Cannot start alt-device-linking: {0}", throwable.getMessage());
+            }
+            return;
+        }
 
         var refs = extractPairRefs(pairDevice); // WAWebHandlePairDevice._: c.pairDeviceRef.map(function(e) { ... readString(t.size()) })
         if (refs.isEmpty()) {
@@ -225,7 +250,6 @@ public final class IqStreamHandler implements SocketStream.Handler {
         }
 
         scheduleVerificationValues(refs); // WAWebHandlePairDevice.g: f(d) -- schedules timer rotation
-        sendPairDeviceAck(iqNode); // WAWebHandlePairDevice._: u() -- makeSetToCompanionResponseClientResponse
     }
 
     /**
@@ -287,54 +311,87 @@ public final class IqStreamHandler implements SocketStream.Handler {
     /**
      * Schedules the rotation of QR code verification values.
      *
-     * <p>Publishes the first ref immediately, then schedules a fixed-rate
-     * rotation for remaining refs. The rotation interval is
-     * {@link #QR_ROTATION_MS} when 6 refs are present (initial QR display),
-     * or {@link #REFRESH_ROTATION_MS} otherwise (refresh rotation).
+     * <p>Mirrors WA Web's {@code ShiftTimer} loop where each tick recomputes
+     * the rotation delay from the current queue size before popping the next
+     * ref: the tick where {@code d.length === 6} uses {@link #QR_ROTATION_MS}
+     * (the initial 60 second display for the first ref), every subsequent
+     * tick uses {@link #REFRESH_ROTATION_MS}. The first tick is fired
+     * synchronously via {@code forceRunNow}; later ticks are scheduled one
+     * at a time via {@code onOrAfter(e)} so the delay can change between
+     * ticks.
+     *
+     * <p>Rotation also stops early if the device is already registered
+     * (WA Web guards the tick body with
+     * {@code WAWebUserPrefsMultiDevice.isRegistered}) or if the queue has
+     * been drained.
      *
      * @param refs the ordered set of ref strings to rotate through
-     * @implNote WAWebHandlePairDevice.g: d = e; m.forceRunNow() with ShiftTimer callback that calls d.shift()
+     * @implNote WAWebHandlePairDevice.g: d = e; m.forceRunNow() with
+     *           ShiftTimer callback that calls d.shift()
      */
     private void scheduleVerificationValues(LinkedHashSet<String> refs) {
         synchronized (rotationLock) {
-            cancelRotationLocked(); // WAWebHandlePairDevice.g: reuses single ShiftTimer instance m
+            cancelRotationLocked(); // WAWebHandlePairDevice.g: m || (m = new ShiftTimer(...)) reuses single instance
+        }
 
-            var queue = new ArrayDeque<>(refs);
-            var rotationDelay = refs.size() == 6 ? QR_ROTATION_MS : REFRESH_ROTATION_MS; // WAWebHandlePairDevice ShiftTimer callback: var e = d.length === 6 ? u : c
+        var queue = new ArrayDeque<>(refs);
+        runRotationTick(queue); // WAWebHandlePairDevice.g: m.forceRunNow() -- first tick runs immediately
+    }
 
-            publishVerificationValue(queue.pollFirst()); // WAWebHandlePairDevice ShiftTimer callback: var t = d.shift(); Conn.set({ref: t, refTTL: e})
-            if (queue.isEmpty()) {
+    /**
+     * Runs a single rotation tick matching WA Web's {@code ShiftTimer}
+     * callback body.
+     *
+     * <p>The tick order is identical to WA Web: check the early-exit
+     * conditions (registered or empty refs) first, then compute the
+     * next TTL from the current queue size, pop the next ref, publish
+     * it, and reschedule the next tick after the computed delay unless
+     * the queue is now empty.
+     *
+     * @param queue the mutable ref queue shared across ticks
+     * @implNote WAWebHandlePairDevice ShiftTimer callback body
+     */
+    private void runRotationTick(ArrayDeque<String> queue) {
+        String next;
+        long rotationDelay;
+        synchronized (rotationLock) {
+            cancelRotationLocked(); // ADAPTED: WAShiftTimer reschedules via onOrAfter; we reschedule by cancelling + scheduling a new task
+
+            if (whatsapp.store().registered()) { // WAWebHandlePairDevice: if (WAWebUserPrefsMultiDevice.isRegistered()) m && m.cancel(), m = null
                 return;
             }
 
-            rotationTask = rotationExecutor.scheduleAtFixedRate(() -> { // ADAPTED: WAWebHandlePairDevice uses ShiftTimer.onOrAfter(e)
-                String next;
-                synchronized (rotationLock) {
-                    next = queue.pollFirst(); // WAWebHandlePairDevice ShiftTimer callback: var t = d.shift()
-                    if (next == null) {
-                        cancelRotationLocked(); // WAWebHandlePairDevice ShiftTimer callback: m && m.cancel(), m = null
-                        return;
-                    }
-                }
+            if (queue.isEmpty()) { // WAWebHandlePairDevice: else if (!d || !d.length) m && m.cancel(), m = null, triggerSetSocketState(UNPAIRED_IDLE)
+                return; // ADAPTED: UNPAIRED_IDLE event is a WA Web backend event bus signal with no Cobalt analogue
+            }
 
-                publishVerificationValue(next); // WAWebHandlePairDevice ShiftTimer callback: Conn.set({ref: t, refTTL: e})
+            rotationDelay = queue.size() == 6 ? QR_ROTATION_MS : REFRESH_ROTATION_MS; // WAWebHandlePairDevice: var e = d.length === 6 ? u : c
+            next = queue.pollFirst(); // WAWebHandlePairDevice: var t = d.shift()
+        }
 
-                synchronized (rotationLock) {
-                    if (queue.isEmpty()) {
-                        cancelRotationLocked(); // WAWebHandlePairDevice ShiftTimer callback: if (!d || !d.length) { m.cancel(), m = null }
-                    }
-                }
-            }, rotationDelay, rotationDelay, TimeUnit.MILLISECONDS);
+        publishVerificationValue(next); // WAWebHandlePairDevice: Conn.set({ref: t, refTTL: e}), triggerSetSocketState(UNPAIRED)
+
+        synchronized (rotationLock) {
+            if (queue.isEmpty()) { // WAWebHandlePairDevice: on next tick (!d || !d.length) branch cancels; we skip scheduling to avoid a trailing no-op tick
+                return;
+            }
+
+            rotationTask = rotationExecutor.schedule( // WAWebHandlePairDevice: m && m.onOrAfter(e)
+                    () -> runRotationTick(queue),
+                    rotationDelay,
+                    TimeUnit.MILLISECONDS);
         }
     }
 
     /**
-     * Publishes a single verification value (QR ref or pairing code) to the
-     * web verification handler.
+     * Publishes a single QR ref to the web verification handler by
+     * combining the ref with the noise/identity/ADV keys into the
+     * comma-separated payload WA Web stamps into the QR PNG.
      *
-     * <p>For QR code handlers, the ref is combined with cryptographic keys
-     * into a comma-separated payload via {@link #buildQrPayload(String)}.
-     * For pairing code handlers, the raw ref is delivered directly.
+     * <p>Only invoked for the QR branch; the pairing-code branch runs
+     * through {@link CompanionPairingService} which feeds the handler a
+     * client-generated eight-character Crockford base32 code derived
+     * from its own random bytes rather than any server ref.
      *
      * @param ref the ref string to publish, or {@code null} to skip
      * @implNote WAWebHandlePairDevice ShiftTimer callback: Conn.set({ref: t, refTTL: e}),
@@ -345,10 +402,10 @@ public final class IqStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        var payload = webVerificationHandler instanceof WhatsAppClientVerificationHandler.Web.QrCode // ADAPTED: WA Web stores raw ref in Conn.ref; QR assembly done in UI layer
-                ? buildQrPayload(ref)
-                : ref;
-        webVerificationHandler.handle(payload); // ADAPTED: WA Web triggers via BackendEventBus
+        if (!(webVerificationHandler instanceof WhatsAppClientVerificationHandler.Web.QrCode)) {
+            return;
+        }
+        webVerificationHandler.handle(buildQrPayload(ref)); // ADAPTED: WA Web stores raw ref in Conn.ref; QR assembly done in UI layer
     }
 
     /**
@@ -385,12 +442,28 @@ public final class IqStreamHandler implements SocketStream.Handler {
      * storing the paired JID and LID, processing client pairing props,
      * and sending back an IQ result with the signed device identity.
      *
+     * <p>The early return mirrors WA Web's
+     * {@code !(g || WAWebUserPrefsMultiDevice.isRegistered())} guard: the
+     * {@code g} module-level flag prevents concurrent re-entry for the
+     * same IQ, and {@code isRegistered()} swallows duplicate pair-success
+     * deliveries that arrive after the store has already completed
+     * registration. Cobalt folds both checks into the single
+     * {@code store.registered()} call because {@link #handlePairSuccess}
+     * is invoked on a virtual thread per stanza and
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRegistered(boolean)}
+     * is flipped at the very end of a successful run.
+     *
      * @param iqNode the full IQ stanza containing the pair-success child
      * @implNote WAWebHandlePairSuccess.default (h/y function)
      */
     private void handlePairSuccess(Node iqNode) {
+        if (whatsapp.store().registered()) { // WAWebHandlePairSuccess.y: if (!(g || WAWebUserPrefsMultiDevice.isRegistered())) { ... }
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring pair-success iq: store already registered");
+            return;
+        }
+
         synchronized (rotationLock) {
-            cancelRotationLocked(); // ADAPTED: WAWebHandlePairSuccess.y: g = true prevents re-entry; Cobalt cancels rotation
+            cancelRotationLocked(); // ADAPTED: WAWebHandlePairDevice.g timer checks isRegistered() and cancels; we cancel eagerly once pair-success arrives
         }
 
         var pairSuccess = iqNode.getChild("pair-success").orElse(null); // WAWebHandlePairSuccess: receiveSetRegRPC extracts pair-success child

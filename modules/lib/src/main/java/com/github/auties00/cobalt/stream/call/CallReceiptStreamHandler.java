@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.stream.call;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketStream;
@@ -47,8 +49,12 @@ public final class CallReceiptStreamHandler implements SocketStream.Handler {
      *
      * @param whatsapp the WhatsApp client instance used for sending ack nodes
      *                 and accessing the store
-     * @implNote WAWebHandleVoipCallReceipt
+     * @implNote WAWebHandleVoipCallReceipt resolves its dependencies through
+     *           module imports; Cobalt replaces the module-level dependencies
+     *           with constructor injection.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleVoipCallReceipt", exports = "handleCallReceipt",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public CallReceiptStreamHandler(WhatsAppClient whatsapp) {
         this.whatsapp = whatsapp;
     }
@@ -69,8 +75,15 @@ public final class CallReceiptStreamHandler implements SocketStream.Handler {
      *
      * @param node the incoming {@code <receipt>} stanza containing an
      *             {@code <offer>}, {@code <accept>}, or {@code <reject>} child
-     * @implNote WAWebHandleVoipCallReceipt.handleCallReceipt
+     * @implNote WAWebHandleVoipCallReceipt.handleCallReceipt — the VoIP stack
+     *           signaling handoff ({@code handleIncomingSignalingReceipt}) and
+     *           the TC token fetch ({@code frontendSendAndReceive("getTcToken",
+     *           ...)}) are both intentionally omitted because Cobalt does not
+     *           implement a VoIP media runtime. The ack stanza shape is
+     *           preserved exactly.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleVoipCallReceipt", exports = "handleCallReceipt",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
     public void handle(Node node) {
         // WAWebHandleVoipCallReceipt.handleCallReceipt: parser extracts from, stanzaId, type
@@ -90,10 +103,12 @@ public final class CallReceiptStreamHandler implements SocketStream.Handler {
 
         var stanzaId = node.getAttributeAsString("id", null); // WAWebHandleVoipCallReceipt: a.stanzaId = attrString("id")
         var type = node.getAttributeAsString("type", null); // WAWebHandleVoipCallReceipt: a.type = maybeAttrString("type")
-        var meJid = whatsapp.store().jid().orElse(null); // ADAPTED: WAWebHandleVoipCallReceipt: getMePnUserOrThrow_DO_NOT_USE()
-        if (stanzaId == null || meJid == null) {
+        var selfDevice = whatsapp.store().jid().orElse(null);
+        if (stanzaId == null || selfDevice == null) {
             return;
         }
+        // WAWebHandleVoipCallReceipt: JID(getMePnUserOrThrow_DO_NOT_USE()) where getMePnUserOrThrow_DO_NOT_USE() = asUserWidOrThrow(meDevicePn) — strip the device/agent to get the user-level PN.
+        var meJid = selfDevice.toUserJid();
 
         var ack = new NodeBuilder() // WAWebHandleVoipCallReceipt: WAWap.wap("ack", {...})
                 .description("ack") // WAWebHandleVoipCallReceipt: "ack"

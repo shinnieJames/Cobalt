@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
+import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerMetadata;
@@ -95,25 +95,27 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     private final WhatsAppClient whatsapp;
 
     /**
-     * Optional web verification handler for link-code pairing notifications.
+     * Shared alt-device-linking service that drives the companion side
+     * of the pairing-code handshake. Handles both
+     * {@code primary_hello} and {@code refresh_code} stages.
      *
-     * @implNote NO_WA_BASIS
+     * @implNote WAWebAltDeviceLinkingApi
      */
-    private final WhatsAppClientVerificationHandler.Web webVerificationHandler;
+    private final CompanionPairingService deviceLinkingService;
 
     /**
      * Creates a new linking notification stream handler.
      *
-     * @param whatsapp               the WhatsApp client instance, must not be {@code null}
-     * @param webVerificationHandler the web verification handler, may be {@code null}
+     * @param whatsapp                the WhatsApp client instance, must not be {@code null}
+     * @param deviceLinkingService the shared alt-device-linking service
      * @implNote NO_WA_BASIS
      */
     NotificationLinkingStreamHandler(
             WhatsAppClient whatsapp,
-            WhatsAppClientVerificationHandler.Web webVerificationHandler
+            CompanionPairingService deviceLinkingService
     ) {
         this.whatsapp = whatsapp;
-        this.webVerificationHandler = webVerificationHandler;
+        this.deviceLinkingService = deviceLinkingService;
     }
 
     /**
@@ -154,28 +156,74 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles {@code companion_reg_refresh} and {@code link_code_companion_reg}
-     * notification stanzas.
-     * <p>
-     * For {@code companion_reg_refresh}, regenerates the ADV secret key
-     * (32 random bytes stored in the session store). For
-     * {@code link_code_companion_reg}, extracts and forwards any
-     * verification/pairing value to the web verification handler.
+     * Handles {@code companion_reg_refresh} and
+     * {@code link_code_companion_reg} notification stanzas.
+     *
+     * <p>For {@code companion_reg_refresh}, regenerates the ADV secret key
+     * (32 random bytes stored in the session store).
+     *
+     * <p>For {@code link_code_companion_reg}, the first child carries a
+     * {@code stage} attribute identifying the stanza variant. When the
+     * stage is {@code primary_hello}, the companion unwraps the primary's
+     * ephemeral public key and ships the finish IQ via
+     * {@link CompanionPairingService#handlePrimaryHello(byte[], byte[], byte[])}.
+     * When the stage is {@code refresh_code}, the cached ref is updated
+     * via {@link CompanionPairingService#handleRefreshCode(byte[])}.
+     * Other stages are ignored.
      *
      * @param node the notification stanza node
      * @implNote WAWebHandleCompanionReqRefreshNotification.handleCompanionReqRefreshNotification,
-     *     ADAPTED: WAWebAltDeviceLinkingHandleNotification.handleAltDeviceLinkingNotification
+     *     WAWebAltDeviceLinkingHandleNotification.handleAltDeviceLinkingNotification,
+     *     WASmaxInMdPrimaryHelloNotifyCompanionRequest.parsePrimaryHelloNotifyCompanionRequest,
+     *     WASmaxInMdRefreshCodeNotifyCompanionRequest.parseRefreshCodeNotifyCompanionRequest
      */
     private void handleLinkCodeRefresh(Node node) {
-        // WAWebHandleCompanionReqRefreshNotification: regenerate ADV secret key
-        if (node.hasDescription("notification") && node.hasAttribute("type", "companion_reg_refresh")) {
-            whatsapp.store().setAdvSecretKey(DataUtils.randomByteArray(32)); // ADAPTED: WA Web stores base64, Cobalt stores raw bytes
+        if (node.hasAttribute("type", "companion_reg_refresh")) { // WAWebHandleCompanionReqRefreshNotification
+            whatsapp.store().setAdvSecretKey(DataUtils.randomByteArray(32)); // WAWebAdvSignatureApi.generateADVSecretKey -- ADAPTED: WA Web stores base64, Cobalt stores raw bytes
+            return;
         }
 
-        // ADAPTED: WAWebAltDeviceLinkingHandleNotification - Cobalt extracts verification value
-        var verificationValue = findVerificationValue(node);
-        if (verificationValue != null && webVerificationHandler != null) {
-            webVerificationHandler.handle(verificationValue);
+        if (deviceLinkingService == null) {
+            return;
+        }
+
+        var child = node.getChild("link_code_companion_reg").orElse(null); // WAWebAltDeviceLinkingHandleNotification.u: var t = e.content; if (!Array.isArray(t) || !t.length) ...
+        if (child == null) {
+            return;
+        }
+
+        var stage = child.getAttributeAsString("stage", null); // WAWebAltDeviceLinkingHandleNotification.u: var n = t[0].attrs; n.stage
+        if (stage == null) {
+            return;
+        }
+
+        var ref = child.getChild("link_code_pairing_ref") // WASmaxInMdRefreshCodeNotifyCompanionRequest, WASmaxInMdPrimaryHelloNotifyCompanionRequest: linkCodeCompanionRegLinkCodePairingRefElementValue
+                .flatMap(Node::toContentBytes)
+                .orElse(null);
+
+        switch (stage) {
+            case "primary_hello" -> { // WAWebAltDeviceLinkingHandleNotification.c: parsePrimaryHelloNotifyCompanionRequest
+                var wrappedPrimaryEphemeralPub = child.getChild("link_code_pairing_wrapped_primary_ephemeral_pub") // WASmaxInMdPrimaryHelloNotifyCompanionRequest: linkCodeCompanionRegLinkCodePairingWrappedPrimaryEphemeralPubElementValue
+                        .flatMap(Node::toContentBytes)
+                        .orElse(null);
+                var primaryIdentityPublic = child.getChild("primary_identity_pub") // WASmaxInMdPrimaryHelloNotifyCompanionRequest: linkCodeCompanionRegPrimaryIdentityPubElementValue
+                        .flatMap(Node::toContentBytes)
+                        .orElse(null);
+                if (wrappedPrimaryEphemeralPub == null || primaryIdentityPublic == null || ref == null) {
+                    LOGGER.log(System.Logger.Level.WARNING,
+                            "Rejecting primary_hello notification missing required fields"); // WAWebAltDeviceLinkingHandleNotification.c: "alt pairing: could not parse primary hello"
+                    return;
+                }
+                try {
+                    deviceLinkingService.handlePrimaryHello(wrappedPrimaryEphemeralPub, primaryIdentityPublic, ref);
+                } catch (Throwable throwable) {
+                    LOGGER.log(System.Logger.Level.WARNING,
+                            "Cannot complete alt-device-linking handshake: {0}", throwable.getMessage()); // WAWebAltDeviceLinkingHandleNotification.c: primary_hello_error marker
+                }
+            }
+            case "refresh_code" -> deviceLinkingService.handleRefreshCode(ref); // WAWebAltDeviceLinkingHandleNotification.d: refreshAltLinkingCode / forceManualRefresh
+            default -> LOGGER.log(System.Logger.Level.DEBUG,
+                    "Ignoring link_code_companion_reg notification with stage {0}", stage); // WAWebAltDeviceLinkingHandleNotification.u: else makeDeliverResponseBadStanza({ackError:487}, e)
         }
     }
 
@@ -390,57 +438,6 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
                         throwable.getMessage());
             }
         }
-    }
-
-    /**
-     * Recursively searches the node tree for a verification/pairing code value.
-     * <p>
-     * Checks known attribute keys, then content text, then recurses into
-     * children. Returns the first value that passes the
-     * {@link #isLikelyVerificationValue(String)} heuristic.
-     *
-     * @param node the node to search
-     * @return the verification value, or {@code null} if not found
-     * @implNote ADAPTED: WAWebAltDeviceLinkingHandleNotification.handleAltDeviceLinkingNotification
-     */
-    private String findVerificationValue(Node node) {
-        for (var key : new String[]{"code", "pairing_code", "ref", "pair-device-ref", "pair_device_ref", "link_code", "value"}) {
-            var value = node.getAttributeAsString(key, null);
-            if (isLikelyVerificationValue(value)) {
-                return value;
-            }
-        }
-
-        var text = node.toContentString().orElse(null);
-        if (isLikelyVerificationValue(text)) {
-            return text;
-        }
-
-        for (var child : node.children()) {
-            var nested = findVerificationValue(child);
-            if (nested != null) {
-                return nested;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Returns whether the given string looks like a verification/pairing value.
-     * <p>
-     * A value is considered likely if it is non-null, non-blank, and between
-     * 4 and 1024 characters in length.
-     *
-     * @param value the string to check, may be {@code null}
-     * @return {@code true} if the value passes the heuristic
-     * @implNote NO_WA_BASIS
-     */
-    private boolean isLikelyVerificationValue(String value) {
-        return value != null
-                && !value.isBlank()
-                && value.length() >= 4
-                && value.length() <= 1024;
     }
 
     /**

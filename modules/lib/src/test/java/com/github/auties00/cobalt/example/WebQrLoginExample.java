@@ -7,9 +7,9 @@ import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 void main() throws IOException {
     WhatsAppClient.builder()
             .webClient(WhatsAppStoreFactory.inMemory())
-            .loadLatestOrCreateConnection()
+            .createConnection()
             .historySetting(WhatsAppWebClientHistory.extended(true))
-            .unregistered(WhatsAppClientVerificationHandler.Web.QrCode.toTerminal())
+            .unregistered(393495089819L, WhatsAppClientVerificationHandler.Web.PairingCode.toTerminal())
             .addLoggedInListener(api -> System.out.printf("Connected: %s%n", api.store().privacySettings()))
             .addWebAppPrimaryFeaturesListener((_, features) -> System.out.printf("Received features: %s%n", features))
             .addNewMessageListener((_, message) -> System.out.println(message))

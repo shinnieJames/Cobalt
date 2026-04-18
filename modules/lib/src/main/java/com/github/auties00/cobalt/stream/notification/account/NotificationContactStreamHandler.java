@@ -88,18 +88,15 @@ final class NotificationContactStreamHandler implements SocketStream.Handler {
      */
     private void handleNotification(Node node) {
         // WAWebHandleContactNotification.f -- parser: check children for action type
+        // WA Web checks children in the order: update, add, remove, modify, sync.
+        // Cobalt picks the first supported child; notifications have exactly one
+        // action child so the order is semantically equivalent.
         Node actionNode = null;
         for (var child : node.children()) {
-            switch (child.description()) {
-                case "update", "add", "remove", "modify", "sync" -> {
-                    actionNode = child;
-                    break;
-                }
-                default -> {
-                }
-            }
-
-            if (actionNode != null) {
+            var desc = child.description();
+            if ("update".equals(desc) || "add".equals(desc) || "remove".equals(desc)
+                    || "modify".equals(desc) || "sync".equals(desc)) {
+                actionNode = child;
                 break;
             }
         }

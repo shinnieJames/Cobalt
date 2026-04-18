@@ -1,12 +1,18 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -19,9 +25,25 @@ import java.util.logging.Logger;
  * between sync action index parts and {@link MessageKey} objects, as
  * well as sentinel-returning functions for malformed mutation data.
  *
- * @implNote WAWebSyncdIndexUtils
+ * <p>Additionally mirrors {@code WAWebSyncdActionUtils}, which exposes
+ * shared helpers for building and parsing the JSON-encoded index arrays
+ * used by every sync action and for assembling the message-key tuple
+ * embedded in message-oriented mutation indices.
+ *
+ * @implNote WAWebSyncdIndexUtils, WAWebSyncdActionUtils
  */
-final class SyncdIndexUtils {
+@WhatsAppWebModule(moduleName = "WAWebSyncdIndexUtils")
+@WhatsAppWebModule(moduleName = "WAWebSyncdActionUtils")
+public final class SyncdIndexUtils {
+    /**
+     * Position of the action name within a parsed sync action index array.
+     *
+     * <p>Per WhatsApp Web {@code WASyncdConst.MUTATION_NAME_INDEX = 0}: the
+     * zeroth element of a parsed index is always the action name.
+     *
+     * @implNote WASyncdConst.MUTATION_NAME_INDEX
+     */
+    public static final int MUTATION_NAME_INDEX = 0; // WASyncdConst.MUTATION_NAME_INDEX = f = 0
     /**
      * Logger for sync index utilities.
      *
@@ -35,6 +57,133 @@ final class SyncdIndexUtils {
      * @implNote NO_WA_BASIS — Java utility class pattern
      */
     private SyncdIndexUtils() {
+    }
+
+    /**
+     * Serializes an action name together with its index arguments into the
+     * JSON-encoded index string used by every sync mutation.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdActionUtils.buildIndex}:
+     * {@code JSON.stringify([e].concat(t))}. The action name is prepended to
+     * the variadic argument list and the resulting array is serialized to
+     * JSON. The resulting bytes become the mutation index both in the
+     * outgoing upload and in the encrypted index MAC.
+     *
+     * <p>This centralizes the inline {@code JSON.toJSONString(List.of(
+     * actionName(), ...))} pattern used by every {@code *Handler}. Call
+     * sites that still inline this pattern are flagged as
+     * {@code ADAPTED: WAWebSyncdActionUtils.buildPendingMutation} since
+     * they compose the index as part of building a pending mutation.
+     *
+     * @implNote WAWebSyncdActionUtils.buildIndex (function u)
+     * @param actionName the sync action name (e.g. {@code "archive"},
+     *                   {@code "pin_v1"})
+     * @param indexArgs  the action-specific index arguments (zero or more
+     *                   strings); may be empty but must not be {@code null}
+     * @return the JSON-encoded index string
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdActionUtils", exports = "buildIndex", adaptation = WhatsAppAdaptation.DIRECT)
+    public static String buildIndex(String actionName, String... indexArgs) {
+        // WAWebSyncdActionUtils.buildIndex (function u): return JSON.stringify([e].concat(t))
+        var parts = new Object[indexArgs.length + 1];
+        parts[0] = actionName; // WAWebSyncdActionUtils.u: [e]
+        System.arraycopy(indexArgs, 0, parts, 1, indexArgs.length); // WAWebSyncdActionUtils.u: .concat(t)
+        return JSON.toJSONString(Arrays.asList(parts)); // WAWebSyncdActionUtils.u: JSON.stringify(...)
+    }
+
+    /**
+     * Parses a JSON-encoded sync action index back into its component
+     * array.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdActionUtils.parseIndex}: calls
+     * {@code JSON.parse(n)}; returns {@code null} if parsing fails or if
+     * the resulting array has fewer than one element, in both cases after
+     * logging a warning via {@code WALogger}. The collection name is
+     * passed in purely for the log message.
+     *
+     * @implNote WAWebSyncdActionUtils.parseIndex (function c)
+     * @param collectionName the collection the mutation belongs to, used
+     *                       for diagnostic logging only
+     * @param index          the JSON-encoded index string
+     * @return the parsed array, or {@code null} if the index is missing,
+     *         unparseable, or empty
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdActionUtils", exports = "parseIndex", adaptation = WhatsAppAdaptation.DIRECT)
+    public static JSONArray parseIndex(String collectionName, String index) {
+        // WAWebSyncdActionUtils.parseIndex (function c)
+        try {
+            var parsed = JSON.parseArray(index); // WAWebSyncdActionUtils.c: var r = JSON.parse(n)
+            if (parsed == null || parsed.size() < 1) { // WAWebSyncdActionUtils.c: if (r.length < 1)
+                LOGGER.warning(() -> "[syncd] invalid empty index for collection " + collectionName); // WAWebSyncdActionUtils.c: WALogger.WARN
+                return null; // WAWebSyncdActionUtils.c: return null
+            }
+            return parsed;
+        } catch (Throwable throwable) { // WAWebSyncdActionUtils.c: catch (e)
+            LOGGER.warning(() -> "[syncd] invalid index for collection " + collectionName); // WAWebSyncdActionUtils.c: WALogger.WARN
+            return null; // WAWebSyncdActionUtils.c: return null
+        }
+    }
+
+    /**
+     * Extracts the mutation (action) name from a JSON-encoded sync action
+     * index.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdActionUtils.getMutationNameFromIndex}:
+     * {@code var n = parseIndex(e, t); return n == null ? void 0 :
+     * n[WASyncdConst.MUTATION_NAME_INDEX];}. If the underlying parse
+     * returns {@code null} (missing/unparseable/empty), returns
+     * {@code null}; otherwise returns element 0 of the parsed array.
+     *
+     * @implNote WAWebSyncdActionUtils.getMutationNameFromIndex (function d)
+     * @param collectionName the collection the mutation belongs to, used
+     *                       for diagnostic logging in the nested parse
+     * @param index          the JSON-encoded index string
+     * @return the action name, or {@code null} if the index is invalid
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdActionUtils", exports = "getMutationNameFromIndex", adaptation = WhatsAppAdaptation.DIRECT)
+    public static String getMutationNameFromIndex(String collectionName, String index) {
+        // WAWebSyncdActionUtils.getMutationNameFromIndex (function d): var n = c(e, t); return n == null ? void 0 : n[MUTATION_NAME_INDEX]
+        var parsed = parseIndex(collectionName, index); // WAWebSyncdActionUtils.d: var n = c(e, t)
+        if (parsed == null) { // WAWebSyncdActionUtils.d: n == null ? void 0
+            return null;
+        }
+        return parsed.getString(MUTATION_NAME_INDEX); // WAWebSyncdActionUtils.d: n[o("WASyncdConst").MUTATION_NAME_INDEX]
+    }
+
+    /**
+     * Builds the {@code [remoteJid, id, fromMe, participant]} index tuple
+     * used by message-oriented sync mutations (star, delete-for-me,
+     * mark-as-read on a single message, etc.).
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdActionUtils.buildMessageKey}:
+     * {@code return [o, n, t?"1":"0", r!=null && !t ? r : "0"]} where
+     * {@code t = fromMe}, {@code n = id}, {@code r = participant},
+     * {@code o = remoteJid}. The participant segment is coerced to the
+     * literal {@code "0"} when absent or when the message is outgoing
+     * (since the self JID is implicit for {@code fromMe == true}).
+     *
+     * @implNote WAWebSyncdActionUtils.buildMessageKey (function p)
+     * @param remoteJid   the chat JID (must not be {@code null})
+     * @param id          the message ID
+     * @param fromMe      whether the message was sent by the current user
+     * @param participant the participant JID for incoming group messages,
+     *                    or {@code null} for 1:1 chats / outgoing messages
+     * @return the four-element index tuple
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdActionUtils", exports = "buildMessageKey", adaptation = WhatsAppAdaptation.DIRECT)
+    public static List<String> buildMessageKey(Jid remoteJid, String id, boolean fromMe, Jid participant) {
+        // WAWebSyncdActionUtils.buildMessageKey (function p):
+        // return [o, n, t?"1":"0", r!=null && !t ? r : "0"]
+        var fromMeStr = fromMe ? "1" : "0"; // WAWebSyncdActionUtils.p: t?"1":"0"
+        var participantStr = participant != null && !fromMe // WAWebSyncdActionUtils.p: r!=null && !t
+                ? participant.toString() // WAWebSyncdActionUtils.p: r
+                : "0"; // WAWebSyncdActionUtils.p: "0"
+        return List.of(
+                remoteJid.toString(), // WAWebSyncdActionUtils.p: o (remoteJid)
+                id, // WAWebSyncdActionUtils.p: n (id)
+                fromMeStr, // WAWebSyncdActionUtils.p: t?"1":"0"
+                participantStr // WAWebSyncdActionUtils.p: r!=null && !t ? r : "0"
+        );
     }
 
     /**
@@ -62,6 +211,7 @@ final class SyncdIndexUtils {
      * @param key the message key to convert
      * @return the DB ID string with the participant segment removed when applicable
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdIndexUtils", exports = "msgKeyToDbIdWithoutFromMeParticipant", adaptation = WhatsAppAdaptation.ADAPTED)
     static String msgKeyToDbIdWithoutFromMeParticipant(MessageKey key) {
         // WAWebSyncdIndexUtils.msgKeyToDbIdWithoutFromMeParticipant (function d)
         var serialized = serializeMessageKey(key); // WAWebSyncdIndexUtils.d: var t = e.toString()
@@ -103,6 +253,7 @@ final class SyncdIndexUtils {
      * @param participant the participant JID string (sender in group chats)
      * @return the resolved {@link MessageKey}, or empty if the input is invalid
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdIndexUtils", exports = "syncKeyToMsgKey", adaptation = WhatsAppAdaptation.ADAPTED)
     static Optional<MessageKey> syncKeyToMsgKey(WhatsAppStore store, String remote, String id, String fromMe, String participant) {
         // WAWebSyncdIndexUtils.syncKeyToMsgKey (function m)
         if (remote == null || remote.isEmpty()) { // WAWebSyncdIndexUtils.m: if (!r("WAWebWid").isWid(t)) return ... null
@@ -161,10 +312,11 @@ final class SyncdIndexUtils {
      * @param index the JSON-encoded index string from the star action
      * @return the resolved {@link MessageKey}, or empty if the index is malformed
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdIndexUtils", exports = "getMsgKeyFromStarActionIndex", adaptation = WhatsAppAdaptation.ADAPTED)
     static Optional<MessageKey> getMsgKeyFromStarActionIndex(WhatsAppStore store, String index) {
         // WAWebSyncdIndexUtils.getMsgKeyFromStarActionIndex (function p)
         var parsed = JSON.parseArray(index); // WAWebSyncdIndexUtils.p: var t = JSON.parse(e)
-        if (parsed.size() < 5) { // WAWebSyncdIndexUtils.p: if (t.length < 5) throw ...
+        if (parsed == null || parsed.size() < 5) { // WAWebSyncdIndexUtils.p: if (t.length < 5) throw ...  (ADAPTED: defensive null check vs. WA Web's JS-runtime throw)
             LOGGER.warning("[sync-action] star action index malformed, cannot create MsgKey"); // WAWebSyncdIndexUtils.p: r("err")("[sync-action] star action index malformed...")
             return Optional.empty(); // ADAPTED: WAWebSyncdIndexUtils.p throws; Cobalt returns empty
         }
@@ -196,6 +348,7 @@ final class SyncdIndexUtils {
      * @param actionName     the action name for diagnostic context (WAM metric parameter)
      * @return a {@link MutationApplicationResult} with {@code MALFORMED} state
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdIndexUtils", exports = "malformedActionIndex", adaptation = WhatsAppAdaptation.ADAPTED)
     static MutationApplicationResult malformedActionIndex(String collectionName, String actionName) {
         // WAWebSyncdIndexUtils.malformedActionIndex (function _)
         // WAWebSyncdIndexUtils._: o("WAWebSyncdMetrics").uploadMdCriticalEventMetric(...) — WAM telemetry skipped
@@ -214,6 +367,7 @@ final class SyncdIndexUtils {
      * @param collectionName the collection name for diagnostic context
      * @return a {@link MutationApplicationResult} with {@code MALFORMED} state
      */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdIndexUtils", exports = "malformedActionValue", adaptation = WhatsAppAdaptation.DIRECT)
     static MutationApplicationResult malformedActionValue(String collectionName) {
         // WAWebSyncdIndexUtils.malformedActionValue (function f)
         // WAWebSyncdIndexUtils.f: return {actionState: o("WASyncdConst").SyncActionState.Malformed}

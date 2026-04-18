@@ -1,8 +1,8 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -55,19 +55,19 @@ public final class NotificationDeviceDispatcher implements SocketStream.Handler 
      * Constructs a new dispatcher and instantiates every sub-handler with
      * the shared dependencies.
      *
-     * @param whatsapp               the non-{@code null} client providing store and network access
-     * @param webVerificationHandler the verification handler consumed by the linking handler
-     * @param abPropsService         the A/B props service consumed by the server-crypto handler
-     * @param deviceService          the device service consumed by the device-list handler
+     * @param whatsapp                the non-{@code null} client providing store and network access
+     * @param deviceLinkingService the alt-device-linking service consumed by the linking handler
+     * @param abPropsService          the A/B props service consumed by the server-crypto handler
+     * @param deviceService           the device service consumed by the device-list handler
      */
     public NotificationDeviceDispatcher(
             WhatsAppClient whatsapp,
-            WhatsAppClientVerificationHandler.Web webVerificationHandler,
+            CompanionPairingService deviceLinkingService,
             ABPropsService abPropsService,
             DeviceService deviceService
     ) {
         this.notificationDeviceHandler = new NotificationDeviceStreamHandler(whatsapp, deviceService);
-        this.notificationLinkingHandler = new NotificationLinkingStreamHandler(whatsapp, webVerificationHandler);
+        this.notificationLinkingHandler = new NotificationLinkingStreamHandler(whatsapp, deviceLinkingService);
         this.notificationServerCryptoHandler = new NotificationServerCryptoStreamHandler(whatsapp, abPropsService);
         this.notificationSyncHandler = new NotificationSyncStreamHandler(whatsapp);
     }
