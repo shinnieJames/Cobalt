@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.bot.profile.*;
 import com.github.auties00.cobalt.model.business.*;
 import com.github.auties00.cobalt.model.business.profile.*;
+import com.github.auties00.cobalt.model.call.CallOffer;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
@@ -18,18 +19,20 @@ import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.chat.community.CommunityLinkedGroup;
 import com.github.auties00.cobalt.model.chat.community.CommunityLinkedGroupBuilder;
 import com.github.auties00.cobalt.model.chat.community.CommunityMetadataBuilder;
-import com.github.auties00.cobalt.model.chat.group.GroupMetadataBuilder;
-import com.github.auties00.cobalt.model.chat.group.GroupParticipant;
-import com.github.auties00.cobalt.model.chat.group.GroupParticipantBuilder;
-import com.github.auties00.cobalt.model.chat.group.GroupPartipantRole;
+import com.github.auties00.cobalt.model.chat.group.*;
+import com.github.auties00.cobalt.model.contact.Contact;
+import com.github.auties00.cobalt.model.contact.ContactTextStatus;
+import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
 import com.github.auties00.cobalt.model.newsletter.NewsletterViewerRole;
+import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
+import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.mex.json.community.FetchAllSubgroupsMex;
@@ -42,6 +45,7 @@ import com.github.auties00.cobalt.socket.WhatsAppSocketStanza;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
+import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
 import com.github.auties00.cobalt.util.DataUtils;
@@ -689,15 +693,17 @@ public final class WhatsAppClient {
         }
 
         var future = new CompletableFuture<Void>();
-        store.listeners().add(new WhatsAppClientListener() {
+        var listener = new WhatsAppClientListener() {
             @Override
             public void onDisconnected(WhatsAppClient whatsapp, WhatsAppClientDisconnectReason reason) {
                 if (reason != WhatsAppClientDisconnectReason.RECONNECTING) {
                     future.complete(null);
                 }
             }
-        });
+        };
+        store.addListener(listener);
         future.join();
+        store.removeListener(listener);
         return this;
     }
 
@@ -1799,5 +1805,356 @@ public final class WhatsAppClient {
      */
     public void sendMessage(Jid jid, MessageContainer container) {
         throw new UnsupportedOperationException();
+    }
+
+    public WhatsAppClient addListener(WhatsAppClientListener listener) {
+        store.addListener(listener);
+        return this;
+    }
+
+    public WhatsAppClient removeListener(WhatsAppClientListener listener) {
+        store.removeListener(listener);
+        return this;
+    }
+
+    public WhatsAppClient addChatsListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Collection<Chat>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onChats(WhatsAppClient arg0, Collection<Chat> arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addContactsListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Collection<Contact>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onContacts(WhatsAppClient arg0, Collection<Contact> arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addStatusListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Collection<ChatMessageInfo>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onStatus(WhatsAppClient arg0, Collection<ChatMessageInfo> arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNodeSentListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Node> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNodeSent(WhatsAppClient arg0, Node arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addLoggedInListener(WhatsappClientListenerConsumer.Unary<WhatsAppClient> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onLoggedIn(WhatsAppClient arg0) {
+                consumer.accept(arg0);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addCallListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, CallOffer> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onCall(WhatsAppClient arg0, CallOffer arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addWebHistorySyncPastParticipantsListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Jid, Collection<GroupPastParticipant>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onWebHistorySyncPastParticipants(WhatsAppClient arg0, Jid arg1, Collection<GroupPastParticipant> arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addDisconnectedListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, WhatsAppClientDisconnectReason> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onDisconnected(WhatsAppClient arg0, WhatsAppClientDisconnectReason arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addWebAppPrimaryFeaturesListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, List<String>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onWebAppPrimaryFeatures(WhatsAppClient arg0, List<String> arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addContactPresenceListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Jid, Jid> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onContactPresence(WhatsAppClient arg0, Jid arg1, Jid arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNewslettersListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Collection<Newsletter>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNewsletters(WhatsAppClient arg0, Collection<Newsletter> arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNodeReceivedListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Node> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNodeReceived(WhatsAppClient arg0, Node arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addWebAppStateActionListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, SyncAction, String> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onWebAppStateAction(WhatsAppClient arg0, SyncAction arg1, String arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addWebHistorySyncMessagesListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Chat, Boolean> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onWebHistorySyncMessages(WhatsAppClient arg0, Chat arg1, boolean arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNewStatusListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, ChatMessageInfo> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNewStatus(WhatsAppClient arg0, ChatMessageInfo arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addAccountTypeChangedListener(WhatsappClientListenerConsumer.Quaternary<WhatsAppClient, Jid, ADVEncryptionType, ADVEncryptionType> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onAccountTypeChanged(WhatsAppClient arg0, Jid arg1, ADVEncryptionType arg2, ADVEncryptionType arg3) {
+                consumer.accept(arg0, arg1, arg2, arg3);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addAboutChangedListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, String, String> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onAboutChanged(WhatsAppClient arg0, String arg1, String arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNewMessageListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, MessageInfo> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNewMessage(WhatsAppClient arg0, MessageInfo arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addMessageDeletedListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, MessageInfo, Boolean> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onMessageDeleted(WhatsAppClient arg0, MessageInfo arg1, boolean arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addPrivacySettingChangedListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, PrivacySettingEntry> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onPrivacySettingChanged(WhatsAppClient arg0, PrivacySettingEntry arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addWebHistorySyncProgressListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Integer, Boolean> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onWebHistorySyncProgress(WhatsAppClient arg0, int arg1, boolean arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addProfilePictureChangedListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Jid> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onProfilePictureChanged(WhatsAppClient arg0, Jid arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addMessageStatusListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, MessageInfo> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onMessageStatus(WhatsAppClient arg0, MessageInfo arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNameChangedListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, String, String> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNameChanged(WhatsAppClient arg0, String arg1, String arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addMessageReplyListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, MessageInfo, MessageInfo> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onMessageReply(WhatsAppClient arg0, MessageInfo arg1, MessageInfo arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addDeviceIdentityChangedListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Jid, Set<Jid>> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onDeviceIdentityChanged(WhatsAppClient arg0, Jid arg1, Set<Jid> arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addNewContactListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Contact> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onNewContact(WhatsAppClient arg0, Contact arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addContactBlockedListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Jid> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onContactBlocked(WhatsAppClient arg0, Jid arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addContactTextStatusListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, Jid, ContactTextStatus> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onContactTextStatus(WhatsAppClient arg0, Jid arg1, ContactTextStatus arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addLocaleChangedListener(WhatsappClientListenerConsumer.Ternary<WhatsAppClient, String, String> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onLocaleChanged(WhatsAppClient arg0, String arg1, String arg2) {
+                consumer.accept(arg0, arg1, arg2);
+            }
+        });
+        return this;
+    }
+
+    public WhatsAppClient addRegistrationCodeListener(WhatsappClientListenerConsumer.Binary<WhatsAppClient, Long> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        addListener(new WhatsAppClientListener() {
+            @Override
+            public void onRegistrationCode(WhatsAppClient arg0, long arg1) {
+                consumer.accept(arg0, arg1);
+            }
+        });
+        return this;
     }
 }

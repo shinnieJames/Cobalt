@@ -1,7 +1,24 @@
 package com.github.auties00.cobalt.client;
 
+import com.github.auties00.cobalt.exception.WhatsAppABPropTypeMismatchException;
+import com.github.auties00.cobalt.exception.WhatsAppAdvCheckException;
+import com.github.auties00.cobalt.exception.WhatsAppAdvValidationException;
+import com.github.auties00.cobalt.exception.WhatsAppConnectionException;
+import com.github.auties00.cobalt.exception.WhatsAppCorruptedStoreException;
+import com.github.auties00.cobalt.exception.WhatsAppDeviceSyncException;
 import com.github.auties00.cobalt.exception.WhatsAppException;
+import com.github.auties00.cobalt.exception.WhatsAppHistorySyncException;
+import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
+import com.github.auties00.cobalt.exception.WhatsAppMalformedJidException;
+import com.github.auties00.cobalt.exception.WhatsAppMediaException;
+import com.github.auties00.cobalt.exception.WhatsAppMessageException;
+import com.github.auties00.cobalt.exception.WhatsAppOwnDeviceListExpiredException;
 import com.github.auties00.cobalt.exception.WhatsAppReconnectionException;
+import com.github.auties00.cobalt.exception.WhatsAppRegistrationException;
+import com.github.auties00.cobalt.exception.WhatsAppServerRuntimeException;
+import com.github.auties00.cobalt.exception.WhatsAppSessionException;
+import com.github.auties00.cobalt.exception.WhatsAppStreamException;
+import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.io.IOException;
@@ -122,13 +139,68 @@ public interface WhatsAppClientErrorHandler {
      * {@link #toTerminal()} and {@link #toFile(Path)} factories, delegating
      * the stack-trace rendering to the supplied {@code printer}.
      *
-     * <p>The returned handler recognises session-control exception subtypes
-     * and maps them to the matching {@link Result}: reconnection errors are
-     * discarded pending the next timeout, {@code Reconnect} triggers a
-     * reconnect, {@code LoggedOut} logs out, {@code Banned} bans the
-     * session, and every other exception is either discarded (non-fatal) or
-     * disconnected (fatal), as determined by
-     * {@link WhatsAppException#isFatal()}.
+     * <p>The returned handler maps every exception subtype to the
+     * {@link Result} that best matches WhatsApp Web's native reaction for
+     * the same underlying failure. The mapping is exhaustive over the sealed
+     * {@link WhatsAppException} hierarchy:
+     *
+     * <ul>
+     *   <li>{@link WhatsAppReconnectionException} &mdash; {@code DISCARD};
+     *       WA Web's {@code socketLoop} waits for the next backoff tick.</li>
+     *   <li>{@link WhatsAppSessionException.Banned} &mdash; {@code BAN};
+     *       matches WA Web's {@code LogoutReason.AccountLocked} path.</li>
+     *   <li>{@link WhatsAppSessionException.LoggedOut} &mdash; {@code LOG_OUT};
+     *       matches WA Web's {@code WAWebHandleStreamError} path for stream
+     *       code {@code 516} and {@code conflict type="device_removed"}
+     *       ({@code WAWebCompanionRegUtils.startLogout}).</li>
+     *   <li>{@link WhatsAppSessionException.Reconnect} &mdash; {@code RECONNECT};
+     *       matches WA Web's stream code {@code 515} path
+     *       ({@code WAWebCompanionRegUtils.startLogin} &rarr;
+     *       {@code WAWebStartBackend.startBackend}).</li>
+     *   <li>{@link WhatsAppSessionException.Conflict} &mdash; {@code DISCONNECT};
+     *       matches WA Web's {@code conflict type="replaced"} path which
+     *       calls {@code WAComms.stopComms()} without resuming the socket
+     *       loop.</li>
+     *   <li>{@link WhatsAppSessionException.BadMac},
+     *       {@link WhatsAppSessionException.Closed},
+     *       {@link WhatsAppStreamException} &mdash; {@code RECONNECT}; these
+     *       collapse to WA Web's {@code "CLOSE_SOCKET"} resolution, which
+     *       lets the {@code socketLoop} re-open the connection with fresh
+     *       Noise state.</li>
+     *   <li>{@link WhatsAppLidMigrationException} &mdash; {@code LOG_OUT};
+     *       matches WA Web's {@code LogoutReason.LidMigration*} values.</li>
+     *   <li>{@link WhatsAppOwnDeviceListExpiredException} &mdash; {@code LOG_OUT};
+     *       matches WA Web's ADV check forced logout when the own device
+     *       list exceeds the server-enforced staleness threshold.</li>
+     *   <li>{@link WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices}
+     *       &mdash; {@code LOG_OUT}; matches WA Web's
+     *       {@code SyncdFatalErrorType.MISSING_KEY_ON_ALL_CLIENTS} terminal
+     *       state.</li>
+     *   <li>{@link WhatsAppWebAppStateSyncException} (other subtypes) &mdash;
+     *       {@code DISCARD}; {@code SyncdFatalError} and
+     *       {@code SyncdRetryableError} re-sync the affected collection
+     *       without disconnecting the session.</li>
+     *   <li>{@link WhatsAppMessageException},
+     *       {@link WhatsAppMediaException} &mdash; {@code DISCARD}; WA Web
+     *       emits a retry receipt or surfaces a UI error without tearing
+     *       the session down.</li>
+     *   <li>{@link WhatsAppAdvValidationException},
+     *       {@link WhatsAppAdvCheckException},
+     *       {@link WhatsAppDeviceSyncException},
+     *       {@link WhatsAppHistorySyncException} &mdash; {@code DISCARD};
+     *       these are per-request failures in WA Web.</li>
+     *   <li>{@link WhatsAppMalformedJidException},
+     *       {@link WhatsAppABPropTypeMismatchException},
+     *       {@link WhatsAppServerRuntimeException} &mdash; {@code DISCARD};
+     *       informational/validation errors that do not impact the session.</li>
+     *   <li>{@link WhatsAppConnectionException},
+     *       {@link WhatsAppCorruptedStoreException},
+     *       {@link WhatsAppRegistrationException} &mdash; {@code DISCONNECT};
+     *       no session exists (or can exist) to recover.</li>
+     *   <li>Any other {@link WhatsAppException} &mdash; falls back to
+     *       {@link WhatsAppException#isFatal()}: fatal &rarr;
+     *       {@code DISCONNECT}, non-fatal &rarr; {@code DISCARD}.</li>
+     * </ul>
      *
      * @param printer consumer that renders the exception (for example to
      *                stderr or to a file); may be {@code null} to skip
@@ -143,20 +215,21 @@ public interface WhatsAppClientErrorHandler {
                     .jid()
                     .map(Jid::user)
                     .orElse("UNKNOWN");
-            if(exception instanceof WhatsAppReconnectionException) {
+
+            if (exception instanceof WhatsAppReconnectionException) {
                 logger.log(WARNING, "[{0}] Cannot reconnect: retrying on next timeout", jid);
                 return Result.DISCARD;
             }
 
-            if (exception instanceof com.github.auties00.cobalt.exception.WhatsAppSessionException.Reconnect) {
-                logger.log(WARNING, "[{0}] Session requires reconnect", jid);
+            if (exception instanceof WhatsAppSessionException.Banned) {
+                logger.log(ERROR, "[{0}] Session banned by server", jid);
                 if (printer != null) {
                     printer.accept(whatsapp, exception);
                 }
-                return Result.RECONNECT;
+                return Result.BAN;
             }
 
-            if (exception instanceof com.github.auties00.cobalt.exception.WhatsAppSessionException.LoggedOut) {
+            if (exception instanceof WhatsAppSessionException.LoggedOut) {
                 logger.log(WARNING, "[{0}] Session logged out by server", jid);
                 if (printer != null) {
                     printer.accept(whatsapp, exception);
@@ -164,16 +237,108 @@ public interface WhatsAppClientErrorHandler {
                 return Result.LOG_OUT;
             }
 
-            if (exception instanceof com.github.auties00.cobalt.exception.WhatsAppSessionException.Banned) {
-                logger.log(WARNING, "[{0}] Session banned by server", jid);
+            if (exception instanceof WhatsAppSessionException.Reconnect) {
+                return Result.RECONNECT;
+            }
+
+            if (exception instanceof WhatsAppSessionException.Conflict) {
+                logger.log(WARNING, "[{0}] Session replaced by another active session", jid);
                 if (printer != null) {
                     printer.accept(whatsapp, exception);
                 }
-                return Result.BAN;
+                return Result.DISCONNECT;
+            }
+
+            if (exception instanceof WhatsAppSessionException
+                    || exception instanceof WhatsAppStreamException) {
+                logger.log(ERROR, "[{0}] Session/stream failure ({1}): reconnecting",
+                        jid, exception.getClass().getSimpleName());
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.RECONNECT;
+            }
+
+            if (exception instanceof WhatsAppLidMigrationException) {
+                logger.log(WARNING, "[{0}] LID migration failed: {1}", jid, exception.getMessage());
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.LOG_OUT;
+            }
+
+            if (exception instanceof WhatsAppOwnDeviceListExpiredException) {
+                logger.log(WARNING, "[{0}] Own device list expired: logging out", jid);
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.LOG_OUT;
+            }
+
+            if (exception instanceof WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices) {
+                logger.log(ERROR, "[{0}] Sync key missing on all devices: {1}",
+                        jid, exception.getMessage());
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.LOG_OUT;
+            }
+
+            if (exception instanceof WhatsAppWebAppStateSyncException) {
+                logger.log(WARNING, "[{0}] App state sync failure ({1}): resyncing collection",
+                        jid, exception.getClass().getSimpleName());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppMessageException) {
+                logger.log(WARNING, "[{0}] Message failure: {1}", jid, exception.getMessage());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppMediaException) {
+                logger.log(WARNING, "[{0}] Media operation failed: {1}", jid, exception.getMessage());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppAdvValidationException
+                    || exception instanceof WhatsAppAdvCheckException) {
+                logger.log(WARNING, "[{0}] ADV failure ({1}): {2}",
+                        jid, exception.getClass().getSimpleName(), exception.getMessage());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppDeviceSyncException) {
+                logger.log(WARNING, "[{0}] USync failure: {1}", jid, exception.getMessage());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppHistorySyncException) {
+                logger.log(WARNING, "[{0}] History sync failure: {1}", jid, exception.getMessage());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppMalformedJidException
+                    || exception instanceof WhatsAppABPropTypeMismatchException
+                    || exception instanceof WhatsAppServerRuntimeException) {
+                logger.log(WARNING, "[{0}] {1}: {2}",
+                        jid, exception.getClass().getSimpleName(), exception.getMessage());
+                return Result.DISCARD;
+            }
+
+            if (exception instanceof WhatsAppConnectionException
+                    || exception instanceof WhatsAppCorruptedStoreException
+                    || exception instanceof WhatsAppRegistrationException) {
+                logger.log(ERROR, "[{0}] Fatal failure ({1}): {2}",
+                        jid, exception.getClass().getSimpleName(), exception.getMessage());
+                if (printer != null) {
+                    printer.accept(whatsapp, exception);
+                }
+                return Result.DISCONNECT;
             }
 
             var fatal = exception.isFatal();
-            logger.log(ERROR, "[{0}] Socket failure at {1}: {2} failure", jid, exception.getClass().getSimpleName(), fatal ? "Fatal" : "Ignored");
+            logger.log(ERROR, "[{0}] Unhandled {1} ({2})",
+                    jid, exception.getClass().getSimpleName(), fatal ? "fatal" : "ignored");
             if (printer != null) {
                 printer.accept(whatsapp, exception);
             }

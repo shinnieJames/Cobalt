@@ -97,9 +97,34 @@ public interface SocketClientLayerContext {
     /**
      * Sets the next layer context in the inbound processing chain.
      *
+     * <p>The next layer is the one immediately above this one in the
+     * chain — inbound bytes produced by this layer flow to the next layer.
+     *
      * @param next the next layer context
      */
     default void setNextLayer(SocketClientLayerContext next) {
+    }
+
+    /**
+     * Sets the previous layer context in the outbound processing chain.
+     *
+     * <p>The previous layer is the one immediately below this one in the
+     * chain — outbound bytes produced by this layer flow to the previous
+     * layer, which eventually reaches the transport and the channel.
+     *
+     * @param prev the previous layer context
+     */
+    default void setPrevLayer(SocketClientLayerContext prev) {
+    }
+
+    /**
+     * Returns the previous layer in the outbound processing chain, or
+     * {@code null} if this is the head of the chain (the transport).
+     *
+     * @return the previous layer context, or {@code null} for the head
+     */
+    default SocketClientLayerContext prevLayer() {
+        return null;
     }
 
     /**
@@ -110,6 +135,27 @@ public interface SocketClientLayerContext {
      * during unregistration, before the channel is closed.
      */
     void onDisconnect();
+
+    /**
+     * Offers a pending blocking-read request to this layer context.
+     *
+     * <p>Used during synchronous handshake phases (proxy handshake,
+     * WebSocket HTTP upgrade, Noise handshake) where a caller thread
+     * blocks until the selector thread delivers bytes into a specific
+     * destination buffer.
+     *
+     * <p>The default implementation refuses the request.  The selector
+     * walks the chain from tail to head and routes the pending read to
+     * the first context that accepts it — normally whichever layer is
+     * currently the topmost of the stack during the handshake phase.
+     *
+     * @param read the pending read request
+     * @return {@code true} if this context accepted the request
+     */
+    default boolean setPendingRead(SocketClientPendingRead read) {
+        return false;
+    }
+
     /**
      * Returns whether this layer context is currently handshaking.
      *
@@ -192,10 +238,14 @@ public interface SocketClientLayerContext {
         return null;
     }
     /**
-     * Processes outbound data through this layer and writes to the channel.
+     * Processes outbound data through this layer.
      *
-     * <p>The default implementation writes the buffers directly to the
-     * channel without any transformation.
+     * <p>Outbound flow walks <em>down</em> the chain (from app toward
+     * transport), opposite to the inbound flow.  The default implementation
+     * delegates to {@link #prevLayer()}; the transport context at the head
+     * of the chain has no previous layer and writes directly to the channel.
+     * Layers that transform outbound bytes (TLS wrap, framing, compression)
+     * override this method to apply their transformation before delegating.
      *
      * @param channel the socket channel to write to
      * @param buffers the data buffers to write
@@ -205,6 +255,10 @@ public interface SocketClientLayerContext {
      * @throws IOException if an I/O error occurs during writing
      */
     default boolean processOutbound(SocketChannel channel, ByteBuffer[] buffers, int offset, int count) throws IOException {
+        var prev = prevLayer();
+        if (prev != null) {
+            return prev.processOutbound(channel, buffers, offset, count);
+        }
         channel.write(buffers, offset, count);
         return true;
     }

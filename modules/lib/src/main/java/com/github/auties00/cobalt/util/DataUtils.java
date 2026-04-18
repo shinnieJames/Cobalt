@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.util;
 
+import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
@@ -23,9 +24,20 @@ public final class DataUtils {
     private static final SecureRandom RANDOM;
 
     /**
-     * Singleton empty byte array returned by zero-length helpers.
+     * Shared empty byte array, safe to use as a sentinel for zero-length
+     * payloads.
      */
-    private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
+    public static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
+
+    /**
+     * Shared empty heap {@link ByteBuffer}, safe to use as a sentinel for
+     * zero-length buffer payloads.
+     *
+     * @implNote A zero-capacity buffer exposes no mutable state (position
+     *     and limit are fixed at {@code 0}), so a single shared instance is
+     *     safe to reuse across threads.
+     */
+    public static final ByteBuffer EMPTY_BYTE_BUFFER = ByteBuffer.allocate(0);
 
     /**
      * Character table used by {@link #randomHex(int)} to produce uppercase

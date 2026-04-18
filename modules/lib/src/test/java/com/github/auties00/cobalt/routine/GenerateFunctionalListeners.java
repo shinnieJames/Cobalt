@@ -36,17 +36,18 @@ private void printFunctionalMethod(Method method) {
             .collect(Collectors.joining(", "));
 
     var functionalMethodName = "add%sListener".formatted(originalMethodName.substring(2));
-    var functionalMethodParameters = "WhatsappFunctionalListener." + switch (method.getParameters().length) {
+    var functionalMethodParameters = "WhatsappClientListenerConsumer." + switch (method.getParameters().length) {
         case 0 -> "Empty consumer";
         case 1 -> "Unary<%s> consumer".formatted(getParameterType(method.getParameters()[0]));
         case 2 -> "Binary<%s, %s> consumer".formatted(getParameterType(method.getParameters()[0]), getParameterType(method.getParameters()[1]));
         case 3 -> "Ternary<%s, %s, %s> consumer".formatted(getParameterType(method.getParameters()[0]), getParameterType(method.getParameters()[1]), getParameterType(method.getParameters()[2]));
-        default -> throw new IllegalStateException("Unexpected value: " + method.getParameters().length);
+        case 4 -> "Quaternary<%s, %s, %s, %s> consumer".formatted(getParameterType(method.getParameters()[0]), getParameterType(method.getParameters()[1]), getParameterType(method.getParameters()[2]), getParameterType(method.getParameters()[3]));
+        default -> throw new IllegalStateException("Unexpected parameters count(" + method.getParameters().length + ") for listener " + method.getName());
     };
     System.out.printf("""
-                public Whatsapp %s(%s) {
+                public WhatsAppClient %s(%s) {
                     Objects.requireNonNull(consumer, "consumer cannot be null");
-                    addListener(new WhatsappListener() {
+                    addListener(new WhatsAppListener() {
                         @Override
                           public void %s(%s) {
                               consumer.accept(%s);

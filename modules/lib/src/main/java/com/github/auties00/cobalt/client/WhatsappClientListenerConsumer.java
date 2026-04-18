@@ -81,4 +81,26 @@ public sealed interface WhatsappClientListenerConsumer {
          */
         void accept(F first, S second, T third);
     }
+
+    /**
+     * A quaternary functional consumer used for listener overloads whose
+     * underlying event carries four payloads of interest.
+     *
+     * @param <F> the first payload type
+     * @param <S> the second payload type
+     * @param <T> the third payload type
+     * @param <FO> the fourth payload type
+     */
+    @FunctionalInterface
+    non-sealed interface Quaternary<F, S, T, FO> extends WhatsappClientListenerConsumer {
+        /**
+         * Invokes the consumer with the given payloads.
+         *
+         * @param first  the first event payload
+         * @param second the second event payload
+         * @param third  the third event payload
+         * @param fourth the fourth event payload
+         */
+        void accept(F first, S second, T third, FO fourth);
+    }
 }

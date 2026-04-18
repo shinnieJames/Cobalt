@@ -1,9 +1,11 @@
 package com.github.auties00.cobalt.socket.layer.application.whatsapp;
 
 import com.github.auties00.cobalt.socket.threading.SocketClientInboundResult;
+import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
 import com.github.auties00.cobalt.socket.layer.SocketClientLayerListener;
 import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayerContext;
 import com.github.auties00.cobalt.socket.threading.SocketClientPendingRead;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -41,7 +43,7 @@ import java.util.concurrent.Executors;
  *     Cobalt because frames are processed one at a time from the selector
  *     thread rather than buffered in a binary accumulator.
  */
-public final class WhatsAppSocketClientLayerContext implements SocketClientApplicationLayerContext {
+final class WhatsAppSocketClientLayerContext implements SocketClientApplicationLayerContext {
     /**
      * The size in bytes of the int24 length prefix (3 bytes).
      *
@@ -158,6 +160,13 @@ public final class WhatsAppSocketClientLayerContext implements SocketClientAppli
     private volatile ExecutorService listenerExecutor;
 
     /**
+     * The previous layer context in the chain (the layer below WhatsApp).
+     * Outbound bytes flow to this layer.  The WhatsApp context is the tail
+     * of the chain, so it has no next layer — only a prev.
+     */
+    private volatile SocketClientLayerContext prevLayer;
+
+    /**
      * Creates an application layer context for the given listener.
      *
      * @implNote ADAPTED: WAFrameSocket.FrameSocket constructor — WA Web accepts
@@ -183,8 +192,18 @@ public final class WhatsAppSocketClientLayerContext implements SocketClientAppli
      * @param listener the non-null listener to receive datagrams and close events
      * @return a new {@code WhatsAppSocketClientLayerContext}
      */
-    public static WhatsAppSocketClientLayerContext newAppContext(SocketClientLayerListener listener) {
+    static WhatsAppSocketClientLayerContext newAppContext(SocketClientLayerListener listener) {
         return new WhatsAppSocketClientLayerContext(listener);
+    }
+
+    @Override
+    public void setPrevLayer(SocketClientLayerContext prev) {
+        this.prevLayer = prev;
+    }
+
+    @Override
+    public SocketClientLayerContext prevLayer() {
+        return prevLayer;
     }
 
     /**
@@ -205,18 +224,10 @@ public final class WhatsAppSocketClientLayerContext implements SocketClientAppli
     public ByteBuffer inboundTarget() {
         if (handshakeMode) {
             var read = pendingHandshakeRead;
-            return read != null ? read.buffer : EMPTY_BUFFER;
+            return read != null ? read.buffer : DataUtils.EMPTY_BYTE_BUFFER;
         }
         return datagramBuffer != null ? datagramBuffer : datagramLengthBuffer;
     }
-
-    /**
-     * An empty buffer returned when no handshake read is pending.
-     *
-     * @implNote NO_WA_BASIS — Cobalt-specific sentinel for the handshake
-     *     mode inbound target.
-     */
-    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
     /**
      * Processes inbound bytes that were placed into the current

@@ -34,6 +34,12 @@ import java.nio.ByteOrder;
  *
  * <p>Instances of this class are <b>not</b> thread-safe.  A single
  * decoder must be used by one reader thread at a time.
+ *
+ * @implNote No WhatsApp Web counterpart: WA Web relies on the browser's
+ *     native {@code WebSocket} object, so the RFC 6455 wire format is
+ *     never parsed by application code.  Cobalt implements the wire
+ *     format itself because it talks to the server directly over a
+ *     selector-backed socket pipeline.
  */
 public final class WebSocketFrameDecoder {
     private static final int READ_HEADER_FIRST = 0;
@@ -303,6 +309,11 @@ public final class WebSocketFrameDecoder {
      * Routes payload consumption to the appropriate handler based on the
      * current frame's opcode.
      *
+     * @implNote Text frames ({@link WebSocketFrameConstants#OPCODE_TEXT})
+     *     are legal per RFC 6455 but are never produced by the WhatsApp
+     *     server, so their payload is discarded rather than delivered:
+     *     keeping the branch avoids corrupting the stream in the face of
+     *     a hypothetical rogue text frame.
      * @param source the buffer containing incoming bytes
      * @return a decoded frame result, or {@link WebSocketDecodedFrame#none()}
      *         if no complete result is available yet

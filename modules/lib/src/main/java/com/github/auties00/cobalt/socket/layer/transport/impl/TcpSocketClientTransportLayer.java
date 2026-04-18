@@ -26,36 +26,18 @@ public final class TcpSocketClientTransportLayer implements SocketClientTranspor
      */
     private SocketChannel channel;
 
-    /**
-     * The per-connection transport context.
-     */
-    private TcpSocketClientTransportLayerContext transportContext;
-
     public TcpSocketClientTransportLayer() {
 
     }
 
     @Override
     public void connect(InetSocketAddress address, SocketClientLayerListener listener) throws IOException {
-        this.transportContext = new TcpSocketClientTransportLayerContext();
+        var transportContext = new TcpSocketClientTransportLayerContext();
         this.channel = SocketChannel.open();
         channel.configureBlocking(false);
         channel.connect(address);
         SocketClientSelector.INSTANCE.register(channel, transportContext);
-        synchronized (transportContext.connectionLock()) {
-            while (!channel.isConnected() && channel.isOpen()) {
-                try {
-                    transportContext.connectionLock().wait(30_000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Connect interrupted", e);
-                }
-            }
-        }
-        if (!channel.isConnected()) {
-            throw new IOException("Connection failed");
-        }
-        transportContext.setConnected(true);
+        SocketClientSelector.INSTANCE.awaitConnect(channel, 30_000);
     }
 
     @Override
@@ -82,7 +64,7 @@ public final class TcpSocketClientTransportLayer implements SocketClientTranspor
             throw new IOException("Failed to post read request");
         }
         synchronized (read.lock) {
-            while (transportContext.isConnected() && (read.length == -1 || (fully && read.length >= 0 && read.buffer.hasRemaining()))) {
+            while (SocketClientSelector.INSTANCE.isConnected(channel) && (read.length == -1 || (fully && read.length >= 0 && read.buffer.hasRemaining()))) {
                 try {
                     read.lock.wait(30_000);
                 } catch (InterruptedException e) {

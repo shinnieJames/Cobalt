@@ -158,10 +158,12 @@ final class InMemoryStoreFactory implements WhatsAppStoreFactory {
             case WEB -> WhatsAppDevice.web();
             case MOBILE -> WhatsAppDevice.ios(false);
         };
+        var directory = StorePathUtils.getSessionDirectory(clientType, this.directory, uuid.toString());
         return new InMemoryStoreBuilder()
                 .uuid(Objects.requireNonNullElseGet(uuid, UUID::randomUUID))
                 .clientType(clientType)
                 .device(device)
+                .directory(directory)
                 .build();
     }
 
@@ -181,7 +183,9 @@ final class InMemoryStoreFactory implements WhatsAppStoreFactory {
             case WEB -> WhatsAppDevice.web();
             case MOBILE -> WhatsAppDevice.ios(false);
         };
+        var directory = StorePathUtils.getSessionDirectory(clientType, this.directory, String.valueOf(phoneNumber));
         return new InMemoryStoreBuilder()
+                .directory(directory)
                 .uuid(UUID.randomUUID())
                 .phoneNumber(phoneNumber)
                 .clientType(clientType)

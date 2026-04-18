@@ -529,12 +529,6 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     protected Instant pairingTimestamp;
 
-    protected ConcurrentHashMap<String, Integer> serverAssignedLabelIdMap;
-
-    protected Boolean shareStatusToFacebook;
-
-    protected Boolean shareStatusToInstagram;
-
     protected final ConcurrentMap<String, com.github.auties00.cobalt.model.chat.ChatMessageInfo> peerMessages;
 
     protected final System.Logger logger;
@@ -635,7 +629,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.missingSyncKeys = requireNonNullElseGet(missingSyncKeys, ConcurrentHashMap::new);
         this.advSecretKey = advSecretKey;
         this.verifiedBusinessNames = requireNonNullElseGet(verifiedBusinessNames, ConcurrentHashMap::new);
-        this.directory = directory;
+        this.directory = Objects.requireNonNull(directory, "directory cannot be null");
         this.primaryDeviceSupportsSyncdRecovery = primaryDeviceSupportsSyncdRecovery;
         this.disableLinkPreviews = disableLinkPreviews;
         this.relayAllCalls = relayAllCalls;
@@ -660,7 +654,6 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.callLogStates = new ConcurrentHashMap<>();
         this.botWelcomeRequestStates = new ConcurrentHashMap<>();
         this.aiThreadTitles = new ConcurrentHashMap<>();
-        this.serverAssignedLabelIdMap = new ConcurrentHashMap<>();
         this.recentEmojiWeights = new CopyOnWriteArrayList<>();
         this.mentionEveryoneMuteExpirations = requireNonNullElseGet(mentionEveryoneMuteExpirations, ConcurrentHashMap::new);
         this.orphanMutationEntries = new ConcurrentHashMap<>();
@@ -3229,76 +3222,6 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public WhatsAppStore setPairingTimestamp(Instant pairingTimestamp) {
         this.pairingTimestamp = pairingTimestamp;
-        return this;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @implNote WAWebLabelCollection.addToServerAssignedLabelIdMap
-     */
-    @Override
-    public Map<String, Integer> serverAssignedLabelIdMap() {
-        return Collections.unmodifiableMap(serverAssignedLabelIdMap);
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @implNote WAWebLabelCollection.addToServerAssignedLabelIdMap
-     */
-    @Override
-    public void addServerAssignedLabelId(String labelId, Integer predefinedId) {
-        Objects.requireNonNull(labelId, "labelId cannot be null");
-        if (predefinedId == null) { // WAWebLabelCollection.addToServerAssignedLabelIdMap: no-op when predefinedId is undefined
-            return;
-        }
-        // WAWebLabelCollection.addToServerAssignedLabelIdMap:
-        // $LabelCollectionImpl$p_1.set(labelId, predefinedId) — JS Map#set unconditionally writes,
-        // but the WA Web call site only fires once per label-id and never overwrites afterwards;
-        // putIfAbsent preserves that single-write semantic against repeated invocations.
-        serverAssignedLabelIdMap.putIfAbsent(labelId, predefinedId);
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToFB
-     */
-    @Override
-    public Optional<Boolean> shareStatusToFacebook() {
-        return Optional.ofNullable(shareStatusToFacebook);
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToFB
-     */
-    @Override
-    public WhatsAppStore setShareStatusToFacebook(Boolean value) {
-        this.shareStatusToFacebook = value;
-        return this;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToIG
-     */
-    @Override
-    public Optional<Boolean> shareStatusToInstagram() {
-        return Optional.ofNullable(shareStatusToInstagram);
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToIG
-     */
-    @Override
-    public WhatsAppStore setShareStatusToInstagram(Boolean value) {
-        this.shareStatusToInstagram = value;
         return this;
     }
 

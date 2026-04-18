@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayer;
 import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
 import com.github.auties00.cobalt.client.WhatsAppClientProxy;
 import com.github.auties00.cobalt.client.WhatsAppClientProxyAuthenticator;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -60,7 +61,7 @@ public final class SocksSocketClientTunnelLayer implements SocketClientTunnelLay
     private static final int SOCKS4_REQUEST_NO_IDENTD = 0x5C;
     private static final int SOCKS4_REQUEST_IDENTD_MISMATCH = 0x5D;
     private static final byte SOCKS4_NULL_TERMINATOR = 0x00;
-    private static final byte[] SOCKS4_EMPTY_USER_ID = new byte[0];
+    private static final byte[] SOCKS4_EMPTY_USER_ID = DataUtils.EMPTY_BYTE_ARRAY;
     private static final byte[] SOCKS4A_SENTINEL_IP = {0x00, 0x00, 0x00, 0x01};
     private static final int IPV4_ADDR_LENGTH = 4;
     private static final int IPV6_ADDR_LENGTH = 16;
@@ -150,7 +151,7 @@ public final class SocksSocketClientTunnelLayer implements SocketClientTunnelLay
         var ipBytes = address.getAddress();
         var userIdBytes = v4.authenticator()
                 .map(auth -> auth.userId().getBytes(StandardCharsets.ISO_8859_1))
-                .orElse(SOCKS4_EMPTY_USER_ID);
+                .orElse(DataUtils.EMPTY_BYTE_ARRAY);
         var request = ByteBuffer.allocate(9 + userIdBytes.length);
         request.put(SOCKS_VERSION_4);
         request.put(CMD_CONNECT);
@@ -174,7 +175,7 @@ public final class SocksSocketClientTunnelLayer implements SocketClientTunnelLay
     private void performSocks4aHandshake(WhatsAppClientProxy.Socks.V4.Remote v4a) throws IOException {
         var userIdBytes = v4a.authenticator()
                 .map(auth -> auth.userId().getBytes(StandardCharsets.ISO_8859_1))
-                .orElse(SOCKS4_EMPTY_USER_ID);
+                .orElse(DataUtils.EMPTY_BYTE_ARRAY);
         var domainBytes = host.getBytes(StandardCharsets.ISO_8859_1);
         var request = ByteBuffer.allocate(10 + userIdBytes.length + domainBytes.length);
         request.put(SOCKS_VERSION_4);

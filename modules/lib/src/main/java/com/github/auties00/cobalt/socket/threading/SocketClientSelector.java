@@ -2,10 +2,11 @@ package com.github.auties00.cobalt.socket.threading;
 
 import com.github.auties00.cobalt.socket.layer.application.SocketClientApplicationLayerContext;
 import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayerContext;
-import com.github.auties00.cobalt.socket.layer.transport.SocketClientTransportLayerContext;
 
 import java.io.IOException;
 import java.lang.System.Logger.Level;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
@@ -70,20 +71,63 @@ public final class SocketClientSelector implements Runnable {
     }
 
     /**
-     * Registers a channel with this selector.
+     * Registers a channel with this selector, attaching the given head
+     * layer context (typically the transport context) as the first entry
+     * in the attachment's chain.
      *
      * <p>Starts the selector virtual thread if it is not already running.
      *
-     * @param channel          the non-blocking socket channel
-     * @param transportContext the transport-level state for this connection
+     * @param channel the non-blocking socket channel
+     * @param head    the head layer context for this connection's chain
      * @throws IOException if registration fails
      */
-    public synchronized void register(SocketChannel channel, SocketClientTransportLayerContext transportContext) throws IOException {
+    public synchronized void register(SocketChannel channel, SocketClientLayerContext head) throws IOException {
         selector.wakeup();
-        channel.register(selector, SelectionKey.OP_CONNECT, AttachmentData.newConnectionContext(transportContext));
+        channel.register(selector, SelectionKey.OP_CONNECT, AttachmentData.newConnectionContext(head));
         if (selectorThread == null || !selectorThread.isAlive()) {
             selectorThread = Thread.startVirtualThread(this);
         }
+    }
+
+    /**
+     * Blocks the current thread until the given channel is connected
+     * (that is, the selector thread has processed the {@code OP_CONNECT}
+     * event) or until the timeout elapses.
+     *
+     * <p>On success, marks the attachment as connected and returns.  On
+     * failure or timeout, throws an {@link IOException}.
+     *
+     * @param channel   the channel
+     * @param timeoutMs the maximum time to wait, in milliseconds
+     * @throws IOException if the channel never connects or the wait is
+     *                     interrupted
+     */
+    public void awaitConnect(SocketChannel channel, long timeoutMs) throws IOException {
+        var key = channel.keyFor(selector);
+        if (key == null) {
+            throw new IOException("Channel not registered");
+        }
+        var ctx = (AttachmentData) key.attachment();
+        var lock = ctx.connectionLock();
+        synchronized (lock) {
+            var deadline = System.currentTimeMillis() + timeoutMs;
+            while (!channel.isConnected() && channel.isOpen()) {
+                var remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                try {
+                    lock.wait(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Connect interrupted", e);
+                }
+            }
+        }
+        if (!channel.isConnected()) {
+            throw new IOException("Connection failed");
+        }
+        ctx.setConnected(true);
     }
 
     /**
@@ -118,15 +162,14 @@ public final class SocketClientSelector implements Runnable {
         key.cancel();
 
         var ctx = (AttachmentData) key.attachment();
-        var transportCtx = ctx.transportContext();
 
         // Notify connection lock
-        synchronized (transportCtx.connectionLock()) {
-            transportCtx.connectionLock().notifyAll();
+        synchronized (ctx.connectionLock()) {
+            ctx.connectionLock().notifyAll();
         }
 
         // Use connected CAS to guard single notification
-        if (!transportCtx.compareAndSetConnected(true, false)) {
+        if (!ctx.compareAndSetConnected(true, false)) {
             try {
                 channel.close();
             } catch (IOException _) {
@@ -137,7 +180,7 @@ public final class SocketClientSelector implements Runnable {
 
         // Notify all layer contexts before closing the channel so that
         // the TLS layer can send its close_notify alert (RFC 8446 §6.1)
-        ctx.bottomProcessingContext().onDisconnect();
+        ctx.head().onDisconnect();
 
         try {
             channel.close();
@@ -163,15 +206,21 @@ public final class SocketClientSelector implements Runnable {
             return false;
         }
 
-        return ((AttachmentData) key.attachment()).transportContext().isConnected();
+        return ((AttachmentData) key.attachment()).isConnected();
     }
 
     /**
-     * Posts a blocking read request for the pre-tunnel phase.
+     * Posts a blocking read request during a synchronous handshake phase.
+     *
+     * <p>Walks the layer chain from tail to head and delivers the read to
+     * the first context that accepts it.  This lets each handshake phase
+     * route the read to whichever layer is currently topmost — the tunnel
+     * during a proxy handshake, the WebSocket layer during the HTTP
+     * upgrade, the WhatsApp layer during the Noise handshake.
      *
      * @param channel the channel
      * @param read    the pending read request
-     * @return {@code true} if the read was posted
+     * @return {@code true} if some layer accepted the read
      */
     public boolean addRead(SocketChannel channel, SocketClientPendingRead read) {
         var key = channel.keyFor(selector);
@@ -180,12 +229,7 @@ public final class SocketClientSelector implements Runnable {
         }
 
         var ctx = (AttachmentData) key.attachment();
-        var tunnelCtx = ctx.tunnelContext();
-        if (tunnelCtx.isEmpty()) {
-            return false;
-        }
-
-        if (!tunnelCtx.get().setPendingRead(read)) {
+        if (!ctx.offerPendingRead(read)) {
             return false;
         }
 
@@ -216,7 +260,7 @@ public final class SocketClientSelector implements Runnable {
         }
 
         var ctx = (AttachmentData) key.attachment();
-        var pendingWrites = ctx.transportContext().pendingWrites();
+        var pendingWrites = ctx.pendingWrites();
         var hasWrites = false;
         for (var buffer : buffers) {
             if (buffer != null && buffer.hasRemaining()) {
@@ -319,7 +363,7 @@ public final class SocketClientSelector implements Runnable {
 
         synchronized (lock) {
             var deadline = System.currentTimeMillis() + timeout;
-            while (!securityContext.isHandshakeComplete() && ctx.transportContext().isConnected()) {
+            while (!securityContext.isHandshakeComplete() && ctx.isConnected()) {
                 var remaining = deadline - System.currentTimeMillis();
                 if (remaining <= 0) {
                     throw new IOException("Handshake timed out");
@@ -444,14 +488,13 @@ public final class SocketClientSelector implements Runnable {
         }
 
         var channel = (SocketChannel) key.channel();
-        var transportCtx = ctx.transportContext();
 
         try {
             if (key.isConnectable()) {
                 if (channel.finishConnect()) {
                     key.interestOps(SelectionKey.OP_READ);
-                    synchronized (transportCtx.connectionLock()) {
-                        transportCtx.connectionLock().notifyAll();
+                    synchronized (ctx.connectionLock()) {
+                        ctx.connectionLock().notifyAll();
                     }
                 }
             }
@@ -461,6 +504,13 @@ public final class SocketClientSelector implements Runnable {
             if (handshakingCtx.isPresent()) {
                 var hCtx = handshakingCtx.get();
                 if (hCtx.isTasksPending()) {
+                    return;
+                }
+                // Flow any readable bytes through the chain first so the
+                // handshaking layer's netInBuffer is populated through the
+                // outer layers' unwraps (matters for nested TLS).
+                if (key.isReadable() && !processRead(channel, ctx)) {
+                    unregister(channel);
                     return;
                 }
                 if (!processHandshake(channel, ctx, key, hCtx)) {
@@ -477,7 +527,7 @@ public final class SocketClientSelector implements Runnable {
             }
             if (key.isWritable()) {
                 processWrite(channel, ctx);
-                var hasPendingWrites = !transportCtx.pendingWrites().isEmpty() || ctx.hasPendingOutput();
+                var hasPendingWrites = !ctx.pendingWrites().isEmpty() || ctx.hasPendingOutput();
                 key.interestOps(updateWriteInterestOps(key.interestOps(), hasPendingWrites));
             }
         } catch (Exception _) {
@@ -491,7 +541,7 @@ public final class SocketClientSelector implements Runnable {
     }
 
     private boolean processRead(SocketChannel channel, AttachmentData ctx) throws IOException {
-        var bottom = ctx.bottomProcessingContext();
+        var bottom = ctx.head();
         var target = bottom.inboundTarget();
         var bytesRead = channel.read(target);
         var result = bottom.processInbound(bytesRead);
@@ -505,10 +555,9 @@ public final class SocketClientSelector implements Runnable {
             case SocketClientInboundResult.Continue _, SocketClientInboundResult.Buffering _ -> true;
             case SocketClientInboundResult.Close _ -> false;
             case SocketClientInboundResult.NeedsWrite needsWrite -> {
-                var transportCtx = ctx.transportContext();
                 for (var buf : needsWrite.data()) {
                     if (buf != null && buf.hasRemaining()) {
-                        transportCtx.pendingWrites().offer(buf);
+                        ctx.pendingWrites().offer(buf);
                     }
                 }
                 try {
@@ -539,17 +588,17 @@ public final class SocketClientSelector implements Runnable {
     }
 
     private boolean processWrite(SocketChannel channel, AttachmentData ctx) throws IOException {
-        var transportCtx = ctx.transportContext();
-        while (transportCtx.isConnected()) {
-            var claim = transportCtx.pendingWrites().claim();
+        var tail = ctx.tail();
+        while (ctx.isConnected()) {
+            var claim = ctx.pendingWrites().claim();
             if (claim.isEmpty()) {
                 return true;
             }
 
-            var success = transportCtx.processOutbound(channel, claim.array(), claim.offset(), claim.count());
+            var success = tail.processOutbound(channel, claim.array(), claim.offset(), claim.count());
 
             var consumed = countConsumed(claim);
-            transportCtx.pendingWrites().release(consumed);
+            ctx.pendingWrites().release(consumed);
             if (!success) {
                 return false;
             }
@@ -588,69 +637,138 @@ public final class SocketClientSelector implements Runnable {
      * so the selector can never disagree with the factory about layer
      * positions.
      *
-     * <p>Typed accessors are kept only for what the selector genuinely
-     * needs position-awareness of — the bottom (transport) for the write
-     * queue and connection lifecycle, and the tunnel for the pre-tunnel
-     * blocking-read phase.  All other accesses walk the chain.
+     * <p>The attachment also owns the per-connection state that is not
+     * really "the transport's" — the outbound write queue, the connection
+     * lock, and the {@code connected} flag.  The transport layer context
+     * only owns the read buffer and its chain link.
      */
     private static final class AttachmentData {
-        /**
-         * Transport-level state: connection lifecycle, pending writes.
-         * Always the head of the chain.
-         */
-        private final SocketClientTransportLayerContext transportContext;
+        private static final int WRITES_CHUNK_CAPACITY = 64;
+        private static final VarHandle CONNECTED;
+
+        static {
+            try {
+                CONNECTED = MethodHandles.lookup().findVarHandle(AttachmentData.class, "connected", boolean.class);
+            } catch (ReflectiveOperationException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        }
 
         /**
-         * The layers in registration order, first entry is {@link #transportContext}.
-         * Short — typical depth is 3–5 entries.
+         * The layers in registration order, first entry is the head
+         * (the transport context).  Short — typical depth is 3–5 entries.
          */
         private final List<SocketClientLayerContext> layers;
 
-        private AttachmentData(SocketClientTransportLayerContext transportContext) {
-            this.transportContext = Objects.requireNonNull(transportContext);
+        /**
+         * Monitor used to block the connecting thread until the selector
+         * completes the non-blocking connect operation.
+         */
+        private final Object connectionLock;
+
+        /**
+         * Lock-free MPSC queue of outbound buffers waiting to be written
+         * to the channel.  Owned by the connection, drained by the
+         * selector thread, produced into by caller-thread
+         * {@code sendBinary} calls.
+         */
+        private final SocketClientPendingWrites pendingWrites;
+
+        /**
+         * Whether the underlying channel is connected and registered with
+         * the selector.  Accessed via the {@link #CONNECTED} VarHandle for
+         * atomic transitions.
+         */
+        @SuppressWarnings("unused")
+        private volatile boolean connected;
+
+        private AttachmentData(SocketClientLayerContext head) {
+            Objects.requireNonNull(head);
             this.layers = new ArrayList<>(5);
-            this.layers.add(transportContext);
+            this.layers.add(head);
+            this.connectionLock = new Object();
+            this.pendingWrites = new SocketClientPendingWrites(WRITES_CHUNK_CAPACITY);
         }
 
         /**
-         * Creates a new connection context wrapping the given transport context.
+         * Creates a new connection attachment whose chain begins at the
+         * given head context.
          *
-         * @param transportContext the transport-level state for the connection
+         * @param head the head of the layer chain (typically the transport context)
          * @return a new {@code AttachmentData}
          */
-        static AttachmentData newConnectionContext(SocketClientTransportLayerContext transportContext) {
-            return new AttachmentData(transportContext);
+        static AttachmentData newConnectionContext(SocketClientLayerContext head) {
+            return new AttachmentData(head);
         }
 
         /**
-         * Returns the transport-level context.
+         * Returns the head of the layer chain — always the transport
+         * context, the one the selector reads bytes into.
          *
-         * @return the transport context, never {@code null}
+         * @return the head context, never {@code null}
          */
-        SocketClientTransportLayerContext transportContext() {
-            return transportContext;
+        SocketClientLayerContext head() {
+            return layers.getFirst();
         }
 
         /**
-         * Returns the bottommost processing layer context.
+         * Returns the tail of the layer chain — the topmost layer, where
+         * outbound processing begins.
          *
-         * <p>This is always the transport context — the one that the
-         * selector reads bytes into and calls {@code processInbound()} on.
-         *
-         * @return the transport layer context, never {@code null}
+         * @return the tail context, never {@code null}
          */
-        SocketClientLayerContext bottomProcessingContext() {
-            return transportContext;
+        SocketClientLayerContext tail() {
+            return layers.getLast();
         }
 
         /**
-         * Returns the first layer context above the transport layer.
+         * Returns the outbound write queue for this connection.
          *
-         * @return the first layer above transport, or {@code null} if no
-         *         processing layers are registered
+         * @return the pending-writes queue, never {@code null}
          */
-        SocketClientLayerContext firstLayerAboveTransport() {
-            return layers.size() >= 2 ? layers.get(1) : null;
+        SocketClientPendingWrites pendingWrites() {
+            return pendingWrites;
+        }
+
+        /**
+         * Returns the monitor used to notify threads waiting for the
+         * non-blocking connect to complete.
+         *
+         * @return the connection lock, never {@code null}
+         */
+        Object connectionLock() {
+            return connectionLock;
+        }
+
+        /**
+         * Returns whether the underlying channel is currently connected.
+         *
+         * @return {@code true} if connected
+         */
+        boolean isConnected() {
+            return (boolean) CONNECTED.getVolatile(this);
+        }
+
+        /**
+         * Sets the connected flag.
+         *
+         * @param value {@code true} to mark as connected, {@code false}
+         *              to mark as disconnected
+         */
+        void setConnected(boolean value) {
+            CONNECTED.setVolatile(this, value);
+        }
+
+        /**
+         * Atomically transitions the connected flag from {@code expected}
+         * to {@code newValue}, returning {@code true} on success.
+         *
+         * @param expected the expected current value
+         * @param newValue the new value
+         * @return {@code true} if the compare-and-set succeeded
+         */
+        boolean compareAndSetConnected(boolean expected, boolean newValue) {
+            return CONNECTED.compareAndSet(this, expected, newValue);
         }
 
         /**
@@ -675,18 +793,21 @@ public final class SocketClientSelector implements Runnable {
         }
 
         /**
-         * Appends a layer context to the tail of the chain and wires it as
-         * the previous tail's {@code nextLayer}.
+         * Appends a layer context to the tail of the chain and wires both
+         * directions of the link: the previous tail's {@code nextLayer}
+         * points forward to the new context, and the new context's
+         * {@code prevLayer} points back to the previous tail.
+         *
+         * <p>The forward link drives the inbound walk (head to tail); the
+         * backward link drives the outbound walk (tail to head).
          *
          * @param layerContext the context to register
          */
         void addLayerContext(SocketClientLayerContext layerContext) {
-            if (layerContext == transportContext) {
-                return;
-            }
             var previous = layers.getLast();
             layers.add(layerContext);
             previous.setNextLayer(layerContext);
+            layerContext.setPrevLayer(previous);
         }
 
         /**
@@ -702,6 +823,22 @@ public final class SocketClientSelector implements Runnable {
                 }
             }
             return Optional.empty();
+        }
+
+        /**
+         * Walks the chain from tail to head and offers the pending read
+         * to each layer until one accepts it.
+         *
+         * @param read the pending read request
+         * @return {@code true} if some layer accepted the read
+         */
+        boolean offerPendingRead(SocketClientPendingRead read) {
+            for (var i = layers.size() - 1; i >= 0; i--) {
+                if (layers.get(i).setPendingRead(read)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**

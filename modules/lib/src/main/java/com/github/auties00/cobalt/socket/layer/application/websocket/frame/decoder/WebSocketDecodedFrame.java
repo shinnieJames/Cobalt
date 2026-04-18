@@ -4,6 +4,12 @@ import java.nio.ByteBuffer;
 
 /**
  * A decoded WebSocket frame, produced by {@link WebSocketFrameDecoder}.
+ *
+ * @implNote No WhatsApp Web counterpart: WA Web relies on the browser's
+ *     native {@code WebSocket} object, which surfaces complete frames as
+ *     {@code ArrayBuffer} payloads on {@code onmessage}.  Cobalt builds
+ *     this algebraic result type to propagate decoder outcomes through
+ *     the selector pipeline.
  */
 public sealed interface WebSocketDecodedFrame permits WebSocketDecodedFrame.None,
         WebSocketDecodedFrame.Invalid,
@@ -53,8 +59,14 @@ public sealed interface WebSocketDecodedFrame permits WebSocketDecodedFrame.None
      * Indicates that no complete frame is available yet.
      */
     final class None implements WebSocketDecodedFrame {
+        /**
+         * Singleton instance of {@code None}.
+         */
         private static final None INSTANCE = new None();
 
+        /**
+         * Prevents external instantiation.  Use {@link #none()}.
+         */
         private None() {
 
         }
@@ -65,8 +77,14 @@ public sealed interface WebSocketDecodedFrame permits WebSocketDecodedFrame.None
      * closed.
      */
     final class Invalid implements WebSocketDecodedFrame {
+        /**
+         * Singleton instance of {@code Invalid}.
+         */
         private static final Invalid INSTANCE = new Invalid();
 
+        /**
+         * Prevents external instantiation.  Use {@link #invalid()}.
+         */
         private Invalid() {
 
         }
@@ -76,8 +94,17 @@ public sealed interface WebSocketDecodedFrame permits WebSocketDecodedFrame.None
      * A data frame (binary or continuation) with its payload.
      */
     final class Data implements WebSocketDecodedFrame {
+        /**
+         * The unmasked payload chunk, as a read-mode buffer referencing
+         * the decoder's reusable internal array.
+         */
         private final ByteBuffer payload;
 
+        /**
+         * Creates a data frame wrapping the given payload.
+         *
+         * @param payload the unmasked payload chunk
+         */
         private Data(ByteBuffer payload) {
             this.payload = payload;
         }
@@ -96,10 +123,30 @@ public sealed interface WebSocketDecodedFrame permits WebSocketDecodedFrame.None
      * A control frame (ping, pong, or close) with its payload.
      */
     final class Control implements WebSocketDecodedFrame {
+        /**
+         * The control opcode ({@code 0x8} close, {@code 0x9} ping,
+         * {@code 0xA} pong).
+         */
         private final byte opcode;
+
+        /**
+         * The decoder-owned buffer holding the accumulated, unmasked
+         * payload bytes.
+         */
         private final byte[] payload;
+
+        /**
+         * The number of valid bytes in {@link #payload}.
+         */
         private final int length;
 
+        /**
+         * Creates a control frame wrapping the given opcode and payload.
+         *
+         * @param opcode  the control opcode
+         * @param payload the payload buffer
+         * @param length  the number of valid bytes in the payload buffer
+         */
         private Control(byte opcode, byte[] payload, int length) {
             this.opcode = opcode;
             this.payload = payload;

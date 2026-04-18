@@ -4,10 +4,10 @@ import com.github.auties00.cobalt.socket.threading.SocketClientInboundResult;
 import com.github.auties00.cobalt.socket.threading.SocketClientPendingRead;
 import com.github.auties00.cobalt.socket.layer.tunnel.SocketClientTunnelLayerContext;
 import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 
 /**
  * Default implementation of {@link SocketClientTunnelLayerContext} that handles
@@ -20,13 +20,17 @@ import java.nio.channels.SocketChannel;
  * passthrough to the next layer above.
  */
 final class CommonSocketTunnelLayerContext implements SocketClientTunnelLayerContext {
-    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
-
     /**
      * The next layer context in the chain (above tunnel).
      * Set via {@link #setNextLayer(SocketClientLayerContext)} by auto-chaining.
      */
     private volatile SocketClientLayerContext nextLayer;
+
+    /**
+     * The previous layer context in the chain (below tunnel).
+     * Set via {@link #setPrevLayer(SocketClientLayerContext)} by auto-chaining.
+     */
+    private volatile SocketClientLayerContext prevLayer;
 
     /**
      * Whether the tunnel has been established.
@@ -64,35 +68,42 @@ final class CommonSocketTunnelLayerContext implements SocketClientTunnelLayerCon
         this.nextLayer = next;
     }
 
+    @Override
+    public void setPrevLayer(SocketClientLayerContext prev) {
+        this.prevLayer = prev;
+    }
+
+    @Override
+    public SocketClientLayerContext prevLayer() {
+        return prevLayer;
+    }
+
     /**
-     * Returns the appropriate inbound target based on the tunnel phase.
+     * Returns the inbound target buffer.
      *
-     * <p>Pre-tunnel: returns the pending read's destination buffer.
-     * Post-tunnel: delegates to the next layer's inbound target.
+     * <p>When this tunnel is currently serving a proxy-handshake pending
+     * read, returns that read's buffer directly.  Otherwise delegates to
+     * the next layer so post-handshake bytes flow through to the next
+     * protocol layer (for example a TLS layer above the tunnel).
      *
      * @return the buffer to read into
      */
     @Override
     public ByteBuffer inboundTarget() {
-        if (tunnelled) {
-            var next = nextLayer;
-            return next != null ? next.inboundTarget() : EMPTY_BUFFER;
-        } else {
-            var read = pendingBinaryRead;
-            if (read != null) {
-                return read.buffer;
-            } else {
-                return EMPTY_BUFFER;
-            }
+        var read = pendingBinaryRead;
+        if (read != null) {
+            return read.buffer;
         }
+        var next = nextLayer;
+        return next != null ? next.inboundTarget() : DataUtils.EMPTY_BYTE_BUFFER;
     }
 
     /**
-     * Processes inbound bytes based on the tunnel phase.
+     * Processes inbound bytes.
      *
-     * <p>Pre-tunnel: updates the pending read request and notifies the
-     * waiting handshake thread.
-     * Post-tunnel: delegates to the next layer.
+     * <p>When this tunnel is currently serving a proxy-handshake pending
+     * read, updates that read and notifies the waiting handshake thread.
+     * Otherwise delegates to the next layer so bytes continue up the chain.
      *
      * @param bytesRead the number of bytes read, or -1 for end-of-stream
      * @return the processing result
@@ -100,7 +111,7 @@ final class CommonSocketTunnelLayerContext implements SocketClientTunnelLayerCon
      */
     @Override
     public SocketClientInboundResult processInbound(int bytesRead) throws IOException {
-        if (!tunnelled) {
+        if (pendingBinaryRead != null) {
             return processPreTunnelRead(bytesRead);
         }
         var next = nextLayer;
@@ -152,16 +163,16 @@ final class CommonSocketTunnelLayerContext implements SocketClientTunnelLayerCon
     /**
      * Sets the pending binary read request.
      *
-     * <p>Called by the handshake thread to post a read request
-     * that the selector will fulfill.
+     * <p>Refused if another read is already pending or if this tunnel
+     * has already been marked tunnelled (meaning any future handshake
+     * reads belong to a higher layer, not to the proxy).
      *
      * @param read the pending read request
-     * @return {@code true} if the read was posted, {@code false} if
-     *         another read is already pending
+     * @return {@code true} if the read was accepted
      */
     @Override
     public boolean setPendingRead(SocketClientPendingRead read) {
-        if (pendingBinaryRead != null) {
+        if (tunnelled || pendingBinaryRead != null) {
             return false;
         }
         pendingBinaryRead = read;
@@ -203,32 +214,5 @@ final class CommonSocketTunnelLayerContext implements SocketClientTunnelLayerCon
         if (next != null) {
             next.onDisconnect();
         }
-    }
-
-    /**
-     * Delegates outbound bytes up the chain so that any security layer
-     * above this tunnel gets to wrap them before they reach the channel.
-     *
-     * <p>Without this override, the default {@link SocketClientLayerContext#processOutbound}
-     * would write directly to the channel and short-circuit any TLS layer
-     * that sits above the tunnel in the new linked-list ordering (where
-     * end-to-end TLS is above the tunnel because the factory composes it
-     * as an outer wrapper around the proxy tunnel).
-     *
-     * @param channel the socket channel to write to
-     * @param buffers the data buffers
-     * @param offset  the offset into the buffers array
-     * @param count   the number of buffers to process
-     * @return {@code true} if all data was written successfully
-     * @throws IOException if an I/O error occurs during writing
-     */
-    @Override
-    public boolean processOutbound(SocketChannel channel, ByteBuffer[] buffers, int offset, int count) throws IOException {
-        var next = nextLayer;
-        if (next != null) {
-            return next.processOutbound(channel, buffers, offset, count);
-        }
-        channel.write(buffers, offset, count);
-        return true;
     }
 }

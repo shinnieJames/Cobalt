@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.socket.layer.application.websocket.frame.enco
 
 import com.github.auties00.cobalt.socket.layer.application.websocket.frame.WebSocketEncodedFrame;
 import com.github.auties00.cobalt.socket.layer.application.websocket.frame.WebSocketFrameConstants;
+import com.github.auties00.cobalt.util.DataUtils;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.VectorOperators;
@@ -38,13 +39,13 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <p>This is a stateless utility class.  All methods are static and
  * thread-safe.
+ *
+ * @implNote No WhatsApp Web counterpart: WA Web relies on the browser's
+ *     native {@code WebSocket} object to frame, mask and transmit
+ *     payloads.  Cobalt writes to the socket directly, so it has to
+ *     produce the RFC 6455 wire format itself.
  */
 public final class WebSocketFrameEncoder {
-
-    /**
-     * A shared empty payload buffer returned for zero-length frames.
-     */
-    private static final ByteBuffer EMPTY_PAYLOAD = ByteBuffer.allocate(0);
 
     /**
      * A shared empty result.
@@ -142,7 +143,7 @@ public final class WebSocketFrameEncoder {
             if (!sawPayloadArgument) {
                 return EMPTY_RESULT;
             }
-            var frame = encodeFrame(WebSocketFrameConstants.OPCODE_BINARY, EMPTY_PAYLOAD);
+            var frame = encodeFrame(WebSocketFrameConstants.OPCODE_BINARY, DataUtils.EMPTY_BYTE_BUFFER);
             return new ByteBuffer[]{frame.header()};
         }
 
@@ -192,7 +193,7 @@ public final class WebSocketFrameEncoder {
         }
 
         var content = length == 0
-                ? EMPTY_PAYLOAD
+                ? DataUtils.EMPTY_BYTE_BUFFER
                 : ByteBuffer.wrap(Arrays.copyOf(payload, length));
         return encodeFrame(opcode, content);
     }
@@ -217,7 +218,7 @@ public final class WebSocketFrameEncoder {
         var header = buildHeader(opcode, payloadLength, maskKey);
 
         if (payloadLength == 0) {
-            return new WebSocketEncodedFrame(header, EMPTY_PAYLOAD);
+            return new WebSocketEncodedFrame(header, DataUtils.EMPTY_BYTE_BUFFER);
         }
 
         var maskedPayload = applyMaskToBuffer(payloadView, maskKey, 0);
@@ -281,7 +282,7 @@ public final class WebSocketFrameEncoder {
     private static ByteBuffer applyMaskToBuffer(ByteBuffer payload, int maskKey, int maskOffset) {
         var length = payload.remaining();
         if (length == 0) {
-            return EMPTY_PAYLOAD;
+            return DataUtils.EMPTY_BYTE_BUFFER;
         }
 
         if(payload.isReadOnly()) {

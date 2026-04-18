@@ -5,9 +5,22 @@ import java.util.Objects;
 
 /**
  * An encoded WebSocket frame consisting of a header and payload.
+ *
+ * @implNote No WhatsApp Web counterpart: WA Web relies on the browser's
+ *     native {@code WebSocket} object to produce on-the-wire frames.
+ *     Cobalt materialises the header and payload buffers explicitly so
+ *     the layered selector can hand them to a gather-write call.
  */
 public final class WebSocketEncodedFrame {
+    /**
+     * The pre-built frame header, including FIN/opcode byte, payload
+     * length encoding and the 4-byte mask key.
+     */
     private final ByteBuffer header;
+
+    /**
+     * The masked payload, or an empty buffer for length-0 frames.
+     */
     private final ByteBuffer payload;
 
     /**
@@ -39,6 +52,13 @@ public final class WebSocketEncodedFrame {
         return payload;
     }
 
+    /**
+     * Returns whether this frame equals another by comparing the header
+     * and payload buffers structurally.
+     *
+     * @param obj the reference object
+     * @return {@code true} if {@code obj} is an equivalent encoded frame
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) return true;
@@ -48,11 +68,22 @@ public final class WebSocketEncodedFrame {
                 Objects.equals(this.payload, that.payload);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(header, payload);
     }
 
+    /**
+     * Returns a string representation including the header and payload
+     * buffers.
+     *
+     * @return a debug-oriented string
+     */
     @Override
     public String toString() {
         return "WebSocketEncodedFrame[" +

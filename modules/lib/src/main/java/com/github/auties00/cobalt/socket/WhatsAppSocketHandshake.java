@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.socket;
 
+import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.GcmUtils;
 
 import javax.crypto.*;
@@ -29,6 +30,14 @@ import java.security.*;
  */
 final class WhatsAppSocketHandshake implements AutoCloseable {
     /**
+     * Empty IKM used by {@link #finish()} to derive final keys.
+     *
+     * @implNote WANoiseHandshake.finish — corresponds to
+     *     {@code new Uint8Array(0)} passed as IKM to HKDF
+     */
+    private static final byte[] FINISH_KEY = DataUtils.EMPTY_BYTE_ARRAY;
+
+    /**
      * The Noise protocol name, null-padded to 32 bytes.
      *
      * <p>Since this value is exactly 32 bytes, it is used directly as the
@@ -38,14 +47,6 @@ final class WhatsAppSocketHandshake implements AutoCloseable {
      *     is used directly when its byte length equals 32
      */
     private static final byte[] NOISE_PROTOCOL = "Noise_XX_25519_AESGCM_SHA256\0\0\0\0".getBytes(StandardCharsets.UTF_8);
-
-    /**
-     * Empty IKM used by {@link #finish()} to derive final keys.
-     *
-     * @implNote WANoiseHandshake.finish — corresponds to
-     *     {@code new Uint8Array(0)} passed as IKM to HKDF
-     */
-    private static final byte[] FINISH_KEY = new byte[0];
 
     /**
      * The HKDF-SHA256 key derivation function instance.

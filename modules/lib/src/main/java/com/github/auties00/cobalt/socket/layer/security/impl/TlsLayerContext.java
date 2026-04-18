@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.socket.layer.security.impl;
 import com.github.auties00.cobalt.socket.layer.security.SocketClientSecurityLayerContext;
 import com.github.auties00.cobalt.socket.threading.SocketClientInboundResult;
 import com.github.auties00.cobalt.socket.threading.SocketClientLayerContext;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
@@ -36,9 +37,8 @@ import java.nio.channels.SocketChannel;
  * true.
  */
 final class TlsLayerContext implements SocketClientSecurityLayerContext {
-    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
-
     private volatile SocketClientLayerContext nextLayer;
+    private volatile SocketClientLayerContext prevLayer;
     private SSLEngine sslEngine;
     private ByteBuffer netInBuffer;
     private ByteBuffer netOutBuffer;
@@ -59,6 +59,16 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
     @Override
     public void setNextLayer(SocketClientLayerContext next) {
         this.nextLayer = next;
+    }
+
+    @Override
+    public void setPrevLayer(SocketClientLayerContext prev) {
+        this.prevLayer = prev;
+    }
+
+    @Override
+    public SocketClientLayerContext prevLayer() {
+        return prevLayer;
     }
 
     /**
@@ -105,18 +115,25 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
         if (bytesRead == -1) {
             return new SocketClientInboundResult.Close();
         }
+        if (sslHandshaking) {
+            // During the handshake bytes are left accumulated in
+            // netInBuffer for driveHandshake() to unwrap.  We must not
+            // call processDataSsl here because the engine will refuse to
+            // unwrap application data while still handshaking, and
+            // because nextLayer may not even be registered yet.
+            return new SocketClientInboundResult.Buffering();
+        }
         return processDataSsl();
     }
 
     @Override
     public SocketClientInboundResult driveHandshake(SocketChannel channel) throws IOException {
+        // Flush any leftover bytes from a previous handshake iteration.
         if (netOutBuffer.position() > 0) {
             netOutBuffer.flip();
-            while (netOutBuffer.hasRemaining()) {
-                if (channel.write(netOutBuffer) == 0) {
-                    netOutBuffer.compact();
-                    return new SocketClientInboundResult.Buffering();
-                }
+            if (!writeHandshakeBytes(channel, netOutBuffer)) {
+                netOutBuffer.compact();
+                return new SocketClientInboundResult.Buffering();
             }
             netOutBuffer.compact();
         }
@@ -127,7 +144,7 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
                     netOutBuffer.clear();
                     SSLEngineResult result;
                     try {
-                        result = sslEngine.wrap(EMPTY_BUFFER, netOutBuffer);
+                        result = sslEngine.wrap(DataUtils.EMPTY_BYTE_BUFFER, netOutBuffer);
                     } catch (SSLException e) {
                         throw new IOException("TLS handshake wrap failed", e);
                     }
@@ -137,21 +154,22 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
                         return new SocketClientInboundResult.Close();
                     }
 
-                    while (netOutBuffer.hasRemaining()) {
-                        if (channel.write(netOutBuffer) == 0) {
-                            netOutBuffer.compact();
-                            return new SocketClientInboundResult.Buffering();
-                        }
+                    if (!writeHandshakeBytes(channel, netOutBuffer)) {
+                        netOutBuffer.compact();
+                        return new SocketClientInboundResult.Buffering();
                     }
                     netOutBuffer.compact();
                 }
 
                 case NEED_UNWRAP -> {
-                    if (channel.read(netInBuffer) == -1) {
-                        return new SocketClientInboundResult.Close();
-                    }
-
+                    // Bytes are placed into netInBuffer by the normal
+                    // inbound chain (selector processRead → outer layers'
+                    // unwraps end up here).  If nothing arrived yet, wait.
                     netInBuffer.flip();
+                    if (!netInBuffer.hasRemaining()) {
+                        netInBuffer.compact();
+                        return new SocketClientInboundResult.Buffering();
+                    }
                     SSLEngineResult result;
                     try {
                         result = sslEngine.unwrap(netInBuffer, appInBuffer);
@@ -267,6 +285,29 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
 
     private SocketClientInboundResult feedNextLayer(ByteBuffer source) throws IOException {
         return nextLayer.feedFromSource(source);
+    }
+
+    /**
+     * Writes {@code bytes} (a read-mode view of {@link #netOutBuffer}) to
+     * the channel, routing through {@link #prevLayer} so any outer TLS
+     * layer below this one also wraps them.  If this is the outermost TLS
+     * layer ({@code prevLayer == null}) the bytes go straight to the
+     * channel.
+     *
+     * @return {@code true} if all bytes were written; {@code false} if
+     *         the write was partial (caller should buffer and retry)
+     */
+    private boolean writeHandshakeBytes(SocketChannel channel, ByteBuffer bytes) throws IOException {
+        var prev = prevLayer;
+        if (prev != null) {
+            return prev.processOutbound(channel, new ByteBuffer[]{bytes}, 0, 1);
+        }
+        while (bytes.hasRemaining()) {
+            if (channel.write(bytes) == 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -403,13 +444,13 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
 
     @Override
     public boolean processOutbound(SocketChannel channel, ByteBuffer[] buffers, int offset, int count) throws IOException {
-        var next = nextLayer;
-        if (next != null) {
+        var prev = prevLayer;
+        if (prev != null) {
             var wrapped = wrapToBuffer(buffers, offset, count);
             if (wrapped == null) {
                 return false;
             }
-            return next.processOutbound(channel, new ByteBuffer[]{wrapped}, 0, 1);
+            return prev.processOutbound(channel, new ByteBuffer[]{wrapped}, 0, 1);
         }
         return wrapAndWrite(channel, buffers, offset, count);
     }
@@ -435,7 +476,7 @@ final class TlsLayerContext implements SocketClientSecurityLayerContext {
         }
         try {
             netOutBuffer.clear();
-            sslEngine.wrap(EMPTY_BUFFER, netOutBuffer);
+            sslEngine.wrap(DataUtils.EMPTY_BYTE_BUFFER, netOutBuffer);
             netOutBuffer.flip();
             while (netOutBuffer.hasRemaining()) {
                 if (ch.write(netOutBuffer) == 0) {

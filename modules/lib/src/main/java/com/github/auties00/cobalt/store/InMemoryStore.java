@@ -101,9 +101,9 @@ final class InMemoryStore extends AbstractWhatsAppStore {
     @Override
     public WhatsAppStore save() {
         var newHashCode = hashCode();
-        if (storeHashCode != newHashCode) {
+        if (storeHashCode == null || storeHashCode != newHashCode) {
             synchronized (this) {
-                if(storeHashCode != newHashCode) {
+                if(storeHashCode == null || storeHashCode != newHashCode) {
                     storeHashCode = newHashCode;
                     try (var executor = newVirtualThreadPerTaskExecutor()) {
                         executor.submit(() -> {

@@ -34,6 +34,8 @@ import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
+import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction;
+import com.github.auties00.cobalt.model.sync.action.media.NoteEditAction;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastInsightsAction;
@@ -885,10 +887,6 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     WhatsAppStore setBusinessCampaignStatuses(Map<String, String> statuses);
 
-    Optional<String> businessAccountNonce();
-
-    WhatsAppStore setBusinessAccountNonce(String nonce);
-
     /**
      * Returns the per-customer data sharing preferences keyed by account LID
      * raw string.
@@ -957,6 +955,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Map<String, Long> businessSubscriptionCreationTimes();
 
     WhatsAppStore setBusinessSubscriptionCreationTimes(Map<String, Long> creationTimes);
+
+    Optional<String> businessAccountNonce();
+
+    WhatsAppStore setBusinessAccountNonce(String nonce);
 
     boolean detectedOutcomesEnabled();
 
@@ -2270,15 +2272,15 @@ public interface WhatsAppStore extends SignalProtocolStore {
             Map<String, com.github.auties00.cobalt.model.device.DeviceCapabilities> states
     );
 
-    Map<String, com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction> interactiveMessageStates();
+    Map<String, InteractiveMessageAction> interactiveMessageStates();
 
     WhatsAppStore setInteractiveMessageStates(
-            Map<String, com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction> states
+            Map<String, InteractiveMessageAction> states
     );
 
-    Map<String, com.github.auties00.cobalt.model.sync.action.media.NoteEditAction> noteStates();
+    Map<String, NoteEditAction> noteStates();
 
-    WhatsAppStore setNoteStates(Map<String, com.github.auties00.cobalt.model.sync.action.media.NoteEditAction> states);
+    WhatsAppStore setNoteStates(Map<String, NoteEditAction> states);
 
     Map<String, Instant> newsletterPinStates();
 
@@ -2426,86 +2428,6 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @return this store instance for method chaining
      */
     WhatsAppStore setPairingTimestamp(Instant pairingTimestamp);
-
-    /**
-     * Returns the unmodifiable map of label identifiers to their server
-     * assigned predefined identifiers.
-     *
-     * <p>WhatsApp Web maintains this mapping inside
-     * {@code WAWebLabelCollection} as a private {@code Map} keyed by the label
-     * id and valued by the predefined id. Labels of type
-     * {@code SERVER_ASSIGNED} are intentionally not added to the main label
-     * collection; instead, their predefined id is registered here so the UI
-     * can resolve their well-known semantics.
-     *
-     * @implNote WAWebLabelCollection.addToServerAssignedLabelIdMap
-     * @return an unmodifiable map of label id to predefined id
-     */
-    Map<String, Integer> serverAssignedLabelIdMap();
-
-    /**
-     * Registers a predefined identifier for a server-assigned label, mirroring
-     * WhatsApp Web's {@code addToServerAssignedLabelIdMap} method.
-     *
-     * <p>The mutator is a no-op when {@code predefinedId} is {@code null} or
-     * when {@code labelId} already has a registered mapping. WhatsApp Web's
-     * {@code $LabelCollectionImpl$p_1.set(labelId, predefinedId)} likewise
-     * does not overwrite an existing entry: the JS implementation only inserts
-     * when the key is absent.
-     *
-     * @implNote WAWebLabelCollection.addToServerAssignedLabelIdMap
-     * @param labelId      the label identifier, must not be {@code null}
-     * @param predefinedId the predefined identifier to associate with the
-     *                     label, may be {@code null} (in which case the call
-     *                     is a no-op)
-     */
-    void addServerAssignedLabelId(String labelId, Integer predefinedId);
-
-    /**
-     * Returns the user's preference for crossposting status updates to
-     * Facebook.
-     *
-     * <p>WhatsApp Web persists this preference via the
-     * {@code WAWebStatusPrivacySettingSync} {@code persistShareToFB} branch,
-     * which writes the value to the user prefs IndexedDB store under the
-     * {@code STATUS_SHARE_TO_FB} key.
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToFB
-     * @return an {@code Optional} containing the preference if it has been set
-     */
-    Optional<Boolean> shareStatusToFacebook();
-
-    /**
-     * Sets the user's preference for crossposting status updates to Facebook.
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToFB
-     * @param value the preference, or {@code null} to clear
-     * @return this store instance for method chaining
-     */
-    WhatsAppStore setShareStatusToFacebook(Boolean value);
-
-    /**
-     * Returns the user's preference for crossposting status updates to
-     * Instagram.
-     *
-     * <p>WhatsApp Web persists this preference via the
-     * {@code WAWebStatusPrivacySettingSync} {@code persistShareToIG} branch,
-     * which writes the value to the user prefs IndexedDB store under the
-     * {@code STATUS_SHARE_TO_IG} key.
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToIG
-     * @return an {@code Optional} containing the preference if it has been set
-     */
-    Optional<Boolean> shareStatusToInstagram();
-
-    /**
-     * Sets the user's preference for crossposting status updates to Instagram.
-     *
-     * @implNote WAWebStatusPrivacySettingSync.persistShareToIG
-     * @param value the preference, or {@code null} to clear
-     * @return this store instance for method chaining
-     */
-    WhatsAppStore setShareStatusToInstagram(Boolean value);
 
     /**
      * Removes every recent sticker that is flagged as an avatar sticker and
