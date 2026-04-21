@@ -23,6 +23,21 @@ Before doing anything else, verify the whatsapp MCP server is reachable:
    Wait a few seconds, then re-check. The server runs on port 8787 by default.
 3. If the server cannot be started (missing build, missing data), stop and tell the user.
 
+### Verify Registered Emulators
+
+Live captures are produced by pairing the web runtime against a real WhatsApp account running on an Android emulator. Validating the full API surface requires **both** account types, because a non-trivial subset of flows is business-gated (catalog, business-profile MEX, label ops, advertising) and would silently skip without a business peer.
+
+Call `mcp__whatsapp__web_live_emulator_list` and confirm the result contains at least one emulator with `registrationState: "registered"` for each of `accountType: "personal"` and `accountType: "business"`. Record their names — agents will reference them when driving live flows.
+
+If either is missing, notify the user which account type is missing and ask whether to provision it now. **Do not start provisioning without explicit confirmation** — registration burns a TextVerified rental, may require manual intervention on the confirmation-notice / 2FA / device-migration screens, and takes several minutes. Once the user confirms, run the chain:
+
+1. `mcp__whatsapp__web_live_emulator_create` — creates the AVD
+2. `mcp__whatsapp__web_live_emulator_start` — boots it
+3. `mcp__whatsapp__web_live_emulator_install_apk` — installs the `personal` or `business` APK
+4. `mcp__whatsapp__web_live_emulator_register_whatsapp` — drives the on-device registration flow
+
+Poll `web_live_emulator_list` until both account types are `registered`, then continue.
+
 ### Verify Live Runtime
 
 Call `mcp__whatsapp__web_live_status`. If `running=false`, call `mcp__whatsapp__web_live_start_session` and wait until `authState` reaches `logged_in`. Live captures require this session. **Do NOT stop the session between agents** — it's reused for the entire run. Only stop it at the very end, from Phase 4.
