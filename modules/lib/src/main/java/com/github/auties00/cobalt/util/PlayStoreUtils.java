@@ -134,23 +134,21 @@ public final class PlayStoreUtils {
 
     /**
      * Absolute classpath path of the Aurora device profile posted to the
-     * dispenser. Follows the {@code .properties} format used by
-     * {@code gplaydl} and the Aurora Store, so profiles from those
-     * projects can be dropped into
-     * {@code src/main/resources/android-device-profiles/} unchanged.
+     * dispenser. JSON document whose keys match the Aurora property names
+     * and whose values are their stringified forms, dumped from a Google
+     * Play system image on the Android Studio emulator (x86_64).
      */
-    private static final String DEVICE_PROFILE_RESOURCE = "/android-device-profiles/pixel-9a.properties";
+    private static final String DEVICE_PROFILE_RESOURCE = "/android-device-profiles/sdk-gphone64-x86_64.json";
 
     /**
-     * "Pixel 9a" device profile loaded from {@link #DEVICE_PROFILE_RESOURCE},
-     * derived verbatim from {@code gplaydl}'s {@code Pv.properties} — the
-     * highest-priority ARM64 profile in that tool's rotation.
+     * Emulator-derived x86_64 device profile loaded from
+     * {@link #DEVICE_PROFILE_RESOURCE}.
      *
      * @implNote The full list of capabilities matters because the Play
      *     FDFE API filters which apps are visible to the caller based on
      *     the device features the token was minted for.
      */
-    private static final SequencedMap<String, String> DEVICE_PROFILE = loadDeviceProfile();
+    private static final Map<String, Object> DEVICE_PROFILE = loadDeviceProfile();
 
     /**
      * Prevents instantiation of this utility class.
@@ -655,14 +653,14 @@ public final class PlayStoreUtils {
      * @throws UncheckedIOException if the resource is missing or cannot be
      *     read
      */
-    private static SequencedMap<String, String> loadDeviceProfile() {
+    private static Map<String, Object> loadDeviceProfile() {
         try (var in = PlayStoreUtils.class.getResourceAsStream(DEVICE_PROFILE_RESOURCE)) {
             Objects.requireNonNull(in, "Missing classpath resource: " + DEVICE_PROFILE_RESOURCE);
-            var properties = new Properties();
-            properties.load(in);
-            var m = new LinkedHashMap<String, String>(properties.size());
-            properties.forEach((k, v) -> m.put(k.toString(), v.toString()));
-            return Collections.unmodifiableSequencedMap(m);
+            var json = JSON.parseObject(in);
+            if (json == null) {
+                throw new IOException("Device profile JSON is empty");
+            }
+            return json;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to load device profile from " + DEVICE_PROFILE_RESOURCE, e);
         }
