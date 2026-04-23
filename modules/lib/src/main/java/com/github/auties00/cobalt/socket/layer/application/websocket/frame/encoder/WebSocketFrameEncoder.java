@@ -428,11 +428,20 @@ public final class WebSocketFrameEncoder {
      * <p>The caller must have aligned the mask offset to a four-byte
      * boundary so that byte 0 of the pattern maps to lane 0.
      *
+     * <p>RFC 6455 masks use {@code maskKey[0]} as the highest-order byte,
+     * which is the big-endian memory layout.  {@link IntVector#reinterpretAsBytes()}
+     * always uses the platform's native byte order, so on little-endian hosts
+     * (x86-64, ARM64 in practice) the int is reversed before broadcasting so the
+     * reinterpreted bytes end up in the RFC 6455 order.
+     *
      * @param maskKey the four-byte masking key
      * @return a {@link ByteVector} filled with the repeating mask pattern
      */
     private static ByteVector buildAlignedMaskVector(int maskKey) {
-        return IntVector.broadcast(INT_SPECIES, maskKey)
+        var nativeKey = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN
+                ? Integer.reverseBytes(maskKey)
+                : maskKey;
+        return IntVector.broadcast(INT_SPECIES, nativeKey)
                 .reinterpretAsBytes();
     }
 }
