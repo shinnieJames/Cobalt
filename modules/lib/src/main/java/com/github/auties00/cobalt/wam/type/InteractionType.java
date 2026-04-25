@@ -80,5 +80,9 @@ public enum InteractionType {
     @WamEnumConstant(72) WATCH_AND_BROWSE_FULL_EXPANSION,
     @WamEnumConstant(73) WATCH_AND_BROWSE_BROWSER_CLOSE,
     @WamEnumConstant(74) PIX_BANK_SELECTED_FROM_GRID,
-    @WamEnumConstant(75) PIX_BANK_SELECTED_FROM_LIST
+    @WamEnumConstant(75) PIX_BANK_SELECTED_FROM_LIST,
+    @WamEnumConstant(76) PIX_UNDERAGE_ERROR_SHOWN,
+    @WamEnumConstant(77) PIX_CANNOT_CONNECT_TO_BANK_ERROR_SHOWN,
+    @WamEnumConstant(78) PIX_INVALID_ERROR_SHOWN,
+    @WamEnumConstant(79) PIX_ERROR_COPY_CLICKED
 }

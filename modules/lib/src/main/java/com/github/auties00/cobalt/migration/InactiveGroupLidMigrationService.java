@@ -102,15 +102,14 @@ public final class InactiveGroupLidMigrationService {
      * {@code WAWebUserPrefsStore} under the key
      * {@code UserPrefs.InactiveGroupLidMigrationComplete}. Cobalt keeps a
      * process-local {@link AtomicBoolean} because the UserPrefs persistence
-     * layer is not replicated.
+     * layer is not replicated for this single boolean flag; the field plays
+     * the role of the {@code UserPrefs.InactiveGroupLidMigrationComplete}
+     * slot read and written by the two module exports.
      *
-     * @implNote ADAPTED: WAWebInactiveGroupLidMigration.isInactiveGroupLidMigrationComplete
-     *           reads this value; WAWebInactiveGroupLidMigration.setInactiveGroupLidMigrationComplete
-     *           writes {@code true} to it.
+     * @implNote ADAPTED: backing storage for
+     *           {@link #isInactiveGroupLidMigrationComplete()} and
+     *           {@link #setInactiveGroupLidMigrationComplete()}.
      */
-    @WhatsAppWebExport(moduleName = "WAWebInactiveGroupLidMigration",
-            exports = {"isInactiveGroupLidMigrationComplete", "setInactiveGroupLidMigrationComplete"},
-            adaptation = WhatsAppAdaptation.ADAPTED)
     private final AtomicBoolean complete;
 
     /**
@@ -157,7 +156,7 @@ public final class InactiveGroupLidMigrationService {
     public void start() {
         // WAWebInactiveGroupLidMigrationJob.migrateInactiveGroupsToLid
         // Short-circuits scheduling when the migration has already been marked complete in a previous call
-        if (complete.get()) {
+        if (isInactiveGroupLidMigrationComplete()) {
             LOGGER.log(System.Logger.Level.DEBUG,
                     "[lid-inactive-group-migration] already done, skip");
             return;
@@ -185,6 +184,56 @@ public final class InactiveGroupLidMigrationService {
             task.cancel(true);
             scheduledTask = null;
         }
+    }
+
+    /**
+     * Returns whether the inactive-group LID migration has been recorded as
+     * complete for this client.
+     *
+     * <p>WhatsApp Web reads
+     * {@code UserPrefs.InactiveGroupLidMigrationComplete} from
+     * {@code WAWebUserPrefsStore} and returns {@code true} if and only if the
+     * persisted value is strictly equal to {@code true}; any other value
+     * (including {@code null} / {@code undefined}) returns {@code false}.
+     * Cobalt mirrors this semantic with the local {@link AtomicBoolean},
+     * which defaults to {@code false} when the flag has never been written.
+     *
+     * @implNote WAWebInactiveGroupLidMigration.isInactiveGroupLidMigrationComplete:
+     *           {@code === true} strict-equality check is preserved by the
+     *           {@link AtomicBoolean#get()} contract, which always returns a
+     *           primitive {@code boolean}.
+     * @return {@code true} if the migration has been marked complete,
+     *         {@code false} otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebInactiveGroupLidMigration",
+            exports = "isInactiveGroupLidMigrationComplete",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public boolean isInactiveGroupLidMigrationComplete() {
+        // WAWebInactiveGroupLidMigration.isInactiveGroupLidMigrationComplete
+        // Reads the UserPrefs.InactiveGroupLidMigrationComplete slot and applies the === true strict-equality semantic
+        return complete.get();
+    }
+
+    /**
+     * Marks the inactive-group LID migration as complete for this client.
+     *
+     * <p>WhatsApp Web writes {@code true} to
+     * {@code UserPrefs.InactiveGroupLidMigrationComplete} via
+     * {@code WAWebUserPrefsStore.set}. The export takes no parameter; the
+     * value being written is hard-coded to {@code true}. Cobalt mirrors this
+     * by always setting the underlying {@link AtomicBoolean} to {@code true}.
+     *
+     * @implNote WAWebInactiveGroupLidMigration.setInactiveGroupLidMigrationComplete:
+     *           the JS export writes {@code !0} (i.e. {@code true}) and never
+     *           clears the flag.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebInactiveGroupLidMigration",
+            exports = "setInactiveGroupLidMigrationComplete",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void setInactiveGroupLidMigrationComplete() {
+        // WAWebInactiveGroupLidMigration.setInactiveGroupLidMigrationComplete
+        // Persists true into the UserPrefs.InactiveGroupLidMigrationComplete slot
+        complete.set(true);
     }
 
     /**
@@ -218,7 +267,7 @@ public final class InactiveGroupLidMigrationService {
 
             // WAWebInactiveGroupLidMigrationJob.migrateInactiveGroupsToLid
             // Re-checks the complete flag in case the initial pass ran during a previous session
-            if (complete.get()) {
+            if (isInactiveGroupLidMigrationComplete()) {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "[lid-inactive-group-migration] already done, skip");
                 return;
@@ -233,7 +282,7 @@ public final class InactiveGroupLidMigrationService {
             if (pnGroups.isEmpty()) {
                 LOGGER.log(System.Logger.Level.INFO,
                         "[lid-inactive-group-migration] no PN groups, done");
-                complete.set(true);
+                setInactiveGroupLidMigrationComplete();
                 return;
             }
 
@@ -261,7 +310,7 @@ public final class InactiveGroupLidMigrationService {
             if (remaining.isEmpty()) {
                 LOGGER.log(System.Logger.Level.INFO,
                         "[lid-inactive-group-migration] no PN groups left, done");
-                complete.set(true);
+                setInactiveGroupLidMigrationComplete();
             } else {
                 LOGGER.log(System.Logger.Level.INFO,
                         "[lid-inactive-group-migration] {0} PN groups left, retry later",

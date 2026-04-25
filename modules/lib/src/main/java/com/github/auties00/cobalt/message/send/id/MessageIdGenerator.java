@@ -113,12 +113,22 @@ public final class MessageIdGenerator {
      * @throws NullPointerException if any argument is {@code null}
      *
      * @implNote WAWebMsgKey.newId: tries
-     * {@code WAWebMsgKeyNewId.getMsgKeyNewSHA256Id()} (V2), catches errors
-     * and falls back to {@code newId_DEPRECATED()} (V1).
+     * {@code WAWebMsgKeyNewId.getMsgKeyNewSHA256Id()} (V2), catches every
+     * thrown error (logs it via {@code WALogger.ERROR(...).catching(n)}) and
+     * returns {@code newId_DEPRECATED()} (V1). Cobalt narrows the fallback
+     * catch to {@link NoSuchAlgorithmException} because that is the only
+     * recoverable failure mode in the V2 path: clock access, JID stringify,
+     * RNG draw, and {@link MessageDigest#digest} after a successful
+     * {@code getInstance("SHA-256")} cannot throw checked exceptions, and
+     * unchecked errors (OOM, programmer bugs) should propagate rather than
+     * silently downgrade to V1.
      * WAWebMsgKeyNewId.genMsgKeyUint: uses
      * {@code getMePnUserOrThrow_DO_NOT_USE().toString()} as the JID
      * component of the SHA-256 pre-image, which is always the sender's
-     * own PN user JID.
+     * own PN user JID. Cobalt rejects a {@code null senderJid} with
+     * {@link NullPointerException} instead of letting the WA Web
+     * "me is undefined" error funnel through the V1 fallback, since a
+     * null sender JID at this layer is a programmer error.
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgKey", exports = "newId",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -156,21 +166,50 @@ public final class MessageIdGenerator {
      * V2 (SHA-256): {@code "3EB0"} + 18 uppercase hex chars from
      * {@code SHA256(int64(time) || utf8(jid) || random(16))[0:9]}.
      *
-     * @implNote WAWebMsgKeyNewId.getMsgKeyNewSHA256Id: builds pre-image via
-     * genMsgKeyUint (WABinary.writeInt64 + writeString + writeBuffer),
-     * then {@code "3EB0" + toHex(SHA256(payload)[0:9])}.
+     * @param senderJid the sender PN user JID used in the pre-image
+     * @return the V2 message ID
+     * @throws NoSuchAlgorithmException if SHA-256 is unavailable
+     *
+     * @implNote WAWebMsgKey.newId: calls
+     * {@code WAWebMsgKeyNewId.getMsgKeyNewSHA256Id()} and prepends the
+     * {@code "3EB0"} prefix (the prefix concatenation lives in the
+     * exported function itself).
      */
-    @WhatsAppWebExport(moduleName = "WAWebMsgKeyNewId", exports = {"getMsgKeyNewSHA256Id", "genMsgKeyUint"},
-            adaptation = WhatsAppAdaptation.DIRECT)
     private static String generateV2(Jid senderJid) throws NoSuchAlgorithmException {
-        // WAWebMsgKeyNewId.genMsgKeyUint: build the pre-image payload
+        var payload = genMsgKeyUint(senderJid);
+        return getMsgKeyNewSHA256Id(payload);
+    }
+
+    /**
+     * Builds the SHA-256 pre-image bytes for a V2 message ID.
+     *
+     * <p>Layout: {@code int64(unixTime) || utf8(jid) || random(16)}.
+     *
+     * @param senderJid the sender PN user JID (stringified into the
+     *                  pre-image without a length prefix)
+     * @return the pre-image byte array
+     *
+     * @implNote WAWebMsgKeyNewId.genMsgKeyUint: builds the pre-image via
+     * {@code new Binary()}, {@code writeInt64(unixTime())},
+     * {@code writeString(getMePnUserOrThrow_DO_NOT_USE().toString())},
+     * {@code writeBuffer(parseHex(randomHex(16)))}, then returns
+     * {@code readByteArrayView()}. The WA export reads the sender JID
+     * from {@code WAWebUserPrefsMeUser}; Cobalt receives it as a
+     * parameter to avoid a hidden dependency on a global user store.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMsgKeyNewId", exports = "genMsgKeyUint",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static byte[] genMsgKeyUint(Jid senderJid) {
+        // WATimeUtils.unixTime(): epoch seconds
         var timestamp = Instant.now().getEpochSecond();
+        // WAWebUserPrefsMeUser.getMePnUserOrThrow_DO_NOT_USE().toString()
         var jidBytes = senderJid.toString().getBytes(StandardCharsets.UTF_8);
+        // WAHex.parseHex(WARandomHex.randomHex(16)): 16 random bytes
         var randomBytes = DataUtils.randomByteArray(V2_RANDOM_BYTES);
         var payload = new byte[Long.BYTES + jidBytes.length + randomBytes.length];
         var offset = 0;
 
-        // WABinary.writeInt64: big-endian 64-bit timestamp
+        // WABinary.writeInt64: big-endian signed 64-bit integer
         LONG_BE.set(payload, offset, timestamp);
         offset += Long.BYTES;
 
@@ -178,10 +217,32 @@ public final class MessageIdGenerator {
         System.arraycopy(jidBytes, 0, payload, offset, jidBytes.length);
         offset += jidBytes.length;
 
-        // WABinary.writeBuffer: raw random bytes
+        // WABinary.writeBuffer: raw bytes appended verbatim
         System.arraycopy(randomBytes, 0, payload, offset, randomBytes.length);
 
-        // WAWebMsgKeyNewId: SHA256(payload)[0:9] → hex
+        // Binary.readByteArrayView(): return the accumulated buffer
+        return payload;
+    }
+
+    /**
+     * Hashes the pre-image with SHA-256 and returns the prefixed V2 id.
+     *
+     * @param payload the pre-image produced by {@link #genMsgKeyUint}
+     * @return {@code "3EB0"} concatenated with 18 uppercase hex chars
+     * @throws NoSuchAlgorithmException if SHA-256 is unavailable
+     *
+     * @implNote WAWebMsgKeyNewId.getMsgKeyNewSHA256Id:
+     * {@code "3EB0" + WAHex.toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", genMsgKeyUint()), 0, 9))}.
+     * {@code WAHex.toHex} emits uppercase hex, so Cobalt uses
+     * {@link HexFormat#withUpperCase()}. The original WA export is
+     * {@code async} and reads the pre-image from a no-arg
+     * {@code genMsgKeyUint()}; Cobalt blocks on a virtual thread and
+     * takes the pre-image as a parameter so the sender JID can be
+     * injected explicitly.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMsgKeyNewId", exports = "getMsgKeyNewSHA256Id",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String getMsgKeyNewSHA256Id(byte[] payload) throws NoSuchAlgorithmException {
         var digest = MessageDigest.getInstance("SHA-256").digest(payload);
         return PREFIX + HEX.formatHex(digest, 0, V2_DIGEST_SLICE);
     }

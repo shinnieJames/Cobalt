@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -51,10 +50,28 @@ public sealed interface FetchNewsletterPollVotersMex extends MexJsonOperation pe
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterPollVotersJob")
     final class Request implements FetchNewsletterPollVotersMex {
-        private final String input;
+        private final String newsletterId;
+        private final long limit;
+        private final long serverId;
+        private final String voteHash;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request for the supplied poll voter list query.
+         *
+         * @implNote WAWebMexFetchNewsletterPollVotersJob.default: the four
+         * positional arguments correspond to the {@code newsletterId},
+         * {@code limit}, {@code serverId} and {@code voteHash} variables
+         * embedded under {@code variables.input}.
+         * @param newsletterId the newsletter JID whose poll voters are being requested
+         * @param limit        the maximum number of voter edges to return
+         * @param serverId     the server-assigned identifier of the poll message
+         * @param voteHash     the base64-encoded option hash, or {@code null} for all options
+         */
+        public Request(String newsletterId, long limit, long serverId, String voteHash) {
+            this.newsletterId = newsletterId;
+            this.limit = limit;
+            this.serverId = serverId;
+            this.voteHash = voteHash;
         }
 
         /**
@@ -62,10 +79,13 @@ public sealed interface FetchNewsletterPollVotersMex extends MexJsonOperation pe
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchNewsletterPollVotersJob.default: WA Web constructs the
-         * {@code variables} object inline and delegates to
+         * {@code {input: {limit, server_id, newsletter_id, vote_hash}}}
+         * variables envelope inline and delegates to
          * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
          * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@link MexJsonOperation#createMexNode(String, String)}. The
+         * {@code server_id} is rendered as a base-10 string to mirror the JS
+         * {@code a.toString(10)} call.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -76,18 +96,39 @@ public sealed interface FetchNewsletterPollVotersMex extends MexJsonOperation pe
             // Opens a UTF-8 JSON writer that will serialise the GraphQL variables envelope
             try (var writer = JSONWriter.ofUTF8()) {
                 // WAWebMexFetchNewsletterPollVotersJob.default
-                // Begins the outer envelope and the nested "variables" object consumed by WAWebMexClient.fetchQuery
+                // Begins the outer envelope and the nested "variables" then "input" objects consumed by WAWebMexClient.fetchQuery
                 writer.startObject();
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
                 // WAWebMexFetchNewsletterPollVotersJob.default
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // limit:t -- numeric page size
+                writer.writeName("limit");
+                writer.writeColon();
+                writer.writeInt64(limit);
+                // WAWebMexFetchNewsletterPollVotersJob.default
+                // server_id:a.toString(10) -- server-assigned poll id rendered as decimal string
+                writer.writeName("server_id");
+                writer.writeColon();
+                writer.writeString(Long.toString(serverId, 10));
+                // WAWebMexFetchNewsletterPollVotersJob.default
+                // newsletter_id:n -- newsletter JID, written when present
+                if (newsletterId != null) {
+                    writer.writeName("newsletter_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(newsletterId);
                 }
+                // WAWebMexFetchNewsletterPollVotersJob.default
+                // vote_hash:i -- optional base64 option hash; null selects all options
+                if (voteHash != null) {
+                    writer.writeName("vote_hash");
+                    writer.writeColon();
+                    writer.writeString(voteHash);
+                }
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 
@@ -207,10 +248,15 @@ public sealed interface FetchNewsletterPollVotersMex extends MexJsonOperation pe
                     /**
                      * Returns the {@code action_time} field.
                      *
+                     * @implNote WAWebMexFetchNewsletterPollVotersJob.default: WA Web's
+                     * post-processor divides the raw value by {@code 1e6} and feeds the
+                     * result to {@code WATimeUtils.castToUnixTime}, indicating that the
+                     * GraphQL field is reported in microseconds.
                      * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
                      */
                     public Optional<Instant> actionTime() {
-                        return Optional.ofNullable(actionTime).map(Instant::ofEpochSecond);
+                        return Optional.ofNullable(actionTime)
+                                .map(micros -> Instant.ofEpochSecond(micros / 1_000_000L));
                     }
 
                     /**

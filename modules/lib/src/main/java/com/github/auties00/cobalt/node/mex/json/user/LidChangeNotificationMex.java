@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -57,11 +56,14 @@ public sealed interface LidChangeNotificationMex extends MexJsonOperation permit
          * Serialises an empty GraphQL variables envelope and wraps it in a
          * {@code w:mex} IQ stanza.
          *
-         * @implNote WAWebMexLidChangeNotificationQuery.graphql: the query
-         * takes no variables and operates on the caller's LID mapping.
+         * @implNote WAWebMexLidChangeNotificationQuery.graphql: the compiled
+         * Relay artifact declares {@code argumentDefinitions: []} and
+         * {@code params.operationKind = "query"}, so the variables envelope is
+         * always empty and the IQ is dispatched with {@code type="get"} via
+         * {@link MexJsonOperation#createMexNode(String, String)}.
          * @return the IQ {@link NodeBuilder} ready to be built and dispatched
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params.id",
+        @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public NodeBuilder toNode() {
             try (var writer = JSONWriter.ofUTF8()) {
@@ -96,14 +98,16 @@ public sealed interface LidChangeNotificationMex extends MexJsonOperation permit
         /**
          * Parses the MEX response carried by an inbound IQ stanza.
          *
-         * @implNote WAWebMexLidChangeNotificationQuery.graphql: reads the
-         * {@code old} and {@code new} fields from
-         * {@code data.xwa2_notify_lid_change}.
+         * @implNote WAWebMexLidChangeNotificationQuery.graphql: the compiled
+         * Relay {@code selections} array selects the {@code XWA2LidChange}
+         * linked field {@code xwa2_notify_lid_change} carrying the scalar
+         * children {@code old} and {@code new}; this method extracts both
+         * straight from the JSON payload of the {@code <result>} child.
          * @param node the inbound IQ stanza carrying the {@code <result>} child
          * @return the parsed response, or {@code Optional.empty()} if the
          *         expected JSON shape is absent
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params.id",
+        @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "selections",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<Response> of(Node node) {
             return node.getChild("result")
@@ -112,19 +116,31 @@ public sealed interface LidChangeNotificationMex extends MexJsonOperation permit
         }
 
         /**
-         * Returns the {@code old} field.
+         * Returns the previous LID value carried by the GraphQL response.
          *
+         * @implNote WAWebMexLidChangeNotificationQuery.graphql: corresponds to
+         * the scalar selection {@code selections[0].selections[0].name = "old"}
+         * inside the {@code xwa2_notify_lid_change} linked field.
          * @return an {@link Optional} containing the value, or empty if absent
          */
+        @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "selections",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         public Optional<String> oldValue() {
             return Optional.ofNullable(oldValue);
         }
 
         /**
-         * Returns the {@code new} field.
+         * Returns the new LID value carried by the GraphQL response.
          *
+         * @implNote WAWebMexLidChangeNotificationQuery.graphql: corresponds to
+         * the scalar selection {@code selections[0].selections[1].name = "new"}
+         * inside the {@code xwa2_notify_lid_change} linked field. Renamed to
+         * {@code newValue()} to avoid clashing with the Java {@code new}
+         * keyword.
          * @return an {@link Optional} containing the value, or empty if absent
          */
+        @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "selections",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         public Optional<String> newValue() {
             return Optional.ofNullable(newValue);
         }

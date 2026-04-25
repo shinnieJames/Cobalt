@@ -15,13 +15,12 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Checks whether a given domain is previewable inside newsletter messages.
+ * Checks whether a given list of domains is previewable inside newsletter messages.
  *
- * <p>The WhatsApp backend maintains a list of allowed domains whose link previews may be rendered inside newsletter messages. This query validates a URL before publishing.
+ * <p>The WhatsApp backend maintains a list of allowed domains whose link previews may be rendered inside newsletter messages. This query validates one or more URL domains before publishing.
  *
  * @implNote WAWebMexFetchNewsletterIsDomainPreviewableJob: adapts the {@code mexFetchNewsletterIsDomainPreviewable} GraphQL query,
  * which in WA Web is invoked via {@code WAWebMexClient.fetchQuery} and
@@ -36,7 +35,8 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
      * to the {@code FetchNewsletterIsDomainPreviewable} compiled query.
      *
      * @implNote WAWebMexFetchNewsletterIsDomainPreviewableJobQuery.graphql: corresponds to the compiled
-     * document id registered for the {@code mexFetchNewsletterIsDomainPreviewable} query.
+     * document id registered for the {@code mexFetchNewsletterIsDomainPreviewable} query
+     * (see {@code params.id} in the generated relay descriptor).
      */
     String QUERY_ID = "9849510985088294";
 
@@ -45,14 +45,23 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
      * query variables and emits the outbound IQ stanza.
      *
      * @implNote WAWebMexFetchNewsletterIsDomainPreviewableJob.mexFetchNewsletterIsDomainPreviewable: adapts the {@code variables}
-     * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * object constructed inline in the JS implementation ({@code r = {url_domains: e}}) into a dedicated
+     * Java class. The JS function accepts the {@code url_domains} parameter as a list of strings (see
+     * {@code WAWebNewsletterIsDomainPreviewableAction} which calls {@code mexFetchNewsletterIsDomainPreviewable([t])}
+     * and the GraphQL relay descriptor which defines {@code url_domains} as an input field of an
+     * {@code XWA2NewsletterMessageIntegrityInput} ObjectValue). Cobalt therefore models the variable as a
+     * {@link List} of strings and serialises it as a JSON array.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterIsDomainPreviewableJob")
     final class Request implements FetchNewsletterIsDomainPreviewableMex {
-        private final String urlDomains;
+        private final List<String> urlDomains;
 
-        public Request(String urlDomains) {
+        /**
+         * Creates a new request variant carrying the given list of URL domains.
+         *
+         * @param urlDomains the URL domains to validate; may be {@code null} or empty
+         */
+        public Request(List<String> urlDomains) {
             this.urlDomains = urlDomains;
         }
 
@@ -61,7 +70,8 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchNewsletterIsDomainPreviewableJob.mexFetchNewsletterIsDomainPreviewable: WA Web constructs the
-         * {@code variables} object inline and delegates to
+         * {@code variables} object inline as {@code {url_domains: e}} where
+         * {@code e} is a string array, and delegates to
          * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
          * via {@code fastjson2.JSONWriter} and wraps it through
          * {@link MexJsonOperation#createMexNode(String, String)}.
@@ -81,12 +91,11 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
                 writer.writeColon();
                 writer.startObject();
                 // WAWebMexFetchNewsletterIsDomainPreviewableJob.mexFetchNewsletterIsDomainPreviewable
-                // Emits the url_domains variable when present
-                if (urlDomains != null) {
-                    writer.writeName("url_domains");
-                    writer.writeColon();
-                    writer.writeString(urlDomains);
-                }
+                // Emits the url_domains variable as a JSON array; matches the JS object literal {url_domains: e}
+                // which always populates the key (the array itself may be empty).
+                writer.writeName("url_domains");
+                writer.writeColon();
+                writeStringArray(writer, urlDomains);
                 writer.endObject();
                 writer.endObject();
 
@@ -99,6 +108,28 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }
+        }
+
+        /**
+         * Writes a list of strings as a JSON array into the given writer.
+         *
+         * @implNote The array is always emitted (possibly empty) so the on-wire
+         * shape always contains the {@code url_domains} key, mirroring the JS
+         * object literal {@code {url_domains: e}} which never omits the key.
+         * @param writer the JSON writer to emit into
+         * @param values the string values to serialise, may be {@code null}
+         */
+        private static void writeStringArray(JSONWriter writer, List<String> values) {
+            writer.startArray();
+            if (values != null) {
+                for (var i = 0; i < values.size(); i++) {
+                    if (i > 0) {
+                        writer.writeComma();
+                    }
+                    writer.writeString(values.get(i));
+                }
+            }
+            writer.endArray();
         }
     }
 
@@ -113,6 +144,11 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
     final class Response implements FetchNewsletterIsDomainPreviewableMex {
         private final List<UrlPreviews> urlPreviews;
 
+        /**
+         * Creates a new response variant carrying the given list of url previews.
+         *
+         * @param urlPreviews the parsed list of url previews
+         */
         private Response(List<UrlPreviews> urlPreviews) {
             this.urlPreviews = urlPreviews;
         }
@@ -144,11 +180,21 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
 
         /**
          * A parsed {@code UrlPreviews} object.
+         *
+         * @implNote WAWebMexFetchNewsletterIsDomainPreviewableJob.mexFetchNewsletterIsDomainPreviewable: mirrors the per-entry
+         * shape produced by the JS handler when it constructs
+         * {@code new Map(i.map(({is_previewable, url_domain}) => [url_domain, is_previewable === true]))}.
          */
         public static final class UrlPreviews {
             private final String urlDomain;
             private final Boolean isPreviewable;
 
+            /**
+             * Creates a new UrlPreviews object.
+             *
+             * @param urlDomain the {@code url_domain} field
+             * @param isPreviewable the {@code is_previewable} field, {@code null} if absent
+             */
             private UrlPreviews(String urlDomain, Boolean isPreviewable) {
                 this.urlDomain = urlDomain;
                 this.isPreviewable = isPreviewable;
@@ -166,6 +212,9 @@ public sealed interface FetchNewsletterIsDomainPreviewableMex extends MexJsonOpe
             /**
              * Returns the {@code is_previewable} field.
              *
+             * @implNote WAWebMexFetchNewsletterIsDomainPreviewableJob.mexFetchNewsletterIsDomainPreviewable: matches the JS
+             * coalescing {@code t === true} which collapses {@code null}, {@code undefined}
+             * and any non-{@code true} value to {@code false}.
              * @return {@code true} if the value is present and true, {@code false} otherwise
              */
             public boolean isPreviewable() {

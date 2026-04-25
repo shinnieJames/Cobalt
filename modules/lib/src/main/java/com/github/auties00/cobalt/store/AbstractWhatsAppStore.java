@@ -121,10 +121,69 @@ import static java.util.Objects.requireNonNullElseGet;
  * fields. The UserPrefs module {@code WAWebUserPrefsBase} corresponds to
  * the scalar fields (registered, showSecurityNotifications,
  * primaryDeviceSupportsSyncdRecovery, etc.).
+ *
+ * <p>The three {@code WAWebModelStorageInitialize} lifecycle exports map
+ * to Cobalt as follows:
+ * <ul>
+ *   <li>{@code initializeWithoutGKs}: the per-table {@code addTable()}
+ *       fan-out plus {@code WAWebModelStorageUtils.createStorage(...).
+ *       initialize()} is replaced by
+ *       {@code WhatsAppStoreFactory.create(...)} /
+ *       {@code WhatsAppStoreFactory.load(...)}. Each WA Web
+ *       {@code WAWebSchema*.addTable()} call corresponds to one of the
+ *       {@link java.util.concurrent.ConcurrentHashMap} fields declared on
+ *       this class; the maps are unconditionally allocated, so there is
+ *       no rollout / column-packing branch
+ *       ({@code WAWebDbRolloutUtil.loadSchemaVersions} and
+ *       {@code WAWebStorageGatingUtils.columnPackingEnabled} have no
+ *       counterpart).</li>
+ *   <li>{@code destroy}: implemented by
+ *       {@link WhatsAppStore#delete()}, which removes the persistent
+ *       backing directory. Both branches of the WA Web fall-back chain
+ *       ({@code destroyStorage()} and {@code new Dexie(DATABASE_NAME).
+ *       delete()}) collapse here; the {@code s = null} reset of the
+ *       cached init promise has no analog because Cobalt does not
+ *       memoize one.</li>
+ *   <li>{@code clearInitializePromise}: no analog. WA Web uses it as a
+ *       test-only reset of the module-level {@code s} cache; Cobalt's
+ *       store factory is stateless and re-materializes the aggregate
+ *       on every call.</li>
+ * </ul>
+ *
+ * <p>The {@code WAWebSignalStorage} module is absorbed in the same way:
+ * <ul>
+ *   <li>{@code initialize}: replaced by the constructor of this class,
+ *       which allocates the seven Signal-state maps unconditionally.
+ *       The WA Web sequence
+ *       ({@code WAWebSchemaBasekey.addTable()}, {@code WAWebSchemaIdentity.addTable()},
+ *       {@code WAWebSchemaMeta.addTable()}, {@code WAWebSchemaPrekey.addTable()},
+ *       {@code WAWebSchemaSenderkey.addTable()}, {@code WAWebSchemaSession.addTable()},
+ *       {@code WAWebSchemaSignedPrekey.addTable()},
+ *       {@code WAWebSignalStorageUtils.createStorage().initialize()})
+ *       maps to the constructor's allocation of {@link #baseKeys},
+ *       {@link #remoteIdentities} (plus {@link #registrationId},
+ *       {@link #identityKeyPair}, {@link #noiseKeyPair},
+ *       {@link #signedDeviceIdentity} for the meta keys), {@link #preKeys},
+ *       {@link #senderKeys}, {@link #sessions} and {@link #signedKeyPair}
+ *       respectively. The {@code WALogger} crash-and-rethrow branch in
+ *       {@code WAWebSignalStorage.initialize} has no analog because
+ *       allocation cannot fail.</li>
+ *   <li>{@code destroy}: covered by the same {@link WhatsAppStore#delete()}
+ *       call described above; the protobuf aggregate is the only
+ *       persistent backing.</li>
+ *   <li>{@code getBaseKeyTable}, {@code getIdentityTable},
+ *       {@code getMetaTable}, {@code getPreKeyTable},
+ *       {@code getSenderKeyTable}, {@code getSessionTable},
+ *       {@code getSignedPreKeyTable}: replaced by the typed accessor
+ *       methods on this class; the Dexie {@code Table} object is
+ *       sidestepped because the in-memory {@code ConcurrentHashMap} is
+ *       directly accessible.</li>
+ * </ul>
  */
 @WhatsAppWebModule(moduleName = "WAWebModelStorageInitialize")
 @WhatsAppWebModule(moduleName = "WAWebCollections")
 @WhatsAppWebModule(moduleName = "WAWebSignalStorage")
+@WhatsAppWebModule(moduleName = "WAWebSignalConst")
 @WhatsAppWebModule(moduleName = "WAWebUserPrefsBase")
 @WhatsAppWebModule(moduleName = "WAWebGetSyncKey")
 @WhatsAppWebModule(moduleName = "WAWebGetSyncAction")
@@ -133,6 +192,7 @@ import static java.util.Objects.requireNonNullElseGet;
 @WhatsAppWebModule(moduleName = "WAWebSyncdOrphan")
 @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
 @WhatsAppWebModule(moduleName = "WAWebSyncdCollectionsStateMachine")
+@WhatsAppWebModule(moduleName = "WAWebChatUtmCache")
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 @ProtobufMessage
 abstract class AbstractWhatsAppStore implements WhatsAppStore {
@@ -252,22 +312,115 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 40, type = ProtobufType.BOOL)
     protected boolean syncedBusinessCertificate;
 
+    /**
+     * The Signal protocol registration ID, persisted under the
+     * {@code signal_reg_id} key of the {@code signal-meta-store} IndexedDB
+     * table in WA Web.
+     *
+     * @implNote Mirrors {@code WAWebSignalConst.META_KEYS.REG_ID}, retrieved
+     *           through {@code WAWebSignalStorage.getMetaTable()}; Cobalt
+     *           promotes the persisted scalar to a typed field rather than
+     *           encoding it as a key/value row, so {@code WAWebSchemaMeta}'s
+     *           {@code signal-meta-store} is fanned out across discrete
+     *           protobuf properties on this class.
+     */
     @ProtobufProperty(index = 41, type = ProtobufType.INT32)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getMetaTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final Integer registrationId;
 
+    /**
+     * The Signal protocol Noise static key pair used to drive the Noise XX
+     * handshake on every reconnect.
+     *
+     * @implNote Mirrors the {@code WAWebSignalConst.META_KEYS.STATIC_PUBKEY}
+     *           and {@code STATIC_PRIVKEY} entries of the
+     *           {@code signal-meta-store} IndexedDB table. Cobalt fuses the
+     *           public/private halves into a single value object instead of
+     *           tracking two separate key/value rows.
+     */
     @ProtobufProperty(index = 42, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getMetaTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final SignalIdentityKeyPair noiseKeyPair;
 
+    /**
+     * The Signal protocol long-term identity key pair used to derive
+     * sessions, sender keys and to attest the companion device.
+     *
+     * @implNote Mirrors the local-identity counterpart of the
+     *           {@code identity-store} IndexedDB table; the table itself
+     *           ({@code WAWebSignalStorage.getIdentityTable()}) holds the
+     *           remote identities in {@link #remoteIdentities}, while the
+     *           local identity is kept here as a typed field.
+     */
     @ProtobufProperty(index = 44, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getIdentityTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final SignalIdentityKeyPair identityKeyPair;
 
+    /**
+     * The signed companion device identity blob retained after the
+     * pair-success ADV exchange.
+     *
+     * @implNote Mirrors {@code WAWebSignalConst.META_KEYS.ADV_SIGNED_IDENTITY},
+     *           one of the keys persisted via the {@code signal-meta-store}
+     *           IndexedDB table.
+     */
     @ProtobufProperty(index = 46, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getMetaTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected ADVSignedDeviceIdentity signedDeviceIdentity;
 
+    /**
+     * The current signed pre-key, used as the medial step of the X3DH
+     * session-initiation exchange.
+     *
+     * @implNote Mirrors the {@code signed-prekey-store} IndexedDB table
+     *           ({@code WAWebSignalStorage.getSignedPreKeyTable()}). WA Web
+     *           keeps every previously-signed pre-key in the table, indexed
+     *           by an auto-incrementing {@code keyId}; Cobalt only retains
+     *           the latest entry because the rotation flow always discards
+     *           the prior signed pre-key once the server has acknowledged
+     *           the new one.
+     */
     @ProtobufProperty(index = 47, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSignedPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final SignalSignedKeyPair signedKeyPair;
 
+    /**
+     * The pool of one-time pre-keys backing the X3DH initiation flow,
+     * indexed by their pre-key id.
+     *
+     * @implNote Mirrors the {@code prekey-store} IndexedDB table
+     *           ({@code WAWebSignalStorage.getPreKeyTable()}). Cobalt does
+     *           not currently track the {@code isDirectDistribution} column
+     *           used by {@code WAWebSignalStoreApi.markPreKeyAsDirectDistribution}
+     *           because the retry-receipt flow that flips it is not yet
+     *           implemented; downstream module validation owns that gap.
+     */
     @ProtobufProperty(index = 48, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final LinkedHashMap<Integer, SignalPreKeyPair> preKeys;
 
     @ProtobufProperty(index = 49, type = ProtobufType.STRING)
@@ -285,13 +438,74 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 53, type = ProtobufType.BYTES)
     protected final byte[] backupToken;
 
+    /**
+     * The per-(group, sender-device) sender-key records used by the SKDM
+     * group-encryption flow.
+     *
+     * @implNote Mirrors the {@code senderkey-store} IndexedDB table
+     *           ({@code WAWebSignalStorage.getSenderKeyTable()}). Cobalt
+     *           collapses the table's {@code senderKeyName} composite into a
+     *           {@link SignalSenderKeyName} value object and folds the
+     *           {@code senderId} indexed column into the same key, so the
+     *           secondary index used by WA Web to bulk-delete a sender's
+     *           keys is replaced by {@link #removeSenderKeys(Jid)} which
+     *           filters in-memory.
+     */
     @ProtobufProperty(index = 54, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSenderKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys;
 
+    /**
+     * The app state sync keys used to encrypt and decrypt app state
+     * mutations propagated between the primary device and its
+     * companions.
+     *
+     * <p>The map is keyed by the hex-encoded {@code keyId} bytes (via
+     * {@link HexFormat#formatHex(byte[])}) and uses {@link LinkedHashMap}
+     * so that the {@link SequencedCollection} returned by
+     * {@link #appStateKeys()} preserves insertion order — equivalent to
+     * the {@code WAWebSchemaSyncKeys} IndexedDB cursor over the
+     * {@code sync-keys} table.
+     *
+     * @implNote Mirrors the {@code sync-keys} IndexedDB table
+     *           ({@code WAWebSchemaSyncKeys.getSyncKeysTable()}). The
+     *           table's user-defined primary key is {@code keyId}, with
+     *           additional indexed columns ({@code timestamp},
+     *           {@code fingerprint}, {@code keyData} encrypted,
+     *           {@code keyEpoch}). All non-{@code keyId} columns are
+     *           folded into the embedded {@link AppStateSyncKey} value
+     *           object since Cobalt does not query them via secondary
+     *           indices — {@link #expireAppStateKeysByEpoch(int)} scans
+     *           the values map in-memory rather than using the
+     *           {@code keyEpoch} index.
+     */
     @ProtobufProperty(index = 55, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSchemaSyncKeys",
+            exports = "getSyncKeysTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final LinkedHashMap<String, AppStateSyncKey> appStateKeys;
 
+    /**
+     * The Double-Ratchet session records keyed by the peer Signal address.
+     *
+     * @implNote Mirrors the {@code session-store} IndexedDB table
+     *           ({@code WAWebSignalStorage.getSessionTable()}). The
+     *           {@code address} column is the user-defined primary key in
+     *           WA Web; Cobalt uses {@link SignalProtocolAddress} as the map
+     *           key directly.
+     */
     @ProtobufProperty(index = 56, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSessionTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions;
 
     @ProtobufProperty(index = 57, type = ProtobufType.MESSAGE, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
@@ -324,7 +538,27 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 66, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
     protected Instant lastAdvCheckTime;
 
+    /**
+     * The persisted public identity keys of every peer device this client
+     * has talked to.
+     *
+     * @implNote Mirrors the {@code identity-store} IndexedDB table
+     *           ({@code WAWebSignalStorage.getIdentityTable()}). The WA Web
+     *           row carries an {@code identityKey} blob plus the
+     *           bookkeeping columns {@code rowId} and {@code sentAddonRowId}
+     *           used by {@code WAWebSendMsgCommonApi.updateIdentityRange};
+     *           Cobalt keeps the public key here and tracks the regular
+     *           {@code rowId} sequence in {@link #identityEncryptionRange}.
+     *           The {@code sentAddonRowId} column has no counterpart yet
+     *           because the addon (reaction / edit) send flow that
+     *           populates it is not implemented in Cobalt.
+     */
     @ProtobufProperty(index = 67, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.BYTES)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getIdentityTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     protected final ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities;
 
     @ProtobufProperty(index = 68, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
@@ -404,6 +638,105 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @ProtobufProperty(index = 85, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
     protected Instant groupAbPropsEmergencyPushTimestamp; // WAWebABPropsLocalStorage.setGroupAbPropsEmergencyPushTimestamp
 
+    /**
+     * The {@code abKey} field of the {@code ABPROPS} JSON blob most recently
+     * persisted by {@code updateAttributesLocalStorage}.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @ProtobufProperty(index = 86, type = ProtobufType.STRING)
+    protected String abPropsAbKey; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * The {@code hash} field of the {@code ABPROPS} JSON blob most recently
+     * persisted by {@code updateAttributesLocalStorage}.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @ProtobufProperty(index = 87, type = ProtobufType.STRING)
+    protected String abPropsHash; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * The clamped {@code refresh} interval (seconds) of the {@code ABPROPS}
+     * JSON blob. Stored as a primitive so the protobuf manifest does not need
+     * a wrapper; the explicit {@code 0} sentinel is interpreted as "never
+     * recorded" by {@link #abPropsRefresh()}, which then surfaces the
+     * {@code 86400} default to mirror {@code WAWebABPropsLocalStorage.getRefresh}.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @ProtobufProperty(index = 88, type = ProtobufType.INT64)
+    protected long abPropsRefresh; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * The {@code lastSyncTime} field of the {@code ABPROPS} JSON blob most
+     * recently persisted by {@code updateAttributesLocalStorage}.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @ProtobufProperty(index = 89, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
+    protected Instant abPropsLastSyncTime; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * The {@code ABPROPS_REFRESH_ID} {@code localStorage} value.
+     *
+     * @implNote WAWebABPropsLocalStorage.setRefreshId
+     */
+    @ProtobufProperty(index = 90, type = ProtobufType.INT64)
+    protected long abPropsRefreshId; // WAWebABPropsLocalStorage.setRefreshId
+
+    /**
+     * The {@code UserPrefs.AbpropsWebRefreshId} {@code localStorage} value.
+     *
+     * @implNote WAWebABPropsLocalStorage.setWebRefreshId
+     */
+    @ProtobufProperty(index = 91, type = ProtobufType.INT64)
+    protected long abPropsWebRefreshId; // WAWebABPropsLocalStorage.setWebRefreshId
+
+    /**
+     * The {@code GROUP_ABPROPS_REFRESH_ID} {@code localStorage} value.
+     *
+     * @implNote WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
+     */
+    @ProtobufProperty(index = 92, type = ProtobufType.INT64)
+    protected long groupAbPropsRefreshId; // WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
+
+    /**
+     * The Alice base-key dedupe table for inbound pre-key messages.
+     *
+     * <p>Each entry is keyed by the encoded peer address and the
+     * {@code originalMsgId} of the pre-key {@code <message>} stanza, and
+     * holds the 32-byte X3DH ephemeral public key (Alice's base key) of the
+     * inbound session-initiation. The receive path uses this map to detect
+     * a peer replaying the same pre-key message (which would otherwise
+     * cause a duplicate session to be derived) and to skip re-decryption
+     * when {@link #hasSameBaseKey} reports a match.
+     *
+     * <p>The map is keyed by a flat {@code "<address>|<originalMsgId>"}
+     * string because the protobuf manifest only supports scalar map keys;
+     * lookups go through the {@link #saveSessionBaseKey},
+     * {@link #findSessionBaseKey}, {@link #hasSameBaseKey} and
+     * {@link #removeSessionBaseKey} accessors which take the typed
+     * {@code (address, originalMsgId)} pair.
+     *
+     * @implNote Mirrors the {@code baseKey-store} IndexedDB table
+     *           ({@code WAWebSignalStorage.getBaseKeyTable()}); the
+     *           composite index on {@code [address, originalMsgId]} is
+     *           collapsed into the encoded map key. The auto-incrementing
+     *           {@code id} column has no Cobalt counterpart because
+     *           {@link #removeSessionBaseKey} addresses entries by
+     *           composite key directly. The base-key dedupe semantics
+     *           themselves match {@code WAWebSignalSessionApi.saveSessionBaseKey}
+     *           and {@code WAWebSignalSessionApi.hasSameBaseKey}.
+     */
+    @ProtobufProperty(index = 93, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.BYTES)
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getBaseKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    protected final ConcurrentMap<String, byte[]> baseKeys;
+
     protected final ConcurrentMap<SignalProtocolAddress, Long> identityEncryptionRange;
 
     protected final AtomicLong encryptionSequence;
@@ -445,6 +778,24 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     protected final Set<Jid> unconfirmedIdentityChanges;
 
     protected final Set<Jid> coexHostedVerificationCache;
+
+    /**
+     * The set of chat JIDs for which a click-to-WhatsApp (CTWA) UTM
+     * attribution payload has already been consumed during this session.
+     *
+     * @implNote Mirrors {@code WAWebChatUtmCache.utmReadChatIds}, the in-memory
+     *           {@code Set<string>} that guards against re-reading the
+     *           per-chat UTM value stored in {@code WAWebUtmBizPrefs} more
+     *           than once. The cache is cleared when
+     *           {@code WAWebChatUtmCache.clearAll} is invoked and entries
+     *           are removed when a new UTM payload is persisted via
+     *           {@code WAWebUpdateUtmAction.addUtmToChat}. The WA Web
+     *           keys are string forms of the chat id; Cobalt uses the
+     *           underlying {@link Jid} for type safety, matching the
+     *           convention of {@link #unconfirmedIdentityChanges} and
+     *           {@link #coexHostedVerificationCache}.
+     */
+    protected final Set<Jid> utmReadChatIds;
 
     /**
      * The set of contacts currently blocked by this account. Mirrors
@@ -570,7 +921,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     protected final System.Logger logger;
 
-    AbstractWhatsAppStore(java.util.UUID uuid, java.lang.Long phoneNumber, com.github.auties00.cobalt.client.WhatsAppClientType clientType, java.time.Instant initializationTimeStamp, com.github.auties00.cobalt.client.WhatsAppDevice device, com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel releaseChannel, boolean online, java.lang.String locale, java.lang.String name, java.lang.String verifiedName, java.net.URI profilePicture, java.lang.String about, com.github.auties00.cobalt.model.jid.Jid jid, com.github.auties00.cobalt.model.jid.Jid lid, java.lang.String businessAddress, java.lang.Double businessLongitude, java.lang.Double businessLatitude, java.lang.String businessDescription, java.lang.String businessWebsite, java.lang.String businessEmail, com.github.auties00.cobalt.model.business.profile.BusinessCategory businessCategory, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.Contact> contacts, java.util.concurrent.ConcurrentHashMap<java.lang.String,com.github.auties00.cobalt.model.call.CallOffer> calls, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.privacy.PrivacySettingType,com.github.auties00.cobalt.model.privacy.PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, com.github.auties00.cobalt.model.chat.ChatEphemeralTimer newChatsEphemeralTimer, com.github.auties00.cobalt.client.WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, java.lang.Integer registrationId, com.github.auties00.libsignal.key.SignalIdentityKeyPair noiseKeyPair, com.github.auties00.libsignal.key.SignalIdentityKeyPair identityKeyPair, com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity signedDeviceIdentity, com.github.auties00.libsignal.key.SignalSignedKeyPair signedKeyPair, java.util.LinkedHashMap<java.lang.Integer,com.github.auties00.libsignal.key.SignalPreKeyPair> preKeys, java.util.UUID fdid, byte[] deviceId, java.util.UUID advertisingId, byte[] identityId, byte[] backupToken, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.groups.SignalSenderKeyName,com.github.auties00.libsignal.groups.state.SignalSenderKeyRecord> senderKeys, java.util.LinkedHashMap<java.lang.String,com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey> appStateKeys, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.state.SignalSessionRecord> sessions, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.model.sync.SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> recentStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> favouriteStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.QuickReply> quickReplies, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Label> labels, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion clientVersion, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion companionVersion, java.time.Instant lastAdvCheckTime, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.key.SignalIdentityPublicKey> remoteIdentities, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.business.BusinessVerifiedName> verifiedBusinessNames, java.nio.file.Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, com.github.auties00.cobalt.model.setting.ChatLockSettings chatLockSettings, java.util.List<com.github.auties00.cobalt.model.jid.Jid> favoriteChats, java.util.List<java.lang.String> primaryFeatures, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.chat.ChatMute> mentionEveryoneMuteExpirations, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.store.AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.OutContact> outContacts, long clockSkewSeconds, java.time.Instant groupAbPropsEmergencyPushTimestamp) {
+    AbstractWhatsAppStore(java.util.UUID uuid, java.lang.Long phoneNumber, com.github.auties00.cobalt.client.WhatsAppClientType clientType, java.time.Instant initializationTimeStamp, com.github.auties00.cobalt.client.WhatsAppDevice device, com.github.auties00.cobalt.model.device.pairing.ClientPayload.ClientReleaseChannel releaseChannel, boolean online, java.lang.String locale, java.lang.String name, java.lang.String verifiedName, java.net.URI profilePicture, java.lang.String about, com.github.auties00.cobalt.model.jid.Jid jid, com.github.auties00.cobalt.model.jid.Jid lid, java.lang.String businessAddress, java.lang.Double businessLongitude, java.lang.Double businessLatitude, java.lang.String businessDescription, java.lang.String businessWebsite, java.lang.String businessEmail, com.github.auties00.cobalt.model.business.profile.BusinessCategory businessCategory, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.Contact> contacts, java.util.concurrent.ConcurrentHashMap<java.lang.String,com.github.auties00.cobalt.model.call.CallOffer> calls, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.privacy.PrivacySettingType,com.github.auties00.cobalt.model.privacy.PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, com.github.auties00.cobalt.model.chat.ChatEphemeralTimer newChatsEphemeralTimer, com.github.auties00.cobalt.client.WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, java.lang.Integer registrationId, com.github.auties00.libsignal.key.SignalIdentityKeyPair noiseKeyPair, com.github.auties00.libsignal.key.SignalIdentityKeyPair identityKeyPair, com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity signedDeviceIdentity, com.github.auties00.libsignal.key.SignalSignedKeyPair signedKeyPair, java.util.LinkedHashMap<java.lang.Integer,com.github.auties00.libsignal.key.SignalPreKeyPair> preKeys, java.util.UUID fdid, byte[] deviceId, java.util.UUID advertisingId, byte[] identityId, byte[] backupToken, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.groups.SignalSenderKeyName,com.github.auties00.libsignal.groups.state.SignalSenderKeyRecord> senderKeys, java.util.LinkedHashMap<java.lang.String,com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey> appStateKeys, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.state.SignalSessionRecord> sessions, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.model.sync.SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> recentStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Sticker> favouriteStickers, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.QuickReply> quickReplies, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.preference.Label> labels, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion clientVersion, com.github.auties00.cobalt.model.device.pairing.ClientAppVersion companionVersion, java.time.Instant lastAdvCheckTime, java.util.concurrent.ConcurrentMap<com.github.auties00.libsignal.SignalProtocolAddress,com.github.auties00.libsignal.key.SignalIdentityPublicKey> remoteIdentities, java.util.concurrent.ConcurrentMap<java.lang.String,com.github.auties00.cobalt.model.device.sync.MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.business.BusinessVerifiedName> verifiedBusinessNames, java.nio.file.Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, com.github.auties00.cobalt.model.setting.ChatLockSettings chatLockSettings, java.util.List<com.github.auties00.cobalt.model.jid.Jid> favoriteChats, java.util.List<java.lang.String> primaryFeatures, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.chat.ChatMute> mentionEveryoneMuteExpirations, java.util.concurrent.ConcurrentMap<com.github.auties00.cobalt.model.sync.SyncPatchType,com.github.auties00.cobalt.store.AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, java.util.concurrent.ConcurrentHashMap<com.github.auties00.cobalt.model.jid.Jid,com.github.auties00.cobalt.model.contact.OutContact> outContacts, long clockSkewSeconds, java.time.Instant groupAbPropsEmergencyPushTimestamp, java.lang.String abPropsAbKey, java.lang.String abPropsHash, long abPropsRefresh, java.time.Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, java.util.concurrent.ConcurrentMap<java.lang.String, byte[]> baseKeys) {
         this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
         this.phoneNumber = phoneNumber;
         this.clientType = Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -594,6 +945,13 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.outContacts = requireNonNullElseGet(outContacts, ConcurrentHashMap::new); // WAWebDBOutContactDatabaseApi — initialise the dedicated out-contact store
         this.clockSkewSeconds = clockSkewSeconds; // WAWebUpdateClockSkewUtils.updateClockSkew
         this.groupAbPropsEmergencyPushTimestamp = groupAbPropsEmergencyPushTimestamp; // WAWebABPropsLocalStorage.setGroupAbPropsEmergencyPushTimestamp
+        this.abPropsAbKey = abPropsAbKey; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsHash = abPropsHash; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsRefresh = abPropsRefresh; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsLastSyncTime = abPropsLastSyncTime; // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsRefreshId = abPropsRefreshId; // WAWebABPropsLocalStorage.setRefreshId
+        this.abPropsWebRefreshId = abPropsWebRefreshId; // WAWebABPropsLocalStorage.setWebRefreshId
+        this.groupAbPropsRefreshId = groupAbPropsRefreshId; // WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
 
         this.privacySettings = Objects.requireNonNull(privacySettings, "privacySettings cannot be null");
         this.calls = Objects.requireNonNull(calls, "calls cannot be null");
@@ -653,6 +1011,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.deviceLists = new ConcurrentLinkedHashMap<>();
         this.unconfirmedIdentityChanges = ConcurrentHashMap.newKeySet();
         this.coexHostedVerificationCache = ConcurrentHashMap.newKeySet();
+        this.utmReadChatIds = ConcurrentHashMap.newKeySet();
         this.blockedContacts = ConcurrentHashMap.newKeySet();
         this.pendingDeviceSyncs = new ConcurrentLinkedQueue<>();
         this.groupSenderKeyDistribution = new ConcurrentHashMap<>();
@@ -698,6 +1057,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.mentionEveryoneMuteExpirations = requireNonNullElseGet(mentionEveryoneMuteExpirations, ConcurrentHashMap::new);
         this.orphanMutationEntries = new ConcurrentHashMap<>();
         this.identityEncryptionRange = new ConcurrentHashMap<>();
+        this.baseKeys = requireNonNullElseGet(baseKeys, ConcurrentHashMap::new); // WAWebSignalStorage.getBaseKeyTable
         this.encryptionSequence = new AtomicLong();
         this.logger = System.getLogger(this.getClass().getName());
         this.mediaConnectionLock = new Object();
@@ -1781,66 +2141,141 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public SequencedCollection<SignalPreKeyPair> preKeys() {
         return preKeys.sequencedValues();
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public boolean hasPreKeys() {
         return !preKeys.isEmpty();
     }
 
+    /**
+     * Returns the pre-key with the given numeric id, if any.
+     *
+     * @param id the pre-key id, or {@code null} for a no-op lookup
+     * @return an {@link Optional} containing the pre-key pair, or
+     *         {@link Optional#empty()} if the id is {@code null} or no
+     *         such pre-key exists
+     * @implNote Mirrors {@code WAWebSignalStoreApi.loadPreKey} via
+     *           {@code WAWebSignalStorage.getPreKeyTable().equals(...)}.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public Optional<SignalPreKeyPair> findPreKeyById(Integer id) {
         return id == null ? Optional.empty() : Optional.ofNullable(preKeys.get(id));
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void addPreKey(SignalPreKeyPair preKey) {
         Objects.requireNonNull(preKey, "preKey cannot be null");
         preKeys.put(preKey.id(), preKey);
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public boolean removePreKey(int id) {
         return preKeys.remove(id) != null;
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSignedPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public Optional<SignalSignedKeyPair> findSignedPreKeyById(Integer id) {
         return id == signedKeyPair.id() ? Optional.of(signedKeyPair) : Optional.empty();
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSignedPreKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void addSignedPreKey(SignalSignedKeyPair signalSignedKeyPair) {
         throw new UnsupportedOperationException("Cannot add signed pre keys to a Keys instance");
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSessionTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public Optional<SignalSessionRecord> findSessionByAddress(SignalProtocolAddress address) {
         return Optional.ofNullable(sessions.get(address));
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSessionTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void addSession(SignalProtocolAddress address, SignalSessionRecord record) {
         sessions.put(address, record);
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSenderKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public Optional<SignalSenderKeyRecord> findSenderKeyByName(SignalSenderKeyName name) {
         return Optional.ofNullable(senderKeys.get(name));
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSenderKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void addSenderKey(SignalSenderKeyName name, SignalSenderKeyRecord newRecord) {
         senderKeys.put(name, newRecord);
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSessionTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public boolean removeSession(SignalProtocolAddress address) {
         return sessions.remove(address) != null;
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSenderKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void removeSenderKeys(Jid deviceJid) {
         var signalAddress = deviceJid.toSignalAddress();
         senderKeys.keySet().removeIf(name ->
@@ -1849,16 +2284,151 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getSenderKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void removeSenderKeys(SignalSenderKeyName senderKeyName) {
         Objects.requireNonNull(senderKeyName, "senderKeyName cannot be null");
         senderKeys.remove(senderKeyName);
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = {"getSessionTable", "getSenderKeyTable"},
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void cleanupSignalSessions(Jid deviceJid) {
         var signalAddress = deviceJid.toSignalAddress();
         removeSession(signalAddress);
         removeSenderKeys(deviceJid);
+    }
+
+    /**
+     * Encodes a {@code (address, originalMsgId)} pair as the flat string
+     * key used by {@link #baseKeys}.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the WA Web {@code originalMsgId} from the
+     *                      pre-key {@code <message>} stanza
+     * @return the encoded composite key
+     */
+    private static String encodeBaseKeyKey(SignalProtocolAddress address, String originalMsgId) {
+        return address.toString() + "|" + originalMsgId;
+    }
+
+    /**
+     * Persists Alice's X3DH base key for a pre-key message so that a
+     * future replay of the same message can be deduplicated.
+     *
+     * @param address       the peer Signal address that initiated the
+     *                      session
+     * @param originalMsgId the {@code originalMsgId} carried by the
+     *                      pre-key stanza
+     * @param baseKey       the 32-byte X3DH ephemeral public key (Alice's
+     *                      base key) extracted from the pre-key message
+     * @throws NullPointerException if any argument is {@code null}
+     * @implNote {@code WAWebSignalSessionApi.saveSessionBaseKey} delegates
+     *           to {@code WAWebSignalStoreApi.saveBaseKey}, which performs
+     *           {@code getBaseKeyTable().createOrReplace(...)}. Cobalt
+     *           collapses the persistent table into the in-memory
+     *           {@link #baseKeys} map.
+     */
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getBaseKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public void saveSessionBaseKey(SignalProtocolAddress address, String originalMsgId, byte[] baseKey) {
+        Objects.requireNonNull(address, "address cannot be null");
+        Objects.requireNonNull(originalMsgId, "originalMsgId cannot be null");
+        Objects.requireNonNull(baseKey, "baseKey cannot be null");
+        baseKeys.put(encodeBaseKeyKey(address, originalMsgId), baseKey);
+    }
+
+    /**
+     * Returns the previously-saved Alice base key for a
+     * {@code (address, originalMsgId)} pair, if any.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @return an {@link Optional} containing the 32-byte base key, or
+     *         {@link Optional#empty()} if no entry exists
+     * @throws NullPointerException if any argument is {@code null}
+     * @implNote Mirrors {@code WAWebSignalStoreApi.loadBaseKey}, which
+     *           queries the {@code baseKey-store} composite index
+     *           {@code [address, originalMsgId]} for the Dexie row.
+     */
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getBaseKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public Optional<byte[]> findSessionBaseKey(SignalProtocolAddress address, String originalMsgId) {
+        Objects.requireNonNull(address, "address cannot be null");
+        Objects.requireNonNull(originalMsgId, "originalMsgId cannot be null");
+        return Optional.ofNullable(baseKeys.get(encodeBaseKeyKey(address, originalMsgId)));
+    }
+
+    /**
+     * Reports whether a stored base key matches the candidate one for the
+     * given {@code (address, originalMsgId)} pair.
+     *
+     * <p>Used by the receive path to detect a duplicate pre-key message
+     * (the same peer replaying the same {@code originalMsgId} with the
+     * same Alice base key) and skip re-deriving the session.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @param candidate     the candidate base key extracted from the
+     *                      newly-received pre-key message
+     * @return {@code true} if a base key was previously stored for this
+     *         pair and equals {@code candidate}, {@code false} otherwise
+     * @throws NullPointerException if any argument is {@code null}
+     * @implNote Mirrors {@code WAWebSignalSessionApi.hasSameBaseKey}, which
+     *           combines {@code WAWebSignalStoreApi.loadBaseKey} with a
+     *           constant-time byte comparison ({@code bufferEqual}).
+     */
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getBaseKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public boolean hasSameBaseKey(SignalProtocolAddress address, String originalMsgId, byte[] candidate) {
+        Objects.requireNonNull(address, "address cannot be null");
+        Objects.requireNonNull(originalMsgId, "originalMsgId cannot be null");
+        Objects.requireNonNull(candidate, "candidate cannot be null");
+        var stored = baseKeys.get(encodeBaseKeyKey(address, originalMsgId));
+        return stored != null && Arrays.equals(stored, candidate);
+    }
+
+    /**
+     * Removes the persisted base key for a {@code (address, originalMsgId)}
+     * pair, if any.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @return {@code true} if an entry was removed
+     * @throws NullPointerException if any argument is {@code null}
+     * @implNote Mirrors {@code WAWebSignalStoreApi.deleteBaseKey}, which
+     *           looks the row up by the composite index then removes it
+     *           by primary key.
+     */
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getBaseKeyTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public boolean removeSessionBaseKey(SignalProtocolAddress address, String originalMsgId) {
+        Objects.requireNonNull(address, "address cannot be null");
+        Objects.requireNonNull(originalMsgId, "originalMsgId cannot be null");
+        return baseKeys.remove(encodeBaseKeyKey(address, originalMsgId)) != null;
     }
 
     @Override
@@ -1952,6 +2522,17 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Per WAWebGetSyncKey.getAllSyncKeysInTransaction:
+     *           {@code runInTransaction({SyncKeyStore: true}, t => t.SyncKeyStore.getAll())}
+     *           which delegates to
+     *           {@code WAWebSyncdDb.getAllSyncKeys() ->
+     *           getSyncKeysTable().all().map(convertToSyncKeyFromRow)}.
+     *           Cobalt returns the in-memory map's sequenced values
+     *           wrapped in an unmodifiable view.
+     */
     @Override
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1959,9 +2540,23 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     public SequencedCollection<AppStateSyncKey> appStateKeys() {
+        // WAWebSyncdDb.getAllSyncKeys: getSyncKeysTable().all()
         return Collections.unmodifiableSequencedCollection(appStateKeys.sequencedValues());
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Per WAWebGetSyncKey.getSyncKeyInTransaction_DO_NOT_USE:
+     *           {@code runInTransaction({SyncKeyStore: true}, t => t.SyncKeyStore.get(id))}
+     *           which delegates to
+     *           {@code WAWebSyncdDb.getSyncKey(id) ->
+     *           getSyncKeysTable().get(new Uint8Array(fromSyncKeyId(id)))}.
+     *           {@code WASyncdKeyTypes.fromSyncKeyId} is the identity
+     *           function so the lookup is by raw {@code keyId} bytes.
+     *           Cobalt keys the in-memory map by hex-encoded
+     *           {@code keyId} for {@link String}-keyed storage.
+     */
     @Override
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1969,9 +2564,30 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     public Optional<AppStateSyncKey> findWebAppStateKeyById(byte[] id) {
+        // WAWebSyncdDb.getSyncKey: getSyncKeysTable().get(new Uint8Array(fromSyncKeyId(e)))
         return Optional.ofNullable(appStateKeys.get(HexFormat.of().formatHex(id)));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Per WAWebGetSyncKey.setSyncKeyInTransaction:
+     *           {@code runInTransaction({SyncKeyStore: true}, t => t.SyncKeyStore.set(key))}
+     *           which delegates to
+     *           {@code WAWebSyncdDb.createSyncKey(key) ->
+     *           getSyncKeysTable().createOrReplace(convertFromSyncKeyToRow(key))}.
+     *           Cobalt accepts a {@link Collection} per call to amortise
+     *           the rotation/key-share batched store path
+     *           ({@code SyncKeyRotationService}) — WA Web invokes
+     *           {@code setSyncKeyInTransaction} once per key from
+     *           {@code WAWebSyncdHandleKeyShare.handleKeyShare} and
+     *           {@code WAWebSyncdKeyManagement}. The empty
+     *           {@code keyData} guard is an ADAPTED defensive filter
+     *           with no JS counterpart: WA Web's call sites pass
+     *           individual fully-populated keys after a {@code n != null}
+     *           check, while Cobalt's bulk wrapper additionally rejects
+     *           rows whose payload is absent or zero-length.
+     */
     @Override
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1980,6 +2596,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     )
     public void addWebAppStateKeys(Collection<AppStateSyncKey> keys) {
         for (var key : keys) {
+            // ADAPTED: defensive filter with no WA Web counterpart — reject keys without payload.
             var hasKeyData = key.keyData()
                     .flatMap(AppStateSyncKeyData::keyData)
                     .map(data -> data.length > 0)
@@ -1987,12 +2604,24 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
             if (!hasKeyData) {
                 continue;
             }
+            // WAWebSyncdDb.createSyncKey: getSyncKeysTable().createOrReplace(convertFromSyncKeyToRow(e))
             key.keyId()
                     .flatMap(AppStateSyncKeyId::keyId)
                     .ifPresent(keyId -> appStateKeys.put(HexFormat.of().formatHex(keyId), key));
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote NO_WA_BASIS — WA Web's {@code SyncKeyStore} only exposes
+     *           {@code expire(epoch)} (mapped to
+     *           {@link #expireAppStateKeysByEpoch(int)}) and
+     *           {@code clear()} ({@code WAWebSchemaSyncKeys.getSyncKeysTable().clear}).
+     *           This timestamp-threshold variant has no equivalent and
+     *           is currently unused; retained pending cleanup by the
+     *           phantom-sweep agent.
+     */
     @Override
     public void expireAppStateKeys(Instant threshold) {
         for (var entry : appStateKeys.entrySet()) {
@@ -2006,6 +2635,27 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote Per WAWebGetSyncKey.expireSyncKeyInTransaction:
+     *           {@code runInTransaction({SyncKeyStore: true}, t => t.SyncKeyStore.expire(epoch))}
+     *           which delegates to
+     *           {@code WAWebSyncdDb.expireSyncKey(epoch)}:
+     *           <pre>{@code
+     *             const t = yield getSyncKeysTable().equals(["keyEpoch"], epoch);
+     *             t.forEach(e => getSyncKeysTable().merge({keyId: e.keyId},
+     *                                                    {timestamp: 0}));
+     *           }</pre>
+     *           — i.e. the IndexedDB {@code keyEpoch} index lookup is
+     *           replaced by an in-memory scan over
+     *           {@link #appStateKeys}, and the partial-row merge is
+     *           replaced by mutating the embedded
+     *           {@link AppStateSyncKeyData#setTimestamp} to
+     *           {@link Instant#EPOCH} (the Java equivalent of
+     *           {@code timestamp: 0}). Note that this is a soft-mark,
+     *           NOT a deletion — keys remain in the map.
+     */
     @Override
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -2014,10 +2664,12 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     )
     public void expireAppStateKeysByEpoch(int epoch) {
         for (var key : appStateKeys.values()) {
+            // WAWebSyncdDb.expireSyncKey: getSyncKeysTable().equals(["keyEpoch"], e) — Cobalt scans values, no secondary index.
             if (com.github.auties00.cobalt.sync.key.SyncKeyUtils.getKeyEpoch(key) != epoch) {
                 continue;
             }
 
+            // WAWebSyncdDb.expireSyncKey: getSyncKeysTable().merge({keyId: e.keyId}, {timestamp: 0})
             key.keyData().ifPresent(data -> data.setTimestamp(Instant.EPOCH));
         }
     }
@@ -2070,13 +2722,13 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     @Override
     @WhatsAppWebExport(
-            moduleName = "WAWebGetSyncAction",
-            exports = "getSyncActionsByCollectionAndIndexesInTransaction",
+            moduleName = "WAWebSyncActionStore",
+            exports = "WAWebSyncActionStore",
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     public void putSyncActionEntry(SyncPatchType patchType, byte[] indexMac, SyncActionEntry entry) {
         syncActionEntries.computeIfAbsent(patchType, _ -> new ConcurrentHashMap<>())
-                .put(HexFormat.of().formatHex(indexMac), entry);
+                .put(HexFormat.of().formatHex(indexMac), entry); // WAWebSyncActionStore.bulkSet/bulkUpdate: setSyncActionRows / updateSyncActionRows
     }
 
     @Override
@@ -2119,12 +2771,43 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     @Override
     @WhatsAppWebExport(
+            moduleName = "WAWebGetSyncAction",
+            exports = "countSyncActionsInTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public int countSyncActionEntries() {
+        var total = 0;
+        for (var inner : syncActionEntries.values()) {
+            total += inner.size(); // WAWebSyncActionStore.count: getSyncActionsTable().count()
+        }
+        return total;
+    }
+
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetSyncAction",
+            exports = "getAllSyncActions",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public Collection<SyncActionEntry> getAllSyncActionEntries() {
+        if (syncActionEntries.isEmpty()) {
+            return List.of();
+        }
+        var all = new ArrayList<SyncActionEntry>();
+        for (var inner : syncActionEntries.values()) {
+            all.addAll(inner.values()); // WAWebSyncActionStore.getAll: getSyncActionsTable().all()
+        }
+        return Collections.unmodifiableCollection(all);
+    }
+
+    @Override
+    @WhatsAppWebExport(
             moduleName = "WAWebGetMissingKey",
             exports = "getAllMissingKeysInTransaction",
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     public Collection<MissingDeviceSyncKey> missingSyncKeys() {
-        return Collections.unmodifiableCollection(missingSyncKeys.values());
+        return Collections.unmodifiableCollection(missingSyncKeys.values()); // WAWebMissingKeyStore.getAll: WAWebSyncdDb.getAllMissingKeys()
     }
 
     @Override
@@ -2134,21 +2817,51 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     public Optional<MissingDeviceSyncKey> findMissingSyncKey(byte[] keyId) {
+        // ADAPTED: WAWebMissingKeyStore.bulkGet takes a list of keyHex strings;
+        //         Cobalt looks up a single entry by raw keyId bytes encoded with HexFormat.
         return Optional.ofNullable(missingSyncKeys.get(HexFormat.of().formatHex(keyId)));
     }
 
     @Override
     @WhatsAppWebExport(
-            moduleName = "WAWebSyncdStoreMissingKeys",
-            exports = "addMissingKeys",
+            moduleName = "WAWebGetMissingKey",
+            exports = "getMissingKeyCountTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public int missingSyncKeyCount() {
+        return missingSyncKeys.size(); // WAWebMissingKeyStore.count: WAWebSyncdDb.getMissingKeyCount()
+    }
+
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetMissingKey",
+            exports = "bulkUpdateMissingKeysInTransaction",
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     public void addMissingSyncKey(MissingDeviceSyncKey missingKey) {
+        // Single-element form of WAWebMissingKeyStore.bulkUpdate:
+        //   WAWebSyncdDb.createOrUpdateMissingKeys([{keyHex, keyId, timestamp, deviceResponses}])
         missingSyncKeys.put(HexFormat.of().formatHex(missingKey.keyId()), missingKey);
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetMissingKey",
+            exports = "bulkUpdateMissingKeysInTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public void addMissingSyncKeys(Collection<MissingDeviceSyncKey> missingKeys) {
+        Objects.requireNonNull(missingKeys, "missingKeys cannot be null");
+        // WAWebMissingKeyStore.bulkUpdate: WAWebSyncdDb.createOrUpdateMissingKeys(records)
+        for (var missingKey : missingKeys) {
+            this.missingSyncKeys.put(HexFormat.of().formatHex(missingKey.keyId()), missingKey);
+        }
+    }
+
+    @Override
     public void removeMissingSyncKey(byte[] keyId) {
+        // Single-element form of WAWebMissingKeyStore.bulkRemove:
+        //   WAWebSyncdDb.bulkRemoveMissingKeys([keyHex])
         missingSyncKeys.remove(HexFormat.of().formatHex(keyId));
     }
 
@@ -2309,6 +3022,11 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getIdentityTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public void saveIdentity(SignalProtocolAddress address, SignalIdentityPublicKey identityKey) {
         Objects.requireNonNull(address, "address cannot be null");
         Objects.requireNonNull(identityKey, "identityKey cannot be null");
@@ -2316,6 +3034,11 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebSignalStorage",
+            exports = "getIdentityTable",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     public Optional<SignalIdentityPublicKey> findIdentityByAddress(SignalProtocolAddress address) {
         if (address == null) {
             return Optional.empty();
@@ -2458,6 +3181,22 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
                         current.bootstrapped()
                 )
         );
+    }
+
+    @Override
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetCollectionVersion",
+            exports = "getIsCollectionInMacMismatchFatalInTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    public boolean isCollectionInMacMismatchFatal(SyncPatchType collectionName) {
+        // WAWebGetCollectionVersion.getIsCollectionInMacMismatchFatalInTransaction:
+        // n.get(e).then(e => e?.isCollectionInMacMismatchFatal)
+        // The optional-chain `e?.isCollectionInMacMismatchFatal` resolves to `undefined`
+        // (falsy) when no entry exists; findWebAppState returns a default with
+        // macMismatch == false in that case, matching that semantics.
+        var current = webAppStateCollections.get(collectionName);
+        return current != null && current.macMismatch();
     }
 
     @Override
@@ -2835,6 +3574,76 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public void clearCoexHostedVerificationCache() {
         coexHostedVerificationCache.clear();
+    }
+
+    /**
+     * Records that the stored CTWA UTM payload for the given chat has been
+     * consumed, so that {@link #hasReadUtmForChat(Jid)} returns {@code true}
+     * on subsequent reads until the entry is evicted.
+     *
+     * @param chatJid the chat JID whose UTM payload has just been read;
+     *                {@code null} is ignored
+     * @implNote Mirrors {@code WAWebChatUtmCache.read(t)} which performs
+     *           {@code this.utmReadChatIds.add(t)} on the singleton instance.
+     */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebChatUtmCache", exports = "default.read", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void markUtmReadForChat(Jid chatJid) {
+        if (chatJid != null) {
+            utmReadChatIds.add(chatJid); // WAWebChatUtmCache.read
+        }
+    }
+
+    /**
+     * Returns whether the CTWA UTM payload for the given chat has already
+     * been consumed during this session.
+     *
+     * @param chatJid the chat JID to check
+     * @return {@code true} if {@link #markUtmReadForChat(Jid)} was invoked
+     *         for this chat and the entry has not since been evicted
+     * @implNote Mirrors {@code WAWebChatUtmCache.hasRead(t)} which returns
+     *           {@code this.utmReadChatIds.has(t)} on the singleton instance.
+     */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebChatUtmCache", exports = "default.hasRead", adaptation = WhatsAppAdaptation.ADAPTED)
+    public boolean hasReadUtmForChat(Jid chatJid) {
+        if (chatJid == null) {
+            return false;
+        }
+        return utmReadChatIds.contains(chatJid); // WAWebChatUtmCache.hasRead
+    }
+
+    /**
+     * Evicts the given chat from the UTM-read cache so that its UTM payload
+     * will be re-read the next time it is requested. Invoked by
+     * {@code WAWebUpdateUtmAction.addUtmToChat} after a new UTM value is
+     * persisted for the chat.
+     *
+     * @param chatJid the chat JID to forget; {@code null} is ignored
+     * @implNote Mirrors {@code WAWebChatUtmCache.deleteChatId(t)} which
+     *           performs {@code this.utmReadChatIds.delete(t)} on the
+     *           singleton instance.
+     */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebChatUtmCache", exports = "default.deleteChatId", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void deleteUtmReadChatId(Jid chatJid) {
+        if (chatJid != null) {
+            utmReadChatIds.remove(chatJid); // WAWebChatUtmCache.deleteChatId
+        }
+    }
+
+    /**
+     * Clears every entry from the UTM-read cache. Mirrors the
+     * {@code clearAll} lifecycle hook called during logout / account-swap.
+     *
+     * @implNote Mirrors {@code WAWebChatUtmCache.clearAll()} which performs
+     *           {@code this.utmReadChatIds.clear()} on the singleton
+     *           instance.
+     */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebChatUtmCache", exports = "default.clearAll", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void clearUtmReadChatIds() {
+        utmReadChatIds.clear(); // WAWebChatUtmCache.clearAll
     }
 
     /**
@@ -3495,6 +4304,165 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
     /**
      * {@inheritDoc}
      *
+     * @implNote WAWebABPropsLocalStorage.getABKey
+     */
+    @Override
+    public Optional<String> abPropsAbKey() { // WAWebABPropsLocalStorage.getABKey
+        return Optional.ofNullable(abPropsAbKey);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @Override
+    public WhatsAppStore setAbPropsAbKey(String abKey) { // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsAbKey = abKey;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.getHash
+     */
+    @Override
+    public Optional<String> abPropsHash() { // WAWebABPropsLocalStorage.getHash
+        return Optional.ofNullable(abPropsHash);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @Override
+    public WhatsAppStore setAbPropsHash(String hash) { // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsHash = hash;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Returns the persisted refresh interval, or the JS-side
+     * {@code parseInt(86400, 10)} default when no value has been recorded.
+     *
+     * @implNote WAWebABPropsLocalStorage.getRefresh
+     */
+    @Override
+    public long abPropsRefresh() { // WAWebABPropsLocalStorage.getRefresh
+        return abPropsRefresh != 0L ? abPropsRefresh : 86400L;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The refresh value is clamped into the {@code [600, 604800]}
+     * inclusive range, matching the bounds checked by the JS export.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @Override
+    public WhatsAppStore setAbPropsRefresh(long refreshSeconds) { // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        var clamped = refreshSeconds;
+        if (clamped < 600L) {
+            clamped = 600L;
+        } else if (clamped > 604800L) {
+            clamped = 604800L;
+        }
+        this.abPropsRefresh = clamped;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @Override
+    public Optional<Instant> abPropsLastSyncTime() { // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        return Optional.ofNullable(abPropsLastSyncTime);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     */
+    @Override
+    public WhatsAppStore setAbPropsLastSyncTime(Instant lastSyncTime) { // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+        this.abPropsLastSyncTime = lastSyncTime;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.getRefreshId
+     */
+    @Override
+    public long abPropsRefreshId() { // WAWebABPropsLocalStorage.getRefreshId
+        return abPropsRefreshId;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.setRefreshId
+     */
+    @Override
+    public WhatsAppStore setAbPropsRefreshId(long refreshId) { // WAWebABPropsLocalStorage.setRefreshId
+        this.abPropsRefreshId = refreshId;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.getWebRefreshId
+     */
+    @Override
+    public long abPropsWebRefreshId() { // WAWebABPropsLocalStorage.getWebRefreshId
+        return abPropsWebRefreshId;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.setWebRefreshId
+     */
+    @Override
+    public WhatsAppStore setAbPropsWebRefreshId(long webRefreshId) { // WAWebABPropsLocalStorage.setWebRefreshId
+        this.abPropsWebRefreshId = webRefreshId;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.getGroupAbPropsRefreshId
+     */
+    @Override
+    public long groupAbPropsRefreshId() { // WAWebABPropsLocalStorage.getGroupAbPropsRefreshId
+        return groupAbPropsRefreshId;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
+     */
+    @Override
+    public WhatsAppStore setGroupAbPropsRefreshId(long groupRefreshId) { // WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
+        this.groupAbPropsRefreshId = groupRefreshId;
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * @implNote WAWebRecentStickerCollectionMd.removeAllRecentAvatarStickers
      */
     @Override
@@ -3612,6 +4580,7 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && Objects.equals(deviceLists, that.deviceLists)
                             && Objects.equals(unconfirmedIdentityChanges, that.unconfirmedIdentityChanges)
                             && Objects.equals(coexHostedVerificationCache, that.coexHostedVerificationCache)
+                            && Objects.equals(utmReadChatIds, that.utmReadChatIds)
                             && Objects.equals(pendingDeviceSyncs, that.pendingDeviceSyncs)
                             && Objects.equals(groupSenderKeyDistribution, that.groupSenderKeyDistribution)
                             && disableLinkPreviews == that.disableLinkPreviews
@@ -3620,7 +4589,8 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && Objects.equals(chatLockSettings, that.chatLockSettings)
                             && Objects.equals(favoriteChats, that.favoriteChats)
                             && Objects.equals(primaryFeatures, that.primaryFeatures)
-                            && Objects.equals(mentionEveryoneMuteExpirations, that.mentionEveryoneMuteExpirations);
+                            && Objects.equals(mentionEveryoneMuteExpirations, that.mentionEveryoneMuteExpirations)
+                            && Objects.equals(baseKeys, that.baseKeys);
     }
 
     @Override
@@ -3641,9 +4611,9 @@ abstract class AbstractWhatsAppStore implements WhatsAppStore {
                 verifiedBusinessNames, proxy, directory, listeners, lidToPhoneMappings, phoneToLidMappings,
                 mediaConnection, mediaConnectionLock, offlineResumeState, offlineDeliveryLatch, usersNeedingSenderKeyRotation,
                 webAppStatePendingMutations, webAppStateCollections, pendingMessageRecipients, clientVersionLock, chatMetadata,
-                deviceLists, unconfirmedIdentityChanges, coexHostedVerificationCache, pendingDeviceSyncs, groupSenderKeyDistribution,
+                deviceLists, unconfirmedIdentityChanges, coexHostedVerificationCache, utmReadChatIds, pendingDeviceSyncs, groupSenderKeyDistribution,
                 disableLinkPreviews, relayAllCalls, externalWebBeta, chatLockSettings, favoriteChats, primaryFeatures,
-                mentionEveryoneMuteExpirations);
+                mentionEveryoneMuteExpirations, baseKeys);
     }
 
     @Override

@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.client;
 import com.github.auties00.cobalt.client.registration.WhatsAppMobileClientRegistration;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
-import com.github.auties00.cobalt.client.WhatsAppDevice;
+import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 
@@ -745,6 +745,28 @@ public sealed class WhatsAppClientBuilder {
          */
         public static final class Mobile extends Options {
             /**
+             * Device attestor captured by {@link #deviceAttestor}. Holds
+             * at most one of {@link WhatsAppDeviceAttestor.Android} or
+             * {@link WhatsAppDeviceAttestor.Ios}; {@code null} means "no
+             * attestor configured" and the registration falls back to
+             * the concrete subclass's NOOP.
+             */
+            private WhatsAppDeviceAttestor deviceAttestor;
+
+            /**
+             * Tracks whether the caller has explicitly selected the
+             * device via {@link #device(WhatsAppDevice)}, as opposed to
+             * inheriting the default produced by the store factory.
+             *
+             * <p>{@link #deviceAttestor} consults this flag to decide
+             * whether an immediate platform-mismatch check is
+             * meaningful: when the device is still the factory default
+             * the caller has not expressed an intent yet, so the
+             * deferred check in the terminal methods covers it instead.
+             */
+            private boolean deviceExplicitlySet;
+
+            /**
              * Package-private constructor used by {@link Client.Mobile}.
              *
              * @param store the store resolved by the previous stage
@@ -766,15 +788,130 @@ public sealed class WhatsAppClientBuilder {
             }
 
             /**
-             * Sets the companion device for the connection
+             * Sets the companion device for the connection.
+             *
+             * <p>If a device attestor has already been attached via
+             * {@link #deviceAttestor}, the new device's platform is
+             * validated against the attestor's sealed sub-type and the
+             * call raises {@link IllegalArgumentException} on a
+             * mismatch. The builder also flips an internal flag marking
+             * the device as explicitly chosen so that a subsequent
+             * {@code deviceAttestor} call can itself perform the
+             * symmetric check.
              *
              * @param device the companion device, can be null
              * @return the same instance for chaining
+             * @throws IllegalArgumentException if an attestor is already
+             *                                  set and its platform
+             *                                  does not match
+             *                                  {@code device}
              */
             @Override
             public Mobile device(WhatsAppDevice device) {
+                if (device != null) {
+                    requirePlatformMatches(device, deviceAttestor);
+                }
                 store.setDevice(device);
+                this.deviceExplicitlySet = true;
                 return this;
+            }
+
+            /**
+             * Sets the device attestor that produces the Play Integrity
+             * or App Attest payloads (and, on Android, the
+             * TEE-backed body signature) embedded into the upcoming
+             * registration requests.
+             *
+             * <p>If {@link #device(WhatsAppDevice)} has already been
+             * called explicitly, the attestor's sealed sub-type is
+             * validated against the stored device's platform and the
+             * call raises {@link IllegalArgumentException} on a
+             * mismatch. When the device is still the factory default
+             * the check is deferred to the terminal methods
+             * ({@link #register} and {@link #registered()}), which
+             * catches the case of an attestor set against the defaulted
+             * device.
+             *
+             * <p>Passing {@code null} clears the attestor and brings
+             * the registration back to the low-trust lane (the concrete
+             * registration subclass's private NOOP attestor).
+             *
+             * @param attestor the device attestor, or {@code null} to
+             *                 clear
+             * @return the same instance for chaining
+             * @throws IllegalArgumentException if {@code device(...)}
+             *                                  was called explicitly
+             *                                  and the stored device's
+             *                                  platform does not match
+             *                                  {@code attestor}
+             */
+            public Mobile deviceAttestor(WhatsAppDeviceAttestor attestor) {
+                if (deviceExplicitlySet && attestor != null) {
+                    requirePlatformMatches(store.device(), attestor);
+                }
+                this.deviceAttestor = attestor;
+                return this;
+            }
+
+            /**
+             * Cross-checks the currently stored device against the
+             * currently stored attestor and raises
+             * {@link IllegalArgumentException} if they do not agree.
+             *
+             * <p>Called by the terminal {@link #register} and
+             * {@link #registered()} methods so that a caller that set an
+             * attestor without also picking a matching device (thus
+             * relying on the factory default) still gets a clear error
+             * at the point the mismatch matters.
+             *
+             * @throws IllegalArgumentException if the stored attestor's
+             *                                  platform does not match
+             *                                  the stored device's
+             *                                  platform
+             */
+            private void validateAttestorMatchesDevice() {
+                if (deviceAttestor != null) {
+                    requirePlatformMatches(store.device(), deviceAttestor);
+                }
+            }
+
+            /**
+             * Validates that the sub-interface of {@code attestor}
+             * matches the platform carried by {@code device}.
+             *
+             * <p>A {@code null} attestor is always accepted, because
+             * registration will fall back to the concrete subclass's
+             * NOOP attestor.
+             *
+             * @param device the device whose platform the attestor must
+             *               match; never {@code null}
+             * @param attestor the device attestor to validate, or
+             *                 {@code null} to skip the check
+             * @throws IllegalArgumentException if the attestor's
+             *                                  platform does not match
+             *                                  the device's platform
+             */
+            private static void requirePlatformMatches(WhatsAppDevice device, WhatsAppDeviceAttestor attestor) {
+                if (attestor == null) {
+                    return;
+                }
+                var platform = device.platform();
+                switch (attestor) {
+                    case WhatsAppDeviceAttestor.Android ignored -> {
+                        if (platform != ClientPlatformType.ANDROID
+                                && platform != ClientPlatformType.ANDROID_BUSINESS) {
+                            throw new IllegalArgumentException(
+                                    "Android attestor requires an Android device, got platform: " + platform);
+                        }
+                    }
+                    case WhatsAppDeviceAttestor.Ios ignored -> {
+                        if (platform != ClientPlatformType.IOS
+                                && platform != ClientPlatformType.IOS_BUSINESS) {
+                            throw new IllegalArgumentException(
+                                    "iOS attestor requires an iOS device, got platform: " + platform);
+                        }
+                    }
+                }
             }
 
             /**
@@ -920,8 +1057,15 @@ public sealed class WhatsAppClientBuilder {
              * This means that the verification code has already been sent to WhatsApp
              *
              * @return an optional containing the WhatsApp instance if registered, empty otherwise
+             * @throws IllegalArgumentException if an attestor was
+             *                                  attached via
+             *                                  {@link #deviceAttestor}
+             *                                  whose platform does not
+             *                                  match the configured
+             *                                  device
              */
             public Optional<WhatsAppClient> registered() {
+                validateAttestorMatchesDevice();
                 if (!store.registered()) {
                     return Optional.empty();
                 }
@@ -944,6 +1088,7 @@ public sealed class WhatsAppClientBuilder {
              */
             public WhatsAppClient register(long phoneNumber, WhatsAppClientVerificationHandler.Mobile verification) {
                 Objects.requireNonNull(verification, "verification must not be null");
+                validateAttestorMatchesDevice();
 
                 var oldPhoneNumber = store.phoneNumber();
                 if(oldPhoneNumber.isPresent() && oldPhoneNumber.getAsLong() != phoneNumber) {
@@ -953,7 +1098,8 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 if (!store.registered()) {
-                    try(var registration = WhatsAppMobileClientRegistration.of(store, verification)) {
+                    try(var registration = WhatsAppMobileClientRegistration.of(
+                            store, verification, deviceAttestor)) {
                         registration.register();
                     }
                 }

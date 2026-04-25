@@ -2,7 +2,9 @@ package com.github.auties00.cobalt.wam;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.node.Node;
@@ -67,6 +69,9 @@ import java.util.logging.Logger;
  */
 @WhatsAppWebModule(moduleName = "WAWebWam")
 @WhatsAppWebModule(moduleName = "WAWebWamCommonLogEvent")
+@WhatsAppWebModule(moduleName = "WAWebL10NCountryCodes")
+@WhatsAppWebModule(moduleName = "WAWebBrowserApi")
+@WhatsAppWebExport(moduleName = "WAWebWam", exports = "Wam", adaptation = WhatsAppAdaptation.ADAPTED)
 public final class WamService {
     private static final Logger LOGGER = Logger.getLogger(WamService.class.getName());
 
@@ -135,7 +140,13 @@ public final class WamService {
     /**
      * Device classification value for DESKTOP, matching the JS enum
      * {@code DEVICE_CLASSIFICATION.DESKTOP}.
+     *
+     * @implNote Adapts {@code WAWebFalcoCanonicalDeviceClassification}
+     * which returns the string {@code "desktop"}; this numeric constant
+     * is the encoded form written into the Falco global
+     * {@code deviceClassification} (14507).
      */
+    @WhatsAppWebExport(moduleName = "WAWebFalcoCanonicalDeviceClassification", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int DEVICE_CLASSIFICATION_DESKTOP = 4;
 
     /**
@@ -181,7 +192,39 @@ public final class WamService {
     private volatile long platform;
     private volatile String appVersion;
     private volatile String deviceName;
+    /**
+     * Approximate device memory class in megabytes, reported as the
+     * WAM global with index {@code 655} ({@code memClass}).
+     *
+     * @implNote In WA Web this is derived from
+     *           {@code self.navigator.deviceMemory * 1000}, short-circuiting
+     *           to {@code 1000} when gkx {@code 17565} (prod low-end device)
+     *           is set. Cobalt runs headless on the JVM where
+     *           {@code navigator.deviceMemory} has no analog, so the value
+     *           is approximated from {@link Runtime#maxMemory()}, and the
+     *           low-end-device override is not applicable.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebBrowserApi",
+            exports = "getMemClass",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     private volatile int memClass;
+    /**
+     * Number of logical CPUs reported as the WAM global with index
+     * {@code 10317} ({@code numCpu}).
+     *
+     * @implNote In WA Web this is {@code self.navigator.hardwareConcurrency},
+     *           short-circuiting to {@code 1} when gkx {@code 17565} (prod
+     *           low-end device) is set. Cobalt runs headless on the JVM and
+     *           uses {@link Runtime#availableProcessors()}; the
+     *           low-end-device override is not applicable.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebBrowserApi",
+            exports = "getNumCpu",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     private volatile int numCpu;
     private volatile String browser;
     private volatile String browserVersion;
@@ -193,6 +236,7 @@ public final class WamService {
     private volatile String companionAppVersion;
     private volatile String psCountryCode;
     private volatile boolean serviceImprovementOptOut;
+    private volatile String pushPhase;
 
     /**
      * Constructs a new {@code WamService} bound to the given client.
@@ -227,14 +271,29 @@ public final class WamService {
      *
      * <p>This method should be called once after the client has
      * authenticated and the store's JID and version are available.
+     *
+     * @implNote Adapts {@code WAWebWam.initWamRuntime}: the JS routine
+     *     resolves {@code WAWebWamGlobals.PrivateStatsAllIds}, calls
+     *     {@code WAWebWamPrivateStats.initPrivateStats}, starts the
+     *     {@code WAShiftTimer} that drains pending events, registers the
+     *     runtime singleton with {@code WAWebWamRuntimeProvider}, then
+     *     replays the queue of pre-init {@code commit} / {@code set}
+     *     calls. Cobalt collapses the registration into constructor DI
+     *     and the {@code commitOnSet} toggle around {@code Global.set} is
+     *     not needed because Cobalt does not back globals with a reactive
+     *     proxy. The pre-init queue is implemented by {@link #initQueue}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebWam", exports = "initWamRuntime", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebWam", exports = "commitOnSet", adaptation = WhatsAppAdaptation.ADAPTED)
     public void initialize() {
         var store = client.store();
         var version = store.clientVersion();
         this.appVersion = version != null ? version.toString() : null;
         this.platform = store.clientType() == WhatsAppClientType.WEB ? 8L : 2L;
         this.deviceName = store.name();
+        // ADAPTED: WAWebBrowserApi.getMemClass - navigator.deviceMemory*1000 is headless-unavailable
         this.memClass = (int) (Runtime.getRuntime().maxMemory() / (1024 * 1024));
+        // ADAPTED: WAWebBrowserApi.getNumCpu - navigator.hardwareConcurrency is headless-unavailable
         this.numCpu = Runtime.getRuntime().availableProcessors();
         this.browser = "Chrome";
         this.browserVersion = appVersion;
@@ -250,6 +309,7 @@ public final class WamService {
                 .orElse(null);
         this.psCountryCode = derivePsCountryCode();
         this.serviceImprovementOptOut = abPropsService.getBool(ABProp.SERVICE_IMPROVEMENT_OPT_OUT_FLAG);
+        this.pushPhase = getPushPhase();
 
         // Load WAM event sampling overrides from AB props
         var configs = abPropsService.samplingConfigs();
@@ -284,13 +344,30 @@ public final class WamService {
     }
 
     /**
-     * Derives the PS country code from the user's phone number using
-     * libphonenumber, matching WhatsApp Web's
-     * {@code WAWebL10NCountryCodes.getCountryShortcodeByPhone}.
+     * Derives the PS country code from the user's phone number, matching
+     * WhatsApp Web's {@code WAWebL10NCountryCodes.getCountryShortcodeByPhone}.
      *
-     * @return the two-letter ISO 3166-1 alpha-2 country code, or
-     *         {@code null} if not derivable
+     * @implNote WA Web walks a hand-maintained prefix trie
+     *           (leading-digit -&gt; next-digit -&gt; ... -&gt; {@code c} leaf)
+     *           hardcoded inside {@code WAWebL10NCountryCodes}, with two
+     *           special-case rules applied on top: a leading {@code 1}
+     *           that does not match a NANP sub-prefix falls back to
+     *           {@code "US"}, and a leading {@code 7} that would match
+     *           {@code "RU"} is remapped to {@code "KZ"} when the second
+     *           digit is {@code 6} or {@code 7}. Cobalt defers the prefix
+     *           analysis to Google's {@code libphonenumber}, whose
+     *           region-code database encodes the same NANP fallback and
+     *           the Kazakhstan {@code 7-6xx}/{@code 7-7xx} split as
+     *           authoritative prefix data. The output format (ISO 3166-1
+     *           alpha-2) is identical, and libphonenumber is kept up to
+     *           date with ITU E.164 allocations rather than a handwritten
+     *           trie snapshot.
+     * @return the two-letter ISO 3166-1 alpha-2 country code in
+     *         lowercase, or {@code null} if not derivable
      */
+    @WhatsAppWebExport(moduleName = "WAWebL10NCountryCodes",
+            exports = "getCountryShortcodeByPhone",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private String derivePsCountryCode() {
         var phoneNumber = client.store().phoneNumber();
         if (phoneNumber.isEmpty()) {
@@ -446,7 +523,21 @@ public final class WamService {
      *
      * <p>The pending list is atomically swapped to {@code null} so that
      * new events committed during the flush are not lost.
+     *
+     * @implNote Adapts {@code WAWebWam.sendAllLogs}: the JS routine
+     *     reads pending buffers from {@code WAWebWamStorage} (IndexedDB)
+     *     for a single buffer-key, uploads each to either
+     *     {@code WAWebUploadStatsBackend} or
+     *     {@code WAWebUploadPrivateStatsBackend}, drops oversize buffers
+     *     emitting a {@code WamClientErrorsWamEvent} with
+     *     {@code wamClientBufferDropErrorCount = 1}, and on partial
+     *     success re-persists the failed payloads. Cobalt does not
+     *     persist pending buffers to disk, so this method is the direct
+     *     in-memory equivalent: {@code flushChannel} drains the pending
+     *     list and {@code buildAndSend} performs the equivalent oversize
+     *     drop and self-metric emission.
      */
+    @WhatsAppWebExport(moduleName = "WAWebWam", exports = "sendAllLogs", adaptation = WhatsAppAdaptation.ADAPTED)
     public void flush() {
         if (!initialized) {
             return;
@@ -771,6 +862,8 @@ public final class WamService {
             if (abKey2 != null) globals.put(4473, abKey2);
             // 4505 - deviceVersion (regular)
             if (deviceVersion != null) globals.put(4505, deviceVersion);
+            // 6605 - webcWebArch (regular) - WAWebWam.getPushPhase
+            if (pushPhase != null) globals.put(6605, pushPhase);
         }
         // 6251 - ocVersion (regular, private)
         globals.put(6251, 1L);
@@ -1075,6 +1168,29 @@ public final class WamService {
         if (delay < RETRY_BASE_DELAY_MS) delay = RETRY_BASE_DELAY_MS;
         var jitter = (long) (delay * 0.1 * DataUtils.randomDouble());
         return delay + jitter;
+    }
+
+    /**
+     * Returns the {@code webcWebArch} push-phase string for the current
+     * build, or {@code null} if no phase is configured.
+     *
+     * <p>The JS implementation maps the build constant
+     * {@code PUSH_PHASE} through a fixed alias table:
+     * {@code "sandcastle" -> "dev"}, {@code "trunkstable" -> "C1"};
+     * unmapped phases pass through. When the {@code 26256} gatekeeper is
+     * set the value is forced to {@code "jest-e2e"}.
+     *
+     * @implNote Cobalt is a third-party client without an internal
+     *     {@code PUSH_PHASE} build constant or jest-e2e harness, so this
+     *     method always returns {@code null} and {@code webcWebArch}
+     *     remains absent from emitted globals.
+     * @return the push-phase string, or {@code null} when not applicable
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWam", exports = "getPushPhase", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String getPushPhase() {
+        // WAWebWam.ie: alias map sandcastle->dev, trunkstable->C1; gkx 26256 -> jest-e2e.
+        // Cobalt has no PUSH_PHASE build constant nor jest-e2e harness.
+        return null;
     }
 
     /**

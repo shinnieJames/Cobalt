@@ -29,5 +29,7 @@ public enum SignalType {
     @WamEnumConstant(21) USER_BLOCK_REASON_OTP_DID_NOT_REQUEST,
     @WamEnumConstant(22) USER_BLOCK_REASON_OTHER,
     @WamEnumConstant(23) USER_MUTE,
-    @WamEnumConstant(24) USER_BLOCK_REASON_SCAM_OR_FRAUD
+    @WamEnumConstant(24) USER_BLOCK_REASON_SCAM_OR_FRAUD,
+    @WamEnumConstant(25) MESSAGE,
+    @WamEnumConstant(26) USER_ARCHIVE
 }

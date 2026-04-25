@@ -236,6 +236,12 @@ public final class SuccessStreamHandler implements SocketStream.Handler {
     private void bootstrap(Node node) {
         var store = whatsapp.store();
 
+        // ADAPTED: WAWebHandleSuccess.default ->
+        // WAWebPageLoadLogging.addPageLoadQplPoint("success_received") and
+        // WAWebQplFlowWrapper.QPL.markerPoint(p, "SuccessReceived").
+        // Cobalt has no QPL/page-load instrumentation, so these telemetry
+        // markers have no equivalent.
+
         // NO_WA_BASIS: Cobalt-specific lifecycle state — flips the store
         // out of the "connecting" state once authentication has succeeded.
         store.setOnline(true);
@@ -366,14 +372,17 @@ public final class SuccessStreamHandler implements SocketStream.Handler {
         // WAWebHandleSuccess.default -> WAWebABPropsLocalStorage
         //     .setGroupAbPropsEmergencyPushTimestamp(u.ts)
         // WA Web compares the server-supplied group_abprops refresh id against
-        // its locally-persisted copy, and when they differ it writes the
+        // its locally-persisted copy via WAWebABPropsLocalStorage
+        //     .getGroupAbPropsRefreshId(), and when they differ it writes the
         // stanza's server timestamp so a future sync can detect the push.
-        // Cobalt does not persist the refresh id separately yet; ADAPTED by
-        // always stamping when the server-supplied group_abprops attribute is
-        // non-zero, which is a strict superset of the WA Web behaviour.
+        // Cobalt now persists the refresh id on the store via
+        // WhatsAppStore.setGroupAbPropsRefreshId, so we mirror the JS
+        // exact comparison instead of stamping unconditionally.
         var groupAbpropsRefreshId = node.getAttributeAsLong("group_abprops", 0L);
-        if (groupAbpropsRefreshId != 0L && serverTimestampSeconds > 0) {
+        if (groupAbpropsRefreshId != 0L && serverTimestampSeconds > 0
+                && groupAbpropsRefreshId != store.groupAbPropsRefreshId()) {
             store.setGroupAbPropsEmergencyPushTimestamp(Instant.ofEpochSecond(serverTimestampSeconds)); // WAWebABPropsLocalStorage.setGroupAbPropsEmergencyPushTimestamp
+            store.setGroupAbPropsRefreshId(groupAbpropsRefreshId); // WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
         }
 
         // ADAPTED: WAWebHandleSuccess.default -> WA Web resumes syncd and

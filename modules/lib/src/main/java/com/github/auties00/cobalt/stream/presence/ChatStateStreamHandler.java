@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.stream.presence;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -31,6 +33,7 @@ import com.github.auties00.cobalt.stream.SocketStream;
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleChatState")
 @WhatsAppWebModule(moduleName = "WACreateHandleChatState")
+@WhatsAppWebModule(moduleName = "WAHandleChatStateProtocol")
 @WhatsAppWebModule(moduleName = "WAWebChangePresenceHandlerAction")
 public final class ChatStateStreamHandler implements SocketStream.Handler {
     /**
@@ -85,6 +88,8 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
      *           that routes to handleIndividualChatState or handleGroupChatState
      */
     @Override
+    @WhatsAppWebExport(moduleName = "WACreateHandleChatState", exports = "createHandleChatState",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public void handle(Node node) {
         // WACreateHandleChatState: stateSource determines FromUser vs FromGroup
         // WASmaxInChatstateFromUserMixin: from attr is a user JID
@@ -132,6 +137,8 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
      * @param state the resolved composing state
      * @implNote WAWebHandleChatState.handleIndividualChatState
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleChatState", exports = "handleIndividualChatState",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleIndividualChatState(Jid from, ContactStatus state) {
         // WAWebChangePresenceHandlerAction.default: if (!isMeAccount(a))
         // Skip self-chatstates for individual chats
@@ -180,6 +187,8 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
      * @implNote WAWebHandleChatState.handleGroupChatState,
      *           WAWebChangePresenceHandlerAction.default, group path in m(e, t)
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleChatState", exports = "handleGroupChatState",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleGroupChatState(Jid from, Jid participant, ContactStatus state) {
         // WAWebHandleChatState.handleGroupChatState: var i = chatJidToChatWid(jid), var l = userJidToUserWid(participant)
         // WAWebChangePresenceHandlerAction.default -> m(presence, {id: i, type: status, participant: l})
@@ -222,6 +231,10 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
      *           WASmaxInChatstatePausedMixin.parsePausedMixin,
      *           WAHandleChatStateProtocol.parseChatStatus
      */
+    @WhatsAppWebExport(moduleName = "WAHandleChatStateProtocol", exports = "parseChatStatus",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WASmaxInChatstateStateTypes", exports = "parseStateTypes",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private ContactStatus resolveState(Node node) {
         // WASmaxInChatstateStateTypes: tries parseComposingMixin, then parsePausedMixin
         var child = node.getChild().orElse(null);

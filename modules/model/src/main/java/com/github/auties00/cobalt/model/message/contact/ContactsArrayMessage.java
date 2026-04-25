@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.contact;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 
@@ -24,8 +27,25 @@ import java.util.Optional;
  * <p>As a {@link ContextualMessage}, this message can also carry
  * {@link ContextInfo} describing a quoted message, a forwarding score,
  * mentions and other contextual metadata.
+ *
+ * @implNote The WA Web generator {@code WAWebGenerateMultiVcardMessageProto}
+ *           is a tiny factory that wraps an input {@code {contextInfo, json}}
+ *           pair into {@code {contactsArrayMessage: {contacts: json.vcardList.map(e => e), contextInfo}}}.
+ *           The JS {@code .map(e => e)} is an identity copy that preserves
+ *           element shape; the input {@code vcardList} entries are already
+ *           contact-shaped records with a {@code vcard} string (they are
+ *           consumed as {@code ContactMessage} protos by recipients). Cobalt
+ *           represents this structure statically: this protobuf message is
+ *           the inner {@code {contactsArrayMessage: ...}} object and the
+ *           surrounding wrapper is {@code MessageContainer.contactsArrayMessage}.
+ *           Construction goes through the generated
+ *           {@code ContactsArrayMessageBuilder}, which is the direct analog of
+ *           the JS factory call site. The JS generator never sets
+ *           {@code displayName}; that field is populated elsewhere by WA Web
+ *           (e.g. on receive-side parsing or preview formatting).
  */
 @ProtobufMessage(name = "Message.ContactsArrayMessage")
+@WhatsAppWebModule(moduleName = "WAWebGenerateMultiVcardMessageProto")
 public final class ContactsArrayMessage implements ContextualMessage {
     /**
      * The human readable label shown for the bundle of contacts.
@@ -43,8 +63,15 @@ public final class ContactsArrayMessage implements ContextualMessage {
      * <p>Each entry is a fully formed {@link ContactMessage} with its
      * own display name and vCard payload, so that the recipient's
      * client can import each contact independently.
+     *
+     * @implNote In the WA Web generator this list is produced by
+     *           {@code json.vcardList.map(function(e){return e})}, an identity
+     *           map that copies the array while preserving element identity.
+     *           Cobalt's builder performs the same role by accepting a
+     *           {@code List<ContactMessage>} directly.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateMultiVcardMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     List<ContactMessage> contacts;
 
     /**
@@ -53,8 +80,12 @@ public final class ContactsArrayMessage implements ContextualMessage {
      * <p>When present, this field describes a quoted message, a
      * forwarding score, mentioned participants or any other
      * context related information.
+     *
+     * @implNote The WA Web generator {@code WAWebGenerateMultiVcardMessageProto}
+     *           forwards its input {@code contextInfo} verbatim onto this field.
      */
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateMultiVcardMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     ContextInfo contextInfo;
 
 

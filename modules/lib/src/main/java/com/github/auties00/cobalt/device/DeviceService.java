@@ -82,7 +82,10 @@ import java.util.stream.Stream;
  * WAWebHandleAdvDeviceNotificationApi: processes real-time device add/remove notifications.
  * WAWebHandleAdvForMessageApi: handles ADV device updates from incoming messages.
  * WAWebIcdcHandlerApi: handles ICDC data processing for incoming messages.
- * WAWebApiDeviceList: provides getDeviceIds, getMyDeviceList, hasDevice accessors.
+ * WAWebApiDeviceList: provides the per-user device-list cache and CRUD operations:
+ * getDeviceRecord, bulkGetDeviceRecord, createOrReplaceDeviceRecord,
+ * bulkCreateOrReplaceDeviceRecord, getDeviceIds, hasDevice, getDeviceInfoForSync,
+ * getMyDeviceList, getAllDeviceLists.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvSyncDeviceListApi")
 @WhatsAppWebModule(moduleName = "WAWebAdvHandlerApi")
@@ -498,36 +501,54 @@ public final class DeviceService {
      * message routing.
      *
      * @param userJids the user JIDs to check
-     * @param caller   the caller context for logging (e.g., "device_sync_request")
+     * @param caller   the caller context for logging (e.g., "device_sync_request"); when
+     *                 {@code null}, the literal {@code "unknown"} is used to match WA Web
      *
      * @implNote WAWebApiContact.checkPnToLidMapping: diagnostic check that logs warnings
-     * for phone number JIDs missing LID mappings. Called before USync requests.
+     *           for phone number JIDs missing LID mappings. Called before USync requests.
+     *           Uses {@link Set} for both the eligible-PN bucket and the missing-mapping
+     *           bucket so that duplicates in {@code userJids} are collapsed exactly the
+     *           way WA Web's two {@code Set} accumulators do. The eligible filter
+     *           excludes bots ({@code !isBot()}), hosted users ({@code !isHosted()}, which
+     *           covers both {@code hosted} and {@code hosted.lid} servers), and LIDs
+     *           ({@code !isLid()}). The look-up uses {@link WhatsAppStore#findLidByPhone}
+     *           which already implements WA Web's {@code getCurrentLid} me-user fast path.
      */
     @WhatsAppWebExport(moduleName = "WAWebApiContact",
             exports = "checkPnToLidMapping",
             adaptation = WhatsAppAdaptation.DIRECT)
     private void checkPnToLidMapping(Collection<Jid> userJids, String caller) {
-        // WAWebApiContact.checkPnToLidMapping: filter to only phone number JIDs
-        // Excludes bots (!isBot()), hosted (!isHosted()), and LIDs (!isLid())
-        var phoneNumberJids = userJids.stream()
-                .filter(jid -> !jid.hasBotServer() && !jid.hasHostedServer() && !jid.hasLidServer())
-                .map(Jid::toUserJid)
-                .toList();
-
-        if (phoneNumberJids.isEmpty()) {
-            return;
+        // WAWebApiContact.checkPnToLidMapping: build the eligible-PN set
+        // Mirrors the JS forEach + Set.add: a user JID enters the bucket only when it is
+        // not a bot, not hosted (hosted or hosted.lid), and not a LID. Duplicates are
+        // collapsed by the Set just like WA Web's `r` accumulator.
+        var phoneNumberJids = new LinkedHashSet<Jid>();
+        for (var jid : userJids) {
+            if (jid.isBot() || jid.hasHostedServer() || jid.hasHostedLidServer() || jid.hasLidServer()) {
+                continue;
+            }
+            // WAWebWidFactory.asUserWidOrThrow: strip device/agent before lookup
+            phoneNumberJids.add(jid.toUserJid());
         }
 
-        // WAWebApiContact.checkPnToLidMapping: check which phone numbers are missing LID mappings
-        var missingMappings = phoneNumberJids.stream()
-                .filter(jid -> store.findLidByPhone(jid).isEmpty())
-                .toList();
+        // WAWebApiContact.checkPnToLidMapping: build the missing-mapping set
+        // Mirrors the JS forEach + Set.add over `r`: every PN whose getCurrentLid lookup
+        // returns null is collected into the second Set `a`.
+        var missingMappings = new LinkedHashSet<Jid>();
+        for (var jid : phoneNumberJids) {
+            // WAWebApiContact.getCurrentLid: store.findLidByPhone embeds the me-user fast path
+            if (store.findLidByPhone(jid).isEmpty()) {
+                missingMappings.add(jid);
+            }
+        }
 
+        // WAWebApiContact.checkPnToLidMapping: emit the diagnostic log when any mapping is missing
+        // Caller defaults to "unknown" when null, matching the JS `n!=null?n:"unknown"` ternary.
         if (!missingMappings.isEmpty()) {
+            var resolvedCaller = caller != null ? caller : "unknown";
             LOGGER.log(System.Logger.Level.WARNING,
-                    "LID mapping missing for {0} of {1} phone numbers during {2}. Missing: {3}",
-                    missingMappings.size(), phoneNumberJids.size(), caller,
-                    missingMappings.stream().limit(5).toList());
+                    "LID null - {0} PNs, missing: {1}, caller: {2}",
+                    phoneNumberJids.size(), missingMappings.size(), resolvedCaller);
         }
     }
 
@@ -851,38 +872,32 @@ public final class DeviceService {
                             yield null;
                         }
                         // WAWebHandleAdvOmittedResultApi: if (e != null) a.timestamp = e
-                        // Only update timestamp and check expectedTs clearing when ts is present
+                        // Only update timestamp and check expectedTs clearing when ts is present.
+                        // The shallow-copy semantics of `babelHelpers.extends({}, t)` mean the
+                        // expectedTs / expectedTsLastDeviceJobTs / expectedTsUpdateTs fields are
+                        // preserved from the cached record by default and are only mutated when
+                        // shouldClearExpectedTs returns true.
                         Instant newTimestamp;
-                        Instant finalExpectedTs;
-                        Instant newExpectedTsUpdateTs;
-                        Instant newExpectedTsLastDeviceJobTs;
+                        Instant finalExpectedTs = oldList.expectedTimestamp();
+                        Instant newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
+                        Instant newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
                         if (omitted.timestamp().isPresent()) {
-                            // WAWebHandleAdvOmittedResultApi: timestamp is present, update it
+                            // WAWebHandleAdvOmittedResultApi: timestamp is present, update it (a.timestamp = e)
                             newTimestamp = omitted.timestamp().get();
-                            var newExpectedTs = omitted.expectedTimestamp().orElse(null);
-                            finalExpectedTs = newExpectedTs;
-                            newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
-                            newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
 
-                            // WAWebAdvExpectedTsApi.shouldClearExpectedTs: check staleness
-                            if (DeviceExpectedTsUtils.shouldClearExpectedTimestamp(newTimestamp, finalExpectedTs, oldList, lastADVCheckTime)) {
+                            // WAWebAdvExpectedTsApi.shouldClearExpectedTs: clear only when staleness
+                            // condition is met. Note: the incoming expectedTs is passed solely as
+                            // input to shouldClearExpectedTs and is NOT written into the record.
+                            var incomingExpectedTs = omitted.expectedTimestamp().orElse(null);
+                            if (DeviceExpectedTsUtils.shouldClearExpectedTimestamp(newTimestamp, incomingExpectedTs, oldList, lastADVCheckTime)) {
+                                // a.expectedTs = void 0; a.expectedTsLastDeviceJobTs = void 0; a.expectedTsUpdateTs = void 0
                                 finalExpectedTs = null;
                                 newExpectedTsUpdateTs = null;
                                 newExpectedTsLastDeviceJobTs = null;
-                            } else {
-                                // WAWebAdvExpectedTsApi.computeNewExpectedTs: check if changed
-                                var oldExpectedTs = oldList.expectedTimestamp();
-                                if (DeviceExpectedTsUtils.hasExpectedTimestampChanged(oldExpectedTs, newExpectedTs)) {
-                                    newExpectedTsUpdateTs = Instant.now();
-                                    newExpectedTsLastDeviceJobTs = lastADVCheckTime;
-                                }
                             }
                         } else {
                             // WAWebHandleAdvOmittedResultApi: when ts is null, preserve all existing values
                             newTimestamp = oldList.timestamp();
-                            finalExpectedTs = oldList.expectedTimestamp();
-                            newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
-                            newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
                         }
 
                         // WAWebHandleAdvOmittedResultApi.handleOmittedResult: reset devices to PRIMARY ONLY
@@ -1039,7 +1054,12 @@ public final class DeviceService {
 
     /**
      * Error-protocol code used as the 429 fallback when a device-sync USync
-     * fails, matching WAWebContactSyncErrorCodes.DEVICE_SYNC.
+     * fails, matching {@link com.github.auties00.cobalt.wam.type.ContactSyncErrorCode#DEVICE_SYNC}.
+     *
+     * @implNote WAWebContactSyncErrorCodes.DEVICE_SYNC: {@code 1300}. The
+     * constant is duplicated here as a plain {@code int} because the WAM
+     * event property {@link com.github.auties00.cobalt.wam.event.ContactSyncEventEvent#contactSyncErrorCode()}
+     * is serialized as a raw integer on the wire, not as an enum reference.
      */
     private static final int CONTACT_SYNC_ERROR_CODE_DEVICE_SYNC = 1300;
 
@@ -2651,12 +2671,440 @@ public final class DeviceService {
             exports = "syncAndGetDeviceList",
             adaptation = WhatsAppAdaptation.DIRECT)
     public List<DeviceList> syncAndGetDeviceList(Collection<Jid> userJids) {
-        // WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: sync first, then return device IDs
+        // WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: yield syncDeviceList({wids, context:null, phash:null})
         getDeviceLists(userJids, null, null, false);
-        // WAWebApiDeviceList.getDeviceIds: return cached device lists
-        return userJids.stream()
-                .map(jid -> store.findDeviceList(jid).orElse(null))
+        // WAWebAdvSyncDeviceListApi.syncAndGetDeviceList: return yield getDeviceIds(wids)
+        return getDeviceIds(userJids, false);
+    }
+
+    /**
+     * Returns the cached device record for a user.
+     *
+     * <p>Looks up the user's device list in the in-memory cache; the cache is
+     * shared with the rest of the device service and is sized for {@code 5000}
+     * entries with LRU eviction. The accessor also fires a
+     * {@code checkPnToLidMapping} diagnostic for the requested JID, mirroring
+     * WA Web's behaviour, so that missing PN/LID mappings are reported.
+     *
+     * <p>WA Web reads from the {@code device-list} IndexedDB table when the
+     * record is not yet cached. Cobalt has no IDB equivalent: persisted device
+     * lists live in the same {@link WhatsAppStore} that backs the cache, so
+     * the lookup is a single store call.
+     *
+     * @param userJid the user JID; only the user portion is significant
+     * @return an {@link Optional} holding the cached record when present,
+     *         otherwise {@link Optional#empty()}
+     *
+     * @implNote ADAPTED: WAWebApiDeviceList.getDeviceRecord: WA Web's
+     * implementation backs the LRU with an IDB read (Promise resolving to
+     * the record). Cobalt collapses cache and persistence into
+     * {@link WhatsAppStore#findDeviceList(Jid)}, so the asynchronous
+     * IDB-fallback path is not needed. The {@code checkPnToLidMapping}
+     * diagnostic side effect is preserved verbatim.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "getDeviceRecord",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public Optional<DeviceList> getDeviceRecord(Jid userJid) {
+        Objects.requireNonNull(userJid, "userJid cannot be null");
+        // WAWebApiDeviceList.getDeviceRecord: lookup record from cache (or load via IDB in WA Web)
+        var record = store.findDeviceList(userJid);
+        // WAWebApiDeviceList.getDeviceRecord:
+        //   d.get(r)!=null && checkPnToLidMapping([e], WAWEB_API_DEVICE_LIST_GET_DEVICE_RECORD)
+        // After the IDB put d.get(r) is the cached Promise — never null — so the check fires
+        // unconditionally. Cobalt fires the diagnostic on every call to mirror that.
+        checkPnToLidMapping(List.of(userJid), "waweb_api_device_list_get_device_record");
+        return record;
+    }
+
+    /**
+     * Returns the cached device records for a collection of users.
+     *
+     * <p>Returns one entry per input JID, in the same order as the input. Slots
+     * for which no record is cached or persisted are returned as {@code null}.
+     * Fires a single {@code checkPnToLidMapping} diagnostic over the JIDs that
+     * resolved to non-null records, mirroring WA Web's behaviour.
+     *
+     * @param userJids the user JIDs to look up
+     * @return one record per input JID, in the same order; missing entries are
+     *         {@code null}
+     *
+     * @implNote ADAPTED: WAWebApiDeviceList.bulkGetDeviceRecord: WA Web fans
+     * out an IDB {@code bulkGet} for the keys not yet in the LRU and stores
+     * Promise-wrapped results back into the LRU. Cobalt's
+     * {@link WhatsAppStore} keeps the cache and persistence collapsed, so the
+     * IDB step is unnecessary. The {@code checkPnToLidMapping} diagnostic
+     * side effect is preserved verbatim, including its filter to JIDs whose
+     * record resolved to non-null.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "bulkGetDeviceRecord",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public List<DeviceList> bulkGetDeviceRecord(Collection<Jid> userJids) {
+        Objects.requireNonNull(userJids, "userJids cannot be null");
+
+        // WAWebApiDeviceList.bulkGetDeviceRecord: read each cached/persisted record in input order
+        var records = new ArrayList<DeviceList>(userJids.size());
+        for (var jid : userJids) {
+            records.add(store.findDeviceList(jid).orElse(null));
+        }
+
+        // WAWebApiDeviceList.bulkGetDeviceRecord:
+        // var a=e.filter(function(e){return d.get(createDeviceListPK(e))!=null});
+        // a.length>0 && checkPnToLidMapping(a, WAWEB_API_DEVICE_LIST_BULK_GET_DEVICE_RECORD)
+        var withRecord = new ArrayList<Jid>(userJids.size());
+        var index = 0;
+        for (var jid : userJids) {
+            if (records.get(index) != null) {
+                withRecord.add(jid);
+            }
+            index++;
+        }
+        if (!withRecord.isEmpty()) {
+            checkPnToLidMapping(withRecord, "waweb_api_device_list_bulk_get_device_record");
+        }
+
+        return records;
+    }
+
+    /**
+     * Persists a device record and refreshes the cache entry.
+     *
+     * <p>Fires a {@code checkPnToLidMapping} diagnostic for the record's owner,
+     * stores the record through the underlying {@link WhatsAppStore}, and emits
+     * a warning when the record is being saved as a tombstone for the current
+     * user's account.
+     *
+     * @param record the device list to persist; the {@link DeviceList#userJid()}
+     *               is used as the cache key
+     *
+     * @implNote ADAPTED: WAWebApiDeviceList.createOrReplaceDeviceRecord: WA Web
+     * writes the record through {@code getDeviceListTable().createOrReplace(e)}
+     * and stores a {@code Promise.resolve(e)} in the LRU. Cobalt persists
+     * through {@link WhatsAppStore#addDeviceList(DeviceList)} which already
+     * subsumes both steps. The {@code checkPnToLidMapping} diagnostic and the
+     * "syncd: trying to delete own device list" warning fired by the JS
+     * helper {@code f(t)} are preserved verbatim.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "createOrReplaceDeviceRecord",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void createOrReplaceDeviceRecord(DeviceList record) {
+        Objects.requireNonNull(record, "record cannot be null");
+
+        // WAWebApiDeviceList.createOrReplaceDeviceRecord:
+        // checkPnToLidMapping([createUserWidFromDeviceListPk(e.id)], WAWEB_API_DEVICE_LIST_CREATE_OR_REPLACE_DEVICE_RECORD)
+        checkPnToLidMapping(List.of(record.userJid()), "waweb_api_device_list_create_or_replace_device_record");
+
+        // WAWebApiDeviceList.createOrReplaceDeviceRecord:
+        // yield getDeviceListTable().createOrReplace(e); d.put(e.id, Promise.resolve(e))
+        store.addDeviceList(record);
+
+        // WAWebApiDeviceList.f: trying to delete own device list warning
+        warnIfDeletingOwnDeviceList(record);
+    }
+
+    /**
+     * Persists a batch of device records and refreshes their cache entries.
+     *
+     * <p>Fires a single {@code checkPnToLidMapping} diagnostic over every
+     * record's owner, persists each record through {@link WhatsAppStore}, and
+     * emits a per-record warning when a record is being saved as a tombstone
+     * for the current user's account.
+     *
+     * @param records the device lists to persist
+     *
+     * @implNote ADAPTED: WAWebApiDeviceList.bulkCreateOrReplaceDeviceRecord:
+     * WA Web writes through {@code getDeviceListTable().bulkCreateOrReplace(e)}
+     * and pushes Promise-wrapped records into the LRU. Cobalt collapses both
+     * steps into {@link WhatsAppStore#addDeviceList(DeviceList)} per record.
+     * The {@code checkPnToLidMapping} diagnostic and the per-record
+     * "syncd: trying to delete own device list" warning fired by
+     * {@code f(t)} are preserved verbatim.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "bulkCreateOrReplaceDeviceRecord",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void bulkCreateOrReplaceDeviceRecord(Collection<DeviceList> records) {
+        Objects.requireNonNull(records, "records cannot be null");
+
+        // WAWebApiDeviceList.bulkCreateOrReplaceDeviceRecord:
+        // checkPnToLidMapping(e.map(e => createUserWidFromDeviceListPk(e.id)), WAWEB_API_DEVICE_LIST_BULK_CREATE_OR_REPLACE_DEVICE_RECORD)
+        var ownerJids = records.stream()
+                .map(DeviceList::userJid)
                 .toList();
+        checkPnToLidMapping(ownerJids, "waweb_api_device_list_bulk_create_or_replace_device_record");
+
+        // WAWebApiDeviceList.bulkCreateOrReplaceDeviceRecord:
+        // yield bulkCreateOrReplace(e); e.forEach(e => { d.put(e.id, Promise.resolve(e)); f(e); })
+        for (var record : records) {
+            store.addDeviceList(record);
+            warnIfDeletingOwnDeviceList(record);
+        }
+    }
+
+    /**
+     * Returns the cached device records for a collection of users, optionally
+     * folding in alternate-identity device lists.
+     *
+     * <p>Each output slot mirrors the corresponding input JID. When no record
+     * is cached for an input JID, the slot is {@code null}. When
+     * {@code shouldMergeAltDevices} is {@code true}, the alternate device list
+     * (PN for a LID input, or LID for a PN input) is also fetched and its
+     * devices are appended to the primary slot if a primary record exists, or
+     * its content replaces the slot when the primary record is missing.
+     *
+     * <p>Unlike WA Web's projection, Cobalt returns the full {@link DeviceList}
+     * record rather than a stripped {@code {id, devices: [{id, isHosted}]}}
+     * shape: callers in Cobalt that only need device ids work directly with
+     * {@link DeviceList#devices()}.
+     *
+     * @param userJids              the user JIDs to look up; processed in order
+     * @param shouldMergeAltDevices whether alternate-identity records should be
+     *                              merged into the result
+     * @return one record per input JID, in input order; missing or deleted
+     *         entries are {@code null}
+     *
+     * @implNote ADAPTED: WAWebApiDeviceList.getDeviceIds: WA Web returns a
+     * stripped projection with only {@code {id, devices: [{id, isHosted}]}}.
+     * Cobalt returns the full {@link DeviceList} for downstream callers; the
+     * input ordering, the {@code null} slots for missing/deleted records, and
+     * the merge behaviour with alternate-identity records are preserved
+     * verbatim. WA Web mutates {@code u.devices} in place when merging;
+     * Cobalt rebuilds an immutable {@link DeviceList} via the existing
+     * {@link DeviceList#merge(DeviceList)} helper.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "getDeviceIds",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public List<DeviceList> getDeviceIds(Collection<Jid> userJids, boolean shouldMergeAltDevices) {
+        Objects.requireNonNull(userJids, "userJids cannot be null");
+
+        // WAWebApiDeviceList.getDeviceIds: var n=Array.from(yield bulkGetDeviceRecord(e))
+        var records = new ArrayList<>(bulkGetDeviceRecord(userJids));
+
+        if (shouldMergeAltDevices) {
+            // WAWebApiDeviceList.getDeviceIds: var r=new Map; n.forEach(e => e!=null && r.set(e.id, e))
+            var byOwner = new HashMap<Jid, DeviceList>();
+            for (var record : records) {
+                if (record != null) {
+                    byOwner.put(record.userJid(), record);
+                }
+            }
+
+            // WAWebApiDeviceList.getDeviceIds: var a=new Map; e.forEach((e,t) => a.set(e.toString(),t))
+            var positionByJid = new HashMap<Jid, Integer>();
+            var pos = 0;
+            for (var jid : userJids) {
+                positionByJid.putIfAbsent(jid, pos);
+                pos++;
+            }
+
+            // WAWebApiDeviceList.getDeviceIds: var i=e.reduce(...) — alternate JIDs for user JIDs only
+            var alternateJids = new ArrayList<Jid>();
+            for (var jid : userJids) {
+                if (!jid.isUser()) {
+                    continue;
+                }
+                var alternate = findAlternateUserWid(jid.toUserJid());
+                if (alternate != null) {
+                    alternateJids.add(alternate);
+                }
+            }
+
+            // WAWebApiDeviceList.getDeviceIds: var l=yield bulkGetDeviceRecord(i)
+            var alternateRecords = bulkGetDeviceRecord(alternateJids);
+
+            // WAWebApiDeviceList.getDeviceIds: l.forEach((e,t) => { if(!(!e||e.deleted)) ... })
+            for (var t = 0; t < alternateRecords.size(); t++) {
+                var altRecord = alternateRecords.get(t);
+                if (altRecord == null || altRecord.deleted()) {
+                    continue;
+                }
+                var altJid = alternateJids.get(t);
+                // WAWebApiDeviceList.getDeviceIds: var s=getAlternateUserWid(altJid)
+                var originalJid = findAlternateUserWid(altJid.toUserJid());
+                if (originalJid == null) {
+                    continue;
+                }
+                var primary = byOwner.get(originalJid);
+                if (primary != null) {
+                    // WAWebApiDeviceList.getDeviceIds: append missing devices into primary's record
+                    if (!primary.deleted()) {
+                        var existingIds = new HashSet<Integer>();
+                        for (var device : primary.devices()) {
+                            existingIds.add(device.id());
+                        }
+                        var newDevices = new ArrayList<>(primary.devices());
+                        for (var device : altRecord.devices()) {
+                            if (!existingIds.contains(device.id())) {
+                                newDevices.add(device);
+                            }
+                        }
+                        if (newDevices.size() != primary.devices().size()) {
+                            var merged = new DeviceListBuilder()
+                                    .userJid(primary.userJid())
+                                    .devices(newDevices)
+                                    .timestamp(primary.timestamp())
+                                    .rawId(primary.rawId())
+                                    .deleted(primary.deleted())
+                                    .deletedChangedToHost(primary.deletedChangedToHost())
+                                    .advAccountType(primary.advAccountType())
+                                    .expectedTimestamp(primary.expectedTimestamp())
+                                    .expectedTimestampLastDeviceJobTimestamp(primary.expectedTimestampLastDeviceJobTimestamp())
+                                    .expectedTimestampUpdateTimestamp(primary.expectedTimestampUpdateTimestamp())
+                                    .currentIndex(primary.currentIndex())
+                                    .validIndexes(primary.validIndexes())
+                                    .build();
+                            byOwner.put(originalJid, merged);
+                            // Replace in-place at every input slot referring to originalJid
+                            var p = positionByJid.get(originalJid);
+                            if (p != null) {
+                                records.set(p, merged);
+                            }
+                        }
+                    }
+                } else {
+                    // WAWebApiDeviceList.getDeviceIds: replace slot with synthesised record carrying alt's data
+                    var slot = positionByJid.get(originalJid);
+                    if (slot != null) {
+                        var synthesised = new DeviceListBuilder()
+                                .userJid(originalJid)
+                                .devices(altRecord.devices())
+                                .timestamp(altRecord.timestamp())
+                                .rawId(altRecord.rawId())
+                                .deleted(altRecord.deleted())
+                                .currentIndex(altRecord.currentIndex())
+                                .validIndexes(altRecord.validIndexes())
+                                .build();
+                        records.set(slot, synthesised);
+                    }
+                }
+            }
+        }
+
+        // WAWebApiDeviceList.getDeviceIds: n.map(e => e&&!e.deleted ? {id, devices:[{id,isHosted}]} : null)
+        // Cobalt returns the full record but tombstones deleted entries to null to match the JS shape.
+        var result = new ArrayList<DeviceList>(records.size());
+        for (var record : records) {
+            if (record == null || record.deleted()) {
+                result.add(null);
+            } else {
+                result.add(record);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns the cached device records for a collection of users, projected
+     * to the fields needed for sync.
+     *
+     * <p>WA Web returns a lighter projection containing only the device id,
+     * the device entries (each stripped to id+isHosted), the record timestamp
+     * and the expected timestamp. Cobalt returns the full {@link DeviceList}
+     * because the same set of fields is already addressable on the record.
+     *
+     * @param userJids the user JIDs to look up; processed in order
+     * @return one record per input JID, in input order; missing or deleted
+     *         entries are {@code null}
+     *
+     * @implNote ADAPTED: WAWebApiDeviceList.getDeviceInfoForSync: WA Web
+     * returns {@code {id, devices: [{id, isHosted}], timestamp, expectedTs}}
+     * objects. Cobalt returns the full {@link DeviceList} so callers can read
+     * any of those fields directly through the existing accessors.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "getDeviceInfoForSync",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public List<DeviceList> getDeviceInfoForSync(Collection<Jid> userJids) {
+        Objects.requireNonNull(userJids, "userJids cannot be null");
+        // WAWebApiDeviceList.getDeviceInfoForSync: var t=yield bulkGetDeviceRecord(e); return t.map(...)
+        var records = bulkGetDeviceRecord(userJids);
+        var result = new ArrayList<DeviceList>(records.size());
+        for (var record : records) {
+            // WAWebApiDeviceList.getDeviceInfoForSync: e&&!e.deleted ? projection : null
+            if (record == null || record.deleted()) {
+                result.add(null);
+            } else {
+                result.add(record);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Emits a warning when a deleted device list belongs to the current user's
+     * account.
+     *
+     * <p>Mirrors WA Web's helper {@code f(t)}: when persisting a record that is
+     * marked as deleted, if the owner JID matches the logged-in user's PN or
+     * LID, log a diagnostic so that accidental own-device-list deletions are
+     * surfaced.
+     *
+     * @param record the device record about to be persisted
+     *
+     * @implNote WAWebApiDeviceList.f (file-private helper invoked from
+     * {@code createOrReplaceDeviceRecord} and {@code bulkCreateOrReplaceDeviceRecord}):
+     * {@code if(t.deleted){var n=createUserWidFromDeviceListPk(t.id);
+     * isMeAccount(n)&&LOG.WARN("syncd: trying to delete own device list")}}.
+     * The PK-to-Wid step is folded into a direct comparison because Cobalt
+     * already addresses records by user-level {@link Jid}.
+     */
+    private void warnIfDeletingOwnDeviceList(DeviceList record) {
+        if (!record.deleted()) {
+            return;
+        }
+        // WAWebApiDeviceList.f: var n=createUserWidFromDeviceListPk(t.id) — owner JID
+        var owner = record.userJid();
+        // WAWebUserPrefsMeUser.isMeAccount: own PN or own LID
+        var ownPn = store.jid().map(Jid::toUserJid).orElse(null);
+        var ownLid = store.lid().map(Jid::toUserJid).orElse(null);
+        var isMe = (ownPn != null && ownPn.equals(owner.toUserJid()))
+                || (ownLid != null && ownLid.equals(owner.toUserJid()));
+        if (isMe) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "syncd: trying to delete own device list");
+        }
+    }
+
+    /**
+     * Returns the alternate-identity user JID for the given JID by consulting
+     * the store's PN-to-LID and LID-to-PN mappings.
+     *
+     * <p>Local helper that mirrors the semantics of
+     * {@code WAWebApiContact.getAlternateUserWid} as needed by
+     * {@link #getDeviceIds(Collection, boolean)}; the canonical mapping for
+     * that export lives in {@code LidMigrationService.getAlternateUserWid}.
+     * This copy is kept private to avoid coupling the device service to the
+     * migration service for what is otherwise a pure store lookup.
+     *
+     * @param userJid the user JID whose alternate identity should be resolved
+     * @return the alternate user JID, or {@code null} if none is mapped
+     *
+     * @implNote ADAPTED: WAWebApiContact.getAlternateUserWid (canonical
+     * mapping in {@code LidMigrationService}). Returns the PN for a LID input
+     * and the LID for a PN input, with me-user fast paths through
+     * {@link WhatsAppStore#jid()} and {@link WhatsAppStore#lid()}.
+     */
+    private Jid findAlternateUserWid(Jid userJid) {
+        if (userJid == null) {
+            return null;
+        }
+        if (userJid.hasLidServer()) {
+            var meLid = store.lid().map(Jid::toUserJid).orElse(null);
+            var mePn = store.jid().map(Jid::toUserJid).orElse(null);
+            if (mePn != null && meLid != null && userJid.equals(meLid)) {
+                return mePn;
+            }
+            return store.findPhoneByLid(userJid).orElse(null);
+        }
+        var mePn = store.jid().map(Jid::toUserJid).orElse(null);
+        var meLid = store.lid().map(Jid::toUserJid).orElse(null);
+        if (meLid != null && mePn != null && userJid.equals(mePn)) {
+            return meLid;
+        }
+        return store.findLidByPhone(userJid).orElse(null);
     }
 
     /**
@@ -2670,23 +3118,28 @@ public final class DeviceService {
      * @param deviceId the device ID to look for
      * @return {@code true} if the device exists in the user's device list
      *
-     * @implNote WAWebApiDeviceList.hasDevice: if {@code deviceId === DEFAULT_DEVICE_ID} returns
-     * {@code true} immediately. Otherwise calls {@code getDeviceIds([userJid])} and checks
-     * if any device in the result has the matching ID.
+     * @implNote ADAPTED: WAWebApiDeviceList.hasDevice: if
+     * {@code deviceId === DEFAULT_DEVICE_ID} returns {@code true} immediately.
+     * Otherwise WA calls {@code getDeviceIds([userJid])} and checks if any
+     * device in the result matches; Cobalt skips the projection step and
+     * reads the cached {@link DeviceList} directly through
+     * {@link WhatsAppStore#findDeviceList(Jid)}, which is the underlying
+     * cache that WA's {@code getDeviceIds} would have queried.
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "hasDevice",
-            adaptation = WhatsAppAdaptation.DIRECT)
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean hasDevice(Jid userJid, int deviceId) {
         // WAWebApiDeviceList.hasDevice: primary device always exists
         if (deviceId == DeviceConstants.PRIMARY_DEVICE_ID) {
             return true;
         }
-        // WAWebApiDeviceList.hasDevice: check cached device list
+        // WAWebApiDeviceList.hasDevice: check cached device list (WA: getDeviceIds([userJid])[0])
         var deviceList = store.findDeviceList(userJid).orElse(null);
         if (deviceList == null || deviceList.deleted()) {
             return false;
         }
+        // WAWebApiDeviceList.hasDevice: r.devices.some(e => e.id === t)
         return deviceList.devices().stream()
                 .anyMatch(device -> device.id() == deviceId);
     }
@@ -2700,57 +3153,80 @@ public final class DeviceService {
      * @return the current user's device list
      * @throws IllegalStateException if the device list cannot be found
      *
-     * @implNote WAWebApiDeviceList.getMyDeviceList: gets the device list for
-     * {@code getMeDevicePnOrThrow()}. If not found or deleted, falls back to LID
-     * via {@code getMeDeviceLidOrThrow()}. Throws if both are missing.
+     * @implNote WAWebApiDeviceList.getMyDeviceList: calls
+     * {@code getDeviceRecord(getMeDevicePnOrThrow_DO_NOT_USE())}. If the PN
+     * record is missing or deleted, falls back to
+     * {@code getDeviceRecord(getMeDeviceLidOrThrow())}. Throws with the JS
+     * diagnostic line if both records are missing or deleted.
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getMyDeviceList",
             adaptation = WhatsAppAdaptation.DIRECT)
     public DeviceList getMyDeviceList() {
-        // WAWebApiDeviceList.getMyDeviceList: try PN first
+        // WAWebApiDeviceList.getMyDeviceList: var e=getMeDevicePnOrThrow_DO_NOT_USE(); var t=yield getDeviceRecord(e)
         var pnJid = store.jid().map(Jid::toUserJid).orElse(null);
+        DeviceList pnRecord = null;
         if (pnJid != null) {
-            var pnList = store.findDeviceList(pnJid).orElse(null);
-            if (pnList != null && !pnList.deleted()) {
-                return pnList;
+            pnRecord = getDeviceRecord(pnJid).orElse(null);
+            if (pnRecord != null && !pnRecord.deleted()) {
+                return pnRecord;
             }
         }
 
-        // WAWebApiDeviceList.getMyDeviceList: fall back to LID
+        // WAWebApiDeviceList.getMyDeviceList:
+        // if(!t||t.deleted){var n=getMeDeviceLidOrThrow(); var a=yield getDeviceRecord(n); ...}
         var lidJid = store.lid().orElse(null);
+        DeviceList lidRecord = null;
         if (lidJid != null) {
-            var lidList = store.findDeviceList(lidJid).orElse(null);
-            if (lidList != null && !lidList.deleted()) {
-                return lidList;
+            lidRecord = getDeviceRecord(lidJid).orElse(null);
+            if (lidRecord != null && !lidRecord.deleted()) {
+                return lidRecord;
             }
         }
 
-        // WAWebApiDeviceList.getMyDeviceList: throw if both are missing
-        var hasPn = pnJid != null && store.findDeviceList(pnJid).isPresent();
-        var isPnDeleted = pnJid != null && store.findDeviceList(pnJid).map(DeviceList::deleted).orElse(false);
-        var hasLid = lidJid != null && store.findDeviceList(lidJid).isPresent();
-        var isLidDeleted = lidJid != null && store.findDeviceList(lidJid).map(DeviceList::deleted).orElse(false);
+        // WAWebApiDeviceList.getMyDeviceList:
+        // var i=t!=null, l=t?.deleted===true, u=a!=null, c=a?.deleted===true
+        // LOG("[syncd] no device list pn=%s/%s lid=%s/%s", i, l, u, c)
+        var hasPn = pnRecord != null;
+        var isPnDeleted = pnRecord != null && pnRecord.deleted();
+        var hasLid = lidRecord != null;
+        var isLidDeleted = lidRecord != null && lidRecord.deleted();
         LOGGER.log(System.Logger.Level.WARNING,
                 "[syncd] no device list pn={0}/{1} lid={2}/{3}",
                 hasPn, isPnDeleted, hasLid, isLidDeleted);
+        // WAWebApiDeviceList.getMyDeviceList: throw err("syncd: cannot find my device list")
         throw new IllegalStateException("syncd: cannot find my device list");
     }
 
     /**
      * Returns all device lists currently stored in the cache.
      *
+     * <p>Logs a diagnostic line carrying the number of records and the time
+     * taken, mirroring WA Web's
+     * {@code "getAllDeviceLists: got %s devices, took %sms"} log.
+     *
      * @return an unmodifiable collection of all cached device lists
      *
-     * @implNote WAWebApiDeviceList.getAllDeviceLists: returns all records from the
-     * device list table via {@code getDeviceListTable().all()}.
+     * @implNote ADAPTED: WAWebApiDeviceList.getAllDeviceLists: WA Web reads
+     * the IDB-backed table via {@code getDeviceListTable().all()}; Cobalt
+     * reads from the {@link WhatsAppStore} which collapses cache and
+     * persistence. The timing log is preserved verbatim.
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getAllDeviceLists",
-            adaptation = WhatsAppAdaptation.DIRECT)
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public Collection<DeviceList> getAllDeviceLists() {
-        // WAWebApiDeviceList.getAllDeviceLists: return all device lists from store
-        return store.deviceLists();
+        // WAWebApiDeviceList.getAllDeviceLists: var e=self.performance.now()
+        var start = System.nanoTime();
+        // WAWebApiDeviceList.getAllDeviceLists: var t=yield getDeviceListTable().all()
+        var lists = store.deviceLists();
+        // WAWebApiDeviceList.getAllDeviceLists:
+        // LOG("getAllDeviceLists: got %s devices, took %sms", t.length, Math.round(performance.now()-e))
+        var elapsedMs = Math.round((System.nanoTime() - start) / 1_000_000.0);
+        LOGGER.log(System.Logger.Level.DEBUG,
+                "getAllDeviceLists: got {0} devices, took {1}ms",
+                lists.size(), elapsedMs);
+        return lists;
     }
 
     /**
@@ -3034,7 +3510,8 @@ public final class DeviceService {
                 }
 
                 // WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord: mark as deleted with HOSTED transition
-                store.addDeviceList(createDeletedDeviceList(relevantJid, false));
+                // (5th arg of clearDeviceRecord here is HOSTED, so the tombstone records deletedChangedToHost=true)
+                store.addDeviceList(createDeletedDeviceList(relevantJid, true));
 
                 // WAWebIcdcHandlerApi: trigger device sync
                 if (store.isResumeFromRestartComplete()) {
@@ -3123,9 +3600,10 @@ public final class DeviceService {
                 .orElse(null);
 
         // WAWebHandleAdvForMessageApi: check if this is a new primary identity
-        // isNewPrimaryIdentity = identityKey == null || (storedIdentityKey != null && !bufferEqual(identityKey, storedIdentityKey))
-        var isNewPrimaryIdentity = identityKey == null
-                || (storedIdentityKey != null && !Arrays.equals(identityKey, storedIdentityKey));
+        // JS: y = r == null || (a != null && !bufferEqual(r, a))
+        // where r = stored identity (from loadIdentityKey), a = message-side primary identity (accountSignatureKey from PKMSG)
+        var isNewPrimaryIdentity = storedIdentityKey == null
+                || (identityKey != null && !Arrays.equals(storedIdentityKey, identityKey));
 
         // WAWebHandleAdvForMessageApi: check existing record timestamp
         if (existingRecord != null && !existingRecord.deleted()
@@ -3287,6 +3765,45 @@ public final class DeviceService {
         } catch (WhatsAppAdvValidationException exception) {
             client.handleFailure(exception);
             return Optional.empty();
+        }
+    }
+
+    /**
+     * Persists the account signature key extracted from a validated pair-success identity as
+     * the local user's signal identity.
+     *
+     * <p>WA Web's {@code WAWebHandlePairSuccess} flow performs
+     * {@code waSignalStore.putIdentity(createSignalAddress(asUserWidOrThrow(deviceJidToDeviceWid(y))).toString(),
+     * bufferToStr(toSignalCurvePubKey(P)))} immediately after generating the device signature, so the
+     * primary device's identity (device 0) becomes resolvable for subsequent ADV verification and
+     * encrypted-session establishment. This helper mirrors that step by saving the
+     * {@code accountSignatureKey} bytes against the user-only signal address (device id stripped).
+     *
+     * @param deviceJid           the local device JID assigned by the server during pair-success
+     * @param accountSignatureKey the {@code accountSignatureKey} extracted from the validated
+     *                            {@link ADVSignedDeviceIdentity}, may be {@code null} when the
+     *                            decoded identity did not carry one
+     * @implNote WAWebHandlePairSuccess: yield waSignalStore.putIdentity(
+     * createSignalAddress(asUserWidOrThrow(deviceJidToDeviceWid(y))).toString(),
+     * bufferToStr(toSignalCurvePubKey(P))). Cobalt delegates to
+     * {@link DevicePreKeyHandler#storeIdentityFromAccountSignatureKey(Jid, byte[])} which strips
+     * the device id and writes the 32-byte curve public key against device 0.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandlePairSuccess",
+            exports = "handlePairSuccess",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public void persistLocalDeviceIdentityFromPairSuccess(Jid deviceJid, byte[] accountSignatureKey) {
+        if (deviceJid == null || accountSignatureKey == null || accountSignatureKey.length == 0) {
+            return;
+        }
+        try {
+            preKeyHandler.storeIdentityFromAccountSignatureKey(deviceJid, accountSignatureKey);
+        } catch (RuntimeException exception) {
+            // Mirrors WA Web error tolerance: pair-success continues even if the signal store
+            // write fails because the account signature key is rederived on the next sync.
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Failed to persist local identity from pair-success accountSignatureKey for {0}: {1}",
+                    deviceJid, exception.getMessage());
         }
     }
 }

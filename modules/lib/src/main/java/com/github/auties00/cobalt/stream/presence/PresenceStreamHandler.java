@@ -1,7 +1,9 @@
 package com.github.auties00.cobalt.stream.presence;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactStatus;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -58,6 +60,8 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
      * @param whatsapp the non-{@code null} WhatsApp client instance
      * @implNote WAWebHandlePresence, module-level initialization
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandlePresence", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public PresenceStreamHandler(WhatsAppClient whatsapp) {
         this.whatsapp = whatsapp;
     }
@@ -78,8 +82,18 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
      * </ol>
      *
      * @param node the non-{@code null} presence stanza node
-     * @implNote WAWebHandlePresence.default, async function m(t)
+     * @implNote WAWebHandlePresence.default, async function m(t). The WA Web
+     *           handler additionally dispatches {@code GroupAvailable} and
+     *           {@code GroupUnavailable} parsed-presence variants to
+     *           {@code WAWebChangeGroupPresenceHandlerAction}; Cobalt does not
+     *           model group-presence counts (the server emits them only for
+     *           UI participant-count badges, which Cobalt's headless model
+     *           does not surface), so those branches are intentionally absent.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandlePresence", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebChangePresenceHandlerAction", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
     public void handle(Node node) {
         // WAWebHandlePresence.default: var l = chatJidToChatWid(i.value.from)

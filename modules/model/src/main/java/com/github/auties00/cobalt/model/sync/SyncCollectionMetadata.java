@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.model.sync;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -16,6 +18,14 @@ import java.util.Objects;
  * a collection that has never been synced from one that has synced and is
  * simply empty.
  *
+ * @implNote The {@code bootstrapped} component adapts WA Web's
+ *           {@code WAWebSyncdCollectionUtils.isBootstrap(n)} predicate, which
+ *           returns {@code n == null} (i.e. no local version recorded yet).
+ *           Cobalt represents this as an explicit boolean field with inverted
+ *           polarity ({@code bootstrapped == true} means a sync round has
+ *           settled, equivalent to {@code !isBootstrap}). The check is
+ *           inlined at each call site rather than exposed as a separate
+ *           predicate method.
  * @param name the identifier of the collection
  * @param version the current version counter, monotonically increasing as
  *                mutations are applied
@@ -36,8 +46,11 @@ import java.util.Objects;
  *                     sync round; a fresh collection is considered not
  *                     bootstrapped until the first sync settles, which is
  *                     distinct from a synced but empty collection at
- *                     version zero
+ *                     version zero. Adapts WA Web
+ *                     {@code WAWebSyncdCollectionUtils.isBootstrap} with
+ *                     inverted polarity.
  */
+@WhatsAppWebModule(moduleName = "WAWebSyncdCollectionUtils")
 public record SyncCollectionMetadata(
         SyncPatchType name,
         long version,

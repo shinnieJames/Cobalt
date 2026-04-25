@@ -34,20 +34,58 @@ import java.util.logging.Logger;
  *           {@code SyncdFatalError} and emitting
  *           {@code WAWebSyncdMetricFatalError.reportSyncdFatalError} WAM telemetry
  *           when any required field is {@code null}/missing. In Cobalt the
- *           equivalent checks are split across two layers: (1) the custom protobuf
- *           library ({@code com.github.auties00:protobuf-serialization-plugin})
- *           enforces required-field presence during {@code decode(...)} and throws
- *           on missing fields, so {@link SyncdPatchSpec#decode(byte[])} and
- *           {@link ExternalBlobReferenceSpec#decode(byte[])} replace the
- *           per-field {@code validateRecordProtobuf}/{@code validateMutationProtobuf}/
- *           {@code validateKeyIdProtobuf} checks; (2) cross-field semantic
- *           validation (inline-vs-external-mutation mutual exclusion, pre-download
- *           {@code ExternalBlobReference} field presence) lives in
- *           {@code WebAppStateService.validateExternalBlobReference} and
- *           {@code WebAppStateService} patch-decoding paths. WAM telemetry is not
- *           emitted per Cobalt's error model; failures surface as
- *           {@link WhatsAppWebAppStateSyncException.UnexpectedError} whose recovery
+ *           equivalent checks are split across three layers (per-branch mapping below),
+ *           and WAM telemetry is not emitted per Cobalt's error model; failures surface
+ *           as typed subtypes of {@link WhatsAppWebAppStateSyncException} whose recovery
  *           is decided by the pluggable {@code WhatsAppClientErrorHandler}.
+ *
+ * <p>Branch-by-branch mapping from {@code WAWebSyncdValidateServerSyncProtobuf}:
+ * <ul>
+ *   <li>{@code validateSnapshotProtobuf}
+ *     <ul>
+ *       <li>{@code MISSING_SNAPSHOT_VERSION} → {@code WebAppStateService.applyAppStateSyncResponse}
+ *           ({@code snapshotProtoVersion <= 0} throws {@link WhatsAppWebAppStateSyncException.UnexpectedError})</li>
+ *       <li>{@code MISSING_SNAPSHOT_MAC} → {@code MutationIntegrityVerifier.verifySnapshotMac}
+ *           ({@code snapshot.mac().isEmpty()} throws {@link WhatsAppWebAppStateSyncException.SnapshotMacMismatch})</li>
+ *       <li>{@code MISSING_SNAPSHOT_KEY_ID} → {@code MutationIntegrityVerifier.verifySnapshotMac}
+ *           ({@code snapshot.keyId().flatMap(KeyId::id).isEmpty()} throws {@link WhatsAppWebAppStateSyncException.UnexpectedError})</li>
+ *     </ul>
+ *   </li>
+ *   <li>{@code validatePatchProtobuf}
+ *     <ul>
+ *       <li>{@code MISSING_PATCH_VERSION} → {@code WebAppStateService.applyAppStateSyncResponse}
+ *           ({@code patchVer <= 0} throws {@link WhatsAppWebAppStateSyncException.UnexpectedError})</li>
+ *       <li>{@code PATCH_WITH_BOTH_INLINE_AND_EXTERNAL_MUTATIONS} → {@code WebAppStateService.getMutationsFromPatch}
+ *           ({@code hasInline && hasExternal} throws {@link WhatsAppWebAppStateSyncException.UnexpectedError})</li>
+ *       <li>{@code MISSING_PATCH_SNAPSHOT_MAC} → {@code WebAppStateService.applyAppStateSyncResponse}
+ *           ({@code patch.snapshotMac().isEmpty()})</li>
+ *       <li>{@code MISSING_PATCH_MAC} → {@code WebAppStateService.applyAppStateSyncResponse}
+ *           ({@code patch.patchMac().isEmpty()})</li>
+ *       <li>{@code MISSING_PATCH_KEY_ID} → {@code MutationIntegrityVerifier.verifyPatchIntegrity}
+ *           ({@code patch.keyId().flatMap(KeyId::id).isEmpty()})</li>
+ *       <li>{@code clientDebugData} best-effort decode → {@link #logClientDebugData(SyncdPatch)}
+ *           (WA Web {@code decodeProtobuf(PatchDebugDataSpec, t)})</li>
+ *     </ul>
+ *   </li>
+ *   <li>{@code validateExternalBlobReference} ({@code MISSING_EXTERNAL_BLOB_REFERENCE_*}) →
+ *       {@code WebAppStateService.validateExternalBlobReference} performs the full
+ *       four-field presence check ({@code mediaKey}/{@code directPath}/{@code fileSha256}/
+ *       {@code fileEncSha256}) in the same order as WA Web, pre-download.</li>
+ *   <li>{@code validateMutationProtobuf} &amp; {@code validateRecordProtobuf}
+ *       ({@code MISSING_MUTATION_OPERATION}, {@code MISSING_MUTATION_RECORD},
+ *       {@code MISSING_MUTATION_INDEX}, {@code MISSING_MUTATION_VALUE},
+ *       {@code MISSING_MUTATION_KEY_ID}) → {@code WebAppStateService.decryptMutations}
+ *       performs the full per-mutation required-field check
+ *       ({@code record}/{@code operation}/{@code record.value.blob}/{@code record.index.blob}/
+ *       {@code record.keyId.id} + empty-bytes guard) immediately before decryption.</li>
+ *   <li>Protobuf-level required-field presence (the {@code .blob}/{@code .id}/{@code .version}
+ *       subfield checks performed structurally rather than by {@code WebAppStateService})
+ *       is additionally enforced by the Cobalt protobuf library
+ *       ({@code com.github.auties00:protobuf-serialization-plugin}) during
+ *       {@link SyncdPatchSpec#decode(byte[])} / {@link ExternalBlobReferenceSpec#decode(byte[])}:
+ *       this is the Cobalt analogue of WA Web's {@code decodeProtobuf} layer and catches
+ *       any truly malformed wire bytes before {@code WebAppStateService} sees them.</li>
+ * </ul>
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdResponseParser")
 @WhatsAppWebModule(moduleName = "WAWebSyncdDecode")
@@ -366,7 +404,8 @@ public final class MutationResponseParser {
             //   "syncd: external blob reference protobuf deserialization failed: " + err.message)
             // ADAPTED: WA Web also calls reportSyncdFatalError(EXTERNAL_BLOB_REFERENCE_PROTOBUF_DESERIALIZATION_FAILED, {collection})
             // and WALogger.ERROR — WAM/telemetry skipped per Cobalt's error model.
-            throw new WhatsAppWebAppStateSyncException.UnexpectedError("Failed to decode snapshot reference", e);
+            throw new WhatsAppWebAppStateSyncException.UnexpectedError(
+                    "syncd: external blob reference protobuf deserialization failed: " + e.getMessage(), e);
         }
     }
 
@@ -424,7 +463,8 @@ public final class MutationResponseParser {
                 //   "syncd: patch protobuf deserialization failed: " + err.message)
                 // ADAPTED: WA Web also calls reportSyncdFatalError(PATCH_PROTOBUF_DESERIALIZATION_FAILED, {collection})
                 // and WALogger.ERROR — WAM/telemetry skipped per Cobalt's error model.
-                throw new WhatsAppWebAppStateSyncException.UnexpectedError("Failed to decode patch", e);
+                throw new WhatsAppWebAppStateSyncException.UnexpectedError(
+                        "syncd: patch protobuf deserialization failed: " + e.getMessage(), e);
             }
         }
 

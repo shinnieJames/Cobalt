@@ -252,6 +252,45 @@ public sealed interface WhatsAppClientVerificationHandler {
         String verificationCode();
 
         /**
+         * Solves a server-issued challenge (image or audio CAPTCHA) and
+         * returns the user's answer.
+         *
+         * <p>Called by the registration code when {@code /v2/code} or
+         * {@code /v2/exist} returns an {@code image_blob} or
+         * {@code audio_blob} payload, which happens whenever the server
+         * decides the client is in the low-trust lane (typically because
+         * no Play Integrity / App Attest token was submitted). The
+         * default implementation returns {@link Optional#empty()}, which
+         * the registration treats as "caller cannot solve challenges" and
+         * raises a registration failure.
+         *
+         * @param imagePng the PNG image challenge bytes, or {@code null}
+         *                 if the server did not include one
+         * @param audioOgg the Ogg-encoded audio challenge bytes, or
+         *                 {@code null} if the server did not include one
+         * @return the user-supplied answer, or empty to abort
+         */
+        default Optional<String> solveCaptcha(byte[] imagePng, byte[] audioOgg) {
+            return Optional.empty();
+        }
+
+        /**
+         * Returns the two-factor authentication PIN the user has
+         * configured on the account being registered.
+         *
+         * <p>Called by the registration code when {@code /v2/register}
+         * returns a {@code 2fa_required} reason. The default
+         * implementation returns {@link Optional#empty()}, which the
+         * registration treats as "caller cannot supply a PIN" and raises
+         * a registration failure.
+         *
+         * @return the PIN, or empty to abort
+         */
+        default Optional<String> twoFactorPin() {
+            return Optional.empty();
+        }
+
+        /**
          * Creates a Mobile verification handler with no specific request method.
          * The verification code is obtained from the provided supplier.
          *

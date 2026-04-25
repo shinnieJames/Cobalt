@@ -262,6 +262,8 @@ public final class MutationKeys implements AutoCloseable {
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdCrypto", exports = "generateEncryptionKeys", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoHelper", exports = "generateEncryptionKeysUnmemoized", adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdKeyCache", exports = "getKeyData", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdKeyCache", exports = "clearSyncKeysCache", adaptation = WhatsAppAdaptation.ADAPTED)
     public static MutationKeys ofSyncKey(byte[] syncKey) {
         if (syncKey == null) {
             throw new NullPointerException("Sync key cannot be null");

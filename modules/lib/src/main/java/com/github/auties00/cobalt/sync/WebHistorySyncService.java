@@ -40,7 +40,7 @@ import java.util.zip.InflaterInputStream;
  * reach several megabytes and the caller is the stanza dispatch thread; keeping
  * it off the main path avoids back-pressuring other incoming messages.
  *
- * @implNote {@code WAWebHandleHistorySyncNotification.default} drives the
+ * @implNote {@code WAWebHandleHistorySyncNotification.handleHistorySyncNotification} drives the
  *           equivalent JS flow, using
  *           {@code WAWebDownloadManager.downloadAndMaybeDecrypt} for the CDN
  *           fetch,
@@ -100,7 +100,8 @@ public final class WebHistorySyncService {
      * @implNote {@code WAWebApiHistorySyncNotification.enqueueNotification}
      *           similarly defers chunk handling to a background queue.
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleHistorySyncNotification", exports = "default",
+    @WhatsAppWebExport(moduleName = "WAWebHandleHistorySyncNotification",
+            exports = "handleHistorySyncNotification",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void process(HistorySyncNotification notification) {
         if (notification == null) {
@@ -117,7 +118,7 @@ public final class WebHistorySyncService {
      *
      * @param notification the non-null notification to process
      * @implNote Mirrors the body of
-     *           {@code WAWebHandleHistorySyncNotification.default}, minus the
+     *           {@code WAWebHandleHistorySyncNotification.handleHistorySyncNotification}, minus the
      *           WAM progress events which are emitted separately.
      */
     private void processSync(HistorySyncNotification notification) {
@@ -151,7 +152,7 @@ public final class WebHistorySyncService {
         } catch (WhatsAppHistorySyncException exception) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "History sync chunk processing failed: {0}", exception.getMessage());
-            // WAWebHandleHistorySyncChunk.handleHistorySyncChunk / WAWebHandleHistorySyncNotification.default:
+            // WAWebHandleHistorySyncChunk.handleHistorySyncChunk / WAWebHandleHistorySyncNotification.handleHistorySyncNotification:
             //   commitHistoryDownloadedMetric(B, historySyncStepStartedTs, false, unixTimeMs())
             //   is called on the download/decode failure path before the applied metric.
             emitHistoryDataDownloaded(notification, null, applyStartTs,
@@ -177,7 +178,7 @@ public final class WebHistorySyncService {
         if (historySync == null) {
             // Notification carried neither an inline payload nor a directPath/mediaKey pair
             // (MESSAGE_ACCESS_STATUS / NO_HISTORY markers). WA Web's equivalent early-return
-            // in WAWebHandleHistorySyncNotification.default also skips all three metrics.
+            // in WAWebHandleHistorySyncNotification.handleHistorySyncNotification also skips all three metrics.
             return;
         }
         // WAWebHandleHistorySyncChunk.handleHistorySyncChunk:
@@ -667,7 +668,8 @@ public final class WebHistorySyncService {
      * Resolves the {@code mdBootstrapPayloadSize} property from the notification,
      * matching WhatsApp Web's {@code historySyncPayloadSize} derivation.
      *
-     * <p>Per {@code WAWebHandleHistorySyncNotification.default} the field is
+     * <p>Per {@code WAWebHandleHistorySyncNotification.handleHistorySyncNotification}
+     * the field is
      * set to {@code t.historySyncNotification.fileLength} when the chunk is
      * announced (i.e. the CDN-hosted ciphertext byte length). When the primary
      * instead inlines the bootstrap chunk in the E2EE message body, WA Web
@@ -679,15 +681,16 @@ public final class WebHistorySyncService {
      * @return the encrypted blob size, the inline payload size, or
      *         {@code null} when neither is available (MESSAGE_ACCESS_STATUS
      *         / NO_HISTORY markers)
-     * @implNote WAWebHandleHistorySyncNotification.default sets
-     *           {@code historySyncPayloadSize} from
+     * @implNote WAWebHandleHistorySyncNotification.handleHistorySyncNotification
+     *           sets {@code historySyncPayloadSize} from
      *           {@code historySyncNotification.fileLength}; WAM treats the
      *           field as a 32-bit integer so the value is narrowed to
      *           {@code int} even though the underlying media size is a
      *           {@code long}.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleHistorySyncNotification",
-            exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
+            exports = "handleHistorySyncNotification",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private static Integer resolvePayloadSize(HistorySyncNotification notification) {
         var mediaSize = notification.fileLength();
         if (mediaSize.isPresent()) {
@@ -780,14 +783,14 @@ public final class WebHistorySyncService {
     @WhatsAppWebExport(moduleName = "WAWebDownloadManager", exports = "downloadAndMaybeDecrypt",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private HistorySync decode(HistorySyncNotification notification) {
-        // WAWebHandleHistorySyncNotification.default: initialHistBootstrapInlinePayload
+        // WAWebHandleHistorySyncNotification.handleHistorySyncNotification: initialHistBootstrapInlinePayload
         // short-circuits the CDN download when the primary inlined the bootstrap
         // bytes directly in the E2EE message (see the inlineInitialPayloadInE2EeMsg
         // device prop set at pairing time).
         var inlinePayload = notification.initialHistBootstrapInlinePayload().orElse(null);
         if (inlinePayload != null && inlinePayload.length > 0) {
             try (var stream = new InflaterInputStream(new ByteArrayInputStream(inlinePayload))) {
-                return decodeBytes(stream);
+                return decodeHistorySync(stream);
             } catch (Exception exception) {
                 throw new WhatsAppHistorySyncException("Failed to decode inline history bootstrap payload", exception);
             }
@@ -811,8 +814,8 @@ public final class WebHistorySyncService {
             throw new WhatsAppHistorySyncException("Interrupted while waiting for media connection", exception);
         }
         var downloadStart = Instant.now();
-        try (var stream = mediaConnection.download(notification)) {
-            var decoded = decodeBytes(stream);
+        try (var stream = mediaConnection.download(notification, whatsapp.abPropsService())) {
+            var decoded = decodeHistorySync(stream);
             commitMediaDownload2Success(downloadStart);
             return decoded;
         } catch (Exception exception) {
@@ -829,7 +832,7 @@ public final class WebHistorySyncService {
      * sets {@code overallDownloadResult=OK}, {@code overallIsFinal=true},
      * {@code downloadHttpCode=200}, marks {@code overallCumT}, and commits the
      * master event. Called indirectly from
-     * WAWebHandleHistorySyncNotification.default via
+     * WAWebHandleHistorySyncNotification.handleHistorySyncNotification via
      * WAWebDownloadManager.downloadAndMaybeDecrypt.
      * @param downloadStart the instant at which the download attempt began
      */
@@ -839,8 +842,8 @@ public final class WebHistorySyncService {
     private void commitMediaDownload2Success(Instant downloadStart) {
         // WAWebCreateMediaDownloadMetrics.createMediaDownloadMetrics:
         // overall mms version, type, origin and mode are constant for the
-        // md-msg-hist flow (WAWebHandleHistorySyncNotification.default passes
-        // type="md-msg-hist" and origin=MESSAGE_HISTORY_SYNC).
+        // md-msg-hist flow (WAWebHandleHistorySyncNotification.handleHistorySyncNotification
+        // passes type="md-msg-hist" and origin=MESSAGE_HISTORY_SYNC).
         var overallT = Instant.ofEpochMilli(Duration.between(downloadStart, Instant.now()).toMillis());
         whatsapp.wamService().commit(new MediaDownload2EventBuilder()
                 .overallMediaType(MediaType.MD_HISTORY_SYNC)
@@ -969,8 +972,14 @@ public final class WebHistorySyncService {
      */
     @WhatsAppWebExport(moduleName = "WAWebBinHistorySync", exports = "HistorySync",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private HistorySync decodeBytes(InputStream stream) {
-        return HistorySync.ofFull(ProtobufInputStream.fromStream(stream));
+    private HistorySync decodeHistorySync(InputStream stream) {
+        var protoStream = ProtobufInputStream.fromStream(stream);
+        var historyPolicy = whatsapp.store().webHistoryPolicy();
+        if(historyPolicy.isPresent() && historyPolicy.get().isZero()) {
+            return HistorySync.ofLight(protoStream);
+        } else {
+            return HistorySync.ofFull(protoStream);
+        }
     }
 
     /**

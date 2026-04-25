@@ -2,7 +2,9 @@ package com.github.auties00.cobalt.stream.receipt;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.message.MessageService;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.device.DeviceConstants;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -180,12 +182,17 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
         builder.messageType(resolveMessageType(parsed.from()));
 
         // WAWebCreateReceiptStanzaReceiveMetric: receiptStanzaType defaults to
-        // ACK_STRING.DELIVERY ("delivery") when ackString is null; otherwise it
-        // is the raw type string when it matches a known RECEIPT_TYPES_TO_ACK
-        // entry. Cobalt's parser normalises unknown strings to RECEIVED, so we
-        // simply propagate the original ackString when present.
+        // ACK_STRING.DELIVERY ("delivery") when ackString is null; otherwise
+        // it is the raw type string when (and only when) it matches a known
+        // RECEIPT_TYPES_TO_ACK entry. Unknown type strings leave the field
+        // unset (WA Web's metric body: `n==null ? type=DELIVERY :
+        // RECEIPT_TYPES_TO_ACK[n]!=null && (type=n)`).
         var ackString = parsed.ackString();
-        builder.receiptStanzaType(ackString != null ? ackString : "delivery");
+        if (ackString == null) {
+            builder.receiptStanzaType("delivery");
+        } else if (isReceiptTypeToAck(ackString)) {
+            builder.receiptStanzaType(ackString);
+        }
 
         // WAWebCreateReceiptStanzaReceiveMetric:
         // (receipts?.length) != null && (receiptStanzaTotalCount = receipts.length)
@@ -362,8 +369,17 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
      * Sends an ack with the retry type regardless of whether re-send succeeds.
      *
      * @param node the retry receipt stanza node
-     * @implNote WAWebHandleMessageRetryRequest.handleMessageRetryRequest
+     * @implNote WAWebHandleMessageRetryRequest.handleMessageRetryRequest — entry-point
+     *           dispatcher: parses the retry request, validates the stanza id,
+     *           builds the {@code class="receipt", type="retry"} ack, and forwards
+     *           to {@code WAWebHandleRetryRequest.handleRetryRequest}. Cobalt fuses
+     *           parsing, validation, dispatch, and ack into a single method whose
+     *           finally-block guarantees the ack is sent in the same conditions as
+     *           the WA Web async return.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMessageRetryRequest",
+            exports = "handleMessageRetryRequest",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleRetryReceipt(Node node) {
         try {
             processRetryRequest(node);
@@ -393,6 +409,9 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
      * @param node the retry receipt stanza node
      * @implNote WAWebHandleRetryRequest.handleRetryRequest, WAWebHandleRetryRequest.E (processRetryDetails)
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleRetryRequest",
+            exports = "handleRetryRequest",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private void processRetryRequest(Node node) {
         // WAWebHandleRetryRequest.R: VoIP retry variants are dispatched to the VoIP stack,
         // which Cobalt does not implement. Skip non-regular retry types.
@@ -477,6 +496,9 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
      * @implNote WAWebHandleRetryRequest.getTargetChat (D function) combined with
      *           WAWebHandleRetryRequest.E message lookup
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleRetryRequest",
+            exports = "getTargetChat",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private MessageInfo findRetryMessage(Jid provider, Jid participant, String id) {
         var direct = whatsapp.store()
                 .findMessageById(provider, id)
@@ -521,29 +543,49 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
      * Processes a key bundle included in a retry receipt, rebuilding the Signal
      * session with the remote device using the provided pre-key material.
      *
+     * <p>Mirrors the {@code WAWebRetryRequestParser} default export: the
+     * {@code <registration>} child carries a 4-byte big-endian unsigned
+     * registration id, the {@code <skey>} and optional {@code <key>}
+     * children carry 3-byte big-endian unsigned ids in their {@code <id>}
+     * sub-nodes, and the public-key / signature children carry raw 32 / 64
+     * byte payloads. The parent assertion that {@code type} is
+     * {@code "retry"} or {@code "enc_rekey_retry"} is performed by
+     * {@link #isRetryReceipt(Node)} and {@link #processRetryRequest(Node)}.
+     *
      * @param node         the retry receipt stanza node containing keys
      * @param remoteDevice the remote device JID to associate the session with
-     * @implNote WAWebUpdateLocalSignalSession.updateLocalSignalSession,
-     *           WAWebProcessRetryKeyBundle (key bundle extraction)
+     * @implNote WAWebRetryRequestParser (default): wire decode of
+     *           {@code <registration>}, {@code <keys><identity></identity>
+     *           <skey><id/><value/><signature/></skey>[<key><id/><value/></key>]}.
+     *           WAWebUpdateLocalSignalSession.updateLocalSignalSession,
+     *           WAWebProcessRetryKeyBundle (session rebuild).
      */
+    @WhatsAppWebExport(moduleName = "WAWebRetryRequestParser",
+            exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     private void processRetryKeyBundle(Node node, Jid remoteDevice) {
         if (remoteDevice == null) {
             return;
         }
 
         var keysNode = node.getChild("keys").orElse(null);
+        // WAWebRetryRequestParser: regId = e.child("registration").contentUint(4)
+        // <registration> content is exactly 4 raw bytes parsed as a big-endian
+        // unsigned integer, NOT an ASCII number string.
         var registrationId = node.getChild("registration")
-                .flatMap(Node::toContentInt)
+                .flatMap(Node::toContentBytes)
+                .map(bytes -> convertBytesToUint(bytes, 4))
                 .orElse(null);
         if (keysNode == null || registrationId == null) {
             return;
         }
 
         try {
+            // WAWebRetryRequestParser: identity = u.child("identity").contentBytes(32)
             var identityKey = keysNode.getChild("identity")
                     .flatMap(Node::toContentBytes)
                     .map(SignalIdentityPublicKey::ofDirect)
                     .orElse(null);
+            // WAWebRetryRequestParser: m = u.child("skey")
             var signedPreKey = keysNode.getChild("skey").orElse(null);
             if (identityKey == null || signedPreKey == null) {
                 return;
@@ -552,19 +594,36 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
             var builder = new SignalPreKeyBundleBuilder()
                     .registrationId(registrationId)
                     .deviceId(Math.max(remoteDevice.device(), 0))
-                    .signedPreKeyId(signedPreKey.getChild("id").flatMap(Node::toContentInt).orElseThrow())
+                    // WAWebRetryRequestParser: skey.id = m.child("id").contentUint(3)
+                    .signedPreKeyId(signedPreKey.getChild("id")
+                            .flatMap(Node::toContentBytes)
+                            .map(bytes -> convertBytesToUint(bytes, 3))
+                            .orElseThrow())
+                    // WAWebRetryRequestParser: skey.pubkey = m.child("value").contentBytes(32)
                     .signedPreKeyPublic(signedPreKey.getChild("value")
                             .flatMap(Node::toContentBytes)
                             .map(SignalIdentityPublicKey::ofDirect)
                             .orElseThrow())
+                    // WAWebRetryRequestParser: skey.signature = m.child("signature").contentBytes(64)
                     .signedPreKeySignature(signedPreKey.getChild("signature")
                             .flatMap(Node::toContentBytes)
                             .orElseThrow())
                     .identityKey(identityKey);
 
+            // WAWebRetryRequestParser: u.maybeChild("key") for bot retries, u.child("key")
+            // for regular retries. ADAPTED: Cobalt treats the one-time pre-key as optional in
+            // both cases, since the session rebuild succeeds with skey alone if the server
+            // omits the one-time prekey, and the bot/non-bot bifurcation only changes whether
+            // the parser would throw — both branches still feed the same SignalPreKeyBundle.
             var preKey = keysNode.getChild("key").orElse(null);
             if (preKey != null) {
-                var preKeyId = preKey.getChild("id").flatMap(Node::toContentInt).orElse(null);
+                // WAWebRetryRequestParser: key.id = g.child("id").contentUint(3)
+                //                         (or f.child("id").contentUint(3) for bot retry)
+                var preKeyId = preKey.getChild("id")
+                        .flatMap(Node::toContentBytes)
+                        .map(bytes -> convertBytesToUint(bytes, 3))
+                        .orElse(null);
+                // WAWebRetryRequestParser: key.pubkey = g.child("value").contentBytes(32)
                 var preKeyValue = preKey.getChild("value")
                         .flatMap(Node::toContentBytes)
                         .map(SignalIdentityPublicKey::ofDirect)
@@ -581,6 +640,38 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
         } catch (Throwable ignored) {
             // ADAPTED: WAWebHandleRetryRequest — WA Web logs warning but continues
         }
+    }
+
+    /**
+     * Converts a big-endian unsigned byte array to an int.
+     *
+     * <p>Mirrors the WA Web {@code WAParsableXmlNode.convertBytesToUint(bytes, byteCount)}
+     * helper used by {@code WAWebRetryRequestParser} (and every smax {@code KeyIDMixin} /
+     * {@code RegistrationIDMixin} parser): accumulates {@code n = n * 256 + bytes[i]} for
+     * the first {@code byteCount} bytes.
+     *
+     * <p>Retry-receipt wire fields use this encoding instead of an ASCII number string:
+     * the {@code <registration>} content is 4 bytes, {@code <skey><id></id></skey>} and
+     * {@code <key><id></id></key>} contents are 3 bytes.
+     *
+     * @param bytes     the raw content bytes from the wire-format node
+     * @param byteCount the number of leading bytes to interpret
+     * @return the resulting big-endian unsigned integer
+     * @throws IllegalArgumentException if {@code bytes} has fewer than {@code byteCount} bytes
+     * @implNote WAParsableXmlNode.convertBytesToUint: identical accumulator implementation.
+     */
+    @WhatsAppWebExport(moduleName = "WAParsableXmlNode",
+            exports = "convertBytesToUint",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static int convertBytesToUint(byte[] bytes, int byteCount) {
+        if (bytes == null || bytes.length < byteCount) {
+            throw new IllegalArgumentException("Expected " + byteCount + " bytes, got " + (bytes == null ? 0 : bytes.length));
+        }
+        var n = 0;
+        for (var i = 0; i < byteCount; i++) {
+            n = (n << 8) | (bytes[i] & 0xFF);
+        }
+        return n;
     }
 
     /**
@@ -789,6 +880,8 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
      * @return the parsed receipt, or {@code null} if essential attributes are missing
      * @implNote WAWebHandleMsgReceiptParser.msgReceiptParser
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
+            exports = "msgReceiptParser", adaptation = WhatsAppAdaptation.ADAPTED)
     private ParsedReceipt parseReceipt(Node node) {
         var id = node.getAttributeAsString("id", null);
         var from = node.getAttributeAsJid("from").orElse(null);
@@ -1273,6 +1366,31 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
+     * Determines whether a raw {@code type} attribute string maps to a known
+     * entry in WA Web's {@code RECEIPT_TYPES_TO_ACK} map.
+     * <p>
+     * Mirrors the keyset of the JS module-local object {@code u}:
+     * {@code delivery, read, played, inactive, server-error, sender,
+     * read-self, played-self, peer_msg}.
+     *
+     * @param type the raw {@code type} attribute string from the receipt stanza
+     * @return {@code true} if the string is a recognized {@code RECEIPT_TYPES_TO_ACK} key
+     * @implNote WAWebHandleMsgReceiptParser.RECEIPT_TYPES_TO_ACK — keyset membership test
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
+            exports = "RECEIPT_TYPES_TO_ACK", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static boolean isReceiptTypeToAck(String type) {
+        if (type == null) {
+            return false;
+        }
+        return switch (type) {
+            case "delivery", "read", "played", "inactive", "server-error",
+                 "sender", "read-self", "played-self", "peer_msg" -> true;
+            default -> false;
+        };
+    }
+
+    /**
      * Holds the result of device-level delivery tracking resolution.
      *
      * @param deliveredDevices the devices that have confirmed delivery
@@ -1548,6 +1666,8 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
          * @return the resolved ack level
          * @implNote WAWebHandleMsgReceiptParser.RECEIPT_TYPES_TO_ACK
          */
+        @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
+                exports = "RECEIPT_TYPES_TO_ACK", adaptation = WhatsAppAdaptation.ADAPTED)
         private static ReceiptAck fromType(String type) {
             if (type == null || "delivery".equals(type) || "sender".equals(type)) {
                 return RECEIVED;

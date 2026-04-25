@@ -38,7 +38,7 @@ public sealed interface FetchNewsletterAdminCountMex extends MexJsonOperation pe
      * @implNote WAWebMexFetchNewsletterAdminInfoJobQuery.graphql: corresponds to the compiled
      * document id registered for the {@code mexFetchNewsletterAdminInfo} query.
      */
-    String QUERY_ID = "29186079397702825";
+    String QUERY_ID = "34983385154639574";
 
     /**
      * The request variant of {@link FetchNewsletterAdminCountMex} that serialises the

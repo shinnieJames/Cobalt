@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -36,25 +35,56 @@ public sealed interface FetchSimilarNewslettersMex extends MexJsonOperation perm
      * The numeric GraphQL query identifier assigned by the WhatsApp relay
      * to the {@code FetchSimilarNewsletters} compiled query.
      *
-     * @implNote WAWebMexFetchSimilarNewslettersJobQuery.graphql: corresponds to the compiled
-     * document id registered for the {@code mexFetchSimilarNewsletters} query.
+     * @implNote WAWebMexFetchSimilarNewslettersJobQuery.graphql: corresponds to the
+     * {@code params.id} field of the compiled GraphQL document
+     * ({@code id:"26217043484590756"}) bundled in the WA Web client.
      */
-    String QUERY_ID = "9885518901479028";
+    String QUERY_ID = "26217043484590756";
 
     /**
      * The request variant of {@link FetchSimilarNewslettersMex} that serialises the
      * query variables and emits the outbound IQ stanza.
      *
-     * @implNote WAWebMexFetchSimilarNewslettersJob.mexFetchSimilarNewsletters: adapts the {@code variables}
-     * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * @implNote WAWebMexFetchSimilarNewslettersJob.mexFetchSimilarNewsletters: adapts the
+     * {@code variables} object constructed inline in the JS implementation
+     * ({@code {input:{newsletter_id:a,limit:r,country_codes:n!=null?n:[]}, fetch_status_metadata: WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}})
+     * into a dedicated Java class. The three positional parameters of the JS
+     * function ({@code newsletterId}, {@code limit}, {@code countryCodes}) become
+     * fields on this record-like class, and the gating flag is also exposed so
+     * callers can decide whether to request newsletter status metadata.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchSimilarNewslettersJob")
     final class Request implements FetchSimilarNewslettersMex {
-        private final String input;
+        private final String newsletterId;
+        private final Long limit;
+        private final List<String> countryCodes;
+        private final boolean fetchStatusMetadata;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request with the given variables.
+         *
+         * @param newsletterId        the JID of the newsletter whose similar
+         *                            channels should be returned, or
+         *                            {@code null} to omit the field
+         * @param limit               the maximum number of similar
+         *                            newsletters to return, or {@code null}
+         *                            to omit the field
+         * @param countryCodes        the list of ISO country codes used to
+         *                            scope the recommendation; mirroring the
+         *                            JS coalescing {@code n!=null?n:[]} a
+         *                            {@code null} value is serialised as an
+         *                            empty array
+         * @param fetchStatusMetadata {@code true} to request the optional
+         *                            {@code status_metadata} sub-selection,
+         *                            mirroring
+         *                            {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}
+         *                            in the JS source
+         */
+        public Request(String newsletterId, Long limit, List<String> countryCodes, boolean fetchStatusMetadata) {
+            this.newsletterId = newsletterId;
+            this.limit = limit;
+            this.countryCodes = countryCodes;
+            this.fetchStatusMetadata = fetchStatusMetadata;
         }
 
         /**
@@ -62,10 +92,11 @@ public sealed interface FetchSimilarNewslettersMex extends MexJsonOperation perm
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchSimilarNewslettersJob.mexFetchSimilarNewsletters: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@code variables} object inline as
+         * {@code {input:{newsletter_id:a,limit:r,country_codes:n!=null?n:[]}, fetch_status_metadata: <bool>}}
+         * and delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes
+         * the JSON directly via {@code fastjson2.JSONWriter} and wraps it
+         * through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -81,13 +112,44 @@ public sealed interface FetchSimilarNewslettersMex extends MexJsonOperation perm
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchSimilarNewslettersJob.mexFetchSimilarNewsletters
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // Emits {input:{newsletter_id:a, limit:r, country_codes:n!=null?n:[]}}; the inner object
+                // is emitted unconditionally to mirror the JS object literal shape, and country_codes
+                // defaults to [] when null per the JS coalescing.
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                if (newsletterId != null) {
+                    writer.writeName("newsletter_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(newsletterId);
                 }
+                if (limit != null) {
+                    writer.writeName("limit");
+                    writer.writeColon();
+                    writer.writeInt64(limit);
+                }
+                writer.writeName("country_codes");
+                writer.writeColon();
+                writer.startArray();
+                if (countryCodes != null) {
+                    for (var i = 0; i < countryCodes.size(); i++) {
+                        if (i > 0) {
+                            writer.writeComma();
+                        }
+                        writer.writeString(countryCodes.get(i));
+                    }
+                }
+                writer.endArray();
+                writer.endObject();
+
+                // WAWebMexFetchSimilarNewslettersJob.mexFetchSimilarNewsletters
+                // Emits the sibling {fetch_status_metadata: <bool>} field, mirroring the JS variables literal
+                writer.writeName("fetch_status_metadata");
+                writer.writeColon();
+                writer.writeBool(fetchStatusMetadata);
+
                 writer.endObject();
                 writer.endObject();
 

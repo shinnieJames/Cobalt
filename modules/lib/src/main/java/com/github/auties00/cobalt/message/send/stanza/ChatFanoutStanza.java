@@ -94,6 +94,8 @@ public final class ChatFanoutStanza {
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebSendDirectMsgToDeviceList", exports = "sendDirectMsgToDeviceList",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public static NodeBuilder build(
             String messageId,
             Jid chatJid,

@@ -425,8 +425,11 @@ public final class MessageReceiptHandler {
      *
      * @implNote WAWebHandleMsgSendAck.sendNack: sends an ack stanza
      * with an error attribute and optional meta child with
-     * failure_reason. WAWebCreateNackFromStanza.NackReason: defines
-     * error code constants (InvalidProtobuf=491, ParsingError=487).
+     * failure_reason. The attribute order on the {@code <ack>} stanza
+     * mirrors WA Web's object-literal order:
+     * {@code id, class, from, to, participant, type, error}.
+     * WAWebCreateNackFromStanza.NackReason: defines error code
+     * constants (InvalidProtobuf=491, ParsingError=487).
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendNack",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -442,11 +445,14 @@ public final class MessageReceiptHandler {
         }
 
         // WAWebHandleMsgSendAck.sendNack
-        // Builds the ack stanza with the error code and optional meta child
+        // Builds the ack stanza with the error code and optional meta child.
+        // Attribute order mirrors WA Web: id, class, from, to, participant, type, error.
         var ack = new NodeBuilder()
                 .description("ack")
                 .attribute("id", stanza.id())
                 .attribute("class", "message")
+                // WAWebHandleMsgSendAck.sendNack: from = DEVICE_JID(getMeDevicePnOrThrow_DO_NOT_USE())
+                .attribute("from", store.jid().orElse(null))
                 .attribute("to", resolveFrom(stanza))
                 .attribute("participant",
                         resolveReceiptParticipant(stanza))
@@ -464,17 +470,22 @@ public final class MessageReceiptHandler {
      * @param stanza the parsed incoming stanza
      *
      * @implNote WAWebHandleMsgSendAck.sendAck: sends an ack with
-     * class, type, to, and optional participant.
+     * id, class, from, to, participant, and type attributes (in that
+     * exact object-literal order). The {@code from} attribute is the
+     * client's own device JID.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgSendAck", exports = "sendAck",
             adaptation = WhatsAppAdaptation.DIRECT)
     public void sendAck(MessageReceiveStanza stanza) {
         // WAWebHandleMsgSendAck.sendAck
-        // Builds the plain ack stanza with class/type/to/participant attributes
+        // Builds the plain ack stanza with class/from/to/participant/type attributes.
+        // Attribute order mirrors WA Web: id, class, from, to, participant, type.
         var ack = new NodeBuilder()
                 .description("ack")
                 .attribute("id", stanza.id())
                 .attribute("class", "message")
+                // WAWebHandleMsgSendAck.sendAck: from = DEVICE_JID(getMeDevicePnOrThrow_DO_NOT_USE())
+                .attribute("from", store.jid().orElse(null))
                 .attribute("to", resolveFrom(stanza))
                 .attribute("participant",
                         resolveReceiptParticipant(stanza))

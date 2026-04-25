@@ -15,9 +15,14 @@ import com.github.auties00.cobalt.model.message.media.ImageMessage;
 import com.github.auties00.cobalt.model.message.media.StickerMessage;
 import com.github.auties00.cobalt.model.message.media.StickerPackMessage;
 import com.github.auties00.cobalt.model.message.media.VideoMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
+import com.github.auties00.cobalt.model.message.interactive.InteractiveMessageContent;
 import com.github.auties00.cobalt.wam.event.SendDocumentEventBuilder;
+import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
+import com.github.auties00.cobalt.wam.type.BotType;
 import com.github.auties00.cobalt.wam.type.DocumentType;
 import com.github.auties00.cobalt.wam.type.E2eDeviceType;
+import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 
@@ -318,6 +323,269 @@ public final class WamMsgUtils {
         }
         // WAWebWamMsgUtils.getWamE2eSenderType: OTHER + primary -> OTHER_PRIMARY
         return E2eDeviceType.OTHER_PRIMARY;
+    }
+
+    /**
+     * Returns the WAM {@link MediaType} classification for an interactive
+     * message based on its body variant.
+     *
+     * <p>The classification mirrors WA Web's {@code getInteractiveWamType}:
+     * shop storefront variants map to {@link MediaType#SHOP_STOREFRONT},
+     * carousels map to {@link MediaType#INTERACTIVE_CAROUSEL}, and native
+     * flow variants delegate to {@link #getInteractiveNativeFlowWamType}
+     * to disambiguate {@code CTA_FLOW} ({@link MediaType#NONE}) from any
+     * other native flow ({@link MediaType#INTERACTIVE_NFM}).
+     *
+     * @param interactive the interactive message whose body variant is
+     *                    being classified; {@code null} yields
+     *                    {@link MediaType#NONE}
+     * @return the WAM media-type classification for the interactive
+     * variant, or {@link MediaType#NONE} when no variant is set
+     *
+     * @implNote Adapts {@code WAWebWamMsgUtils.getInteractiveWamType}.
+     * WA Web reads {@code e.interactiveType} (a string from
+     * {@code WAWebInteractiveMessageType}); Cobalt switches on the
+     * {@link InteractiveMessageContent} sealed hierarchy returned by
+     * {@link InteractiveMessage#content()}, which carries the same
+     * variant information.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getInteractiveWamType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static MediaType getInteractiveWamType(InteractiveMessage interactive) {
+        if (interactive == null) {
+            return MediaType.NONE;
+        }
+        InteractiveMessageContent content = interactive.content().orElse(null);
+        if (content == null) {
+            // WAWebWamMsgUtils.getInteractiveWamType: t == null -> MEDIA_TYPE.NONE
+            return MediaType.NONE;
+        }
+        return switch (content) {
+            // WAWebWamMsgUtils.getInteractiveWamType: case SHOPS_STOREFRONT -> SHOP_STOREFRONT
+            case InteractiveMessage.ShopMessage ignored -> MediaType.SHOP_STOREFRONT;
+            // WAWebWamMsgUtils.getInteractiveWamType: case CAROUSEL -> INTERACTIVE_CAROUSEL
+            case InteractiveMessage.CarouselMessage ignored -> MediaType.INTERACTIVE_CAROUSEL;
+            // WAWebWamMsgUtils.getInteractiveWamType: case NATIVE_FLOW -> d(e)
+            case InteractiveMessage.NativeFlowMessage native_ -> getInteractiveNativeFlowWamType(native_);
+            // Cobalt-only branch: collection messages have no WA Web counterpart in this mapper
+            case InteractiveMessage.CollectionMessage ignored -> MediaType.NONE;
+        };
+    }
+
+    /**
+     * Disambiguates the WAM {@link MediaType} for an interactive native
+     * flow message based on the resolved native flow name.
+     *
+     * <p>WA Web treats the {@code CTA_FLOW} (galaxy) variant as
+     * {@link MediaType#NONE} since it is filtered from interactive WAM
+     * reporting; any other native flow name falls through to
+     * {@link MediaType#INTERACTIVE_NFM}.
+     *
+     * @param nativeFlow the native flow message whose name drives the
+     *                   classification; must not be {@code null}
+     * @return {@link MediaType#NONE} when the native flow is the
+     * {@code CTA_FLOW} (galaxy) variant, otherwise
+     * {@link MediaType#INTERACTIVE_NFM}
+     *
+     * @implNote Adapts {@code WAWebWamMsgUtils.d}, the inner helper that
+     * post-processes a native flow interactive payload.
+     * {@code WAWebInteractiveMessagesNativeFlowName.CTA_FLOW} resolves to
+     * the literal {@code "galaxy_message"}, which Cobalt matches via the
+     * first button name on the native flow message.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getInteractiveWamType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static MediaType getInteractiveNativeFlowWamType(InteractiveMessage.NativeFlowMessage nativeFlow) {
+        for (var button : nativeFlow.buttons()) {
+            var name = button.name().orElse(null);
+            // WAWebInteractiveMessagesNativeFlowName.CTA_FLOW -> "galaxy_message"
+            if ("galaxy_message".equals(name)) {
+                return MediaType.NONE;
+            }
+        }
+        return MediaType.INTERACTIVE_NFM;
+    }
+
+    /**
+     * Returns the WAM {@link AgentEngagementEnumType} classification for a
+     * message exchanged with a bot.
+     *
+     * <p>The classification mirrors WA Web's {@code getWamAgentEngagementType}:
+     * messages whose chat JID is itself a bot map to
+     * {@link AgentEngagementEnumType#DIRECT_CHAT}; messages whose payload is
+     * recognised as a bot query or a Meta-bot response map to
+     * {@link AgentEngagementEnumType#INVOKED}; otherwise the helper returns
+     * {@code null} so callers can omit the property from the WAM event.
+     *
+     * @param chatJid       the chat JID that hosts the message; {@code null}
+     *                      yields {@code null}
+     * @param isBotInvoked  {@code true} when the message originates from a
+     *                      bot query or Meta-bot response; this corresponds
+     *                      to the disjunction of WA Web's
+     *                      {@code getIsBotQuery} and {@code getIsMetaBotResponse}
+     * @return the WAM agent-engagement classification, or {@code null}
+     * when the message is unrelated to a bot conversation
+     *
+     * @implNote Adapts {@code WAWebWamMsgUtils.getWamAgentEngagementType}.
+     * Cobalt does not track {@code isBotQuery} / {@code isMetaBotResponse}
+     * on its message model, so the disjunction is exposed as an explicit
+     * caller-supplied flag rather than recomputed here. The
+     * {@code remote.isBot()} guard is realised through {@link Jid#isBot()}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getWamAgentEngagementType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static AgentEngagementEnumType getWamAgentEngagementType(Jid chatJid, boolean isBotInvoked) {
+        if (chatJid == null) {
+            return null;
+        }
+        if (chatJid.isBot()) {
+            // WAWebWamMsgUtils.getWamAgentEngagementType: e.id.remote.isBot() -> DIRECT_CHAT
+            return AgentEngagementEnumType.DIRECT_CHAT;
+        }
+        if (isBotInvoked) {
+            // WAWebWamMsgUtils.getWamAgentEngagementType: getIsBotQuery || getIsMetaBotResponse -> INVOKED
+            return AgentEngagementEnumType.INVOKED;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the WAM {@link BotType} classification of a bot interaction.
+     *
+     * <p>The classification mirrors WA Web's {@code getWamBotType}: a
+     * Meta-bot JID maps to {@link BotType#METABOT}; a 1P business bot
+     * (either via the {@code BizBotType.BIZ_1P} flag or the
+     * {@code BizBotAutomatedType.PARTIAL_1P} automated flag) maps to
+     * {@link BotType#BOT_1P_BIZ}; a 3P business bot (via
+     * {@code BizBotType.BIZ_3P} or {@code BizBotAutomatedType.FULL_3P})
+     * maps to {@link BotType#BOT_3P_BIZ}; everything else falls through to
+     * {@link BotType#UNKNOWN}.
+     *
+     * @param botJid        the JID involved in the bot interaction;
+     *                      may be {@code null}
+     * @param is1pBizBot    {@code true} when WA Web would classify the
+     *                      interaction as {@code BizBotType.BIZ_1P} or
+     *                      {@code BizBotAutomatedType.PARTIAL_1P}
+     * @param is3pBizBot    {@code true} when WA Web would classify the
+     *                      interaction as {@code BizBotType.BIZ_3P} or
+     *                      {@code BizBotAutomatedType.FULL_3P}
+     * @return the matching WAM bot type, defaulting to
+     * {@link BotType#UNKNOWN}
+     *
+     * @implNote Adapts {@code WAWebWamMsgUtils.getWamBotType}. Cobalt does
+     * not currently model {@code BizBotType} or {@code BizBotAutomatedType}
+     * as Java enums, so the two boolean flags are exposed in their stead;
+     * any future {@code BizBotType} enum can be added here without
+     * disturbing callers.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getWamBotType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static BotType getWamBotType(Jid botJid, boolean is1pBizBot, boolean is3pBizBot) {
+        if (botJid != null && botJid.isBot()) {
+            // WAWebWamMsgUtils.getWamBotType: e?.isBot() -> METABOT
+            return BotType.METABOT;
+        }
+        if (is1pBizBot) {
+            // WAWebWamMsgUtils.getWamBotType: BizBotType.BIZ_1P / BizBotAutomatedType.PARTIAL_1P -> BOT_1P_BIZ
+            return BotType.BOT_1P_BIZ;
+        }
+        if (is3pBizBot) {
+            // WAWebWamMsgUtils.getWamBotType: BizBotType.BIZ_3P / BizBotAutomatedType.FULL_3P -> BOT_3P_BIZ
+            return BotType.BOT_3P_BIZ;
+        }
+        // WAWebWamMsgUtils.getWamBotType: default -> UNKNOWN
+        return BotType.UNKNOWN;
+    }
+
+    /**
+     * Returns the WAM {@link InvisibleMessageCategoryType} classification
+     * for the supplied stanza-level message category attribute.
+     *
+     * <p>WA Web defines a single recognised category, {@code MSG_CATEGORY.peer},
+     * which maps to {@link InvisibleMessageCategoryType#PEER}; any other
+     * value (including {@code null} and the empty string) yields
+     * {@code null} so callers omit the property from the WAM event.
+     *
+     * @param category the {@code category} attribute carried on the
+     *                 incoming stanza; may be {@code null}
+     * @return {@link InvisibleMessageCategoryType#PEER} for {@code "peer"},
+     * otherwise {@code null}
+     *
+     * @implNote Adapts {@code WAWebWamMsgUtils.getWamInvisibleMessageCatgoryType}.
+     * The helper preserves WA Web's misspelling of {@code Catgory} in the
+     * export name while exposing a corrected Java method name. The category
+     * lookup uses the {@code WAWebHandleMsgCommon.MSG_CATEGORY} constants;
+     * Cobalt mirrors that table inline because the only recognised value
+     * is the literal {@code "peer"}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getWamInvisibleMessageCatgoryType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static InvisibleMessageCategoryType getWamInvisibleMessageCategoryType(String category) {
+        if (category == null || category.isEmpty()) {
+            return null;
+        }
+        // WAWebHandleMsgCommon.MSG_CATEGORY.peer -> INVISIBLE_MESSAGE_CATEGORY_TYPE.PEER
+        if ("peer".equals(category)) {
+            return InvisibleMessageCategoryType.PEER;
+        }
+        return null;
+    }
+
+    /**
+     * Returns whether any of the JIDs that participated in the message
+     * exchange are LID-addressed.
+     *
+     * <p>WA Web's {@code msgIsLid} returns:
+     * <ul>
+     *   <li>for groups: the supplied {@code participantIsLid} flag
+     *       (truthy-coerced).</li>
+     *   <li>for status updates: whether the
+     *       {@code key.id.participant} is a LID JID; missing values
+     *       evaluate to {@code false}.</li>
+     *   <li>otherwise: whether either the {@code from} or the {@code to}
+     *       JID is LID-addressed.</li>
+     * </ul>
+     *
+     * @param fromJid             the sender JID; may be {@code null}
+     * @param toJid               the recipient JID; may be {@code null}
+     * @param keyParticipantJid   the {@code key.participant} JID, used for
+     *                            status updates; may be {@code null}
+     * @param chatType            the WAM message-type classification of
+     *                            the chat (used to disambiguate group /
+     *                            status / other); must not be {@code null}
+     * @param participantIsLid    {@code true} when the {@code participant}
+     *                            attribute on a group stanza is LID-addressed
+     * @return {@code true} when the relevant JID for the chat type is
+     * LID-addressed, otherwise {@code false}
+     *
+     * @implNote Adapts {@code WAWebWamMsgUtils.msgIsLid}. The
+     * {@code chatType.isGroup() / chatType.isStatus()} branch checks are
+     * recovered here through the WAM {@link MessageType} classification
+     * already produced by {@link #getWamMessageType(Jid)}, so callers do
+     * not need a {@code Wid}-style helper. The fall-through case checks
+     * both endpoints, matching WA Web's {@code e.from.isLid() || e.to.isLid()}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "msgIsLid",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static boolean msgIsLid(
+            Jid fromJid,
+            Jid toJid,
+            Jid keyParticipantJid,
+            MessageType chatType,
+            boolean participantIsLid
+    ) {
+        if (chatType == MessageType.GROUP) {
+            // WAWebWamMsgUtils.msgIsLid: t.isGroup() -> !!n
+            return participantIsLid;
+        }
+        if (chatType == MessageType.STATUS) {
+            // WAWebWamMsgUtils.msgIsLid: t.isStatus() -> e.id.participant?.isLid() ?? false
+            return keyParticipantJid != null && keyParticipantJid.hasLidServer();
+        }
+        // WAWebWamMsgUtils.msgIsLid: default -> e.from.isLid() || e.to.isLid()
+        var fromIsLid = fromJid != null && fromJid.hasLidServer();
+        var toIsLid = toJid != null && toJid.hasLidServer();
+        return fromIsLid || toIsLid;
     }
 
     /**

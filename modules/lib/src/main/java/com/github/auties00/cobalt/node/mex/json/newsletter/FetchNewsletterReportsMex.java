@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -37,9 +36,10 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
      * to the {@code FetchNewsletterReports} compiled query.
      *
      * @implNote WAWebMexFetchNewsletterReportsJobQuery.graphql: corresponds to the compiled
-     * document id registered for the {@code mexFetchNewsletterReports} query.
+     * document id registered for the {@code mexFetchNewsletterReports} query,
+     * extracted from the relay-supplied {@code params.id} property.
      */
-    String QUERY_ID = "25246702401624388";
+    String QUERY_ID = "24241374008893508";
 
     /**
      * The request variant of {@link FetchNewsletterReportsMex} that serialises the
@@ -52,6 +52,11 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterReportsJob")
     final class Request implements FetchNewsletterReportsMex {
 
+        /**
+         * Constructs an empty request. The underlying GraphQL operation does not
+         * accept arguments, so the corresponding {@code variables} object is
+         * always serialised as an empty JSON object.
+         */
         public Request() {
         }
 
@@ -60,7 +65,7 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchNewsletterReportsJob.mexFetchNewsletterReports: WA Web constructs the
-         * {@code variables} object inline and delegates to
+         * {@code variables} object inline as {@code var e = {}} and delegates to
          * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
          * via {@code fastjson2.JSONWriter} and wraps it through
          * {@link MexJsonOperation#createMexNode(String, String)}.
@@ -102,6 +107,12 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
     final class Response implements FetchNewsletterReportsMex {
         private final List<ChannelsReports> channelsReports;
 
+        /**
+         * Constructs a response value carrying the parsed list of channel
+         * reports.
+         *
+         * @param channelsReports the parsed list of reports; never {@code null}
+         */
         private Response(List<ChannelsReports> channelsReports) {
             this.channelsReports = channelsReports;
         }
@@ -141,21 +152,29 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
             private final Long lastUpdateTime;
             private final String channelName;
             private final String channelJid;
-            private final String serverMsgId;
-            private final String responseServerMsgId;
-            private final String notifyName;
+            private final ReportedContentData reportedContentData;
             private final Appeal appeal;
 
-            private ChannelsReports(String reportId, String status, Long creationTime, Long lastUpdateTime, String channelName, String channelJid, String serverMsgId, String responseServerMsgId, String notifyName, Appeal appeal) {
+            /**
+             * Constructs a single channel-report entry.
+             *
+             * @param reportId            the {@code report_id} value, may be {@code null}
+             * @param status              the {@code status} value, may be {@code null}
+             * @param creationTime        the {@code creation_time} epoch seconds, may be {@code null}
+             * @param lastUpdateTime      the {@code last_update_time} epoch seconds, may be {@code null}
+             * @param channelName         the {@code channel_name} value, may be {@code null}
+             * @param channelJid          the {@code channel_jid} value, may be {@code null}
+             * @param reportedContentData the parsed nested {@code reported_content_data} payload, may be {@code null}
+             * @param appeal              the parsed nested {@code appeal} payload, may be {@code null}
+             */
+            private ChannelsReports(String reportId, String status, Long creationTime, Long lastUpdateTime, String channelName, String channelJid, ReportedContentData reportedContentData, Appeal appeal) {
                 this.reportId = reportId;
                 this.status = status;
                 this.creationTime = creationTime;
                 this.lastUpdateTime = lastUpdateTime;
                 this.channelName = channelName;
                 this.channelJid = channelJid;
-                this.serverMsgId = serverMsgId;
-                this.responseServerMsgId = responseServerMsgId;
-                this.notifyName = notifyName;
+                this.reportedContentData = reportedContentData;
                 this.appeal = appeal;
             }
 
@@ -214,30 +233,12 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
             }
 
             /**
-             * Returns the {@code server_msg_id} field.
+             * Returns the {@code reported_content_data} nested object.
              *
              * @return an {@link Optional} containing the value, or empty if absent
              */
-            public Optional<String> serverMsgId() {
-                return Optional.ofNullable(serverMsgId);
-            }
-
-            /**
-             * Returns the {@code response_server_msg_id} field.
-             *
-             * @return an {@link Optional} containing the value, or empty if absent
-             */
-            public Optional<String> responseServerMsgId() {
-                return Optional.ofNullable(responseServerMsgId);
-            }
-
-            /**
-             * Returns the {@code notify_name} field.
-             *
-             * @return an {@link Optional} containing the value, or empty if absent
-             */
-            public Optional<String> notifyName() {
-                return Optional.ofNullable(notifyName);
+            public Optional<ReportedContentData> reportedContentData() {
+                return Optional.ofNullable(reportedContentData);
             }
 
             /**
@@ -250,6 +251,187 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
             }
 
             /**
+             * The polymorphic {@code reported_content_data} object embedded in
+             * each report entry.
+             *
+             * <p>The relay returns one of three GraphQL inline-fragment shapes
+             * keyed by the {@code __typename} discriminator:
+             * <ul>
+             *   <li>{@code XWA2ChannelServerMsgData} — carries {@code server_msg_id}.</li>
+             *   <li>{@code XWA2ChannelStatusData} — carries {@code server_id}.</li>
+             *   <li>{@code XWA2ChannelQuestionResponseData} — carries
+             *       {@code server_response_id}, {@code notify_name} and a
+             *       nested {@code question_data} fragment of type
+             *       {@code XWA2ChannelServerMsgData}.</li>
+             * </ul>
+             *
+             * @implNote WAWebMexFetchNewsletterReportsJobQuery.graphql: the
+             * compiled GraphQL document declares this field as a {@code LinkedField}
+             * with three {@code InlineFragment} selections discriminated by
+             * {@code __typename}.
+             */
+            public static final class ReportedContentData {
+                private final String typename;
+                private final String serverMsgId;
+                private final String serverId;
+                private final String serverResponseId;
+                private final String notifyName;
+                private final QuestionData questionData;
+
+                /**
+                 * Constructs a parsed {@code reported_content_data} value.
+                 *
+                 * @param typename         the GraphQL {@code __typename} discriminator, may be {@code null}
+                 * @param serverMsgId      the {@code server_msg_id} value (set on {@code XWA2ChannelServerMsgData}), may be {@code null}
+                 * @param serverId         the {@code server_id} value (set on {@code XWA2ChannelStatusData}), may be {@code null}
+                 * @param serverResponseId the {@code server_response_id} value (set on {@code XWA2ChannelQuestionResponseData}), may be {@code null}
+                 * @param notifyName       the {@code notify_name} value (set on {@code XWA2ChannelQuestionResponseData}), may be {@code null}
+                 * @param questionData     the parsed nested {@code question_data} payload, may be {@code null}
+                 */
+                private ReportedContentData(String typename, String serverMsgId, String serverId, String serverResponseId, String notifyName, QuestionData questionData) {
+                    this.typename = typename;
+                    this.serverMsgId = serverMsgId;
+                    this.serverId = serverId;
+                    this.serverResponseId = serverResponseId;
+                    this.notifyName = notifyName;
+                    this.questionData = questionData;
+                }
+
+                /**
+                 * Returns the {@code __typename} discriminator field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> typename() {
+                    return Optional.ofNullable(typename);
+                }
+
+                /**
+                 * Returns the {@code server_msg_id} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> serverMsgId() {
+                    return Optional.ofNullable(serverMsgId);
+                }
+
+                /**
+                 * Returns the {@code server_id} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> serverId() {
+                    return Optional.ofNullable(serverId);
+                }
+
+                /**
+                 * Returns the {@code server_response_id} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> serverResponseId() {
+                    return Optional.ofNullable(serverResponseId);
+                }
+
+                /**
+                 * Returns the {@code notify_name} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> notifyName() {
+                    return Optional.ofNullable(notifyName);
+                }
+
+                /**
+                 * Returns the {@code question_data} nested fragment.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<QuestionData> questionData() {
+                    return Optional.ofNullable(questionData);
+                }
+
+                /**
+                 * Parses a {@code ReportedContentData} from the given JSON object.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 */
+                static Optional<ReportedContentData> of(JSONObject obj) {
+                    if (obj == null) {
+                        return Optional.empty();
+                    }
+
+                    var typename = obj.getString("__typename");
+                    var serverMsgId = obj.getString("server_msg_id");
+                    var serverId = obj.getString("server_id");
+                    var serverResponseId = obj.getString("server_response_id");
+                    var notifyName = obj.getString("notify_name");
+                    var questionData = QuestionData.of(obj.getJSONObject("question_data")).orElse(null);
+                    return Optional.of(new ReportedContentData(typename, serverMsgId, serverId, serverResponseId, notifyName, questionData));
+                }
+
+                /**
+                 * The {@code question_data} nested fragment carried by
+                 * {@code XWA2ChannelQuestionResponseData}.
+                 *
+                 * @implNote WAWebMexFetchNewsletterReportsJobQuery.graphql:
+                 * declared as a {@code LinkedField} with a single
+                 * {@code XWA2ChannelServerMsgData} {@code InlineFragment}
+                 * selection providing {@code server_msg_id}.
+                 */
+                public static final class QuestionData {
+                    private final String typename;
+                    private final String serverMsgId;
+
+                    /**
+                     * Constructs a parsed {@code question_data} value.
+                     *
+                     * @param typename    the {@code __typename} discriminator, may be {@code null}
+                     * @param serverMsgId the {@code server_msg_id} value, may be {@code null}
+                     */
+                    private QuestionData(String typename, String serverMsgId) {
+                        this.typename = typename;
+                        this.serverMsgId = serverMsgId;
+                    }
+
+                    /**
+                     * Returns the {@code __typename} discriminator field.
+                     *
+                     * @return an {@link Optional} containing the value, or empty if absent
+                     */
+                    public Optional<String> typename() {
+                        return Optional.ofNullable(typename);
+                    }
+
+                    /**
+                     * Returns the {@code server_msg_id} field.
+                     *
+                     * @return an {@link Optional} containing the value, or empty if absent
+                     */
+                    public Optional<String> serverMsgId() {
+                        return Optional.ofNullable(serverMsgId);
+                    }
+
+                    /**
+                     * Parses a {@code QuestionData} from the given JSON object.
+                     *
+                     * @param obj the JSON object to parse
+                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     */
+                    static Optional<QuestionData> of(JSONObject obj) {
+                        if (obj == null) {
+                            return Optional.empty();
+                        }
+
+                        var typename = obj.getString("__typename");
+                        var serverMsgId = obj.getString("server_msg_id");
+                        return Optional.of(new QuestionData(typename, serverMsgId));
+                    }
+                }
+            }
+
+            /**
              * A parsed {@code Appeal} object.
              */
             public static final class Appeal {
@@ -259,6 +441,15 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
                 private final String reportId;
                 private final String appealId;
 
+                /**
+                 * Constructs a parsed {@code appeal} value.
+                 *
+                 * @param state        the {@code state} value, may be {@code null}
+                 * @param appealReason the {@code appeal_reason} value, may be {@code null}
+                 * @param creationTime the {@code creation_time} epoch seconds, may be {@code null}
+                 * @param reportId     the {@code report_id} value, may be {@code null}
+                 * @param appealId     the {@code appeal_id} value, may be {@code null}
+                 */
                 private Appeal(String state, String appealReason, Long creationTime, String reportId, String appealId) {
                     this.state = state;
                     this.appealReason = appealReason;
@@ -313,7 +504,7 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
                 }
 
                 /**
-                 * Parses a {@code Appeal} from the given JSON object.
+                 * Parses an {@code Appeal} from the given JSON object.
                  *
                  * @param obj the JSON object to parse
                  * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
@@ -367,11 +558,9 @@ public sealed interface FetchNewsletterReportsMex extends MexJsonOperation permi
                 var lastUpdateTime = obj.getLong("last_update_time");
                 var channelName = obj.getString("channel_name");
                 var channelJid = obj.getString("channel_jid");
-                var serverMsgId = obj.getString("server_msg_id");
-                var responseServerMsgId = obj.getString("response_server_msg_id");
-                var notifyName = obj.getString("notify_name");
+                var reportedContentData = ReportedContentData.of(obj.getJSONObject("reported_content_data")).orElse(null);
                 var appeal = Appeal.of(obj.getJSONObject("appeal")).orElse(null);
-                return Optional.of(new ChannelsReports(reportId, status, creationTime, lastUpdateTime, channelName, channelJid, serverMsgId, responseServerMsgId, notifyName, appeal));
+                return Optional.of(new ChannelsReports(reportId, status, creationTime, lastUpdateTime, channelName, channelJid, reportedContentData, appeal));
             }
 
             /**

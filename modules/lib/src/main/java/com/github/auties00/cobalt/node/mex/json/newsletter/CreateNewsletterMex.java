@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -52,10 +51,26 @@ public sealed interface CreateNewsletterMex extends MexJsonOperation permits Cre
      */
     @WhatsAppWebModule(moduleName = "WAWebMexCreateNewsletterJob")
     final class Request implements CreateNewsletterMex {
-        private final String input;
+        private final String name;
+        private final String description;
+        private final String picture;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request with the given mutation variables.
+         *
+         * @implNote WAWebMexCreateNewsletterJob.mexCreateNewsletter: mirrors the
+         * {@code (t, r, a)} positional arguments of the JS function which are
+         * placed under {@code input.name}, {@code input.description} and
+         * {@code input.picture}.
+         * @param name        the newsletter display name; may be {@code null}
+         * @param description the newsletter description; may be {@code null}
+         * @param picture     the base64 or direct-path encoded picture payload;
+         *                    may be {@code null}
+         */
+        public Request(String name, String description, String picture) {
+            this.name = name;
+            this.description = description;
+            this.picture = picture;
         }
 
         /**
@@ -63,10 +78,10 @@ public sealed interface CreateNewsletterMex extends MexJsonOperation permits Cre
          * WhatsApp relay.
          *
          * @implNote WAWebMexCreateNewsletterJob.mexCreateNewsletter: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@code {input: {name: t, description: r, picture: a}}} variables
+         * object inline and delegates to {@code WAWebMexClient.fetchQuery}.
+         * Cobalt writes the JSON directly via {@code fastjson2.JSONWriter} and
+         * wraps it through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -82,13 +97,20 @@ public sealed interface CreateNewsletterMex extends MexJsonOperation permits Cre
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
-                // WAWebMexCreateNewsletterJob.mexCreateNewsletter
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
-                    writer.writeColon();
-                    writer.writeString(input);
-                }
+                // WAWebMexCreateNewsletterJob.mexCreateNewsletter: {input: {name: t, description: r, picture: a}}
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                writer.writeName("name");
+                writer.writeColon();
+                writer.writeString(name);
+                writer.writeName("description");
+                writer.writeColon();
+                writer.writeString(description);
+                writer.writeName("picture");
+                writer.writeColon();
+                writer.writeString(picture);
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 

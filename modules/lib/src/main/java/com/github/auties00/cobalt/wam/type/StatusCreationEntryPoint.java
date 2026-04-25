@@ -52,5 +52,10 @@ public enum StatusCreationEntryPoint {
     @WamEnumConstant(45) CHANNEL_STATUS_TAB_SELF_POG,
     @WamEnumConstant(46) MY_CHANNEL_STATUS_FAB_CAMERA,
     @WamEnumConstant(47) CHANNEL_THREAD_PAGE,
-    @WamEnumConstant(48) CHANNEL_STATUS_VIEWER_TOP_BAR
+    @WamEnumConstant(48) CHANNEL_STATUS_VIEWER_TOP_BAR,
+    @WamEnumConstant(50) GROUP_STATUS_CHAT_HEADER,
+    @WamEnumConstant(51) CHATS_TAB_SELF_POG,
+    @WamEnumConstant(52) CHATS_TAB_NEW_CHAT,
+    @WamEnumConstant(53) GROUP_STATUS_CHAT_HEADER_PROFILE_RING,
+    @WamEnumConstant(54) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN
 }

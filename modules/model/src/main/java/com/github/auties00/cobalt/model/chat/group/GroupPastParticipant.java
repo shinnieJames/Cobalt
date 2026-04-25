@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.chat.group;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import it.auties.protobuf.annotation.ProtobufEnum;
@@ -34,7 +37,7 @@ public final class GroupPastParticipant {
      * The duration after which past participant records are considered expired
      * and eligible for pruning from the local store.
      */
-    private static final Duration EXPIRATION = Duration.ofDays(180);
+    private static final Duration EXPIRATION = Duration.ofDays(60);
 
     /**
      * The JID of the user who left or was removed from the group, or
@@ -136,7 +139,7 @@ public final class GroupPastParticipant {
      * Returns whether this past participant record has expired and should be
      * pruned from the local store.
      *
-     * <p>Records older than the configured expiration duration (180 days) are
+     * <p>Records older than the configured expiration duration (60 days) are
      * considered stale and can be safely removed during periodic cleanup.
      *
      * @return {@code true} if the record is older than the expiration
@@ -152,17 +155,31 @@ public final class GroupPastParticipant {
      *
      * <p>A participant can leave a group voluntarily ({@link #LEFT}) or be
      * removed by an administrator ({@link #REMOVED}).
+     *
+     * @implNote This enum fills two roles that WA Web keeps separate. It is
+     *           the protobuf enum {@code PastParticipant.LeaveReason} defined
+     *           in {@code WAWebProtobufsHistorySync.pb} (integer-valued
+     *           {@code LEFT=0}, {@code REMOVED=1}), and it also adapts the
+     *           client-side string mirror {@code WAWebLeaveReasonType.LeaveReason}
+     *           (string-valued {@code "Left"}, {@code "Removed"}). WA Web
+     *           translates between the two in
+     *           {@code WAWebHistorySyncNotificationUtils}; Cobalt collapses
+     *           them because Java's enum type system already provides the
+     *           symbolic mirror that the JS string enum was emulating.
      */
+    @WhatsAppWebModule(moduleName = "WAWebLeaveReasonType")
     @ProtobufEnum(name = "PastParticipant.LeaveReason")
     public static enum LeaveReason {
         /**
          * The participant voluntarily left the group.
          */
+        @WhatsAppWebExport(moduleName = "WAWebLeaveReasonType", exports = "LeaveReason", adaptation = WhatsAppAdaptation.ADAPTED)
         LEFT(0),
 
         /**
          * The participant was removed from the group by an administrator.
          */
+        @WhatsAppWebExport(moduleName = "WAWebLeaveReasonType", exports = "LeaveReason", adaptation = WhatsAppAdaptation.ADAPTED)
         REMOVED(1);
 
         /**

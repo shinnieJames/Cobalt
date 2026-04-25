@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -39,7 +38,7 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
      * @implNote WAWebMexFetchAllNewslettersMetadataJobQuery.graphql: corresponds to the compiled
      * document id registered for the {@code mexFetchAllNewsletters} query.
      */
-    String QUERY_ID = "33101596156151910";
+    String QUERY_ID = "25399611239711790";
 
     /**
      * The request variant of {@link FetchAllNewslettersMetadataMex} that serialises the
@@ -52,9 +51,39 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
     @WhatsAppWebModule(moduleName = "WAWebMexFetchAllNewslettersMetadataJob")
     final class Request implements FetchAllNewslettersMetadataMex {
         private final Boolean fetchWamoSub;
+        private final Boolean fetchStatusMetadata;
 
+        /**
+         * Constructs a request that selects only the {@code fetch_wamo_sub}
+         * gating flag.
+         *
+         * @implNote Convenience overload kept for backwards compatibility with
+         *           callers that predate the {@code fetch_status_metadata}
+         *           variable.
+         * @param fetchWamoSub the value of the {@code fetch_wamo_sub} GraphQL
+         *                     variable, or {@code null} to omit the field
+         */
         public Request(Boolean fetchWamoSub) {
+            this(fetchWamoSub, null);
+        }
+
+        /**
+         * Constructs a request with both GraphQL gating variables.
+         *
+         * @implNote WAWebMexFetchAllNewslettersMetadataJob.mexFetchAllNewsletters:
+         *           WA Web invokes
+         *           {@code WAWebMexClient.fetchQuery(query, {fetch_wamo_sub,
+         *           fetch_status_metadata})}; Cobalt mirrors the same two
+         *           variables on the request object.
+         * @param fetchWamoSub        the value of the {@code fetch_wamo_sub}
+         *                            variable, or {@code null} to omit
+         * @param fetchStatusMetadata the value of the
+         *                            {@code fetch_status_metadata} variable,
+         *                            or {@code null} to omit
+         */
+        public Request(Boolean fetchWamoSub, Boolean fetchStatusMetadata) {
             this.fetchWamoSub = fetchWamoSub;
+            this.fetchStatusMetadata = fetchStatusMetadata;
         }
 
         /**
@@ -62,7 +91,8 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchAllNewslettersMetadataJob.mexFetchAllNewsletters: WA Web constructs the
-         * {@code variables} object inline and delegates to
+         * {@code variables} object inline ({@code {fetch_wamo_sub: ...,
+         * fetch_status_metadata: ...}}) and delegates to
          * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
          * via {@code fastjson2.JSONWriter} and wraps it through
          * {@link MexJsonOperation#createMexNode(String, String)}.
@@ -87,6 +117,13 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
                     writer.writeName("fetch_wamo_sub");
                     writer.writeColon();
                     writer.writeBool(fetchWamoSub);
+                }
+                // WAWebMexFetchAllNewslettersMetadataJob.mexFetchAllNewsletters
+                // Emits the fetch_status_metadata boolean variable when present
+                if (fetchStatusMetadata != null) {
+                    writer.writeName("fetch_status_metadata");
+                    writer.writeColon();
+                    writer.writeBool(fetchStatusMetadata);
                 }
                 writer.endObject();
                 writer.endObject();
@@ -141,6 +178,74 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
         }
 
         /**
+         * Splits the items in this response into active newsletters and the
+         * subset that the relay reported as deleted.
+         *
+         * <p>Mirrors the WA Web {@code handleMexGetAllNewsletters} helper that
+         * forwards the response from {@code mexFetchAllNewsletters} to the
+         * Newsletter Collections layer. WA Web filters out {@code null}
+         * entries, parses each surviving item through
+         * {@code WAWebMexNewsletterParseUtils.parseMexNewsletterResponse} and
+         * routes any item whose {@code state.type} equals
+         * {@code "DELETED"} into the {@code deletedNewsletters} bucket. Cobalt
+         * surfaces the same partition without invoking the JS-only parser:
+         * callers map the active items into their domain objects and use the
+         * deleted bucket to evict cached newsletters.
+         *
+         * @implNote WAWebMexFetchAllNewslettersMetadataJob.handleMexGetAllNewsletters:
+         *           {@code t.filter(e=>e!=null).map(e=>{...if(e.state?.type==="DELETED")
+         *           r.push({jid: parsed.idJid}); else n.push(parsed);});
+         *           return n.length>0||r.length>0
+         *               ? {newsletters:n, deletedNewsletters: r.length>0?{id:r}:null}
+         *               : {newsletters:[]};}.
+         * @return a {@link Partitioned} carrying the active and deleted item
+         *         lists; both lists are unmodifiable
+         */
+        @WhatsAppWebExport(moduleName = "WAWebMexFetchAllNewslettersMetadataJob",
+                exports = "handleMexGetAllNewsletters", adaptation = WhatsAppAdaptation.ADAPTED)
+        public Partitioned partition() {
+            // WAWebMexFetchAllNewslettersMetadataJob.handleMexGetAllNewsletters:
+            // bail out fast on the empty payload to mirror the {newsletters: []} return
+            if (items.isEmpty()) {
+                return new Partitioned(List.of(), List.of());
+            }
+            var active = new ArrayList<Item>(items.size());
+            var deleted = new ArrayList<Item>();
+            // WAWebMexFetchAllNewslettersMetadataJob.handleMexGetAllNewsletters:
+            // t.filter(e=>e!=null).map(e=>{...e.state?.type==="DELETED" ? r.push(...) : n.push(...)})
+            for (var item : items) {
+                if (item == null) {
+                    continue;
+                }
+                var stateType = item.state()
+                        .flatMap(Item.State::type)
+                        .orElse(null);
+                if ("DELETED".equals(stateType)) {
+                    deleted.add(item);
+                } else {
+                    active.add(item);
+                }
+            }
+            return new Partitioned(List.copyOf(active), List.copyOf(deleted));
+        }
+
+        /**
+         * Carries the result of {@link Response#partition()}: the active
+         * newsletters surfaced to the UI and the subset that the relay
+         * reported as deleted.
+         *
+         * @param newsletters         the items whose {@code state.type} is not
+         *                            {@code "DELETED"}, in server-defined order
+         * @param deletedNewsletters  the items whose {@code state.type} is
+         *                            {@code "DELETED"}, in server-defined order
+         * @implNote WAWebMexFetchAllNewslettersMetadataJob.handleMexGetAllNewsletters:
+         *           mirrors the {@code {newsletters, deletedNewsletters}}
+         *           shape returned to the Newsletter Collections layer.
+         */
+        public record Partitioned(List<Item> newsletters, List<Item> deletedNewsletters) {
+        }
+
+        /**
          * A parsed {@code Item} object.
          */
         public static final class Item {
@@ -148,12 +253,14 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
             private final State state;
             private final ThreadMetadata threadMetadata;
             private final ViewerMetadata viewerMetadata;
+            private final StatusMetadata statusMetadata;
 
-            private Item(String id, State state, ThreadMetadata threadMetadata, ViewerMetadata viewerMetadata) {
+            private Item(String id, State state, ThreadMetadata threadMetadata, ViewerMetadata viewerMetadata, StatusMetadata statusMetadata) {
                 this.id = id;
                 this.state = state;
                 this.threadMetadata = threadMetadata;
                 this.viewerMetadata = viewerMetadata;
+                this.statusMetadata = statusMetadata;
             }
 
             /**
@@ -190,6 +297,16 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
              */
             public Optional<ViewerMetadata> viewerMetadata() {
                 return Optional.ofNullable(viewerMetadata);
+            }
+
+            /**
+             * Returns the {@code status_metadata} field, populated only when
+             * the request set {@code fetch_status_metadata=true}.
+             *
+             * @return an {@link Optional} containing the value, or empty if absent
+             */
+            public Optional<StatusMetadata> statusMetadata() {
+                return Optional.ofNullable(statusMetadata);
             }
 
             /**
@@ -1016,6 +1133,56 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
             }
 
             /**
+             * A parsed {@code StatusMetadata} object that exposes the
+             * {@code last_status_server_id} and {@code last_status_sent_time}
+             * scalars described by the GraphQL fragment under the
+             * {@code XWA2NewsletterStatusMetadata} concrete type.
+             */
+            public static final class StatusMetadata {
+                private final String lastStatusServerId;
+                private final Long lastStatusSentTime;
+
+                private StatusMetadata(String lastStatusServerId, Long lastStatusSentTime) {
+                    this.lastStatusServerId = lastStatusServerId;
+                    this.lastStatusSentTime = lastStatusSentTime;
+                }
+
+                /**
+                 * Returns the {@code last_status_server_id} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> lastStatusServerId() {
+                    return Optional.ofNullable(lastStatusServerId);
+                }
+
+                /**
+                 * Returns the {@code last_status_sent_time} field.
+                 *
+                 * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+                 */
+                public Optional<Instant> lastStatusSentTime() {
+                    return Optional.ofNullable(lastStatusSentTime).map(Instant::ofEpochSecond);
+                }
+
+                /**
+                 * Parses a {@code StatusMetadata} from the given JSON object.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 */
+                static Optional<StatusMetadata> of(JSONObject obj) {
+                    if (obj == null) {
+                        return Optional.empty();
+                    }
+
+                    var lastStatusServerId = obj.getString("last_status_server_id");
+                    var lastStatusSentTime = obj.getLong("last_status_sent_time");
+                    return Optional.of(new StatusMetadata(lastStatusServerId, lastStatusSentTime));
+                }
+            }
+
+            /**
              * Parses a {@code Item} from the given JSON object.
              *
              * @param obj the JSON object to parse
@@ -1030,7 +1197,8 @@ public sealed interface FetchAllNewslettersMetadataMex extends MexJsonOperation 
                 var state = State.of(obj.getJSONObject("state")).orElse(null);
                 var threadMetadata = ThreadMetadata.of(obj.getJSONObject("thread_metadata")).orElse(null);
                 var viewerMetadata = ViewerMetadata.of(obj.getJSONObject("viewer_metadata")).orElse(null);
-                return Optional.of(new Item(id, state, threadMetadata, viewerMetadata));
+                var statusMetadata = StatusMetadata.of(obj.getJSONObject("status_metadata")).orElse(null);
+                return Optional.of(new Item(id, state, threadMetadata, viewerMetadata, statusMetadata));
             }
 
             /**

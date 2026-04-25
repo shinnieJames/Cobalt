@@ -70,6 +70,10 @@ import com.github.auties00.cobalt.model.sync.action.setting.UnarchiveChatsSettin
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.node.usync.UsyncBackoff;
+import com.github.auties00.cobalt.node.usync.UsyncQuery;
+import com.github.auties00.cobalt.node.usync.UsyncResult;
+import com.github.auties00.cobalt.node.usync.result.UsyncProtocolError;
 import com.github.auties00.cobalt.node.mex.json.business.QueryCatalogMex;
 import com.github.auties00.cobalt.node.mex.json.business.QueryOrderMex;
 import com.github.auties00.cobalt.node.mex.json.business.QueryProductCollectionsMex;
@@ -95,6 +99,7 @@ import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.handler.*;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
+import com.github.auties00.cobalt.util.BusinessLabelConstants;
 import com.github.auties00.cobalt.util.DataUtils;
 import com.github.auties00.cobalt.util.RandomIdUtils;
 import com.github.auties00.cobalt.wam.WamMsgUtils;
@@ -265,6 +270,14 @@ public class WhatsAppClient {
      */
     private final WamService wamService;
     /**
+     * The per-protocol backoff registry consulted before every USync
+     * dispatch and updated when the relay returns an
+     * {@code error_backoff} hint.
+     *
+     * @implNote WAWebUsyncBackoff: the JS module-level singleton.
+     */
+    private final UsyncBackoff usyncBackoff;
+    /**
      * The companion pairing service for the WEB
      */
     private final CompanionPairingService companionPairingService;
@@ -337,6 +350,7 @@ public class WhatsAppClient {
         this.deviceService = new DeviceService(this, webAppStateService, abPropsService, sessionCipher);
         this.messageService = new MessageService(this, sessionCipher, groupCipher, deviceService, abPropsService);
         this.wamService = new WamService(this, abPropsService);
+        this.usyncBackoff = new UsyncBackoff();
         this.pendingSocketRequests = new ConcurrentHashMap<>();
         this.companionPairingService = new CompanionPairingService(this, webVerificationHandler);
         this.socketStream = new SocketStream(this, webVerificationHandler, lidMigrationService, inactiveGroupLidMigrationService, messageService, abPropsService, deviceService, wamService, snapshotRecoveryService, webAppStateService, companionPairingService);
@@ -905,6 +919,92 @@ public class WhatsAppClient {
     }
 
     /**
+     * Convenience wrapper for dispatching a JSON MEX query.
+     *
+     * <p>Forwards to {@link #sendMexNode(NodeBuilder, String, String, boolean)}
+     * with {@code isArgoPayload=false}. Use this for the common case where
+     * the MEX request was built via
+     * {@link com.github.auties00.cobalt.node.mex.json.MexJsonOperation#createMexNode(String, String)}
+     * and the caller wants the raw response IQ to feed into a generated
+     * {@code Foo.Response.of(node)} parser.
+     *
+     * @param request       the outbound MEX IQ builder
+     * @param queryId       the compiled GraphQL query identifier
+     *                      (the {@code QUERY_ID} constant on the
+     *                      generated MEX interface)
+     * @param operationName the GraphQL operation name (used by the WAM
+     *                      telemetry only)
+     * @return the response IQ node
+     * @throws WhatsAppSessionException.Closed if the socket is no longer open
+     */
+    public Node executeMexJson(NodeBuilder request, String queryId, String operationName) {
+        return sendMexNode(request, queryId, operationName, false);
+    }
+
+    /**
+     * Returns the per-protocol USync backoff registry shared by every
+     * query dispatched through {@link #executeUsyncQuery(UsyncQuery)}.
+     *
+     * <p>Most callers do not need to interact with the registry directly;
+     * it is exposed so background tasks can clear backoffs after a
+     * connection-level reset.
+     *
+     * @return the backoff registry
+     */
+    public UsyncBackoff usyncBackoff() {
+        return usyncBackoff;
+    }
+
+    /**
+     * Dispatches a USync query and returns the parsed result.
+     *
+     * <p>This is the canonical entry point for every USync flow in
+     * Cobalt. It performs four steps in order:
+     * <ol>
+     *   <li>blocks the current virtual thread for any active per-protocol
+     *       backoff windows that apply to this query
+     *       (see {@link UsyncBackoff#waitForBackoff(UsyncQuery)});</li>
+     *   <li>sends the query stanza built by
+     *       {@link UsyncQuery#toNode()};</li>
+     *   <li>parses the response via
+     *       {@link UsyncQuery#parseResponse(Node)};</li>
+     *   <li>forwards every protocol error's {@code error_backoff} hint to
+     *       the registry so subsequent queries observe the rate limit.</li>
+     * </ol>
+     *
+     * <p><strong>Thread safety.</strong> Concurrent calls from different
+     * threads are supported as long as each call uses its <em>own</em>
+     * {@link UsyncQuery} instance. A single query must not be shared
+     * across threads while any thread is still mutating it through
+     * {@code with*} setters; see the thread-safety note on
+     * {@link UsyncQuery} for the full contract. The shared
+     * {@link UsyncBackoff} registry consulted here is concurrency-safe
+     * by design.
+     *
+     * @param query the query; must not be shared across threads while
+     *              still being configured
+     * @return the parsed result
+     * @throws WhatsAppSessionException.Closed if the socket is no longer open
+     * @throws InterruptedException            if the thread is interrupted
+     *                                         while waiting for an active
+     *                                         backoff to elapse
+     * @implNote WAWebUsync.USyncQuery.execute.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebUsync",
+            exports = "USyncQuery.execute", adaptation = WhatsAppAdaptation.ADAPTED)
+    public UsyncResult executeUsyncQuery(UsyncQuery query) throws InterruptedException {
+        usyncBackoff.waitForBackoff(query);
+        var response = sendNode(query.toNode());
+        var result = query.parseResponse(response);
+        for (var protocol : query.protocols()) {
+            result.getProtocolError(protocol)
+                    .flatMap(UsyncProtocolError::errorBackoff)
+                    .ifPresent(d -> usyncBackoff.setProtocolBackoffMs(protocol.name(), d.toMillis()));
+        }
+        return result;
+    }
+
+    /**
      * Builds and commits the {@link MexEventV2Event} WAM record for a
      * single MEX dispatch.
      *
@@ -1246,12 +1346,33 @@ public class WhatsAppClient {
      * not thread that rich context through the exception hierarchy, per
      * {@code CLAUDE.md}.
      *
+     * <p>WA Web reaches this emission via the indirection module
+     * {@code WAWebSyncdUploadFatalErrorMetricEmitter}, a two-export callback
+     * slot ({@code listenForUploadFatalErrorMetric} stores the callback,
+     * {@code emitUploadFatalErrorMetric} invokes it). That indirection exists
+     * in WA Web so that the metric-populator module
+     * ({@code WAWebSyncdUploadFatalErrorMetric}, which transitively pulls in
+     * the heavy {@code WAWebMdFatalErrorWamEvent} / AB-props / IDB-access
+     * machinery) can be lazy-loaded without being referenced directly by
+     * every fatal-error throw site. Cobalt does not need the callback slot
+     * because all sync fatal errors converge on the pluggable
+     * {@link #handleFailure} entry point which resolves collaborators via
+     * constructor DI, so the two emitter exports are collapsed into this
+     * direct call and annotated here as {@code ADAPTED} (architecturally
+     * eliminated).
+     *
      * @param exception the fatal or retryable app-state sync exception
      *                  flowing through {@link #handleFailure}; never
      *                  {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdUploadFatalErrorMetric",
             exports = "uploadFatalErrorMetric",
+            adaptation = com.github.auties00.cobalt.meta.model.WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdUploadFatalErrorMetricEmitter",
+            exports = "emitUploadFatalErrorMetric",
+            adaptation = com.github.auties00.cobalt.meta.model.WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdUploadFatalErrorMetricEmitter",
+            exports = "listenForUploadFatalErrorMetric",
             adaptation = com.github.auties00.cobalt.meta.model.WhatsAppAdaptation.ADAPTED)
     private void emitSyncdFatalErrorMetric(WhatsAppWebAppStateSyncException exception) {
         if (!exception.isFatal()) {
@@ -3768,20 +3889,25 @@ public class WhatsAppClient {
             return Map.of();
         }
 
-        // WAWebUsync.USyncQuery.$3 / WAWebUsyncContact.USyncContactProtocol.getUserElement:
-        // each <user> carries a single <contact>+<phone></contact> child with no attributes
+        // WAWebUsync.USyncQuery.$3: WAWap.wap("user", {jid: USER_JID(getId()), pn_jid: ...},
+        // protocols.map(e => e.getUserElement(t))). Cobalt only sends the contact protocol here,
+        // so the only per-user child is the <contact>+<phone></contact> node.
         var userNodes = new ArrayList<Node>(phoneNumbers.size());
         for (var jid : phoneNumbers) {
             var phoneNumber = jid.toPhoneNumber().orElse(null);
             if (phoneNumber == null) {
                 continue;
             }
+            // WAWebUsyncContact.USyncContactProtocol.getUserElement: wap("contact", null, e)
             var contactNode = new NodeBuilder()
                     .description("contact")
-                    .content(phoneNumber) // WAWebUsyncContact.USyncContactProtocol.getUserElement: wap("contact", null, e)
+                    .content(phoneNumber)
                     .build();
+            // WAWebUsync.USyncQuery.$3: <user jid="…"> attribute is set from USyncUser.getId()
+            // via WAWebCommsWapMd.USER_JID, matching the live IQ shape exactly.
             userNodes.add(new NodeBuilder()
                     .description("user")
+                    .attribute("jid", jid.toUserJid())
                     .content(contactNode)
                     .build());
         }
@@ -3800,20 +3926,24 @@ public class WhatsAppClient {
                 .description("list")
                 .content(userNodes)
                 .build();
-        // WAWebUsync.USyncQuery.$3: wap("usync", {sid, mode, last, index, context})
+        // WAWebUsync.USyncQuery.$3: WAWap.wap("usync", {sid, index:"0", last:"true",
+        // mode, context}) — attribute insertion order matches the JS object literal so
+        // the WAP byte stream is byte-stable against live traffic.
         var usyncNode = new NodeBuilder()
                 .description("usync")
-                .attribute("sid", RandomIdUtils.generateSid())
-                .attribute("mode", "query")
-                .attribute("last", "true")
+                .attribute("sid", RandomIdUtils.newId())
                 .attribute("index", "0")
+                .attribute("last", "true")
+                .attribute("mode", "query")
                 .attribute("context", "background")
                 .content(queryNode, listNode)
                 .build();
+        // WAWebUsync.USyncQuery.$3: WAWap.wap("iq", {to: S_WHATSAPP_NET, xmlns: "usync",
+        // type: "get", id: generateId()}) — same attribute order as live traffic.
         var iqNode = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "usync")
                 .attribute("to", JidServer.user())
+                .attribute("xmlns", "usync")
                 .attribute("type", "get")
                 .content(usyncNode);
 
@@ -4187,18 +4317,19 @@ public class WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<Newsletter> queryNewsletter(Jid newsletterJid, NewsletterViewerRole role) {
         Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
-        var inputJson = new JSONObject()
-                .fluentPut("key", newsletterJid.toString()) // WAWebMexFetchNewsletterJob.mexGetNewsletter: input.key
-                .fluentPut("type", "JID"); // WAWebMexFetchNewsletterJob.mexGetNewsletter: input.type
-        if (role != null) {
-            inputJson.fluentPut("view_role", role.name()); // WAWebMexFetchNewsletterJob.mexGetNewsletter: input.view_role
-        }
+        // WAWebMexFetchNewsletterJob.mexGetNewsletter: u = WAWebWid.isNewsletter(t) ? "JID" : "INVITE"
+        // input = {key: t, type: u, view_role: a}
+        var input = new FetchNewsletterMex.Request.Input(
+                newsletterJid.toString(),
+                "JID",
+                role != null ? role.name() : null
+        );
         var request = new FetchNewsletterMex.Request(
                 Boolean.TRUE, // fetch_creation_time
-                Boolean.TRUE, // fetch_full_image
+                Boolean.TRUE, // fetch_full_image (c = u !== "INVITE")
                 Boolean.TRUE, // fetch_viewer_metadata
                 Boolean.TRUE, // fetch_wamo_sub
-                inputJson.toJSONString()
+                input
         );
         // WAWebMexNativeClient.fetchQuery: telemetry-wrapped MEX dispatch
         var response = sendMexNode(request.toNode(), FetchNewsletterMex.QUERY_ID, "mexGetNewsletter", false);
@@ -4298,7 +4429,7 @@ public class WhatsAppClient {
             // WAWebNewsletterCreateJob.encodePicture: empty byte[] clears the picture, non-empty replaces it
             updates.fluentPut("picture", picture.length == 0 ? "" : Base64.getEncoder().encodeToString(picture));
         }
-        var request = new UpdateNewsletterMex.Request(newsletter.toString(), updates.toJSONString());
+        var request = new UpdateNewsletterMex.Request(newsletter.toString(), updates);
         // WAWebMexNativeClient.fetchQuery: telemetry-wrapped MEX dispatch
         sendMexNodeWithNoResponse(request.toNode(), UpdateNewsletterMex.QUERY_ID, "mexUpdateNewsletter", false);
     }
@@ -4441,11 +4572,12 @@ public class WhatsAppClient {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public void muteNewsletter(Jid newsletter, boolean mute) {
         Objects.requireNonNull(newsletter, "newsletter cannot be null");
-        var input = new JSONObject()
-                .fluentPut("newsletter_id", newsletter.toString()) // WAWebNewsletterUpdateUserSettingJob: newsletter_id
-                .fluentPut("type", "MUTE_ADMIN_ACTIVITY") // WAWebNewsletterUpdateUserSettingJob: ADMIN_NOTIFICATIONS -> "MUTE_ADMIN_ACTIVITY"
-                .fluentPut("value", mute ? "ON" : "OFF"); // WAWebNewsletterUpdateUserSettingJob: MUTED_STATE -> "ON", else "OFF"
-        var request = new UpdateNewsletterUserSettingMex.Request(input.toJSONString());
+        // WAWebNewsletterUpdateUserSettingJob: passes {newsletter_id, type, value} as a NESTED input object,
+        // not a stringified JSON. WAWebMexClient.fetchQuery places it under variables.input.
+        var request = new UpdateNewsletterUserSettingMex.Request(
+                newsletter.toString(),       // WAWebNewsletterUpdateUserSettingJob: newsletter_id
+                "MUTE_ADMIN_ACTIVITY",       // WAWebNewsletterUpdateUserSettingJob: ADMIN_NOTIFICATIONS -> "MUTE_ADMIN_ACTIVITY"
+                mute ? "ON" : "OFF");        // WAWebNewsletterUpdateUserSettingJob: MUTED_STATE -> "ON", else "OFF"
         // WAWebMexNativeClient.fetchQuery: telemetry-wrapped MEX dispatch
         sendMexNodeWithNoResponse(request.toNode(), UpdateNewsletterUserSettingMex.QUERY_ID, "mexUpdateNewsletterUserSetting", false);
         // WAWebNewsletterUpdateUserSettingsAction.updateNewsletterUserSettingsAction ->
@@ -4664,7 +4796,7 @@ public class WhatsAppClient {
                 .fluentPut("reaction_codes", reactionCodes);
         var updates = new JSONObject()
                 .fluentPut("settings", settings);
-        var request = new UpdateNewsletterMex.Request(newsletter.toString(), updates.toJSONString());
+        var request = new UpdateNewsletterMex.Request(newsletter.toString(), updates);
         // WAWebMexNativeClient.fetchQuery: telemetry-wrapped MEX dispatch
         sendMexNodeWithNoResponse(request.toNode(), UpdateNewsletterMex.QUERY_ID, "mexUpdateNewsletter", false);
     }
@@ -5806,12 +5938,17 @@ public class WhatsAppClient {
 
         // WAWebChatSendMessages.sendDeleteMsgs: WAWebChatSendDeleteMsgsBridge.sendDeleteMsgs
         // emits a DeleteMessageForMe sync action to every linked device.
-        var indexArgs = new String[] {
-                parentJid.toString(), // WAWebSyncdUtils.constructMsgKeySegments: remote
-                messageId, // WAWebSyncdUtils.constructMsgKeySegments: id
-                key.fromMe() ? "1" : "0", // WAWebSyncdUtils.constructMsgKeySegments: fromMe
-                key.senderJid().map(Jid::toString).orElse("0") // WAWebSyncdUtils.constructMsgKeySegments: participant
-        };
+        // WAWebSyncdUtils.constructMsgKeySegmentsFromMsgKey: builds the
+        // [remote, id, fromMe, participant] tuple with `{legacy:true}` JID
+        // serialization and the !remote.isUser() && !fromMe participant gate.
+        var keySegments = SyncdIndexUtils.constructMsgKeySegmentsFromMsgKey(key);
+        var indexJson = SyncdIndexUtils.buildIndex( // WAWebSyncdActionUtils.buildIndex
+                com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction.ACTION_NAME, // "deleteMessageForMe"
+                keySegments.get(0), // WAWebSyncdUtils.constructMsgKeySegments: remote
+                keySegments.get(1), // WAWebSyncdUtils.constructMsgKeySegments: id
+                keySegments.get(2), // WAWebSyncdUtils.constructMsgKeySegments: fromMe
+                keySegments.get(3)  // WAWebSyncdUtils.constructMsgKeySegments: participant
+        );
         var deleteAction = new com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeActionBuilder()
                 .messageTimestamp(Instant.now()) // WAWebDeleteMessageForMeSync: deleteMessageForMeAction.messageTimestamp
                 .build();
@@ -5819,10 +5956,6 @@ public class WhatsAppClient {
                 .timestamp(Instant.now())
                 .deleteMessageForMeAction(deleteAction)
                 .build();
-        var indexJson = JSON.toJSONString(java.util.List.of(
-                com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction.ACTION_NAME, // "deleteMessageForMe"
-                indexArgs[0], indexArgs[1], indexArgs[2], indexArgs[3]
-        ));
         var mutation = new DecryptedMutation.Trusted(
                 indexJson,
                 value,
@@ -6630,12 +6763,9 @@ public class WhatsAppClient {
         var messageId = key.id() // WAWebStarMessageSync.getStarMessageMutations: id
                 .orElseThrow(() -> new IllegalArgumentException("key must carry an id"));
 
-        // WAWebSyncdUtils.constructMsgKeySegmentsFromMsgKey
-        var fromMe = key.fromMe();
-        var participant = key.senderJid().orElse(null);
-        var participantSegment = (participant != null && !parentJid.hasUserServer() && !fromMe)
-                ? participant.toString()
-                : "0"; // WAWebSyncdUtils.extractParticipantForSync
+        // WAWebSyncdUtils.constructMsgKeySegmentsFromMsgKey: applies the legacy
+        // JID serializer and the !remote.isUser() && !fromMe participant gate.
+        var keySegments = SyncdIndexUtils.constructMsgKeySegmentsFromMsgKey(key);
 
         var action = new StarActionBuilder() // WAWebStarMessageSync.getStarMessageMutations: {starAction: {starred: a}}
                 .starred(starred)
@@ -6644,13 +6774,13 @@ public class WhatsAppClient {
                 .timestamp(Instant.now()) // WAWebSyncdActionUtils.buildPendingMutation: timestamp: e
                 .starAction(action)
                 .build();
-        var indexJson = JSON.toJSONString(java.util.List.of(
+        var indexJson = SyncdIndexUtils.buildIndex( // WAWebSyncdActionUtils.buildIndex
                 StarAction.ACTION_NAME, // WAWebStarMessageSync.getAction: "star"
-                parentJid.toString(), // WAWebSyncdUtils.constructMsgKeySegments: remote.toString({legacy: true})
-                messageId, // WAWebSyncdUtils.constructMsgKeySegments: id
-                fromMe ? "1" : "0", // WAWebSyncdUtils.constructMsgKeySegments: fromMe
-                participantSegment // WAWebSyncdUtils.extractParticipantForSync
-        ));
+                keySegments.get(0), // WAWebSyncdUtils.constructMsgKeySegments: remote.toString({legacy: true})
+                keySegments.get(1), // WAWebSyncdUtils.constructMsgKeySegments: id
+                keySegments.get(2), // WAWebSyncdUtils.constructMsgKeySegments: fromMe
+                keySegments.get(3)  // WAWebSyncdUtils.extractParticipantForSync
+        );
         var mutation = new DecryptedMutation.Trusted(
                 indexJson,
                 value,
@@ -7395,8 +7525,8 @@ public class WhatsAppClient {
      * allocates the next label id via
      * {@code WAWebDBLabelDatabaseApi.getNextLabelId}, maps the name to a
      * predefined-id when applicable (via
-     * {@code WAWebLabelConstants.mapLabelNameToPredefinedId}), and issues a
-     * {@code getLabelMutation} with {@code deleted=false} and
+     * {@link BusinessLabelConstants#mapLabelNameToPredefinedId(String)}), and
+     * issues a {@code getLabelMutation} with {@code deleted=false} and
      * {@code type=CUSTOM}. Cobalt allocates the next id in-memory against
      * the current store (one above the highest existing numeric label id,
      * starting at {@code 1}) because the IndexedDB-backed
@@ -7424,12 +7554,18 @@ public class WhatsAppClient {
                 .max()
                 .orElse(0) + 1;
         var labelId = String.valueOf(nextId); // WAWebBizLabelEditingAction.labelAddAction: String(i)
+        // WAWebBizLabelEditingAction.labelAddAction: c = mapLabelNameToPredefinedId(t) — boxed to Integer (null on non-predefined names)
+        var predefinedLabelId = BusinessLabelConstants.mapLabelNameToPredefinedId(name)
+                .stream()
+                .boxed()
+                .findFirst()
+                .orElse(null);
         var mutation = LabelEditHandler.INSTANCE.getLabelMutation( // WAWebBizLabelEditingAction.labelAddAction: getLabelMutation(String(i), t, a, false, c, d, m, l)
                 labelId,
                 name,
                 colorIndex,
                 false, // WAWebBizLabelEditingAction.labelAddAction: deleted = false
-                null, // WAWebBizLabelEditingAction.labelAddAction: c = mapLabelNameToPredefinedId(t) — Cobalt skips predefined-id mapping (UI catalog)
+                predefinedLabelId, // WAWebBizLabelEditingAction.labelAddAction: c = mapLabelNameToPredefinedId(t)
                 Boolean.TRUE, // WAWebBizLabelEditingAction.labelAddAction: d = isListsEnabled() ? true : undefined — Cobalt always treats new labels as active
                 LabelEditAction.ListType.CUSTOM, // WAWebBizLabelEditingAction.labelAddAction: m = ListType.CUSTOM
                 timestamp
@@ -7439,6 +7575,7 @@ public class WhatsAppClient {
                 .id(labelId)
                 .name(name)
                 .color(colorIndex)
+                .predefinedId(predefinedLabelId) // WAWebBizLabelEditingAction.labelAddAction: predefinedId: c (same mapping used for the mutation)
                 .isActive(Boolean.TRUE)
                 .type(LabelEditAction.ListType.CUSTOM)
                 .build();
@@ -9985,7 +10122,19 @@ public class WhatsAppClient {
      *
      * @implNote WAWebCommunityGroupJourneyEventImpl: {@code
      * n.commit = function(){var e = new(o("WAWebGroupJourneyWamEvent")).GroupJourneyWamEvent({actionType, appSessionId, surface, groupSize}); var t = this.getThreadType(); if (t != null) e.threadType = t; var n = this.getUserRole(); if (n != null) e.userRole = n; e.commit();}}
+     *
+     * @implNote WAWebGetUserRole.getUserRole is inlined into this single Cobalt
+     * consumer. WA Web derives the WAM {@code USER_ROLE_TYPE} from
+     * {@code chat.groupMetadata.participants.iAmAdmin()} and
+     * {@code chat.groupMetadata.isParentGroup}; Cobalt derives the same
+     * three-way {@link UserRoleType} from {@link ChatMetadata} because the
+     * WA Web helper has no independent reuse in Cobalt outside this emitter.
      */
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetUserRole",
+            exports = "getUserRole",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
     private void commitCommunityGroupJourneyEvent(ChatFilterActionTypes action, SurfaceType surface, Jid group) {
         var metadata = store.findChatMetadata(group).orElse(null); // WAWebCommunityGroupJourneyEventImpl: this.chat
         var builder = new GroupJourneyEventBuilder()
@@ -10445,37 +10594,66 @@ public class WhatsAppClient {
      * Maps a chat JID to the {@link MessageChatType} classification used by
      * {@link PollsActionsEvent#chatType()}.
      *
-     * <p>Mirrors {@code WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid}
-     * by dispatching over the JID's server component: user/LID/hosted -> INDIVIDUAL,
-     * group/community -> GROUP, status -> STATUS, broadcast -> BROADCAST,
-     * newsletter -> CHANNEL, anything else -> OTHER.
+     * <p>Mirrors the cascaded ternary in
+     * {@code WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid}
+     * exactly, dispatching on the WA Web {@code Wid} predicates in the
+     * same order:
+     * <ol>
+     *     <li>{@code isUser()} (user/legacy-user/LID/bot/hosted/hosted.lid
+     *         domains) maps to {@code INDIVIDUAL};</li>
+     *     <li>{@code isGroup()} ({@code g.us} domain) maps to
+     *         {@code GROUP};</li>
+     *     <li>{@code isBroadcast()} ({@code broadcast} domain) maps to
+     *         {@code BROADCAST};</li>
+     *     <li>{@code isStatus()} ({@code status@broadcast}) maps to
+     *         {@code STATUS};</li>
+     *     <li>{@code isNewsletter()} ({@code newsletter} domain) maps to
+     *         {@code CHANNEL};</li>
+     *     <li>anything else maps to {@code OTHER}.</li>
+     * </ol>
      *
      * @param jid the chat JID to classify; must not be {@code null}
      * @return the corresponding {@link MessageChatType}; never {@code null}
      *
-     * @apiNote WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid —
-     *          duplicated here because the same helper in
-     *          {@code UserMessageSender} is package-private.
+     * @implNote Duplicated here because the sibling helper in
+     *           {@code UserMessageSender} is package-private and
+     *           {@link WhatsAppClient} lives in a different package. The
+     *           {@code STATUS} branch is unreachable because the preceding
+     *           {@code isBroadcast()} check already catches
+     *           {@code status@broadcast}; it is preserved to keep the
+     *           method body in lock-step with the WA Web source.
      */
     @WhatsAppWebExport(moduleName = "WAWebGetMessageChatTypeFromWid",
             exports = "getMessageChatTypeFromWid",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static MessageChatType pollsWamChatType(Jid jid) {
-        if (jid.isStatusBroadcastAccount()) {
-            return MessageChatType.STATUS;
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isUser()? INDIVIDUAL
+        if (jid.hasUserServer()
+                || jid.hasLidServer()
+                || jid.hasBotServer()
+                || jid.hasHostedServer()
+                || jid.hasHostedLidServer()) {
+            return MessageChatType.INDIVIDUAL;
         }
-        if (jid.hasBroadcastServer()) {
-            return MessageChatType.BROADCAST;
-        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isGroup()? GROUP
         if (jid.hasGroupOrCommunityServer()) {
             return MessageChatType.GROUP;
         }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isBroadcast()? BROADCAST
+        if (jid.hasBroadcastServer()) {
+            return MessageChatType.BROADCAST;
+        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isStatus()? STATUS
+        // (unreachable: isBroadcast above already catches status@broadcast; kept for
+        // structural parity with the JS ternary)
+        if (jid.isStatusBroadcastAccount()) {
+            return MessageChatType.STATUS;
+        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isNewsletter()? CHANNEL
         if (jid.hasNewsletterServer()) {
             return MessageChatType.CHANNEL;
         }
-        if (jid.hasUserServer() || jid.hasLidServer()) {
-            return MessageChatType.INDIVIDUAL;
-        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: OTHER fallthrough
         return MessageChatType.OTHER;
     }
 

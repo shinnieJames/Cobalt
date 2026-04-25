@@ -141,14 +141,17 @@ public final class DeviceUSyncResponseParser {
     /**
      * Parses the username map from the USync list.
      *
-     * @implNote WAWebUsyncUsername.usernameParser: extracts username strings from
-     * {@code usync > list > user > username} nodes for each user.
+     * @implNote WAWebUsync.usyncParser.m: WA Web dispatches each registered protocol parser
+     * against the matching child element of every {@code <user>} node in {@code usync > list}.
+     * Cobalt inlines the dispatch for the username protocol into this helper.
+     * WAWebUsyncUsername.usernameParser: extracts a username string from every
+     * {@code usync > list > user > username} node.
      * @param usync the usync node
      * @return map of user JID to username
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "usernameParser",
-            adaptation = WhatsAppAdaptation.DIRECT)
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private Map<Jid, String> parseUsernameMap(Node usync) {
         return usync.streamChild("list")
                 .flatMap(list -> list.streamChildren("user"))
@@ -417,14 +420,18 @@ public final class DeviceUSyncResponseParser {
         }
 
         // WAWebUsyncDevice.deviceParser: isHosted is only set when bizHostedDevicesEnabled()
-        // AND the is_hosted attribute is present and equals "true"
-        var isHosted = advValidatorService.isBizHostedDevicesEnabled()
-                && deviceNode.hasAttribute("is_hosted")
-                && deviceNode.getAttributeAsBool("is_hosted", false);
+        // AND the is_hosted attribute is present and equals the literal string "true".
+        // Note: WA Web uses strict string equality (attrString("is_hosted") === "true"),
+        // so compare as a case-sensitive string rather than through Boolean.parseBoolean.
+        var bizHostedDevicesEnabled = advValidatorService.isBizHostedDevicesEnabled();
+        var isHosted = bizHostedDevicesEnabled
+                && "true".equals(deviceNode.getAttributeAsString("is_hosted").orElse(null));
 
-        // WAWebHandleAdvKeyIndexResultApi: device with id === 99 is always treated as hosted
-        // when bizHostedDevicesEnabled is true
-        if (deviceId == DeviceConstants.HOSTED_DEVICE_ID) {
+        // WAWebHandleAdvKeyIndexResultApi: id === 99 is treated as hosted only when
+        // bizHostedDevicesEnabled is true. When the gate is off, WA Web produces a
+        // regular {id, keyIndex} record without the isHosted flag, so fall through
+        // to the E2EE branch here as well.
+        if (deviceId == DeviceConstants.HOSTED_DEVICE_ID && bizHostedDevicesEnabled) {
             return Stream.of(DeviceInfo.ofHosted(keyIndex));
         } else {
             return Stream.of(DeviceInfo.ofE2EE(deviceId, keyIndex, isHosted));
@@ -437,20 +444,30 @@ public final class DeviceUSyncResponseParser {
      * <p>Extracts the username from the {@code <username>} child of a user node,
      * skipping entries with errors or empty content.
      *
-     * @implNote WAWebUsyncUsername.usernameParser: extracts username string from the username
-     * protocol child, returning error details if present.
+     * @implNote WAWebUsyncUsername.usernameParser: {@code e.assertTag("username")} is implicit
+     * because the child is located by tag name via {@link Node#getChild(String)}. The WA parser
+     * returns three possible values: an error object {@code {errorCode, errorText}} when an
+     * {@code <error>} child is present, the content string when {@code hasContent()} is true,
+     * or {@code null} otherwise.
+     * @implNote ADAPTED: Cobalt collapses the error-object branch into the same outcome as the
+     * null branch (no username stored). The map built here is typed {@code Map<Jid, String>} and
+     * is consumed only to populate {@link DeviceListResult.Full#username()}, which is a plain
+     * {@code String}; there is no downstream consumer for a per-user username-fetch error, so
+     * suppressing it is observationally equivalent to the JS "username field was not set" path.
      * @param userNode the user node from {@code usync > list > user}
      * @return stream containing the username entry, or empty if not available
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "usernameParser",
-            adaptation = WhatsAppAdaptation.DIRECT)
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private Stream<UsernameEntry> parseUsernameEntry(Node userNode) {
         var jid = userNode.getAttributeAsJid("jid");
         if (jid.isEmpty()) {
             return Stream.empty();
         }
 
+        // WAWebUsyncUsername.usernameParser: e.assertTag("username") — enforced by locating
+        // the child by tag name.
         var usernameNode = userNode.getChild("username");
         if (usernameNode.isEmpty()) {
             return Stream.empty();
@@ -458,11 +475,13 @@ public final class DeviceUSyncResponseParser {
 
         var node = usernameNode.get();
 
-        // WAWebUsyncUsername.usernameParser: skip if error present
+        // WAWebUsyncUsername.usernameParser: var t=e.maybeChild("error"); if(t) return
+        // {errorCode, errorText}. ADAPTED: no consumer for per-user username errors, so drop.
         if (node.getChild("error").isPresent()) {
             return Stream.empty();
         }
 
+        // WAWebUsyncUsername.usernameParser: e.hasContent() ? e.contentString() : null
         var usernameContent = node.toContentString();
         if (usernameContent.isEmpty() || usernameContent.get().isEmpty()) {
             return Stream.empty();

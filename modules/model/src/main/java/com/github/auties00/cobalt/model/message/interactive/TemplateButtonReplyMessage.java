@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.interactive;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 
@@ -21,40 +24,77 @@ import java.util.OptionalInt;
  *
  * <p>This message is contextual: like any other quoted reply it can carry a
  * {@link ContextInfo} pointing back to the originating template message.
+ *
+ * @implNote The WA Web generator {@code WAWebGenerateTemplateButtonReplyMessageProto}
+ *           is a tiny factory that wraps an input {@code {contextInfo, json}} pair into
+ *           {@code {templateButtonReplyMessage: {selectedId: json.selectedId,
+ *           selectedIndex: json.selectedIndex,
+ *           selectedCarouselCardIndex: json.selectedCarouselCardIndex,
+ *           selectedDisplayText: json.body, contextInfo}}}. Note that the JS factory sources
+ *           the display text from {@code json.body} rather than a field named
+ *           {@code selectedDisplayText}; the proto field itself (index 2) keeps the
+ *           {@code selectedDisplayText} name on the wire. Cobalt represents this structure
+ *           statically: this protobuf message is the inner {@code {templateButtonReplyMessage:
+ *           ...}} object and the surrounding wrapper is
+ *           {@code MessageContainer.templateButtonReplyMessage}. Construction goes through
+ *           the generated {@code TemplateButtonReplyMessageBuilder}, which is the direct
+ *           analog of the JS factory call site.
  */
 @ProtobufMessage(name = "Message.TemplateButtonReplyMessage")
+@WhatsAppWebModule(moduleName = "WAWebGenerateTemplateButtonReplyMessageProto")
 public final class TemplateButtonReplyMessage implements ContextualMessage {
     /**
      * The identifier of the button that the recipient selected, matching the {@code id}
      * field of the originating template button.
+     *
+     * @implNote The WA Web generator forwards {@code json.selectedId} onto this field
+     *           verbatim.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateTemplateButtonReplyMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     String selectedId;
 
     /**
      * The human-readable label shown on the selected button.
+     *
+     * @implNote The WA Web generator sources this field from {@code json.body} (not
+     *           {@code json.selectedDisplayText}); the proto field itself keeps the
+     *           {@code selectedDisplayText} name on the wire.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateTemplateButtonReplyMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     String selectedDisplayText;
 
     /**
      * Contextual information that links this reply to the originating template message.
+     *
+     * @implNote The WA Web generator forwards its input {@code contextInfo} verbatim onto
+     *           this field.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateTemplateButtonReplyMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     ContextInfo contextInfo;
 
     /**
      * The zero-based index of the selected button within its parent list, when buttons are
      * ordered.
+     *
+     * @implNote The WA Web generator forwards {@code json.selectedIndex} onto this field
+     *           verbatim.
      */
     @ProtobufProperty(index = 4, type = ProtobufType.UINT32)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateTemplateButtonReplyMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     Integer selectedIndex;
 
     /**
      * The zero-based index of the carousel card that contained the selected button, when the
      * reply originates from an {@link InteractiveMessage.CarouselMessage}.
+     *
+     * @implNote The WA Web generator forwards {@code json.selectedCarouselCardIndex} onto
+     *           this field verbatim.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.UINT32)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateTemplateButtonReplyMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     Integer selectedCarouselCardIndex;
 
 

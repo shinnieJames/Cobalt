@@ -55,6 +55,7 @@ public non-sealed abstract class Chat implements JidProvider {
     // Messages are not deserialized by defualt because it's up to the implementation class to decide how to do so
     // @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
     // private ... messages;
+
     /**
      * The new JID assigned to this chat after a JID migration (for example,
      * when a contact changes their phone number). If present, messages should
@@ -1638,6 +1639,12 @@ public non-sealed abstract class Chat implements JidProvider {
      * history from the primary device. This enum indicates whether the transfer
      * has completed and whether more messages remain available on the primary
      * device.
+     *
+     * @implNote Mirrors the {@code ConversationEndOfHistoryTransferModelPropType}
+     *           enum exported from the {@code WAWebChatConstants} JavaScript
+     *           module. The wire indexes must remain aligned with WhatsApp's
+     *           protobuf definition since values are serialized over history
+     *           sync.
      */
     @ProtobufEnum(name = "Conversation.EndOfHistoryTransferType")
     public enum EndOfHistoryTransferType {
@@ -1654,17 +1661,28 @@ public non-sealed abstract class Chat implements JidProvider {
         COMPLETE_AND_NO_MORE_MESSAGE_REMAIN_ON_PRIMARY(1),
 
         /**
+         * The history sync transfer did not finish and is still in progress or
+         * was interrupted.
+         */
+        INCOMPLETE(2),
+
+        /**
+         * The chat was not included in the history sync payload at all.
+         */
+        NOT_INCLUDED_IN_HIST_SYNC(3),
+
+        /**
          * An on-demand sync chunk has been transferred, but more messages still
          * remain on the primary device.
          */
-        COMPLETE_ON_DEMAND_SYNC_BUT_MORE_MSG_REMAIN_ON_PRIMARY(2),
+        COMPLETE_ON_DEMAND_SYNC_BUT_MORE_MSG_REMAIN_ON_PRIMARY(4),
 
         /**
          * An on-demand sync chunk has been transferred, more messages exist on
          * the primary device, but the companion cannot access them (for example,
          * due to an older primary app version).
          */
-        COMPLETE_ON_DEMAND_SYNC_WITH_MORE_MSG_ON_PRIMARY_BUT_NO_ACCESS(3);
+        COMPLETE_ON_DEMAND_SYNC_WITH_MORE_MSG_ON_PRIMARY_BUT_NO_ACCESS(5);
 
         /**
          * Constructs an {@code EndOfHistoryTransferType} with the specified

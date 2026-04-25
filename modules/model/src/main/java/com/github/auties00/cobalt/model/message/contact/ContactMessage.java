@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.contact;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 
@@ -23,8 +26,20 @@ import java.util.Optional;
  * <p>As a {@link ContextualMessage}, this message can also carry
  * {@link ContextInfo} describing a quoted message, a forwarding score,
  * mentions and other contextual metadata.
+ *
+ * @implNote The WA Web generator {@code WAWebGenerateVcardMessageProto}
+ *           is a tiny factory that wraps an input {@code {contextInfo, json}}
+ *           pair into {@code {contactMessage: {displayName: json.vcardFormattedName,
+ *           vcard: json.body, contextInfo}}}. Cobalt represents this structure
+ *           statically: this protobuf message is the inner {@code {contactMessage: ...}}
+ *           object and the surrounding wrapper is {@code MessageContainer.contactMessage}.
+ *           Construction goes through the generated {@code ContactMessageBuilder},
+ *           which is the direct analog of the JS factory call site. The JS
+ *           generator never sets {@code isSelfContact}; that field is populated
+ *           elsewhere by WA Web (e.g. on receive-side parsing).
  */
 @ProtobufMessage(name = "Message.ContactMessage")
+@WhatsAppWebModule(moduleName = "WAWebGenerateVcardMessageProto")
 public final class ContactMessage implements ContextualMessage {
     /**
      * The human readable name shown to the recipient for this contact.
@@ -32,8 +47,13 @@ public final class ContactMessage implements ContextualMessage {
      * <p>This field typically corresponds to the full name stored in
      * the contact's vCard and is used as a short label when the
      * recipient previews the message before opening it.
+     *
+     * @implNote The WA Web generator {@code WAWebGenerateVcardMessageProto}
+     *           sources this value from its input {@code json.vcardFormattedName}
+     *           and forwards it verbatim onto this field.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateVcardMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     String displayName;
 
     /**
@@ -44,8 +64,13 @@ public final class ContactMessage implements ContextualMessage {
      * such as names, phone numbers, e-mail addresses and photos. The
      * recipient's client parses this value to allow importing the
      * contact into the device address book.
+     *
+     * @implNote The WA Web generator {@code WAWebGenerateVcardMessageProto}
+     *           sources this value from its input {@code json.body} and
+     *           forwards it verbatim onto this field.
      */
     @ProtobufProperty(index = 16, type = ProtobufType.STRING)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateVcardMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     String vcard;
 
     /**
@@ -54,8 +79,12 @@ public final class ContactMessage implements ContextualMessage {
      * <p>When present, this field describes a quoted message, a
      * forwarding score, mentioned participants or any other
      * context related information.
+     *
+     * @implNote The WA Web generator {@code WAWebGenerateVcardMessageProto}
+     *           forwards its input {@code contextInfo} verbatim onto this field.
      */
     @ProtobufProperty(index = 17, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateVcardMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     ContextInfo contextInfo;
 
     /**

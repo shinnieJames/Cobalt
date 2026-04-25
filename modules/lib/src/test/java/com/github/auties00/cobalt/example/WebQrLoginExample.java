@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
+import com.github.auties00.cobalt.util.SchedulerUtils;
 
 void main() throws IOException {
     WhatsAppClient.builder()
@@ -16,8 +17,15 @@ void main() throws IOException {
             .unregistered(WhatsAppClientVerificationHandler.Web.QrCode.toTerminal())
             .addLoggedInListener(api -> {
                 System.out.printf("Connected: %s%n", api.store().privacySettings());
-                api.sendMessage(Jid.of(393495089819L), MessageContainer.of("Hello, world!"));
-                System.out.println("Sent");
+                SchedulerUtils.scheduleDelayed(Duration.ofSeconds(10), () -> {
+                    try {
+                        System.out.println("Sending");
+                        api.sendMessage(Jid.of(393495089819L), MessageContainer.of("Hello, world!"));
+                        System.out.println("Sent");
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
+                });
             })
             .addWebAppPrimaryFeaturesListener((_, features) -> System.out.printf("Received features: %s%n", features))
             .addNewMessageListener((_, message) -> System.out.println(message))

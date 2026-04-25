@@ -51,7 +51,22 @@ import java.util.Optional;
  * {@code MessageEncryption} via {@code WACryptoPkcs7.writeRandomPadMax16}.
  *
  * @implNote WAWebOutgoingMessage.createOutgoingMessageProtobuf: creates
- * the protobuf from message data.
+ * the protobuf from message data; Cobalt fuses this with caller-side
+ * model construction ({@code WAWebMsgKeyNewId.genMsgKeyUint} +
+ * {@code WAWebProcessBaseMsgInfo}) into {@link #prepareChat} /
+ * {@link #prepareNewsletter}.
+ * WAWebOutgoingMessage.createOutgoingMsgModelProtobuf: alias for
+ * {@code createOutgoingMessageProtobuf} with a Message-record
+ * discriminator; subsumed by {@link #prepareChat}, since the Cobalt
+ * entry point already takes the message payload directly.
+ * WAWebOutgoingMessage.OutgoingMessageOriginType: WA-side enum
+ * ({@code Chat / ChatResend / Retry / Newsletter / Report / Status /
+ * Debug}) classifying the origin of an outgoing send. Intentionally
+ * unmodeled in Cobalt: {@code Chat / ChatResend / Retry} collapse
+ * into {@link #prepareChat} (resend/retry are caller responsibilities,
+ * not a classifier-driven branch); {@code Newsletter} is statically
+ * split into {@link #prepareNewsletter}; {@code Report / Status /
+ * Debug} correspond to UI surfaces Cobalt does not implement.
  * WAWebE2EProtoGenerator.getProtobufMessage: sets messageSecret on
  * messageContextInfo.
  * WAWebAddonEncryptAddonMsgData.encryptAddOn: applies inner AES-GCM
@@ -125,7 +140,9 @@ final class MessagePreparer {
      * on messageContextInfo when not invoking a bot.
      */
     @WhatsAppWebExport(moduleName = "WAWebOutgoingMessage", exports = "createOutgoingMessageProtobuf",
-            adaptation = WhatsAppAdaptation.DIRECT)
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebOutgoingMessage", exports = "createOutgoingMsgModelProtobuf",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoGenerator", exports = "getProtobufMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
     ChatMessageInfo prepareChat(Jid chatJid, MessageContainer container) {
@@ -225,10 +242,18 @@ final class MessagePreparer {
      *
      * @implNote WAWebAddonEncryptAddonMsgData.encryptAddOn: validates
      * and encrypts addon content before the outer Signal encryption.
+     * WAWebAddonEncryptAddonMsgData.createDualEncryptionHelper:
+     * factory returning per-addon-type dual encrypt/decrypt closures
+     * via WAWebAddonPluginProcessor.getAddonProcessor; Cobalt collapses
+     * the plugin-processor registry into the switch below, dispatching
+     * to {@link EncMessageFactory} per addon type. The decrypt half is
+     * handled at the receive seam, not here.
      * WAWebSendGroupMsgJob.isCagAddon: detects CAG context for
      * auto-conversion of reactions to encrypted reactions.
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryptAddonMsgData", exports = "encryptAddOn",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebAddonEncryptAddonMsgData", exports = "createDualEncryptionHelper",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private MessageContainer prepareAddonContent(
             MessageContainer container,

@@ -5,7 +5,9 @@ import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.message.MessageService;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.node.Node;
@@ -66,6 +68,23 @@ import java.util.*;
  * newsletter branch of {@code message}, or the {@code type="retry"}
  * branch of {@code receipt}) is pushed down into the corresponding
  * per-tag handler.
+ * @implNote WA Web's {@code WAWebCommsHandleLoggedInStanzaDeferred.handleLoggedInStanza}
+ * is a lazy-loading wrapper around {@code WAWebCommsHandleLoggedInStanza}
+ * that uses {@code requireDeferred} to defer loading the large
+ * logged-in-stanza dispatcher (with all its ~45 notification/handler
+ * dependencies) until the first post-login stanza actually arrives.
+ * It memoises the resolved module in a module-scoped variable ({@code s})
+ * and in-flight load promises ({@code u}) so concurrent callers share
+ * the same {@code load()} call, then forwards
+ * {@code handleLoggedInStanza(e, t)} to the loaded module. Cobalt has no
+ * code-splitting or dynamic module loading: every handler is constructed
+ * eagerly in {@link #SocketStream SocketStream's constructor} and
+ * dispatched synchronously from {@link #handle(Node)}, so the deferred
+ * wrapper has no Java counterpart to implement. The two arguments WA Web
+ * passes through ({@code e} = stanza, {@code t} = offline attribute) map
+ * to the single {@code Node} parameter of {@link #handle(Node)}; the
+ * {@code offline} attribute is read from the node's attributes by the
+ * per-tag handlers themselves.
  * @implNote WA Web registers per-stanza parsers via
  * {@code WADeprecatedWapParser} inside the {@code WAWebCommsRouter} /
  * {@code WAWebSocketModel} boot sequence. Cobalt collapses the registration
@@ -94,6 +113,7 @@ import java.util.*;
 @WhatsAppWebModule(moduleName = "WAWebSocketModel")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleStanza")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
+@WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanzaDeferred")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleWorkerCompatibleStanza")
 public final class SocketStream {
     /**
@@ -230,6 +250,15 @@ public final class SocketStream {
      * synchronisation, matching the WA Web model where Promises may
      * interleave.
      */
+    @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza",
+            exports = "handleLoggedInStanza",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanzaDeferred",
+            exports = "handleLoggedInStanza",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCommsHandleWorkerCompatibleStanza",
+            exports = "handleWorkerCompatibleStanza",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public void handle(Node node) {
         var handler = this.handlers.get(node.description());
         if (handler != null) {

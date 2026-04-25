@@ -1624,7 +1624,8 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      *
      * @implNote WAWebGetMetricE2eDestination.getMetricE2eDestination:
      * returns GROUP for groups/communities, STATUS for status broadcast,
-     * LIST for broadcast list, INDIVIDUAL for user/LID chats.
+     * LIST for broadcast list, CHANNEL for newsletters, INDIVIDUAL for
+     * user/LID chats.
      */
     @WhatsAppWebExport(moduleName = "WAWebGetMetricE2eDestination", exports = "getMetricE2eDestination",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1638,6 +1639,9 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         }
         if (jid.hasBroadcastServer()) {
             return E2eDestination.LIST;
+        }
+        if (jid.hasNewsletterServer()) {
+            return E2eDestination.CHANNEL;
         }
         if (jid.hasUserServer() || jid.hasLidServer()) {
             return E2eDestination.INDIVIDUAL;

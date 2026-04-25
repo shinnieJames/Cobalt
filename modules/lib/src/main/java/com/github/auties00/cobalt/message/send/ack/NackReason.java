@@ -7,13 +7,20 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 /**
  * Well-known server nack (negative acknowledgement) error codes.
  *
- * <p>These codes may appear in the {@code error} attribute of the
- * {@code <ack>} node returned by the server after a message stanza
- * is sent.  Each constant mirrors a value from the WA Web
- * {@code NackReason} internal enum.
+ * <p>These codes appear on two sides of the protocol: the server writes
+ * them into the {@code error} attribute of the {@code <ack>} node it
+ * sends after rejecting a client stanza ({@link AckResult#error()}), and
+ * the client writes them back out when it constructs its own nack stanza
+ * for a stanza it could not process.
+ * Each constant mirrors a value from the WA Web {@code NackReason}
+ * internal enum.
  *
  * @implNote WAWebCreateNackFromStanza.NackReason: defines the known
- * error codes the server may include in the ack's {@code error} attribute.
+ * error codes the server may include in the ack's {@code error}
+ * attribute AND the codes the client echoes back on outgoing nack
+ * stanzas. WA Web exposes the enum as
+ * {@code $InternalEnum({StaleGroupAddressingMode:421, ...})} so keys
+ * round-trip as names via {@code NackReason.getName(n)}.
  * @see AckResult#error()
  */
 @WhatsAppWebModule(moduleName = "WAWebCreateNackFromStanza")

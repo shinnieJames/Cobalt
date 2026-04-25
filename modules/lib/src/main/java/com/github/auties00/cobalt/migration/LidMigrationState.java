@@ -15,7 +15,7 @@ import it.auties.protobuf.annotation.ProtobufEnumIndex;
  * marks the account as fully migrated.
  *
  * <p>This state machine is the Cobalt equivalent of WhatsApp Web's
- * {@code LidThreadMigrationStatus} enum, with two additional Cobalt-only
+ * {@code LidThreadMigrationStatus} enum, with three additional Cobalt-only
  * states ({@link #NOT_STARTED}, {@link #FAILED}, {@link #DISABLED}) used
  * for initialisation and the configurable error model.
  *

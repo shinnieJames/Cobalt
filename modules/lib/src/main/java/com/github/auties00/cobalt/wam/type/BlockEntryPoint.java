@@ -58,5 +58,9 @@ public enum BlockEntryPoint {
     @WamEnumConstant(50) CHAT_MORE_OPTIONS,
     @WamEnumConstant(51) CHAT_LONG_PRESS_OPTIONS,
     @WamEnumConstant(52) IAB_MENU_REPORT,
-    @WamEnumConstant(53) DEPENDENT_CONVERSATION_BLOCKING_VIEW
+    @WamEnumConstant(53) DEPENDENT_CONVERSATION_BLOCKING_VIEW,
+    @WamEnumConstant(54) PAYMENT_TRANSACTION_REPORT,
+    @WamEnumConstant(55) CALL_DETAIL_SAFETY_TOOLS_BLOCK,
+    @WamEnumConstant(56) CALL_DETAIL_SAFETY_TOOLS_REPORT,
+    @WamEnumConstant(57) CALL_DETAIL_OVERFLOW_REPORT
 }

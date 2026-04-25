@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -47,10 +46,35 @@ public sealed interface UpdateTextStatusMex extends MexJsonOperation permits Upd
      * The request payload for this MEX mutation.
      */
     final class Request implements UpdateTextStatusMex {
-        private final String input;
+        private final String text;
+        private final String emoji;
+        private final long ephemeralDurationSec;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request with the three status components.
+         *
+         * @implNote WAWebTextStatusParseUtils.createTextStatusObjectForUpdateRequest:
+         * applies the same normalisation as the WA Web helper:
+         * <ul>
+         *   <li>An empty {@code text} string is coerced to {@code null}.</li>
+         *   <li>A {@code null} {@code emoji} is omitted from the
+         *       {@code emoji} object entirely.</li>
+         *   <li>If both {@code text} and {@code emoji} are absent and the
+         *       caller supplied a non-zero ephemeral duration, the duration
+         *       is silently reset to {@code 0}.</li>
+         * </ul>
+         *
+         * @param text the text body of the status, or {@code null} / empty
+         *             to clear it
+         * @param emoji the optional emoji decoration of the status, or
+         *              {@code null} to omit
+         * @param ephemeralDurationSec the ephemeral duration in seconds, or
+         *                             {@code 0} for no expiry
+         */
+        public Request(String text, String emoji, long ephemeralDurationSec) {
+            this.text = text;
+            this.emoji = emoji;
+            this.ephemeralDurationSec = ephemeralDurationSec;
         }
 
         /**
@@ -58,23 +82,56 @@ public sealed interface UpdateTextStatusMex extends MexJsonOperation permits Upd
          * {@code w:mex} IQ stanza.
          *
          * @implNote WAWebMexUpdateTextStatusJob.mexUpdateTextStatus: the
-         * single {@code input} variable carries the serialised status
-         * payload.
+         * single {@code input} variable carries the structured status
+         * payload built by
+         * {@code WAWebTextStatusParseUtils.createTextStatusObjectForUpdateRequest}
+         * with shape {@code {text, emoji?: {content}, ephemeral_duration_sec}}.
          * @return the IQ {@link NodeBuilder} ready to be built and dispatched
          */
         @WhatsAppWebExport(moduleName = "WAWebMexUpdateTextStatusJob", exports = "mexUpdateTextStatus",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public NodeBuilder toNode() {
+            // WAWebTextStatusParseUtils.createTextStatusObjectForUpdateRequest:
+            // n = textStatusString === "" ? null : textStatusString
+            var normalisedText = (text == null || text.isEmpty()) ? null : text;
+            // r = textStatusEphemeralDuration ?? 0
+            // if (n == null && textStatusEmoji == null && r !== 0) r = 0
+            var normalisedDuration = ephemeralDurationSec;
+            if (normalisedText == null && emoji == null && normalisedDuration != 0L) {
+                normalisedDuration = 0L;
+            }
             try (var writer = JSONWriter.ofUTF8()) {
                 writer.startObject();
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
-                if (input != null) {
-                    writer.writeName("input");
-                    writer.writeColon();
-                    writer.writeString(input);
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                // WAWebTextStatusParseUtils: {text: n, ...}
+                writer.writeName("text");
+                writer.writeColon();
+                if (normalisedText == null) {
+                    writer.writeNull();
+                } else {
+                    writer.writeString(normalisedText);
                 }
+                // WAWebTextStatusParseUtils: emoji object is only set when
+                // textStatusEmoji != null - otherwise the property is omitted
+                if (emoji != null) {
+                    writer.writeName("emoji");
+                    writer.writeColon();
+                    writer.startObject();
+                    writer.writeName("content");
+                    writer.writeColon();
+                    writer.writeString(emoji);
+                    writer.endObject();
+                }
+                // WAWebTextStatusParseUtils: ephemeral_duration_sec is always set
+                writer.writeName("ephemeral_duration_sec");
+                writer.writeColon();
+                writer.writeInt64(normalisedDuration);
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
                 try (var output = new StringWriter()) {

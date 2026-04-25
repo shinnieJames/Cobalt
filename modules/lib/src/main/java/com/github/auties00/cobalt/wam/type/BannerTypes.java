@@ -101,5 +101,6 @@ public enum BannerTypes {
     @WamEnumConstant(106) AVATAR_DEPRECATION,
     @WamEnumConstant(107) QP_BANNER_STICKER_TRAY,
     @WamEnumConstant(108) QP_BANNER_UPDATES_TAB_CHANNELS_HEADER,
-    @WamEnumConstant(109) QP_NEW_USER_CHECKLIST_ME_TAB
+    @WamEnumConstant(109) QP_NEW_USER_CHECKLIST_ME_TAB,
+    @WamEnumConstant(110) META_AI_APP_PROMO
 }

@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -40,7 +39,7 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
      * @implNote WAWebMexFetchNewsletterJobQuery.graphql: corresponds to the compiled
      * document id registered for the {@code mexGetNewsletter} query.
      */
-    String QUERY_ID = "25383075034668475";
+    String QUERY_ID = "35452404184358876";
 
     /**
      * The request variant of {@link FetchNewsletterMex} that serialises the
@@ -48,19 +47,46 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
      *
      * @implNote WAWebMexFetchNewsletterJob.mexGetNewsletter: adapts the {@code variables}
      * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * Java class. The {@code input} GraphQL variable is a structured object
+     * holding the newsletter {@code key}, the lookup {@code type}
+     * ({@code "JID"} or {@code "INVITE"}) and the optional {@code view_role}.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterJob")
     final class Request implements FetchNewsletterMex {
         private final Boolean fetchCreationTime;
         private final Boolean fetchFullImage;
+        private final Boolean fetchStatusMetadata;
         private final Boolean fetchViewerMetadata;
         private final Boolean fetchWamoSub;
-        private final String input;
+        private final Input input;
 
-        public Request(Boolean fetchCreationTime, Boolean fetchFullImage, Boolean fetchViewerMetadata, Boolean fetchWamoSub, String input) {
+        /**
+         * Constructs a request without the {@code fetch_status_metadata} flag.
+         *
+         * @param fetchCreationTime   the {@code fetch_creation_time} flag, may be {@code null}
+         * @param fetchFullImage      the {@code fetch_full_image} flag, may be {@code null}
+         * @param fetchViewerMetadata the {@code fetch_viewer_metadata} flag, may be {@code null}
+         * @param fetchWamoSub        the {@code fetch_wamo_sub} flag, may be {@code null}
+         * @param input               the structured {@code input} GraphQL variable
+         */
+        public Request(Boolean fetchCreationTime, Boolean fetchFullImage, Boolean fetchViewerMetadata, Boolean fetchWamoSub, Input input) {
+            this(fetchCreationTime, fetchFullImage, null, fetchViewerMetadata, fetchWamoSub, input);
+        }
+
+        /**
+         * Constructs a request with the full set of GraphQL variables.
+         *
+         * @param fetchCreationTime    the {@code fetch_creation_time} flag, may be {@code null}
+         * @param fetchFullImage       the {@code fetch_full_image} flag, may be {@code null}
+         * @param fetchStatusMetadata  the {@code fetch_status_metadata} flag, may be {@code null}
+         * @param fetchViewerMetadata  the {@code fetch_viewer_metadata} flag, may be {@code null}
+         * @param fetchWamoSub         the {@code fetch_wamo_sub} flag, may be {@code null}
+         * @param input                the structured {@code input} GraphQL variable
+         */
+        public Request(Boolean fetchCreationTime, Boolean fetchFullImage, Boolean fetchStatusMetadata, Boolean fetchViewerMetadata, Boolean fetchWamoSub, Input input) {
             this.fetchCreationTime = fetchCreationTime;
             this.fetchFullImage = fetchFullImage;
+            this.fetchStatusMetadata = fetchStatusMetadata;
             this.fetchViewerMetadata = fetchViewerMetadata;
             this.fetchWamoSub = fetchWamoSub;
             this.input = input;
@@ -90,20 +116,28 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
-                // WAWebMexFetchNewsletterJob.mexGetNewsletter
-                // Emits the fetch_creation_time boolean variable when present
-                if (fetchCreationTime != null) {
-                    writer.writeName("fetch_creation_time");
+                // WAWebMexFetchNewsletterJob.mexGetNewsletter: d.input = {key: t, type: u, view_role: a}
+                // Emits the input variable as a nested object when present
+                if (input != null) {
+                    writer.writeName("input");
                     writer.writeColon();
-                    writer.writeBool(fetchCreationTime);
-                }
-
-                // WAWebMexFetchNewsletterJob.mexGetNewsletter
-                // Emits the fetch_full_image boolean variable when present
-                if (fetchFullImage != null) {
-                    writer.writeName("fetch_full_image");
-                    writer.writeColon();
-                    writer.writeBool(fetchFullImage);
+                    writer.startObject();
+                    if (input.key() != null) {
+                        writer.writeName("key");
+                        writer.writeColon();
+                        writer.writeString(input.key());
+                    }
+                    if (input.type() != null) {
+                        writer.writeName("type");
+                        writer.writeColon();
+                        writer.writeString(input.type());
+                    }
+                    if (input.viewRole() != null) {
+                        writer.writeName("view_role");
+                        writer.writeColon();
+                        writer.writeString(input.viewRole());
+                    }
+                    writer.endObject();
                 }
                 // WAWebMexFetchNewsletterJob.mexGetNewsletter
                 // Emits the fetch_viewer_metadata boolean variable when present
@@ -112,7 +146,20 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
                     writer.writeColon();
                     writer.writeBool(fetchViewerMetadata);
                 }
-
+                // WAWebMexFetchNewsletterJob.mexGetNewsletter: c = u !== "INVITE"
+                // Emits the fetch_full_image boolean variable when present
+                if (fetchFullImage != null) {
+                    writer.writeName("fetch_full_image");
+                    writer.writeColon();
+                    writer.writeBool(fetchFullImage);
+                }
+                // WAWebMexFetchNewsletterJob.mexGetNewsletter
+                // Emits the fetch_creation_time boolean variable when present
+                if (fetchCreationTime != null) {
+                    writer.writeName("fetch_creation_time");
+                    writer.writeColon();
+                    writer.writeBool(fetchCreationTime);
+                }
                 // WAWebMexFetchNewsletterJob.mexGetNewsletter
                 // Emits the fetch_wamo_sub boolean variable when present
                 if (fetchWamoSub != null) {
@@ -121,11 +168,11 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
                     writer.writeBool(fetchWamoSub);
                 }
                 // WAWebMexFetchNewsletterJob.mexGetNewsletter
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // Emits the fetch_status_metadata boolean variable when present
+                if (fetchStatusMetadata != null) {
+                    writer.writeName("fetch_status_metadata");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeBool(fetchStatusMetadata);
                 }
                 writer.endObject();
                 writer.endObject();
@@ -138,6 +185,62 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
                 }
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
+            }
+        }
+
+        /**
+         * The structured {@code input} GraphQL variable consumed by the
+         * {@code mexGetNewsletter} query.
+         *
+         * @implNote WAWebMexFetchNewsletterJob.mexGetNewsletter: corresponds to
+         * the inline JS object {@code {input: {key: t, type: u, view_role: a}}},
+         * where {@code u} is computed by WAWebWid.isNewsletter as
+         * {@code "JID"} for newsletter JIDs and {@code "INVITE"} for invite
+         * keys.
+         */
+        public static final class Input {
+            private final String key;
+            private final String type;
+            private final String viewRole;
+
+            /**
+             * Constructs a new {@link Input}.
+             *
+             * @param key      the newsletter JID or invite key
+             * @param type     the lookup discriminator, either {@code "JID"} or {@code "INVITE"}
+             * @param viewRole the optional viewer role enum name, may be {@code null}
+             */
+            public Input(String key, String type, String viewRole) {
+                this.key = key;
+                this.type = type;
+                this.viewRole = viewRole;
+            }
+
+            /**
+             * Returns the {@code key} field.
+             *
+             * @return the newsletter JID or invite key, or {@code null} if absent
+             */
+            public String key() {
+                return key;
+            }
+
+            /**
+             * Returns the {@code type} field.
+             *
+             * @return the lookup discriminator, or {@code null} if absent
+             */
+            public String type() {
+                return type;
+            }
+
+            /**
+             * Returns the {@code view_role} field.
+             *
+             * @return the viewer role enum name, or {@code null} if absent
+             */
+            public String viewRole() {
+                return viewRole;
             }
         }
     }
@@ -283,8 +386,9 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
             private final String verification;
             private final Settings settings;
             private final WamoSub wamoSub;
+            private final StatusMetadata statusMetadata;
 
-            private ThreadMetadata(Long creationTime, Name name, Picture picture, Preview preview, Description description, String invite, String handle, Long subscribersCount, String verification, Settings settings, WamoSub wamoSub) {
+            private ThreadMetadata(Long creationTime, Name name, Picture picture, Preview preview, Description description, String invite, String handle, Long subscribersCount, String verification, Settings settings, WamoSub wamoSub, StatusMetadata statusMetadata) {
                 this.creationTime = creationTime;
                 this.name = name;
                 this.picture = picture;
@@ -296,6 +400,7 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
                 this.verification = verification;
                 this.settings = settings;
                 this.wamoSub = wamoSub;
+                this.statusMetadata = statusMetadata;
             }
 
             /**
@@ -395,6 +500,15 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
              */
             public Optional<WamoSub> wamoSub() {
                 return Optional.ofNullable(wamoSub);
+            }
+
+            /**
+             * Returns the {@code status_metadata} field.
+             *
+             * @return an {@link Optional} containing the value, or empty if absent
+             */
+            public Optional<StatusMetadata> statusMetadata() {
+                return Optional.ofNullable(statusMetadata);
             }
 
             /**
@@ -865,6 +979,71 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
             }
 
             /**
+             * A parsed {@code StatusMetadata} object.
+             */
+            public static final class StatusMetadata {
+                private final String lastStatusServerId;
+                private final Long lastStatusSentTime;
+
+                private StatusMetadata(String lastStatusServerId, Long lastStatusSentTime) {
+                    this.lastStatusServerId = lastStatusServerId;
+                    this.lastStatusSentTime = lastStatusSentTime;
+                }
+
+                /**
+                 * Returns the {@code last_status_server_id} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> lastStatusServerId() {
+                    return Optional.ofNullable(lastStatusServerId);
+                }
+
+                /**
+                 * Returns the {@code last_status_sent_time} field.
+                 *
+                 * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+                 */
+                public Optional<Instant> lastStatusSentTime() {
+                    return Optional.ofNullable(lastStatusSentTime).map(Instant::ofEpochSecond);
+                }
+
+                /**
+                 * Parses a {@code StatusMetadata} from the given JSON object.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 */
+                static Optional<StatusMetadata> of(JSONObject obj) {
+                    if (obj == null) {
+                        return Optional.empty();
+                    }
+
+                    var lastStatusServerId = obj.getString("last_status_server_id");
+                    var lastStatusSentTime = obj.getLong("last_status_sent_time");
+                    return Optional.of(new StatusMetadata(lastStatusServerId, lastStatusSentTime));
+                }
+
+                /**
+                 * Parses a list of {@code StatusMetadata} from the given JSON array.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 */
+                static List<StatusMetadata> ofArray(JSONArray arr) {
+                    if (arr == null) {
+                        return List.of();
+                    }
+
+                    var result = new ArrayList<StatusMetadata>(arr.size());
+                    for (var i = 0; i < arr.size(); i++) {
+                        of(arr.getJSONObject(i)).ifPresent(result::add);
+                    }
+                    return result;
+                }
+            }
+
+            /**
              * Parses a {@code ThreadMetadata} from the given JSON object.
              *
              * @param obj the JSON object to parse
@@ -886,7 +1065,8 @@ public sealed interface FetchNewsletterMex extends MexJsonOperation permits Fetc
                 var verification = obj.getString("verification");
                 var settings = Settings.of(obj.getJSONObject("settings")).orElse(null);
                 var wamoSub = WamoSub.of(obj.getJSONObject("wamo_sub")).orElse(null);
-                return Optional.of(new ThreadMetadata(creationTime, name, picture, preview, description, invite, handle, subscribersCount, verification, settings, wamoSub));
+                var statusMetadata = StatusMetadata.of(obj.getJSONObject("status_metadata")).orElse(null);
+                return Optional.of(new ThreadMetadata(creationTime, name, picture, preview, description, invite, handle, subscribersCount, verification, settings, wamoSub, statusMetadata));
             }
 
             /**

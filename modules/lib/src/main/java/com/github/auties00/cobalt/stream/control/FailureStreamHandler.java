@@ -4,6 +4,8 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppConnectionException;
 import com.github.auties00.cobalt.exception.WhatsAppSessionException;
 import com.github.auties00.cobalt.exception.WhatsAppServerRuntimeException;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppAdaptation;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
@@ -159,9 +161,12 @@ public final class FailureStreamHandler implements SocketStream.Handler {
      * a disconnect.
      *
      * @param node the {@code <failure>} stanza node received from the server
-     * @implNote WAWebHandleFailure.default
+     * @implNote WAWebHandleFailure.default - WA Web inlines logout/comms-stop/updater calls;
+     * Cobalt routes every recoverable case through {@link WhatsAppClient#handleFailure(Throwable)}
+     * so the user-supplied error handler decides DISCARD/DISCONNECT/RECONNECT/LOG_OUT/BAN.
      */
     @Override
+    @WhatsAppWebExport(moduleName = "WAWebHandleFailure", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public void handle(Node node) {
         // WAWebHandleFailure.default - parse stanza attributes via failureParser:
         // {reason: attrInt("reason", 400, 599), location: attrString("location"),

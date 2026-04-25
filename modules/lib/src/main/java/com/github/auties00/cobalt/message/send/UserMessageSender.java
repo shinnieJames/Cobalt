@@ -369,8 +369,8 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
             boolean isResend
     ) {
         var container = messageInfo.message();
-        var identityNode = ParticipantsStanza.requiresIdentityNode(payloads)
-                ? buildIdentityNode() : null;
+        var anyPkmsg = ParticipantsStanza.requiresIdentityNode(payloads);
+        var identityNode = anyPkmsg ? buildIdentityNode() : null;
 
         var metaNode = metaStanza.buildChat(chatJid, container, null);
         var bizNode = bizStanza.build(chatJid);
@@ -391,7 +391,9 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
                 payloads,
                 resolveEditAttribute(container),
                 null,
-                isResend ? "false" : null,
+                // WAWebSendMsgCreateFanoutStanza: device_fanout="false" when
+                // isResendingMsg || any payload type === Pkmsg (P flag)
+                (isResend || anyPkmsg) ? "false" : null,
                 resolveMediaType(container),
                 resolveDecryptFail(container),
                 resolveNativeFlowName(container),
@@ -688,43 +690,71 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Returns the WAM {@link MessageChatType} for the given chat JID.
      *
-     * <p>Mirrors the mapping used by WA Web's
-     * {@code WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid}:
-     * user/legacy-user JIDs map to {@code INDIVIDUAL}, group/community JIDs
-     * to {@code GROUP}, broadcast to {@code BROADCAST}, status to
-     * {@code STATUS}, newsletter to {@code CHANNEL}, everything else to
-     * {@code OTHER}.
+     * <p>Mirrors the cascaded ternary in
+     * {@code WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid}
+     * exactly, dispatching on the WA Web {@code Wid} predicates in the
+     * same order:
+     * <ol>
+     *     <li>{@code isUser()} (user/legacy-user/LID/bot/hosted/hosted.lid
+     *         domains) maps to {@code INDIVIDUAL};</li>
+     *     <li>{@code isGroup()} ({@code g.us} domain) maps to
+     *         {@code GROUP};</li>
+     *     <li>{@code isBroadcast()} ({@code broadcast} domain) maps to
+     *         {@code BROADCAST};</li>
+     *     <li>{@code isStatus()} ({@code status@broadcast}) maps to
+     *         {@code STATUS};</li>
+     *     <li>{@code isNewsletter()} ({@code newsletter} domain) maps to
+     *         {@code CHANNEL};</li>
+     *     <li>anything else maps to {@code OTHER}.</li>
+     * </ol>
      *
-     * @param jid the chat JID to classify
-     * @return the corresponding {@link MessageChatType}
+     * @param jid the chat JID to classify, or {@code null}
+     * @return the corresponding {@link MessageChatType}; never {@code null}
      *
-     * @apiNote WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid:
-     *          returns {@code MESSAGE_CHAT_TYPE.INDIVIDUAL / GROUP /
-     *          BROADCAST / STATUS / CHANNEL / OTHER} based on the JID
-     *          predicates.
+     * @implNote The {@code STATUS} branch is unreachable because the
+     *           preceding {@code isBroadcast()} check already catches
+     *           {@code status@broadcast}. It is preserved here solely to
+     *           keep the method body in lock-step with the WA Web source.
+     *           The {@code null} guard is a Cobalt-side defensive
+     *           adaptation for callers that may pass unresolved JIDs;
+     *           WA Web callers always hold a valid {@code Wid} instance
+     *           at this point.
      */
     @WhatsAppWebExport(moduleName = "WAWebGetMessageChatTypeFromWid",
             exports = "getMessageChatTypeFromWid",
             adaptation = WhatsAppAdaptation.DIRECT)
     static MessageChatType chatTypeFromJid(Jid jid) {
         if (jid == null) {
+            // NO_WA_BASIS: defensive null guard, WA callers always pass a valid Wid
             return MessageChatType.OTHER;
         }
-        if (jid.isStatusBroadcastAccount()) {
-            return MessageChatType.STATUS;
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isUser()? INDIVIDUAL
+        if (jid.hasUserServer()
+                || jid.hasLidServer()
+                || jid.hasBotServer()
+                || jid.hasHostedServer()
+                || jid.hasHostedLidServer()) {
+            return MessageChatType.INDIVIDUAL;
         }
-        if (jid.hasBroadcastServer()) {
-            return MessageChatType.BROADCAST;
-        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isGroup()? GROUP
         if (jid.hasGroupOrCommunityServer()) {
             return MessageChatType.GROUP;
         }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isBroadcast()? BROADCAST
+        if (jid.hasBroadcastServer()) {
+            return MessageChatType.BROADCAST;
+        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isStatus()? STATUS
+        // (unreachable: isBroadcast above already catches status@broadcast; kept for
+        // structural parity with the JS ternary)
+        if (jid.isStatusBroadcastAccount()) {
+            return MessageChatType.STATUS;
+        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: e.isNewsletter()? CHANNEL
         if (jid.hasNewsletterServer()) {
             return MessageChatType.CHANNEL;
         }
-        if (jid.hasUserServer() || jid.hasLidServer()) {
-            return MessageChatType.INDIVIDUAL;
-        }
+        // WAWebGetMessageChatTypeFromWid.getMessageChatTypeFromWid: OTHER fallthrough
         return MessageChatType.OTHER;
     }
 

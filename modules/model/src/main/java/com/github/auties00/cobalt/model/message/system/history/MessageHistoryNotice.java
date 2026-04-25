@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.system.history;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 
@@ -17,13 +20,21 @@ import java.util.Optional;
  * user for the back-fill that follows. Unlike the bundle itself, the notice
  * carries no media reference; it only carries the descriptive metadata and
  * the surrounding context info.
+ *
+ * @implNote Mirrors the {@code Message$MessageHistoryNotice} protobuf spec
+ * declared in {@code WAWebProtobufsE2E.pb} and produced by
+ * {@code WAWebGenerateMessageHistoryNoticeProto} from the
+ * {@code groupHistoryBundleMetadata} of the source message.
  */
 @ProtobufMessage(name = "Message.MessageHistoryNotice")
+@WhatsAppWebModule(moduleName = "WAWebProtobufsE2E.pb")
+@WhatsAppWebModule(moduleName = "WAWebGenerateMessageHistoryNoticeProto")
 public final class MessageHistoryNotice implements ContextualMessage {
     /**
      * The quoted-message and mention context in which the notice was sent.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebProtobufsE2E.pb", exports = "Message$MessageHistoryNoticeSpec.contextInfo", adaptation = WhatsAppAdaptation.DIRECT)
     ContextInfo contextInfo;
 
     /**
@@ -31,6 +42,8 @@ public final class MessageHistoryNotice implements ContextualMessage {
      * of the history bundle being announced.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebProtobufsE2E.pb", exports = "Message$MessageHistoryNoticeSpec.messageHistoryMetadata", adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateMessageHistoryNoticeProto", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     MessageHistoryMetadata messageHistoryMetadata;
 
 

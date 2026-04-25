@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.message.receive.stanza;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
  * Classifies the addressing shape of an incoming message based on its
@@ -37,8 +39,10 @@ public enum MessageType {
      * <p>The {@code from} attribute is a user, LID, or bot JID, and the
      * stanza's {@code category} attribute is not {@code "peer"}.
      *
-     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.CHAT
+     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.CHAT (literal value {@code "chat"}).
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     CHAT,
 
     /**
@@ -47,8 +51,10 @@ public enum MessageType {
      * <p>The {@code from} attribute is a group or community JID and the
      * sender's device is identified by the {@code participant} attribute.
      *
-     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.GROUP
+     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.GROUP (literal value {@code "group"}).
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     GROUP,
 
     /**
@@ -58,8 +64,10 @@ public enum MessageType {
      * participant identifies our own companion device, and a
      * {@code <participants>} child lists the broadcast contact list.
      *
-     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.PEER_BROADCAST
+     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.PEER_BROADCAST (literal value {@code "peer_broadcast"}).
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     PEER_BROADCAST,
 
     /**
@@ -68,8 +76,10 @@ public enum MessageType {
      * <p>The {@code from} attribute is a broadcast list JID with a
      * participant identifying the remote sender.
      *
-     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.OTHER_BROADCAST
+     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.OTHER_BROADCAST (literal value {@code "other_broadcast"}).
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     OTHER_BROADCAST,
 
     /**
@@ -80,8 +90,10 @@ public enum MessageType {
      * device are delivered as direct-peer status so the current device
      * can mirror them locally.
      *
-     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.DIRECT_PEER_STATUS
+     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.DIRECT_PEER_STATUS (literal value {@code "direct_peer_status"}).
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     DIRECT_PEER_STATUS,
 
     /**
@@ -90,8 +102,10 @@ public enum MessageType {
      * <p>Uses the status broadcast JID with a participant attribute
      * identifying the remote poster.
      *
-     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.OTHER_STATUS
+     * @implNote WAWebHandleMsgTypes.flow.MESSAGE_TYPE.OTHER_STATUS (literal value {@code "other_status"}).
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     OTHER_STATUS,
 
     /**
@@ -107,5 +121,9 @@ public enum MessageType {
      * @implNote Adapted from WAWebHandleMsgTypes.flow.MESSAGE_TYPE.CHAT
      * combined with WAWebHandleMsgCommon.MSG_CATEGORY.peer.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "MESSAGE_TYPE",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "MSG_CATEGORY",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     PEER_CHAT,
 }

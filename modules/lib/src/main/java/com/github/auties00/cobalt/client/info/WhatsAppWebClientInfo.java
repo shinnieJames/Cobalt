@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.client.info;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 
 import java.io.IOException;

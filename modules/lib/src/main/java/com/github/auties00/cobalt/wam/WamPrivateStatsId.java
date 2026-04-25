@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.wam;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.util.DataUtils;
 
@@ -57,7 +58,12 @@ final class WamPrivateStatsId {
     /**
      * Constructs a new {@code WamPrivateStatsId} instance and initialises
      * all eight rotation groups with fresh random identifiers.
+     *
+     * @implNote The rotation-group tuples (key name, key hash int,
+     *           rotation period in days) replicate the JS literal
+     *           {@code WAWebWamGlobals.PrivateStatsAllIds} exactly.
      */
+    @WhatsAppWebExport(moduleName = "WAWebWamGlobals", exports = "PrivateStatsAllIds")
     WamPrivateStatsId() {
         this.entries = new LinkedHashMap<>();
         addEntry("DefaultPsId", 113760892, -1);

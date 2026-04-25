@@ -14,6 +14,9 @@ import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateFatalExceptionNotification;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyRequest;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyShare;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestMessage;
 import com.github.auties00.cobalt.model.message.system.peer.PeerDataOperationRequestResponseMessage;
@@ -744,8 +747,25 @@ public final class ProtocolMessage implements Message {
      * <p>The value of this enum determines which of the sibling fields on the
      * enclosing message is meaningful: all other fields are expected to be
      * empty for a given event.
+     *
+     * @implNote WA Web exposes a small {@code PARSED_PROTOCOL_MESSAGE_TYPE}
+     *           frozen-object constant (in module {@code WAWebParsedProtocolMsgType})
+     *           whose five string values ({@code "history"},
+     *           {@code "appStateSyncKeyShare"}, {@code "appStateSyncKeyRequest"},
+     *           {@code "peerDataOperationRequestResponseMessage"},
+     *           {@code "peerDataOperationRequestMessage"}) act as the
+     *           discriminator returned by the JS {@code parseProtocolMessage}
+     *           helper when dispatching to deferred / foreground protocol-message
+     *           handlers. Cobalt collapses that parallel discriminator into the
+     *           full {@link Type} protobuf enum, so the consumers simply branch
+     *           on {@link ProtocolMessage#type()} directly; the corresponding
+     *           five enum constants are annotated with
+     *           {@code @WhatsAppWebExport(moduleName = "WAWebParsedProtocolMsgType",
+     *           exports = "PARSED_PROTOCOL_MESSAGE_TYPE")} to record the
+     *           mapping.
      */
     @ProtobufEnum(name = "Message.ProtocolMessage.Type")
+    @WhatsAppWebModule(moduleName = "WAWebParsedProtocolMsgType")
     public static enum Type {
         /**
          * Revokes (deletes for everyone) a previously sent message
@@ -764,15 +784,38 @@ public final class ProtocolMessage implements Message {
         /**
          * Notifies the client that a new history sync blob is available for
          * download.
+         *
+         * @implNote Maps to the WA Web dispatcher value
+         *           {@code PARSED_PROTOCOL_MESSAGE_TYPE.HISTORY}
+         *           ({@code "history"}) surfaced by {@code WAWebParsedProtocolMsgType}.
          */
+        @WhatsAppWebExport(moduleName = "WAWebParsedProtocolMsgType",
+                exports = "PARSED_PROTOCOL_MESSAGE_TYPE",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         HISTORY_SYNC_NOTIFICATION(5),
         /**
          * Delivers requested app-state sync keys to a peer device.
+         *
+         * @implNote Maps to the WA Web dispatcher value
+         *           {@code PARSED_PROTOCOL_MESSAGE_TYPE.APP_STATE_SYNC_KEY_SHARE}
+         *           ({@code "appStateSyncKeyShare"}) surfaced by
+         *           {@code WAWebParsedProtocolMsgType}.
          */
+        @WhatsAppWebExport(moduleName = "WAWebParsedProtocolMsgType",
+                exports = "PARSED_PROTOCOL_MESSAGE_TYPE",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         APP_STATE_SYNC_KEY_SHARE(6),
         /**
          * Requests specific app-state sync keys from peer devices.
+         *
+         * @implNote Maps to the WA Web dispatcher value
+         *           {@code PARSED_PROTOCOL_MESSAGE_TYPE.APP_STATE_SYNC_KEY_REQUEST}
+         *           ({@code "appStateSyncKeyRequest"}) surfaced by
+         *           {@code WAWebParsedProtocolMsgType}.
          */
+        @WhatsAppWebExport(moduleName = "WAWebParsedProtocolMsgType",
+                exports = "PARSED_PROTOCOL_MESSAGE_TYPE",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         APP_STATE_SYNC_KEY_REQUEST(7),
         /**
          * Requests a backfill of a message fanout to recover missed messages.
@@ -798,11 +841,27 @@ public final class ProtocolMessage implements Message {
         /**
          * Requests a peer device to perform a data operation such as
          * historical message lookup.
+         *
+         * @implNote Maps to the WA Web dispatcher value
+         *           {@code PARSED_PROTOCOL_MESSAGE_TYPE.PEER_DATA_OPERATION_REQUEST_MESSAGE}
+         *           ({@code "peerDataOperationRequestMessage"}) surfaced by
+         *           {@code WAWebParsedProtocolMsgType}.
          */
+        @WhatsAppWebExport(moduleName = "WAWebParsedProtocolMsgType",
+                exports = "PARSED_PROTOCOL_MESSAGE_TYPE",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         PEER_DATA_OPERATION_REQUEST_MESSAGE(16),
         /**
          * Delivers the response to a peer data operation request.
+         *
+         * @implNote Maps to the WA Web dispatcher value
+         *           {@code PARSED_PROTOCOL_MESSAGE_TYPE.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE}
+         *           ({@code "peerDataOperationRequestResponseMessage"}) surfaced
+         *           by {@code WAWebParsedProtocolMsgType}.
          */
+        @WhatsAppWebExport(moduleName = "WAWebParsedProtocolMsgType",
+                exports = "PARSED_PROTOCOL_MESSAGE_TYPE",
+                adaptation = WhatsAppAdaptation.ADAPTED)
         PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE(17),
         /**
          * Requests the delivery of a welcome message for a chat.

@@ -36,6 +36,8 @@ public final class ReportingToken {
      *
      * @implNote WAWebReportingTokenUtils: {@code REPORTING_TOKEN_KEY_SIZE = 32}
      */
+    @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "REPORTING_TOKEN_KEY_SIZE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     private static final int KEY_LENGTH = 32;
 
     /**
@@ -44,7 +46,39 @@ public final class ReportingToken {
      * @implNote WAWebReportingTokenUtils: {@code REPORTING_TOKEN_SIZE = 16},
      *          used as the third argument to {@code hmacSha256(key, content, 16)}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "REPORTING_TOKEN_SIZE",
+            adaptation = WhatsAppAdaptation.DIRECT)
     private static final int TOKEN_LENGTH = 16;
+
+    /**
+     * Storage size for a valid reporting token entry.
+     *
+     * <p>Used by the IndexedDB-backed storage layer
+     * ({@code WAWebDBReportingTokenUtils}) to allocate fixed-size rows for
+     * reporting-token records. Cobalt does not persist reporting tokens
+     * because outgoing tokens are computed on demand and incoming-side
+     * validation is not implemented; the constant is preserved here for
+     * parity with the WA Web export surface.
+     *
+     * @implNote WAWebReportingTokenUtils: {@code REPORTING_TOKEN_STORAGE_SIZE = 6}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "REPORTING_TOKEN_STORAGE_SIZE",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public static final int REPORTING_TOKEN_STORAGE_SIZE = 6;
+
+    /**
+     * Storage size sentinel for an invalid reporting token entry.
+     *
+     * <p>WA Web writes this length when a reporting token failed
+     * validation, distinguishing it from a missing record. Cobalt does
+     * not persist reporting tokens; the constant is preserved for parity.
+     *
+     * @implNote WAWebReportingTokenUtils:
+     * {@code REPORTING_TOKEN_INVALID_STORAGE_SIZE = 7}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "REPORTING_TOKEN_INVALID_STORAGE_SIZE",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public static final int REPORTING_TOKEN_INVALID_STORAGE_SIZE = 7;
 
     /**
      * The HKDF algorithm used for key derivation.

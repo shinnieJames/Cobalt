@@ -526,6 +526,11 @@ public final class IqStreamHandler implements SocketStream.Handler {
         emitMdLinkDeviceCompanionStage(MdLinkDeviceCompanionStage.PAIR_SUCCESS_RECEIVED, null, mdSessionId, regStartSeconds);
 
         try {
+            // WAWebHandlePairSuccess: yield waSignalStore.putIdentity(createSignalAddress(asUserWidOrThrow(deviceJidToDeviceWid(y))).toString(), bufferToStr(toSignalCurvePubKey(P)))
+            // Persist the accountSignatureKey as the local user's signal identity (device 0) so
+            // subsequent ADV validations resolve the primary identity from the local store.
+            store.jid().ifPresent(localJid -> deviceService.persistLocalDeviceIdentityFromPairSuccess(
+                    localJid, validatedIdentity.accountSignatureKey().orElse(null)));
             store.setSignedDeviceIdentity(validatedIdentity); // WAWebHandlePairSuccess: setADVSignedIdentity($)
             sendPairSuccessResponse(iqNode, validatedIdentity); // WAWebHandlePairSuccess: return q = d({deviceIdentityElementValue: W, deviceIdentityKeyIndex: B})
 

@@ -50,7 +50,7 @@ public sealed interface CreateReportAppealMex extends MexJsonOperation permits C
      */
     @WhatsAppWebExport(moduleName = "WAWebMexCreateReportAppealJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
-    String QUERY_ID = "25877334095205200";
+    String QUERY_ID = "27283301737925761";
 
     /**
      * The request payload for this MEX mutation.
@@ -135,8 +135,9 @@ public sealed interface CreateReportAppealMex extends MexJsonOperation permits C
          * Parses the MEX response carried by an inbound IQ stanza.
          *
          * @implNote WAWebMexCreateReportAppealJob.createReportAppeal: reads
-         * the {@code data.createReportAppeal} payload including the appeal
-         * record and nested channel metadata.
+         * the {@code data.xwa2_create_channel_report_appeal_v2} payload
+         * (an {@code XWA2ChannelsReport}) including the appeal record and
+         * nested {@code reported_content_data} channel metadata.
          * @param node the inbound IQ stanza carrying the {@code <result>} child
          * @return the parsed response, or {@code Optional.empty()} if the
          *         expected JSON shape is absent
@@ -362,9 +363,13 @@ public sealed interface CreateReportAppealMex extends MexJsonOperation permits C
             var lastUpdateTime = root.getLong("last_update_time");
             var channelName = root.getString("channel_name");
             var channelJid = root.getString("channel_jid");
-            var serverMsgId = root.getString("server_msg_id");
-            var responseServerMsgId = root.getString("response_server_msg_id");
-            var notifyName = root.getString("notify_name");
+            // WAWebMexCreateReportAppealJobMutation.graphql: server_msg_id, server_response_id and
+            // notify_name are nested under reported_content_data (XWA2ChannelServerMsgData /
+            // XWA2ChannelQuestionResponseData inline fragments).
+            var reportedContentData = root.getJSONObject("reported_content_data");
+            var serverMsgId = reportedContentData == null ? null : reportedContentData.getString("server_msg_id");
+            var responseServerMsgId = reportedContentData == null ? null : reportedContentData.getString("server_response_id");
+            var notifyName = reportedContentData == null ? null : reportedContentData.getString("notify_name");
             var appeal = Appeal.of(root.getJSONObject("appeal")).orElse(null);
 
             return Optional.of(new Response(reportId, status, creationTime, lastUpdateTime, channelName, channelJid, serverMsgId, responseServerMsgId, notifyName, appeal));

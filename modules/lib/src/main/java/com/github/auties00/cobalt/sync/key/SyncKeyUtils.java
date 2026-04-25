@@ -151,11 +151,12 @@ public final class SyncKeyUtils {
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdCryptoUtils", exports = "syncKeyIdToHex", adaptation = WhatsAppAdaptation.DIRECT)
     public static String syncKeyIdToHex(byte[] keyId) {
-        if (keyId == null || keyId.length == 0) { // ADAPTED: Java null-safety guard
+        if (keyId == null) { // ADAPTED: Java null-safety guard for callers that pass an absent Optional<byte[]>
             return "unknown";
         }
 
         // WAWebSyncdCryptoUtils.syncKeyIdToHex: Array.from(new Uint8Array(...), e => e.toString(16)).toString().replace(/,/g, " ")
+        // For an empty keyId, Array.from yields []; .toString() yields "" — matched here by the loop producing no output.
         var sb = new StringBuilder();
         for (var i = 0; i < keyId.length; i++) {
             if (i > 0) {
@@ -287,6 +288,7 @@ public final class SyncKeyUtils {
      * @return the device ID, or {@code -1} if the key ID is malformed
      * @implNote WASyncdKeyManagementUtils.getKeyDeviceId
      */
+    @WhatsAppWebExport(moduleName = "WASyncdKeyManagementUtils", exports = "getKeyDeviceId", adaptation = WhatsAppAdaptation.ADAPTED)
     public static int getKeyDeviceId(byte[] keyId) {
         if (keyId == null || keyId.length < KEY_ID_LENGTH) { // ADAPTED: Java null-safety guard
             return -1;

@@ -51,21 +51,55 @@ public sealed interface FetchNewsletterInsightsMex extends MexJsonOperation perm
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterInsightsJob")
     final class Request implements FetchNewsletterInsightsMex {
-        private final String input;
+        /**
+         * The identifier of the newsletter whose insights are being fetched.
+         *
+         * @implNote WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights: mirrors the
+         * {@code newsletter_id} field of the GraphQL {@code input} variable
+         * destructured from {@code e.newsletterJid}.
+         */
+        @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterInsightsJob", exports = "mexFetchNewsletterInsights",
+                adaptation = WhatsAppAdaptation.DIRECT)
+        private final String newsletterId;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * The list of metric identifiers to fetch values for.
+         *
+         * @implNote WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights: mirrors the
+         * {@code metrics} field of the GraphQL {@code input} variable
+         * destructured from {@code e.requestedMetrics}.
+         */
+        @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterInsightsJob", exports = "mexFetchNewsletterInsights",
+                adaptation = WhatsAppAdaptation.DIRECT)
+        private final List<String> metrics;
+
+        /**
+         * Creates a request fetching the supplied metrics for the given newsletter.
+         *
+         * @implNote WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights: mirrors the
+         * {@code {newsletterJid, requestedMetrics}} object destructured at the
+         * head of the JS function.
+         * @param newsletterId the newsletter identifier passed as
+         *                     {@code newsletter_id}
+         * @param metrics      the list of metric identifiers passed as
+         *                     {@code metrics}; may be {@code null}
+         */
+        @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterInsightsJob", exports = "mexFetchNewsletterInsights",
+                adaptation = WhatsAppAdaptation.DIRECT)
+        public Request(String newsletterId, List<String> metrics) {
+            this.newsletterId = newsletterId;
+            this.metrics = metrics;
         }
 
         /**
          * Builds the IQ stanza that dispatches this operation to the
          * WhatsApp relay.
          *
-         * @implNote WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * @implNote WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights: WA Web constructs
+         * {@code {input:{newsletter_id:l, metrics:u}}} inline and delegates to
+         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the same nested
+         * variables envelope directly via {@code fastjson2.JSONWriter} and
+         * wraps it through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -81,13 +115,37 @@ public sealed interface FetchNewsletterInsightsMex extends MexJsonOperation perm
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // {input:{newsletter_id:l, metrics:u}} - opens the nested input object
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+
+                // WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights
+                // input.newsletter_id = l (e.newsletterJid)
+                if (newsletterId != null) {
+                    writer.writeName("newsletter_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(newsletterId);
                 }
+
+                // WAWebMexFetchNewsletterInsightsJob.mexFetchNewsletterInsights
+                // input.metrics = u (e.requestedMetrics) - serialised as a JSON array of strings
+                if (metrics != null) {
+                    writer.writeName("metrics");
+                    writer.writeColon();
+                    writer.startArray();
+                    for (var i = 0; i < metrics.size(); i++) {
+                        if (i > 0) {
+                            writer.writeComma();
+                        }
+                        writer.writeString(metrics.get(i));
+                    }
+                    writer.endArray();
+                }
+
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 

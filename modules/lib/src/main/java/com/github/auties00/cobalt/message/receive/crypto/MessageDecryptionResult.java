@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.message.receive.crypto;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
  * Enumerates the possible outcomes of the end-to-end decryption pipeline
@@ -19,6 +21,13 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
  * enum with values {@code SUCCESS}, {@code RETRY},
  * {@code HSM_MISMATCH}, {@code BACKFILL}, {@code PARSE_ERROR},
  * {@code PARSE_VALIDATION_ERROR}, {@code SIGNAL_OLD_COUNTER_ERROR}.
+ * The {@link #BACKFILL} value additionally absorbs every value of
+ * WAWebHandleMsgTypes.flow.PlaceholderType ({@code E2E},
+ * {@code FANOUT}, {@code BOT_UNAVAILABLE_FANOUT},
+ * {@code HOSTED_UNAVAILABLE_FANOUT},
+ * {@code VIEW_ONCE_UNAVAILABLE_FANOUT}): Cobalt does not retain the
+ * placeholder subtype because the downstream receipt logic is identical
+ * for all four unavailable variants.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgTypes.flow")
 public enum MessageDecryptionResult {
@@ -31,6 +40,8 @@ public enum MessageDecryptionResult {
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.SUCCESS}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
     SUCCESS,
 
     /**
@@ -43,6 +54,8 @@ public enum MessageDecryptionResult {
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.RETRY}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
     RETRY,
 
     /**
@@ -55,6 +68,8 @@ public enum MessageDecryptionResult {
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.HSM_MISMATCH}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
     HSM_MISMATCH,
 
     /**
@@ -66,7 +81,17 @@ public enum MessageDecryptionResult {
      * but does not yet have the content.
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.BACKFILL}.
+     * This single outcome absorbs every unavailable-placeholder variant
+     * from WAWebHandleMsgTypes.flow.PlaceholderType
+     * ({@code FANOUT}, {@code BOT_UNAVAILABLE_FANOUT},
+     * {@code HOSTED_UNAVAILABLE_FANOUT}, {@code VIEW_ONCE_UNAVAILABLE_FANOUT});
+     * Cobalt does not persist the placeholder subtype because the downstream
+     * action (ack + drop) is identical for all four.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "PlaceholderType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     BACKFILL,
 
     /**
@@ -78,6 +103,8 @@ public enum MessageDecryptionResult {
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.PARSE_ERROR}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
     PARSE_ERROR,
 
     /**
@@ -90,6 +117,8 @@ public enum MessageDecryptionResult {
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.PARSE_VALIDATION_ERROR}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
     PARSE_VALIDATION_ERROR,
 
     /**
@@ -103,5 +132,7 @@ public enum MessageDecryptionResult {
      *
      * @implNote WAWebHandleMsgTypes.flow: {@code E2EProcessResult.SIGNAL_OLD_COUNTER_ERROR}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHandleMsgTypes.flow", exports = "E2EProcessResult",
+            adaptation = WhatsAppAdaptation.DIRECT)
     SIGNAL_OLD_COUNTER_ERROR
 }

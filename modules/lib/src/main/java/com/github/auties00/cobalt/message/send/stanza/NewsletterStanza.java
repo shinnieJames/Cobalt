@@ -3,7 +3,6 @@ package com.github.auties00.cobalt.message.send.stanza;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
@@ -11,13 +10,15 @@ import com.github.auties00.cobalt.node.NodeBuilder;
  * Builds common SMAX stanza child nodes used across newsletter
  * message types.
  *
+ * <p>Currently only the {@code <plaintext>} payload wrapper is shared.
+ * Media handles are encoded as the {@code media_id} attribute on the
+ * outer {@code <message>} node (per {@code mergeNewsletterMediaPublishMixin}),
+ * not as a child element.
+ *
  * @apiNote WASmaxOutMessagePublishPayloadMixin: wraps the serialised
  * protobuf in a {@code <plaintext>} node.
- * WASmaxOutMessagePublishNewsletterMediaPublishMixin: includes
- * {@code <media_id>handle</media_id>} when a media handle is available.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishPayloadMixin")
-@WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterMediaPublishMixin")
 public final class NewsletterStanza {
     /**
      * Prevents instantiation of this utility class.
@@ -44,58 +45,24 @@ public final class NewsletterStanza {
     }
 
     /**
-     * Builds the {@code <plaintext>} node with a mediatype attribute.
+     * Builds the {@code <plaintext>} node with a {@code mediatype}
+     * attribute carrying the SMAX media subtype string (e.g.
+     * {@code "image"}, {@code "video"}, {@code "url"}, ...).
      *
      * @param payload   the serialised protobuf bytes
-     * @param mediaType the SMAX media type, or {@code null} for text
+     * @param mediaType the SMAX media subtype (must not be {@code null})
      * @return the plaintext node
      *
-     * @apiNote WASmaxOutMessagePublishNewsletterMediaPublishMixin:
-     * includes {@code mediatype} attribute on the plaintext node.
+     * @apiNote WASmaxOutMessagePublishNewsletterMediaMixin: emits the
+     * {@code mediatype} attribute on the {@code <plaintext>} node.
      */
-    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterMediaPublishMixin", exports = "applyMixin",
+    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterMediaMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static Node buildPlaintext(byte[] payload, String mediaType) {
         return new NodeBuilder()
                 .description("plaintext")
                 .attribute("mediatype", mediaType)
                 .content(payload)
-                .build();
-    }
-
-    /**
-     * Builds the {@code <media_id>} node from the newsletter message
-     * info's media handle, or returns {@code null} if absent.
-     *
-     * @param info the newsletter message info
-     * @return the media_id node, or {@code null}
-     *
-     * @apiNote WASmaxOutMessagePublishNewsletterMediaPublishMixin
-     */
-    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterMediaPublishMixin", exports = "applyMixin",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    public static Node buildMediaId(NewsletterMessageInfo info) {
-        return info.mediaHandle()
-                .map(NewsletterStanza::buildMediaId)
-                .orElse(null);
-    }
-
-    /**
-     * Builds a {@code <media_id>} node from a literal handle string.
-     *
-     * @param handle the media handle
-     * @return the media_id node
-     *
-     * @implNote WASmaxOutMessagePublishNewsletterMediaPublishMixin:
-     * emits {@code <media_id>handle</media_id>} as a child of the
-     * {@code <message>} stanza.
-     */
-    @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterMediaPublishMixin", exports = "applyMixin",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    private static Node buildMediaId(String handle) {
-        return new NodeBuilder()
-                .description("media_id")
-                .content(handle)
                 .build();
     }
 }

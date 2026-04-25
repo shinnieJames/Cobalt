@@ -167,8 +167,14 @@ public sealed class WhatsAppMediaException extends WhatsAppException
      *
      * @param httpStatusCode the HTTP status code from the MMS CDN server
      * @param message        the detail message describing the media error
-     * @implNote WAWebHttpErrors.HttpStatusCodeError - preserves the {@code status} field
+     * @implNote WAWebHttpErrors.HttpStatusCodeError - WA Web's {@code HttpStatusCodeError(status, name, options)}
+     *     constructor stores {@code status} on the error instance; Cobalt preserves the same
+     *     field via {@link #httpStatusCode()}. WA Web composes the message string
+     *     {@code name + ": " + status [+ " " + url]} at the call site; Cobalt expects the caller
+     *     to pre-build the message in the same shape.
      */
+    @WhatsAppWebExport(moduleName = "WAWebHttpErrors", exports = "HttpStatusCodeError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public WhatsAppMediaException(int httpStatusCode, String message) {
         super(message);
         this.httpStatusCode = httpStatusCode;
@@ -386,8 +392,25 @@ public sealed class WhatsAppMediaException extends WhatsAppException
          *
          * @param message the detail message describing the download failure
          * @param cause   the underlying cause of the download failure
-         * @implNote WAWebMmsClientErrors - download error with cause chain
+         * @implNote WAWebHttpErrors.HttpNetworkError - WA Web's
+         *     {@code WAWebHttpExtendedFetch} wraps any non-AbortError fetch failure in a
+         *     {@code HttpNetworkError(message)}; Cobalt instead uses Java's {@link java.net.http.HttpClient}
+         *     and folds {@link java.io.IOException} / {@link InterruptedException} into this
+         *     {@code Download(message, cause)} constructor at the call site (see
+         *     {@code MediaConnection.tryDownload}). The lack of HTTP status code on the resulting
+         *     exception is what {@code isDownloadRetryable} keys off to reproduce WA Web's
+         *     {@code WAWebMmsClientIsErrorRetryable.isErrorRetryable} branch for {@code HttpNetworkError}.
+         * @implNote WAWebHttpErrors.HttpTimedOutError - WA Web declares
+         *     {@code HttpTimedOutError extends HttpNetworkError} but no module in the bundle
+         *     constructs one; the class is dead in the JS source. Java's
+         *     {@link java.net.http.HttpTimeoutException} (a subclass of {@link java.io.IOException})
+         *     reaches this same constructor when the underlying request times out, mirroring
+         *     the inheritance shape on the JS side.
          */
+        @WhatsAppWebExport(moduleName = "WAWebHttpErrors", exports = "HttpNetworkError",
+                           adaptation = WhatsAppAdaptation.ADAPTED)
+        @WhatsAppWebExport(moduleName = "WAWebHttpErrors", exports = "HttpTimedOutError",
+                           adaptation = WhatsAppAdaptation.ADAPTED)
         public Download(String message, Throwable cause) {
             super(message, cause);
         }
@@ -529,8 +552,14 @@ public sealed class WhatsAppMediaException extends WhatsAppException
      *   <li>For codec errors: Use fallback processing or skip optional features</li>
      * </ul>
      *
-     * @implNote WAWebHttpErrors.MmsDownloadFilehashMismatchError - processing-level errors
-     *     like hash mismatches are separate from the HTTP status code errors in WAWebMmsClientErrors
+     * @implNote WAWebHttpErrors.HttpInvalidResponseError - the parent type in WA Web for
+     *     responses whose body fails structural validation (used for the upload-progress JSON
+     *     missing {@code resume} field, etc.); Cobalt collapses it into {@code Processing}.
+     * @implNote WAWebHttpErrors.MmsDownloadFilehashMismatchError - the
+     *     {@code HttpInvalidResponseError} subclass thrown when downloaded ciphertext byte
+     *     length disagrees with the expected {@code encFilehash}; Cobalt's analogous integrity
+     *     verification is handled inside {@code MediaDownloadInputStream} but throws as
+     *     {@link Download} so the existing per-host retry loop can react.
      */
     @WhatsAppWebModule(moduleName = "WAWebHttpErrors")
     public static final class Processing extends WhatsAppMediaException {
@@ -538,8 +567,28 @@ public sealed class WhatsAppMediaException extends WhatsAppException
          * Constructs a new media processing exception with the specified message.
          *
          * @param message the detail message describing the processing failure
-         * @implNote WAWebHttpErrors.MmsDownloadFilehashMismatchError - processing error
+         * @implNote WAWebHttpErrors.HttpInvalidResponseError - WA Web throws
+         *     {@code HttpInvalidResponseError(message, options)} when an MMS response is
+         *     structurally valid (HTTP 2xx) but the body is missing required fields
+         *     (e.g. {@code WAWebMmsClientMmsGetUploadProgress} on missing {@code resume}).
+         *     Cobalt uses {@code Processing(message)} for the same semantic of "the response
+         *     parsed but the content is unusable". WA Web composes the message as
+         *     {@code message [+ ": " + url]}; Cobalt expects the caller to embed any url
+         *     context in the supplied message.
+         * @implNote WAWebHttpErrors.MmsDownloadFilehashMismatchError - WA Web's
+         *     {@code MmsDownloadFilehashMismatchError(options)} extends
+         *     {@code HttpInvalidResponseError} with a fixed message
+         *     {@code "mmsDownload: filehash mismatch"} and is thrown when the byte length
+         *     of the downloaded ciphertext disagrees with {@code encFilehash}. Cobalt's
+         *     equivalent integrity check is implemented in {@code MediaDownloadInputStream}
+         *     and currently throws as {@link Download} ("Ciphertext SHA256 hash doesn't match
+         *     the expected value") to reuse the download-retry pipeline; both are non-fatal
+         *     and surface through {@link WhatsAppClientErrorHandler} unchanged.
          */
+        @WhatsAppWebExport(moduleName = "WAWebHttpErrors", exports = "HttpInvalidResponseError",
+                           adaptation = WhatsAppAdaptation.ADAPTED)
+        @WhatsAppWebExport(moduleName = "WAWebHttpErrors", exports = "MmsDownloadFilehashMismatchError",
+                           adaptation = WhatsAppAdaptation.ADAPTED)
         public Processing(String message) {
             super(message);
         }

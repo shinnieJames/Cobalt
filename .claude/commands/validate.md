@@ -51,15 +51,28 @@ validation/
   scope.md                 # Phase 1 scope report (for the user to review)
   manifest.json            # Whole-universe module-to-owner mapping
   plan.md                  # Topologically ordered agent list
-  reports/<Module>.md      # Per-module validation reports
+  reports/<Module>.md      # Per-module reports — outcome is VALIDATED, SKIPPED, or DEFERRED
   captures/<Module>/       # Live captures + Cobalt captures + diffs (persist across runs)
     live.json              # Captured real WA Web stanzas / WAM / HTTP
     cobalt.json            # Captured Cobalt output from the scratch file
     session.json           # Seed data (keys, device) pulled from the live session
     input.json             # Input used for both sides
     diff.md                # Rendered diff + verdict
-  flow-report.md           # Cross-cutting issues
-  phantom-report.md        # Dead-code sweep
+  sweep-wam.md             # Phase 3.5 WAM call-site sweep
+  sweep-smax.md            # Phase 3.6 SMAX call-site sweep
+  sweep-mex.md             # Phase 3.7 MEX call-site sweep
+  sweep-abprop.md          # Phase 3.8 AB-prop / capability-gate sweep
+  sweep-legacy-iq.md       # Phase 3.9 legacy WADeprecatedSendIq sweep
+  feature-tree.md          # Phase 3.11.1 feature taxonomy
+  features/<F>/<S>/        # Phase 3.11 per-feature artefacts
+    scenario.json          #   inputs + preconditions + expected observables
+    live.json              #   live-WA-Web capture
+    cobalt.json            #   Cobalt capture
+    diff.md                #   diff + verdict
+    debug.md               #   root-cause + fix (only if FUNCTIONAL_FIXED)
+  feature-summary.md       # Phase 3.11.7 index of (sub-)feature verdicts
+  flow-report.md           # Phase 3.12 cross-cutting issues
+  phantom-report.md        # Phase 3.13 dead-code sweep
   report.md                # Final synthesis
 ```
 
@@ -71,52 +84,42 @@ validation/
 
 ### Step 1.1: Enumerate the WA Module Universe
 
-The static snapshot manifest is the source of truth. Do not use MCP `search_modules` for enumeration — it's fuzzy and returns the top N. Read the manifest file directly.
+Call `mcp__whatsapp__list_modules` with no `platform` argument. The tool returns every module from every loaded catalog (web + desktop_windows + desktop_macos + ios) in one shot. Each entry carries `{name, platform, sourceBytes, exports[], dependencies[], sourcePath}`.
 
-1. Find the newest `web` snapshot id: `ls -t tooling/web-mcp-server-new/data/snapshots/web/ | head -1`.
-2. Read `tooling/web-mcp-server-new/data/snapshots/web/<id>/manifest.json`. The `modules` array is the full universe — every entry has `name`, `dependencies`, `exports`, `sourcePath`.
-3. Repeat for `desktop_windows`, `desktop_macos`, `ios`. Merge. The result is a de-duplicated set of `{platform, name, dependencies, exports}` tuples.
+Do NOT read `manifest.json` files from disk — the MCP tool is the source of truth and stays in sync with the active snapshot. Do NOT use `search_modules` for enumeration — it's fuzzy and capped.
 
-Expect ~10,000 modules for web alone. This is the raw universe.
+The result is a de-duplicated set of `{platform, name, dependencies, exports, sourceBytes}` tuples. Expect ~10,000 modules. This is the raw universe — every module gets a manifest entry. **No upfront filtering.** Each per-module agent decides for itself in Phase 3 whether to validate, skip, or defer to a call-site phase, using the skip criteria embedded in its prompt.
 
-### Step 1.2: Filter to the Validation Set
+### Step 1.2: Map WA Modules to Cobalt Owners
 
-Not every module needs to be validated. Cobalt is a headless library — UI modules, rendering helpers, design-system tokens, animation timing modules have no counterpart. Apply these filters in order:
-
-1. **UI skip**: name starts with `WAWebComponent`, contains `Component`, `Jsx`, `Icon`, `Emoji`, `Styles`, `Theme`, `Animation`, `Carousel`, `Modal`, `Tooltip`, `Popover`, `Button` (as a rendered element, not a protocol button), `*View` / `*Viewer` / `*Renderer` suffixes. Err on the side of skipping — if it's ambiguous, it's probably UI.
-2. **Pure-type skip**: every export is a constant, type alias, or enum with no behavior; the module's source is under ~200 bytes and exports look like pure literals.
-3. **Generated-proto skip**: module name starts with `WAProtoProxy*` or matches the compiled-proto naming pattern. These are regenerated from `tooling/proto/` and validated by shape, not by per-module agents.
-4. **Keep everything else.** Signal, Noise, stanza builders, senders, receivers, sync, WAM, app state, privacy, groups, newsletters, calls, media upload/download, device management, identity, prekeys — all kept.
-
-Write `validation/skip-list.json` with each skipped module and the reason. This is auditable — the user can reject a skip reason and force that module back into the set.
-
-### Step 1.3: Map WA Modules to Cobalt Owners
-
-For each retained WA module, find its Cobalt owner(s):
+For each WA module, find its Cobalt owner(s):
 
 1. `grep -rn '@WhatsAppWebModule(moduleName = "<name>"' modules/lib/src/main/java/` to find exact annotations. This is the authoritative mapping.
 2. If no match, `grep -rn '@WhatsAppWebExport(moduleName = "<name>"' modules/lib/src/main/java/` — some modules are split: the class isn't annotated but individual methods are.
-3. If still no match, the module is UNCLAIMED. Keep it in the plan as a candidate for `MISSING_IN_COBALT` — the agent will confirm.
+3. If still no match, the module is UNCLAIMED. Keep it in the plan as a candidate for `MISSING_IN_COBALT` — the per-module agent will confirm or mark SKIPPED if Cobalt has no counterpart by design.
 
-For each Cobalt file, the reverse mapping (Cobalt → WA modules) is already expressed by its annotations. Reverse-index it: for every Java file under `modules/lib/src/main/java/`, collect the `@WhatsAppWebModule`/`@WhatsAppWebExport` annotations it carries. Any Cobalt file that claims to adapt a WA module not in the kept set is either adapting a skipped module (delete the claim) or adapting a module we missed (add it back).
+For each Cobalt file, the reverse mapping (Cobalt → WA modules) is already expressed by its annotations. Reverse-index it: for every Java file under `modules/lib/src/main/java/`, collect the `@WhatsAppWebModule`/`@WhatsAppWebExport` annotations it carries.
 
-### Step 1.4: Build the Dependency Graph
+### Step 1.3: Build the Dependency Graph
 
-Using the `dependencies` arrays from Step 1.1, construct a directed graph over the kept modules. Edges go `module -> dep`. For every Cobalt file, also read its `import com.github.auties00.cobalt.*` statements and translate into WA-module edges via the mapping from Step 1.3 — this catches cases where Cobalt's internal dep graph diverges from WA Web's and the divergence is itself the thing under test.
+Using the `dependencies` arrays from Step 1.1, construct a directed graph over the universe. Edges go `module -> dep`. For every Cobalt file, also read its `import com.github.auties00.cobalt.*` statements and translate into WA-module edges via the mapping from Step 1.2 — this catches cases where Cobalt's internal dep graph diverges from WA Web's and the divergence is itself the thing under test.
 
 Compute strongly connected components (SCCs). Topologically sort. Leaves first, top-level consumers last.
 
-### Step 1.5: Write `validation/scope.md` and Wait for User Confirmation
+### Step 1.4: Write `validation/scope.md` and Wait for User Confirmation
 
 Present:
 - Total WA modules found per platform (counts).
-- Total kept after filtering (count + first 20 names).
-- Total skipped (count + a link to `skip-list.json`).
 - Total Cobalt files claimed vs unclaimed (counts).
-- Orphan Cobalt files (claim a WA module that was skipped) — list them for user review.
+- Orphan Cobalt files (claim a WA module that does not exist in the snapshot) — list them for user review.
 - The first and last 20 entries of the topological order.
 
-Ask the user to confirm or to edit the skip list. Do NOT proceed to Phase 2 until they say go.
+Note in scope.md that there is **no upfront skip list**. Each per-module agent in Phase 3 reads its module's source and decides one of three outcomes:
+- `VALIDATED` — Cobalt has a counterpart; per-module deep validation runs.
+- `SKIPPED` — module is irrelevant to a headless Java client (UI / browser-only / vendored / generated / locale data / platform-specific shell). Agent records the reason in one line.
+- `DEFERRED` — module belongs to an auto-generated catalog (WAM / SMAX / MEX / AB-prop / legacy IQ). Agent records which call-site phase will sweep it; the catalog itself is auto-generated and trusted.
+
+Ask the user to confirm or to amend the skip / defer criteria in the agent prompt. Do NOT proceed to Phase 2 until they say go.
 
 ---
 
@@ -212,7 +215,75 @@ validation/captures/{waModule}/
 ## Report Output Path
 validation/reports/{waModule}.md
 
-Validate every export exhaustively. For every export whose side-effect class is non-PURE:
+## Decide the module's outcome BEFORE validating
+
+Read the module source. Pick exactly one of three outcomes and write it as the
+first line of the report:
+
+### A. SKIPPED — Cobalt is a headless Java client; this module has no counterpart
+
+Mark SKIPPED if any of these apply:
+
+1. **UI rendering** — exports a JSX element / React component, name contains
+   `Component`, `Jsx`, `Icon`, `Emoji`, `Modal`, `Dialog`, `Drawer`, `Tooltip`,
+   `Popover`, `Carousel`, `Animation`, `Theme`, `Stylesheet`, ends with `View` /
+   `Viewer` / `Renderer` / `Plugin`.
+2. **Browser-only runtime** — touches `window` / `document` / `navigator` /
+   `localStorage`, IndexedDB schemas, web/service workers, Comlink/portal
+   bridges, Lexical editor.
+3. **Vendored third-party** — name starts with `WAWeb-` (hyphen), or matches
+   Lottie / easel.js / similar bundled libraries.
+4. **Generated artifact** — `.graphql` files, `*_facebookRelayOperation` stubs,
+   `WAProto*.pb` (Cobalt regenerates these from `tooling/proto/`).
+5. **Lazy-load entry** — name ends with `Loadable`; module body is a thin
+   `requireDeferred` wrapper.
+6. **Locale data** — `WAWebLocalesEmojiSuggestion*`, `WAWebCountriesLocale*`,
+   `WAWebLexicon*`, `WAWebFbt*`, `WAWebEphemeralL10N*`. Per-language data tables
+   with no logic.
+7. **Platform-specific desktop shell** — `WAWebWindowsHybridBridge*`,
+   `WAWebElectron*`, `WAWebMacOs*`. Cobalt is headless.
+8. **UI state** — routers, navigation, theme, keyboard input, file-saver,
+   clipboard, wallpaper, transitions, NUX onboarding, app rating.
+9. **Frontend infra** — `WAWebUse*` React hooks, `WAWebGet*` Backbone-getters,
+   `WAWebDom*` DOM helpers, `WAWebBroker*` browser brokers, `WAWebTP*` /
+   `WAWebTP3P*` third-party-bridge wrappers, `WAWebCanonical*` browser-recovery,
+   `WAWebStorage*` browser-storage manager, `WAWebApi*` / `WAWebCmd*`
+   frontend-bridge, `*Mutator` Backbone mutators, `*Loadable` lazy entries.
+
+If you decide SKIPPED, write a one-line reason and stop. Do NOT validate exports.
+
+### B. DEFERRED — module belongs to an auto-generated catalog
+
+The catalog itself is auto-generated and trusted; Cobalt's *usage* of it is
+validated by a separate Phase 3.5–3.9 call-site sweep. Mark DEFERRED and
+record the destination phase if any of these apply:
+
+- `WAWebWam*` / `*WamEvent` / `WAWebWamEnum*` → **Phase 3.5 (WAM call sites)**
+- `WASmax*` (any sub-shape: RPC / In* / Out* / *Mixin / *Enums) → **Phase 3.6 (SMAX call sites)**
+- `WAWebMex*` (the framework itself, not the protocol behind it) → **Phase 3.7 (MEX call sites)**
+- `WAWebAbProps*` / `WAWebFeatureGate*` / `WAWebCapability*` → **Phase 3.8 (AB-prop / capability call sites)**
+- `WADeprecatedSendIq` and modules that import it → **Phase 3.9 (legacy IQ call sites)**
+
+`WAWebUsync*` modules are **NOT** auto-generated — they are handwritten Java
+under `node/usync/`. They follow the regular VALIDATED path (per-module deep
+validation) like any other handwritten module.
+
+If you decide DEFERRED, write the destination phase and stop. Do NOT validate
+exports — they will be exercised through call-site parity in the named phase.
+
+### C. VALIDATED — Cobalt has a handwritten counterpart; do the full pass
+
+For every export, produce one of these statuses:
+- MATCH (DIRECT) — Cobalt's logic is byte-equivalent to WA Web's.
+- MATCH (ADAPTED) — Cobalt intentionally diverges per CLAUDE.md (sealed
+  exception hierarchy, flat store, virtual-thread blocking, nullable-Boolean
+  coalescing, per-mutation handler interface, dropped frontend bridge).
+- MISMATCH — fix the Cobalt owner; re-verify; record the fix.
+- MISSING_IN_COBALT — implement the missing piece in Cobalt.
+- LIVE_MATCH / LIVE_MISMATCH — observable parity verdict (see below).
+- SKIPPED_PURE — pure module; static parity is sufficient.
+
+For every export whose side-effect class is non-PURE:
   1. Ensure a live capture exists under validation/captures/{waModule}/live.json
      — if not, drive the live runtime to produce one and save it. NO TIMEOUTS on live calls.
   2. Write a scratch validation file under
@@ -225,23 +296,227 @@ Validate every export exhaustively. For every export whose side-effect class is 
 
 For PURE modules, static parity alone is sufficient. Skip steps 1-5.
 
-Exhaustive static parity is always required: every export must have a verdict.
-Leaves must be complete against WA Web, not just against current consumer needs.
-Fix all issues in owned files. Report issues in context files without editing.
-Write the report.
+## Looks-skippable but is NOT — DO NOT skip these
+
+- `WAWebHandle*` — almost always stanza handlers (`<message>`, `<receipt>`,
+  `<notification>`, `<presence>`, `<failure>`, `<stream:error>`). Validate.
+- `WAWebChatDialogState`, `WAWebMessageButton*`, `WAWebInteractive*Header`,
+  `WAWebList*Action` — protocol-level despite UI-flavoured tokens.
+- `WAWebWidFactory`, `WAWebJid*`, `WAWebWid*`, `WAParsableWapNode`,
+  `WAParsableXmlNode` — JID/WID/WAP protocol primitives.
+- Modules with very few exports (1–3) but >2KB source — usually behavior
+  modules, not pure helpers.
+- `WAWebSyncd*` infrastructure (CollectionHandler, AntiTampering, Bootstrap,
+  ResponseParser) — sync framework, not auto-gen.
+- `WAWebHistory*` — history sync orchestration; validate.
+- `WAWebLid*`, `*LidMigration*`, `*LidPnMapping*` — LID/PN protocol logic.
+- `WAWebE2EProto*` — handwritten proto serialization; validate.
+- `WAWebUsync*` — handwritten in Cobalt under `node/usync/`. Validate the
+  per-module Java parity directly. (USync is NOT auto-generated despite being
+  a typed-stanza family — its 11 protocols are stable enough to hand-write.)
+
+## General rules
+
+Exhaustive static parity is always required for VALIDATED modules: every export
+must have a verdict.  Leaves must be complete against WA Web, not just against
+current consumer needs. Fix all issues in owned files. Report issues in context
+files without editing. Write the report.
 ```
 
 ---
 
-## Phase 3.5: Cross-Cutting Flow Validation
+## Phases 3.5 – 3.9: Auto-Generated Catalog Call-Site Sweeps
 
-After every module has a clean report, spawn a single `validate-flow` agent for cross-file issues (delegation misses, type mismatches across module boundaries, per-call vs batched patterns). The agent reads every Phase 3 report's "Issues in Context Files" section plus any deferred LIVE_MISMATCH carried forward.
+The catalogs validated in these phases are produced by the autogen pipeline and
+trusted to be schema-correct. Each phase sweeps Cobalt for every call site that
+*uses* the catalog and confirms parity with the corresponding WA Web call site.
+Per-module agents in Phase 3 marked the relevant modules as `DEFERRED` to one
+of these phases — that's a record, not a dependency. These phases sweep the
+Cobalt codebase directly, not the deferred-module list.
+
+Each sweep is one agent invocation. They are independent — run them in
+parallel (background agents) since each axis is disjoint.
+
+### Phase 3.5: WAM Call-Site Sweep
+
+Walk Cobalt for every `wamService.commit(...)` call. For each call, look up the
+event class against the WAM catalog (auto-generated `wam/event/*Event.java`),
+then confirm WA Web emits the same event at the equivalent code path.
+
+Output: `validation/sweep-wam.md`.
+
+### Phase 3.6: SMAX Call-Site Sweep
+
+Walk Cobalt for every typed-stanza RPC call (whatever Cobalt's analogue to
+`WASmax{Domain}{Op}RPC` is — usually `*Sender.send(...)` invoking a request
+node + parsing the response node). For each, confirm the stanza shape matches
+the SMAX schema for the corresponding `WASmax*` module.
+
+Output: `validation/sweep-smax.md`.
+
+### Phase 3.7: MEX Call-Site Sweep
+
+Walk Cobalt for every `MexJsonOperation` / `MexArgoOperation` invocation. For
+each, confirm the GraphQL operation id, variables shape, and response parser
+align with the corresponding `WAWebMex*` module.
+
+Output: `validation/sweep-mex.md`.
+
+### Phase 3.8: AB-Prop / Capability-Gate Call-Site Sweep
+
+Walk Cobalt for every `ABProp.X.value()` and capability-gate read. For each,
+confirm the prop ID, default value, and read path match the WA Web feature-
+gate definition.
+
+Output: `validation/sweep-abprop.md`.
+
+### Phase 3.9: Legacy `WADeprecatedSendIq` Call-Site Sweep
+
+Walk Cobalt for every legacy IQ send (the analogues of WA Web modules that
+import `WADeprecatedSendIq`). For each, confirm the IQ shape matches.
+
+Output: `validation/sweep-legacy-iq.md`.
+
+---
+
+## Phase 3.11: Feature-Level Functional Validation
+
+Phase 3 + Phase 3.5–3.9 prove **structural** parity (shapes, schemas, call
+sites). They do **not** prove **functional** parity — that an end-to-end user
+flow produces the same observable outcome in Cobalt as in WhatsApp Web. A poll
+can pass per-module validation, every WAM call site can match, and yet the
+"vote on poll" flow can still be broken because Cobalt's poll-update receiver
+forgets to refresh the chat list.
+
+This phase closes that gap.
+
+### Step 3.11.1: Group VALIDATED modules into a feature taxonomy
+
+Spawn one `validate-feature-grouper` agent. It reads every Phase 3 report whose
+outcome is `VALIDATED` and groups the modules into a feature tree: `Feature →
+Sub-feature → Modules`. Example:
+
+```
+Messaging
+├── Send text message       (UserMessageSender, ChatFanoutStanza, ...)
+├── Edit message            (MessageEditAction, ProcessEditProtocolMsgs, ...)
+├── Delete for me           (DeleteMessageForMeHandler, ...)
+├── Delete for everyone     (RevokeMsgAction, ...)
+├── React to message        (ReactionSender, ReactionHandler, ...)
+└── Forward message         (ForwardMessage, ...)
+
+Newsletter
+├── Create newsletter
+├── Send newsletter message (NewsletterMessageSender, ...)
+├── Update newsletter
+└── Follow / unfollow
+
+Groups
+├── Create group
+├── Add participants
+├── Promote / demote admin
+└── ...
+
+Status
+├── Post status
+└── Reply to status
+
+Polls
+├── Send poll
+└── Vote on poll
+```
+
+Output: `validation/feature-tree.md`. The user reviews and either confirms or
+edits the grouping before Step 3.11.2 runs.
+
+### Step 3.11.2: Define behavioral scenarios per (sub-)feature
+
+For each leaf in the feature tree, the agent writes a scenario file under
+`validation/features/<Feature>/<Sub>/scenario.json` that describes:
+
+- **Inputs**: the user-level operation (e.g., "send text 'hello' to chat XYZ").
+- **Preconditions**: required session state (logged in, peer registered, etc.).
+- **Expected observables**: the set of stanzas, WAM events, HTTP calls, and
+  store mutations that constitute "this feature working."
+
+These scenarios are derived by reading WA Web's source for the feature path,
+not invented from spec. They reflect what WA Web *actually* does today.
+
+### Step 3.11.3: Drive the scenario in WhatsApp Web (live)
+
+Use the live emulator and `mcp__whatsapp__web_live_*` tools. Capture every
+outbound stanza, WAM commit, and HTTP request the live runtime produces. Save
+to `validation/features/<Feature>/<Sub>/live.json`.
+
+If a capture already exists from a prior run and the scenario inputs are
+unchanged, **reuse it**. Captures persist across runs.
+
+### Step 3.11.4: Drive the same scenario in Cobalt
+
+Spawn a scratch driver under
+`modules/lib/src/test/java/feature/<Feature><Sub>FeatureValidate.java` that
+exercises Cobalt at the same granularity (same inputs, same preconditions).
+Override `WhatsAppClient.sendNode` to capture stanzas, override `wamService` to
+capture WAM events, intercept `HttpClient` to capture HTTP. Save to
+`validation/features/<Feature>/<Sub>/cobalt.json`.
+
+### Step 3.11.5: Diff and verdict
+
+Diff `live.json` against `cobalt.json`. Three outcomes per (sub-)feature:
+
+- `FUNCTIONAL_PARITY` — captures match (modulo CLAUDE.md-documented adaptations).
+- `FUNCTIONAL_DIVERGENCE` — captures differ; root cause not yet identified.
+- `FUNCTIONAL_FIXED` — captures differed, agent traced the divergence to a
+  Cobalt code path, applied a fix, and re-ran to confirm parity.
+
+### Step 3.11.6: Debug Cobalt against WhatsApp Web
+
+For every `FUNCTIONAL_DIVERGENCE`, spawn one debug agent per feature. Its
+contract:
+
+1. Open the diff. Identify the first observable that diverged (missing stanza,
+   wrong attribute, missing WAM event, missing store mutation).
+2. Read the WA Web source path that produced the missing/divergent observable —
+   the agent must locate the actual JS code that emits it, not guess.
+3. Trace through Cobalt's equivalent code path. The agent reads Cobalt's owner
+   classes for every module Phase 3 grouped into this feature.
+4. Identify the divergence point. Categories include:
+   - missing call site in Cobalt (e.g., a WAM commit, a follow-up stanza)
+   - wrong order of operations (Cobalt computes Y before X but WA Web does X first)
+   - wrong condition (Cobalt's `if` predicate differs)
+   - missing observer / listener registration
+   - wrong store accessor (Cobalt reads from a different field)
+5. Apply the fix in the Cobalt owner. Re-drive Cobalt and re-diff. If the diff
+   shrinks but is non-empty, repeat from step 1.
+6. When the diff is empty, mark the feature `FUNCTIONAL_FIXED` and record the
+   root cause in `validation/features/<Feature>/<Sub>/debug.md`.
+
+If the agent cannot resolve the divergence (e.g., needs a change in a
+not-yet-validated dependency), it emits `FUNCTIONAL_BLOCKED` with the blocking
+reason. The orchestrator records these for Phase 3.12 (cross-cutting flow) to
+pick up.
+
+### Step 3.11.7: Write the feature index
+
+Output: `validation/feature-summary.md` — one row per (sub-)feature with its
+verdict and (for FIXED) a one-line root-cause summary.
+
+---
+
+## Phase 3.12: Cross-Cutting Flow Validation
+
+After every Phase 3 module has a verdict and every Phase 3.5–3.9 sweep has
+completed, spawn a single `validate-flow` agent for cross-file issues
+(delegation misses, type mismatches across module boundaries, per-call vs
+batched patterns). The agent reads every Phase 3 report's "Issues in Context
+Files" section plus any deferred LIVE_MISMATCH carried forward.
 
 Output: `validation/flow-report.md`.
 
-## Phase 3.6: Phantom Code Sweep
+## Phase 3.13: Phantom Code Sweep
 
-After cross-cutting flow validation, spawn `validate-phantom` to remove dead code. Same contract as before. Output: `validation/phantom-report.md`.
+After cross-cutting flow validation, spawn `validate-phantom` to remove dead
+code. Same contract as before. Output: `validation/phantom-report.md`.
 
 ---
 
@@ -249,7 +524,17 @@ After cross-cutting flow validation, spawn `validate-phantom` to remove dead cod
 
 ### Step 4.1: Completeness Check
 
-For every kept WA module, confirm its manifest entry has a verdict (not `pending`). For every export, confirm its status is one of MATCH, MISMATCH (fixed), MISSING_IN_COBALT (implemented), ADAPTED, LIVE_MATCH, LIVE_MISMATCH (fixed), or SKIPPED_PURE.
+For every WA module in the universe, confirm its manifest entry has a Phase 3
+outcome (one of `VALIDATED`, `SKIPPED`, `DEFERRED`). For every VALIDATED export,
+confirm its status is one of MATCH, MISMATCH (fixed), MISSING_IN_COBALT
+(implemented), ADAPTED, LIVE_MATCH, LIVE_MISMATCH (fixed), or SKIPPED_PURE.
+
+For every Phase 3.5–3.9 sweep, confirm the corresponding `sweep-*.md` exists
+and lists every Cobalt call site checked.
+
+For every (sub-)feature in `feature-tree.md`, confirm a row in
+`feature-summary.md` with a verdict in {`FUNCTIONAL_PARITY`,
+`FUNCTIONAL_DIVERGENCE`, `FUNCTIONAL_FIXED`, `FUNCTIONAL_BLOCKED`}.
 
 ### Step 4.2: Re-validation Pass
 
@@ -266,18 +551,29 @@ If any agent applied fixes, re-run Phase 3 from the first module that depended (
 
 ## Summary
 - Modules in universe: N (web: X, desktop_windows: Y, desktop_macos: Z, ios: W)
-- Modules kept after filtering: N
-- Modules validated: N
-- MATCH: N
-- MISMATCH (fixed): N
+- VALIDATED: N (per-module deep validation completed)
+- SKIPPED:   N (irrelevant to a headless Java client — UI / browser / vendored / generated / locale / platform-specific shell)
+- DEFERRED:  N (auto-generated catalog — covered by a Phase 3.5–3.9 sweep)
+- MATCH (DIRECT):     N
+- MATCH (ADAPTED):    N
+- MISMATCH (fixed):   N
 - MISSING_IN_COBALT (implemented): N
-- LIVE_MATCH: N
+- LIVE_MATCH:    N
 - LIVE_MISMATCH (fixed): N
-- ADAPTED: N
-- SKIPPED_PURE: N
+- SKIPPED_PURE:  N
+
+## Auto-Gen Sweep Outcomes
+Per-sweep call-site count + parity verdict — WAM / SMAX / MEX / AB-prop / legacy IQ.
+
+## Feature-Level Functional Outcomes
+| Feature | Sub-Feature | Modules | Verdict | Root cause (if FIXED) |
+|---------|-------------|---------|---------|------------------------|
+- FUNCTIONAL_PARITY:    N
+- FUNCTIONAL_FIXED:     N (root causes summarised inline)
+- FUNCTIONAL_BLOCKED:   N (carried into Phase 3.12 cross-cutting flow)
 
 ## Observable Parity
-Per-side-effect-class outcome: how many STANZA modules reached live parity, how many WAM, etc.
+Per-side-effect-class outcome over the VALIDATED set: how many STANZA modules reached live parity, how many WAM, etc.
 
 ## Issues Fixed
 Grouped by module, with category + one-sentence fix description.
@@ -285,7 +581,7 @@ Grouped by module, with category + one-sentence fix description.
 ## Remaining ADAPTED Items
 Modules where Cobalt intentionally diverges, with reason.
 
-## Per-Module Table
+## Per-Module Table (VALIDATED only)
 | Module | SideEffects | Exports | MATCH | MISMATCH | MISSING_COBALT | LIVE_MATCH | LIVE_MISMATCH | ADAPTED |
 |--------|-------------|---------|-------|----------|----------------|------------|---------------|---------|
 ```
@@ -301,6 +597,6 @@ Modules where Cobalt intentionally diverges, with reason.
 - **Captures persist.** `validation/captures/<Module>/` survives across runs. Agents reuse existing captures.
 - **Exhaustiveness.** Every kept WA module has a verdict. Every export has a status.
 - **Live session is shared.** Start once in Phase 1, reuse for every agent, stop in Phase 4.3.
-- **Filter transparency.** Every skip is in `skip-list.json` with a reason.
+- **Skip transparency.** Every per-module agent records its outcome (`VALIDATED` / `SKIPPED` / `DEFERRED`) on the first line of the report, with a one-line reason for SKIPPED and a destination phase for DEFERRED. There is no upfront `skip-list.json`.
 - **Topological order is mandatory.** Leaves first. Every leaf must be complete against WA Web, regardless of current consumer needs.
 - **Every issue must be fixed, not only reported.**

@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.bot.profile;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import it.auties.protobuf.annotation.ProtobufDeserializer;
 import it.auties.protobuf.annotation.ProtobufSerializer;
 
@@ -23,28 +26,61 @@ import it.auties.protobuf.annotation.ProtobufSerializer;
  * obtained via the {@link #of(String)} factory method, which maps
  * wire-format strings to the appropriate variant.
  *
+ * @implNote WAWebBotProfileCategory.BotProfileCategory:
+ * {@code n("$InternalEnum")({SYNTHETIC:"synthetic",LIVING:"living",
+ * FICTIONAL:"fictional",HISTORICAL:"historical"})}. WA Web exposes a
+ * plain string-valued enum with four members. Cobalt adapts it to a
+ * sealed interface of record singletons so that an {@link Unknown}
+ * variant can carry forward-compatible unrecognised wire values without
+ * breaking deserialization; the four canonical singletons preserve the
+ * exact lowercase wire strings.
  * @see BotProfile#category()
  */
+@WhatsAppWebModule(moduleName = "WAWebBotProfileCategory")
 public sealed interface BotProfileCategory {
     /**
      * Singleton for a fully synthetic or artificial bot persona with no
      * real-world counterpart, such as Meta AI.
+     *
+     * @implNote WAWebBotProfileCategory.BotProfileCategory.SYNTHETIC with on-wire
+     * value {@code "synthetic"}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebBotProfileCategory",
+            exports = "BotProfileCategory.SYNTHETIC",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     BotProfileCategory SYNTHETIC = new Synthetic();
 
     /**
      * Singleton for a bot persona modeled after a currently living person.
+     *
+     * @implNote WAWebBotProfileCategory.BotProfileCategory.LIVING with on-wire
+     * value {@code "living"}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebBotProfileCategory",
+            exports = "BotProfileCategory.LIVING",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     BotProfileCategory LIVING = new Living();
 
     /**
      * Singleton for a bot persona modeled after a fictional character.
+     *
+     * @implNote WAWebBotProfileCategory.BotProfileCategory.FICTIONAL with on-wire
+     * value {@code "fictional"}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebBotProfileCategory",
+            exports = "BotProfileCategory.FICTIONAL",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     BotProfileCategory FICTIONAL = new Fictional();
 
     /**
      * Singleton for a bot persona modeled after a historical figure.
+     *
+     * @implNote WAWebBotProfileCategory.BotProfileCategory.HISTORICAL with on-wire
+     * value {@code "historical"}.
      */
+    @WhatsAppWebExport(moduleName = "WAWebBotProfileCategory",
+            exports = "BotProfileCategory.HISTORICAL",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     BotProfileCategory HISTORICAL = new Historical();
 
     /**

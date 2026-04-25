@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.commerce;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
@@ -517,6 +520,97 @@ public final class OrderMessage implements ContextualMessage {
          */
         public int index() {
             return this.index;
+        }
+    }
+
+    /**
+     * Enumerates the canonical catalog backends that can originate an
+     * {@link OrderMessage}.
+     *
+     * <p>The wire representation of {@link OrderMessage#catalogType} is a
+     * plain string: each constant of this enum corresponds to one of the
+     * string values produced by WA Web's {@code WAWebOrderRequestMsg.flow}
+     * mirrored enum. Cobalt exposes the set as a typed {@link Enum} so that
+     * call sites can branch on a compile-checked value instead of spelling
+     * the string literally, but the field on {@link OrderMessage} remains a
+     * {@link String} to preserve the over-the-wire format.
+     *
+     * @implNote WAWebOrderRequestMsg.flow.CatalogType — mirrored string enum
+     *           built by {@code $InternalEnum.Mirrored(["SMB_META_CATALOG",
+     *           "NATIVE", "UNKNOWN"])}. The constant name equals its wire
+     *           string value.
+     */
+    @WhatsAppWebModule(moduleName = "WAWebOrderRequestMsg.flow")
+    public enum CatalogType {
+        /**
+         * The order was placed from a Meta-hosted small-business catalog.
+         *
+         * @implNote WAWebOrderRequestMsg.flow.CatalogType.SMB_META_CATALOG
+         */
+        @WhatsAppWebExport(moduleName = "WAWebOrderRequestMsg.flow", exports = "CatalogType.SMB_META_CATALOG", adaptation = WhatsAppAdaptation.DIRECT)
+        SMB_META_CATALOG,
+
+        /**
+         * The order was placed from the business's native WhatsApp catalog.
+         *
+         * @implNote WAWebOrderRequestMsg.flow.CatalogType.NATIVE
+         */
+        @WhatsAppWebExport(moduleName = "WAWebOrderRequestMsg.flow", exports = "CatalogType.NATIVE", adaptation = WhatsAppAdaptation.DIRECT)
+        NATIVE,
+
+        /**
+         * The catalog backend could not be determined for the order.
+         *
+         * @implNote WAWebOrderRequestMsg.flow.CatalogType.UNKNOWN
+         */
+        @WhatsAppWebExport(moduleName = "WAWebOrderRequestMsg.flow", exports = "CatalogType.UNKNOWN", adaptation = WhatsAppAdaptation.DIRECT)
+        UNKNOWN;
+
+        /**
+         * Returns the wire-format name of this catalog type, matching verbatim
+         * the string value emitted by {@code $InternalEnum.Mirrored} in WA Web.
+         *
+         * <p>Because {@code $InternalEnum.Mirrored} assigns each constant's
+         * string value to the constant's own name, this is exactly
+         * {@link #name()}; the dedicated accessor exists so that callers do
+         * not accidentally couple to {@link Enum#name()} for the wire format.
+         *
+         * @return the string key used in the {@code catalogType} proto field
+         * @implNote WAWebOrderRequestMsg.flow: {@code $InternalEnum.Mirrored([...])}
+         *           sets {@code CatalogType.X === "X"} for every listed entry.
+         */
+        public String wireName() {
+            return name();
+        }
+
+        /**
+         * Resolves a wire-format catalog type name to its enum constant, or
+         * returns {@code null} when the name does not correspond to any known
+         * catalog type.
+         *
+         * <p>Unlike {@link #valueOf(String)} this method does not throw on
+         * unknown input, matching the defensive lookup behaviour used by WA
+         * Web callers when reading a catalog type that may have been
+         * introduced on the server since the client was built.
+         *
+         * @param name the wire-format catalog type name, or {@code null}
+         * @return the matching {@link CatalogType}, or {@code null} when
+         *         {@code name} is {@code null} or not recognised
+         * @implNote ADAPTED: WAWebOrderRequestMsg.flow — JS reads the mirrored
+         *           map with a string index expression; the Java counterpart
+         *           converts the string to an enum constant and tolerates
+         *           unknown names.
+         */
+        public static CatalogType fromWireName(String name) {
+            if (name == null) {
+                return null;
+            }
+            for (var type : values()) {
+                if (type.name().equals(name)) {
+                    return type;
+                }
+            }
+            return null;
         }
     }
 }

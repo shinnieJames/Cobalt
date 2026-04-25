@@ -89,6 +89,17 @@
                     </dependency>
                 </dependencies>
             </plugin>
+
+            <!-- Used by /validate scratch validators in src/test/java to invoke a main() against the test classpath. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <classpathScope>test</classpathScope>
+                    <commandlineArgs>--enable-preview --add-modules jdk.incubator.vector --add-opens java.base/jdk.internal.misc=ALL-UNNAMED</commandlineArgs>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

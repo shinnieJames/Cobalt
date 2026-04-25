@@ -16,12 +16,22 @@ import java.util.stream.Collectors;
  * affordances. Admins use these flags to opt the newsletter into premium
  * or experimental features such as analytics, polls, quizzes, and music
  * sharing.
+ *
+ * @implNote WA Web's {@code WAWebCommonNewsletterEnums.NewsletterCapability}
+ *           is a zero-indexed numeric enum with no {@code UNKNOWN} sentinel.
+ *           Cobalt adds {@code UNKNOWN} as a defensive fallback for
+ *           unrecognized server values; this shifts the wire indices by one
+ *           relative to WA Web. String-based {@link #of(String)} lookups are
+ *           unaffected because they key off the constant name.
  */
 @ProtobufEnum
 public enum NewsletterCapability {
     /**
      * The capability was not reported by the server or is not recognized
      * by this version of the client.
+     *
+     * @implNote NO_WA_BASIS: defensive sentinel added by Cobalt; not present
+     *           in {@code WAWebCommonNewsletterEnums.NewsletterCapability}.
      */
     UNKNOWN(0),
 
@@ -64,31 +74,69 @@ public enum NewsletterCapability {
     QUIZ(7),
 
     /**
+     * The first admin context card surfaced in the admin onboarding flow.
+     */
+    ADMIN_CONTEXT_CARD_1(8),
+
+    /**
+     * The second admin context card surfaced in the admin onboarding flow.
+     */
+    ADMIN_CONTEXT_CARD_2(9),
+
+    /**
+     * The third admin context card surfaced in the admin onboarding flow.
+     */
+    ADMIN_CONTEXT_CARD_3(10),
+
+    /**
      * Admins may share sticker packs directly into the newsletter.
      */
-    SHARE_STICKER_PACKS(8),
+    SHARE_STICKER_PACKS(11),
+
+    /**
+     * The initial admin onboarding flow is enabled for this newsletter.
+     */
+    ADMIN_ONBOARDING(12),
+
+    /**
+     * The second-iteration admin onboarding flow is enabled for this
+     * newsletter.
+     */
+    ADMIN_ONBOARDING_2(13),
 
     /**
      * Admins may attach music tracks to published messages.
      */
-    MUSIC(9),
+    MUSIC(14),
 
     /**
-     * The newsletter exposes the admin-profile attribution feature.
+     * The client surfaces a tooltip that advertises newly-supported
+     * message types.
      */
-    ADMIN_PROFILE(10),
+    NEW_MESSAGE_TYPES_TOOLTIP(15),
 
     /**
      * The client surfaces a nudge encouraging admins to pin important
      * messages.
      */
-    PINNING_NUDGE(11),
+    PINNING_NUDGE(16),
 
     /**
      * The client surfaces the thread-menu feature inside the newsletter
      * view.
      */
-    THREAD_MENU(12);
+    THREAD_MENU(17),
+
+    /**
+     * The newsletter exposes the admin-profile attribution feature.
+     */
+    ADMIN_PROFILE(18),
+
+    /**
+     * The newsletter exposes the channel-status producer feature, letting
+     * admins publish ephemeral status updates tied to the channel.
+     */
+    CHANNEL_STATUS_PRODUCER(19);
 
     /**
      * Lookup table from the lowercase enum name to the constant, used by

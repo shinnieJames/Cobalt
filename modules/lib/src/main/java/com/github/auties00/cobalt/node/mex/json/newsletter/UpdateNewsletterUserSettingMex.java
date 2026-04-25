@@ -15,7 +15,6 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -50,10 +49,14 @@ public sealed interface UpdateNewsletterUserSettingMex extends MexJsonOperation 
      */
     @WhatsAppWebModule(moduleName = "WAWebMexUpdateNewsletterUserSetting")
     final class Request implements UpdateNewsletterUserSettingMex {
-        private final String input;
+        private final String newsletterId;
+        private final String type;
+        private final String value;
 
-        public Request(String input) {
-            this.input = input;
+        public Request(String newsletterId, String type, String value) {
+            this.newsletterId = newsletterId;
+            this.type = type;
+            this.value = value;
         }
 
         /**
@@ -61,8 +64,8 @@ public sealed interface UpdateNewsletterUserSettingMex extends MexJsonOperation 
          * WhatsApp relay.
          *
          * @implNote WAWebMexUpdateNewsletterUserSetting.mexUpdateNewsletterUserSetting: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
+         * {@code variables} object inline as {@code {input: {newsletter_id, type, value}}}
+         * and delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
          * via {@code fastjson2.JSONWriter} and wraps it through
          * {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
@@ -81,12 +84,26 @@ public sealed interface UpdateNewsletterUserSettingMex extends MexJsonOperation 
                 writer.writeColon();
                 writer.startObject();
                 // WAWebMexUpdateNewsletterUserSetting.mexUpdateNewsletterUserSetting
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // Emits the nested "input" object: {newsletter_id, type, value}
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                if (newsletterId != null) {
+                    writer.writeName("newsletter_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(newsletterId);
                 }
+                if (type != null) {
+                    writer.writeName("type");
+                    writer.writeColon();
+                    writer.writeString(type);
+                }
+                if (value != null) {
+                    writer.writeName("value");
+                    writer.writeColon();
+                    writer.writeString(value);
+                }
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 

@@ -377,7 +377,11 @@ public final class NodeEncoder {
      *
      * @implNote WAWap.encodeStanza: the JS encoder writes the same
      *           leading zero flags byte and then walks the node tree
-     *           producing the wire bytes.
+     *           producing the wire bytes. WAWap.makeStanza: the JS
+     *           {@code makeStanza} normaliser deep-copies a {@code WapNode}
+     *           tree converting any string content into UTF-8 byte views
+     *           before encoding; Cobalt performs the same conversion
+     *           inline in {@link #writeContent(Node, byte[], int)}.
      * @param node   the node to encode
      * @param output the output byte array
      * @param offset the offset in the output array where encoding should
@@ -389,6 +393,8 @@ public final class NodeEncoder {
      *         to a different size than {@code length}
      */
     @WhatsAppWebExport(moduleName = "WAWap", exports = "encodeStanza",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWap", exports = "makeStanza",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public static int encode(Node node, byte[] output, int offset, int length) {
         output[offset] = 0;

@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.util.Objects;
 import java.util.Optional;
 
 /**

@@ -157,9 +157,9 @@ public final class ContentBindingToken {
      *
      * <p>Recognised formats (with optional {@code www.} and {@code m.}):
      * <ul>
-     *   <li>{@code https://youtu.be/XXXXXXXXXXX}</li>
-     *   <li>{@code https://youtube.com/watch?v=XXXXXXXXXXX}</li>
-     *   <li>{@code https://youtube.com/shorts/XXXXXXXXXXX}</li>
+     *   <li>{@code http(s)://youtu.be/XXXXXXXXXXX}</li>
+     *   <li>{@code http(s)://youtube.com/watch?v=XXXXXXXXXXX}</li>
+     *   <li>{@code http(s)://youtube.com/shorts/XXXXXXXXXXX}</li>
      * </ul>
      *
      * @param url the URL to parse
@@ -168,45 +168,58 @@ public final class ContentBindingToken {
      * @implNote WAWebUtilsYoutubeUrlParser.parseYoutubeVideoId: matches
      * against {@code WAWebPipConst.URL_PATTERNS.ONLINE_VIDEO_URL.YOUTUBE}
      * patterns after stripping {@code www.} via {@code WAWebURLUtils.withoutWww}.
+     * The JS regexes are:
+     * <pre>
+     *   /^https?:\/\/youtu\.be\/(.{11})/
+     *   /^https?:\/\/(m\.)?youtube\.com\/watch\?v=(.{11})/
+     *   /^https?:\/\/(m\.)?youtube\.com\/shorts\/(.{11})/
+     * </pre>
+     * WAWebURLUtils.withoutWww: {@code t.split("www.").join("")} — removes
+     * every occurrence of {@code "www."} from the string before matching.
      */
     @WhatsAppWebExport(moduleName = "WAWebUtilsYoutubeUrlParser", exports = "parseYoutubeVideoId",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private static String parseYoutubeVideoId(String url) {
-        // Skip scheme: find the position after "://"
-        var schemeEnd = url.indexOf("://");
-        if (schemeEnd < 0) {
+        if (url == null) {
             return null;
         }
-        var hostStart = schemeEnd + 3;
 
-        // WAWebURLUtils.withoutWww: skip "www." prefix
-        if (url.startsWith("www.", hostStart)) {
-            hostStart += 4;
+        // WAWebURLUtils.withoutWww: t.split("www.").join("") — strips every "www." occurrence.
+        var stripped = url.contains("www.") ? url.replace("www.", "") : url;
+
+        // WAWebUtilsYoutubeUrlParser.parseYoutubeVideoId: regexes are anchored at ^https?://
+        int hostStart;
+        if (stripped.startsWith("https://")) {
+            hostStart = 8;
+        } else if (stripped.startsWith("http://")) {
+            hostStart = 7;
+        } else {
+            return null;
         }
 
-        // youtu.be/XXXXXXXXXXX
-        if (url.startsWith("youtu.be/", hostStart)) {
-            return extractVideoId(url, hostStart + 9);
+        // /^https?:\/\/youtu\.be\/(.{11})/
+        if (stripped.startsWith("youtu.be/", hostStart)) {
+            return extractVideoId(stripped, hostStart + 9);
         }
 
-        // Skip optional "m." prefix
-        if (url.startsWith("m.", hostStart)) {
+        // /^https?:\/\/(m\.)?youtube\.com\/... — optional "m." prefix on youtube.com only
+        if (stripped.startsWith("m.", hostStart)) {
             hostStart += 2;
         }
 
-        if (!url.startsWith("youtube.com/", hostStart)) {
+        if (!stripped.startsWith("youtube.com/", hostStart)) {
             return null;
         }
         var pathStart = hostStart + 12;
 
-        // youtube.com/watch?v=XXXXXXXXXXX
-        if (url.startsWith("watch?v=", pathStart)) {
-            return extractVideoId(url, pathStart + 8);
+        // /^https?:\/\/(m\.)?youtube\.com\/watch\?v=(.{11})/
+        if (stripped.startsWith("watch?v=", pathStart)) {
+            return extractVideoId(stripped, pathStart + 8);
         }
 
-        // youtube.com/shorts/XXXXXXXXXXX
-        if (url.startsWith("shorts/", pathStart)) {
-            return extractVideoId(url, pathStart + 7);
+        // /^https?:\/\/(m\.)?youtube\.com\/shorts\/(.{11})/
+        if (stripped.startsWith("shorts/", pathStart)) {
+            return extractVideoId(stripped, pathStart + 7);
         }
 
         return null;

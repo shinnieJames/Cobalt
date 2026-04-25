@@ -47,6 +47,8 @@ import java.util.Optional;
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalog")
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalogQuery.graphql")
+@WhatsAppWebModule(moduleName = "WAWebBizParseProductGraphql")
+@WhatsAppWebModule(moduleName = "WAWebBizParseProductGraphql_product.graphql")
 public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCatalogMex.Request, QueryCatalogMex.Response {
     /**
      * The numeric GraphQL query identifier assigned by the WhatsApp relay
@@ -75,9 +77,11 @@ public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCa
         private final int width;
         private final int height;
         private final String afterCursor;
+        private final boolean allowShopSource;
 
         /**
-         * Creates a new catalog query request.
+         * Creates a new catalog query request with the WA Web default
+         * {@code allowShopSource=false}.
          *
          * @param catalogJid  the target business JID owning the catalog
          * @param limit       the page size (maximum number of products
@@ -89,21 +93,50 @@ public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCa
          *                    page, or {@code null} for the first page
          */
         public Request(String catalogJid, int limit, int width, int height, String afterCursor) {
+            this(catalogJid, limit, width, height, afterCursor, false);
+        }
+
+        /**
+         * Creates a new catalog query request.
+         *
+         * @param catalogJid       the target business JID owning the
+         *                         catalog
+         * @param limit            the page size (maximum number of products
+         *                         returned per page)
+         * @param width            the requested image width in pixels used
+         *                         when the relay rewrites image URLs
+         * @param height           the requested image height in pixels
+         * @param afterCursor      the pagination cursor returned by a
+         *                         previous page, or {@code null} for the
+         *                         first page
+         * @param allowShopSource  whether the request opts into the
+         *                         WhatsApp shop source surface; mapped to
+         *                         the WA Web {@code allow_shop_source}
+         *                         enum string
+         */
+        public Request(String catalogJid, int limit, int width, int height, String afterCursor, boolean allowShopSource) {
             this.catalogJid = catalogJid;
             this.limit = limit;
             this.width = width;
             this.height = height;
             this.afterCursor = afterCursor;
+            this.allowShopSource = allowShopSource;
         }
 
         /**
          * Builds the IQ stanza that dispatches this operation to the
          * WhatsApp relay.
          *
-         * @implNote WAWebQueryCatalog: mirrors the WA Web
-         * {@code request.product_catalog} variable shape with {@code jid},
-         * {@code allow_shop_source}, {@code width}, {@code height},
-         * {@code limit} and {@code after} stringified as WA expects.
+         * @implNote WAWebQueryCatalog: mirrors the exact WA Web
+         * {@code request.product_catalog} variable shape, in order:
+         * {@code jid}, {@code allow_shop_source} (enum string),
+         * {@code width}, {@code height}, {@code direct_connection_encrypted_info}
+         * (always {@code null} from this surface),
+         * {@code limit}, {@code after} (always emitted, possibly {@code null}),
+         * {@code catalog_session_id}, {@code variant_info_fields},
+         * {@code variant_thumbnail_height}, {@code variant_thumbnail_width}.
+         * WA Web emits explicit {@code null} values for the optional fields
+         * rather than omitting the keys.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -123,28 +156,54 @@ public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCa
                 writer.writeName("product_catalog");
                 writer.writeColon();
                 writer.startObject();
+                // WAWebQueryCatalog.default: jid: catalogWid.toString()
                 writer.writeName("jid");
                 writer.writeColon();
                 writer.writeString(catalogJid);
-                // WAWebQueryCatalog.default: allow_shop_source is serialised as an enum-like string
+                // WAWebQueryCatalog.default: allow_shop_source: u ? "ALLOWSHOPSOURCE_TRUE" : "ALLOWSHOPSOURCE_FALSE"
                 writer.writeName("allow_shop_source");
                 writer.writeColon();
-                writer.writeString("ALLOWSHOPSOURCE_TRUE");
-                // WAWebQueryCatalog.default: width/height are stringified before dispatch
+                writer.writeString(allowShopSource ? "ALLOWSHOPSOURCE_TRUE" : "ALLOWSHOPSOURCE_FALSE");
+                // WAWebQueryCatalog.default: width: String(y)
                 writer.writeName("width");
                 writer.writeColon();
                 writer.writeString(Integer.toString(width));
+                // WAWebQueryCatalog.default: height: String(p)
                 writer.writeName("height");
                 writer.writeColon();
                 writer.writeString(Integer.toString(height));
+                // WAWebQueryCatalog.default: direct_connection_encrypted_info: m (always null at this surface)
+                writer.writeName("direct_connection_encrypted_info");
+                writer.writeColon();
+                writer.writeNull();
+                // WAWebQueryCatalog.default: limit: String(_)
                 writer.writeName("limit");
                 writer.writeColon();
                 writer.writeString(Integer.toString(limit));
+                // WAWebQueryCatalog.default: after: l (afterCursor, may be null but key always present)
+                writer.writeName("after");
+                writer.writeColon();
                 if (afterCursor != null) {
-                    writer.writeName("after");
-                    writer.writeColon();
                     writer.writeString(afterCursor);
+                } else {
+                    writer.writeNull();
                 }
+                // WAWebQueryCatalog.default: catalog_session_id: d (checkmarkCollectionId, null at this surface)
+                writer.writeName("catalog_session_id");
+                writer.writeColon();
+                writer.writeNull();
+                // WAWebQueryCatalog.default: variant_info_fields: f (null at this surface)
+                writer.writeName("variant_info_fields");
+                writer.writeColon();
+                writer.writeNull();
+                // WAWebQueryCatalog.default: variant_thumbnail_height: g!=null ? String(g) : null
+                writer.writeName("variant_thumbnail_height");
+                writer.writeColon();
+                writer.writeNull();
+                // WAWebQueryCatalog.default: variant_thumbnail_width: h!=null ? String(h) : null
+                writer.writeName("variant_thumbnail_width");
+                writer.writeColon();
+                writer.writeNull();
                 writer.endObject();
                 writer.endObject();
                 writer.endObject();
@@ -302,7 +361,7 @@ public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCa
             try {
                 url = URI.create(urlString);
             } catch (IllegalArgumentException ignored) {
-                url = null;
+                // url stays null
             }
         }
         // WAWebBizParseProductGraphql.parseProductGraphQL: currency
@@ -314,7 +373,7 @@ public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCa
             try {
                 price = Long.parseLong(priceString);
             } catch (NumberFormatException ignored) {
-                price = 0L;
+                // price stays 0L
             }
         }
         // WAWebBizParseProductGraphql.parseProductGraphQL: is_hidden is expressed as the "ISHIDDEN_TRUE" enum string
@@ -343,7 +402,7 @@ public sealed interface QueryCatalogMex extends MexJsonOperation permits QueryCa
                         try {
                             encryptedImage = URI.create(originalUrl);
                         } catch (IllegalArgumentException ignored) {
-                            encryptedImage = null;
+                            // encryptedImage stays null
                         }
                     }
                 }

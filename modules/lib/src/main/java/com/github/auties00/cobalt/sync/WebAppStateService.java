@@ -44,6 +44,7 @@ import com.github.auties00.cobalt.sync.handler.SyncdIndexUtils;
 import com.github.auties00.cobalt.util.SchedulerUtils;
 import com.github.auties00.cobalt.wam.event.MdAppStateMessageRangeEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdAppStateSyncMutationStatsEventBuilder;
+import com.github.auties00.cobalt.wam.event.SyncdKeyCountEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateDataDownloadedEventBuilder;
 import com.github.auties00.cobalt.wam.event.MdBootstrapDataAppliedEventBuilder;
@@ -67,6 +68,7 @@ import it.auties.protobuf.stream.ProtobufInputStream;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
@@ -81,7 +83,8 @@ import java.util.logging.Logger;
  *
  * @implNote WAWebSyncd (state machine orchestration, markCollectionsForSync, scheduleSyncCollections,
  *     initializeStateMachine, processOnAppResume, syncBlockedCollections, getInFlightCollections,
- *     getPendingCollections), WAWebSyncdServerSync (serverSync, syncRound, buildAndSendIq),
+ *     getPendingCollections, reportWam, logKeysInfoInIntern),
+ *     WAWebSyncdServerSync (serverSync, syncRound, buildAndSendIq),
  *     WAWebSyncdCollectionHandler (applyAppStateSyncResponse, applyIndividualMutations),
  *     WAWebSyncdCollectionUtils (isBootstrap — adapted to {@code SyncCollectionMetadata.bootstrapped}
  *     boolean field with inverted semantics, inlined at call sites; isCriticalCollection — adapted
@@ -171,6 +174,14 @@ public final class WebAppStateService {
      * @implNote WAWebTasksDefinitions.REPORT_SYNCD_ACTION_STAT (recurring daily task handle)
      */
     private volatile CompletableFuture<?> periodicReportSyncdStatsJob;
+
+    /**
+     * Handle of the currently scheduled daily syncd key stats reporting job,
+     * or {@code null} when no job is scheduled.
+     *
+     * @implNote WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS (recurring daily task handle)
+     */
+    private volatile CompletableFuture<?> periodicReportSyncdKeyStatsJob;
 
     /**
      * Creates a new WebAppStateService instance.
@@ -332,6 +343,53 @@ public final class WebAppStateService {
             }
         }
         return Collections.unmodifiableSet(result); // WAWebSyncd.pe: return F (Set)
+    }
+
+    /**
+     * Reports the current syncd telemetry counters into the WAM aggregator.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncd.reportWam} (z/j): queries
+     * {@code WAWebGetSyncAction.countSyncActionsInTransaction} and feeds the
+     * {@code WAWebSyncdWamAppState} aggregator with stored mutation count, invalid
+     * action count (Malformed state), unsupported action count, and missing key
+     * count. The aggregator is later flushed by {@code WAWebSyncdReportSyncdStatJob}
+     * which commits the {@code MdAppStateSyncMutationStats} and {@code SyncdKeyCount}
+     * WAM events.
+     *
+     * <p>In Cobalt, the per-bucket {@code MdAppStateSyncMutationStats} reporting is
+     * driven by {@link #reportSyncdStatsJob()} (which directly queries the store
+     * and commits one event per mutation name) and the {@code SyncdKeyCount} reporting
+     * is driven by {@link #reportSyncdKeyStatsJob()}. The {@code WAWebSyncdWamAppState}
+     * intermediate aggregator is collapsed away because Cobalt's event pipeline does
+     * not require the aggregate-then-flush pattern WA Web uses. This method exists to
+     * keep the export surface complete and is a no-op pass-through that simply forwards
+     * to the existing recurring job entry points.
+     *
+     * @implNote WAWebSyncd.reportWam (z), WAWebSyncdWamAppState (aggregator collapsed
+     *           away — counts flow directly into per-event commits)
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncd", exports = "reportWam", adaptation = WhatsAppAdaptation.ADAPTED)
+    public void reportWam() {
+        reportSyncdStats(); // WAWebSyncd.j: setStoredMutationCount + setInvalidActionCount + setUnsupportedActionCount (commits MdAppStateSyncMutationStats per mutation name)
+        reportSyncdKeyStats(); // WAWebSyncd.j: setMissingKeyCount (commits SyncdKeyCount)
+    }
+
+    /**
+     * Logs syncd key information to the WhatsApp Web internal-only logging channel.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncd.logKeysInfoInIntern} (X/Y): the JS body
+     * is an empty async generator ({@code function*(){}}) — the export exists as a
+     * tree-shaken stub for the {@code intern}-build logging pipeline. There is no
+     * runtime behavior in production WA Web bundles.
+     *
+     * <p>Cobalt has no separate internal-build channel, so this is a no-op.
+     *
+     * @implNote WAWebSyncd.logKeysInfoInIntern (X) — empty async function in the
+     *           production JS bundle; intentional no-op in Cobalt.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncd", exports = "logKeysInfoInIntern", adaptation = WhatsAppAdaptation.DIRECT)
+    public void logKeysInfoInIntern() {
+        // WAWebSyncd.X: function*(){} — no-op
     }
 
     /**
@@ -1257,7 +1315,7 @@ public final class WebAppStateService {
             // function G). Hoisting the check here avoids the per-patch valueMacs list allocation
             // and the HMAC setup performed inside verifyPatchIntegrity. The internal guard inside
             // MutationIntegrityVerifier.verifyPatchIntegrity is retained as defense in depth.
-            if (!store.findWebAppState(collectionName).macMismatch()) { // WAWebGetCollectionVersion.getIsCollectionInMacMismatchFatalInTransaction: n.get(e).then(e => e?.isCollectionInMacMismatchFatal)
+            if (!store.isCollectionInMacMismatchFatal(collectionName)) { // WAWebGetCollectionVersion.getIsCollectionInMacMismatchFatalInTransaction: n.get(e).then(e => e?.isCollectionInMacMismatchFatal)
                 var patchValueMacs = untrusted.stream()
                         .map(DecryptedMutation.Untrusted::valueMac)
                         .toList();
@@ -1938,7 +1996,7 @@ public final class WebAppStateService {
         try {
             var downloadedData = whatsapp.store()
                     .awaitMediaConnection()
-                    .download(snapshotRef); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "snapshot", collectionName)
+                    .download(snapshotRef, whatsapp.abPropsService()); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "snapshot", collectionName)
             try (var protobufStream = ProtobufInputStream.fromStream(downloadedData)) {
                 var decoded = SyncdSnapshotSpec.decode(protobufStream); // WAWebSyncdDecode.decodeSyncdSnapshot
                 commitMediaDownload2Success(downloadStart); // WAWebCreateMediaDownloadMetrics.handleDownloadAndDecryptSuccess
@@ -2166,7 +2224,7 @@ public final class WebAppStateService {
         try {
             var downloaded = whatsapp.store()
                     .awaitMediaConnection()
-                    .download(externalRef); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "patch", collectionName)
+                    .download(externalRef, whatsapp.abPropsService()); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "patch", collectionName)
             commitMediaDownload2Success(downloadStart); // WAWebCreateMediaDownloadMetrics.handleDownloadAndDecryptSuccess
             return downloaded;
         } catch (Throwable throwable) {
@@ -3312,14 +3370,16 @@ public final class WebAppStateService {
      * action entry updates to be applied if the version guard passes.
      *
      * @implNote WAWebSyncdAntiTampering.computeLtHash (Y/J) — WA Web looks up existing
-     *     entries via {@code getSyncActionsByCollectionAndIndexesInTransaction(collection, [indexMac])};
-     *     Cobalt calls {@link WhatsAppStore#findSyncActionEntry} per index MAC directly.
+     *     entries via {@code getSyncActionsByIndexMacsInTransaction([indexMac])} (the
+     *     LT-hash code path keys lookups by index MAC because mutations are processed
+     *     before the plaintext {@code index} is decoded); Cobalt calls
+     *     {@link WhatsAppStore#findSyncActionEntry} per index MAC directly.
      * @param patchType the collection being processed
      * @param baseHash  the starting LT-Hash
      * @param mutations the mutations to apply to the hash
      * @return the computed hash and the sync action entry updates
      */
-    @WhatsAppWebExport(moduleName = "WAWebGetSyncAction", exports = "getSyncActionsByCollectionAndIndexesInTransaction", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebGetSyncAction", exports = "getSyncActionsByIndexMacsInTransaction", adaptation = WhatsAppAdaptation.ADAPTED)
     private LtHashComputation computeNewLTHash(SyncPatchType patchType, byte[] baseHash, SequencedCollection<DecryptedMutation.Untrusted> mutations) {
         var currentHash = baseHash != null ? baseHash : MutationLTHash.EMPTY_HASH;
         var toAdd = new ArrayList<byte[]>();
@@ -3463,7 +3523,11 @@ public final class WebAppStateService {
                 Thread.currentThread().interrupt();
             }
 
-            sendAppStateFatalExceptionNotification(collectionNames); // WAWebSyncdFatal.handleFatalError: yield sendAppStateFatalExceptionNotification(n)
+            try { // WAWebSyncdFatal.handleFatalError: try { yield sendAppStateFatalExceptionNotification(n) }
+                sendAppStateFatalExceptionNotification(collectionNames); // WAWebSyncdFatal.handleFatalError: yield sendAppStateFatalExceptionNotification(n)
+            } catch (Throwable notifyError) { // WAWebSyncdFatal.handleFatalError: catch(e) ERROR("syncd: error when sending fatal message to primary").sendLogs("syncd: could not send fatal to primary")
+                LOGGER.log(java.util.logging.Level.SEVERE, "syncd: error when sending fatal message to primary", notifyError);
+            }
             // ADAPTED: WAWebSyncdFatal.handleFatalError calls socketLogout(LogoutReason.SyncdFailure);
             // Cobalt routes through pluggable error handler instead of hardcoded logout
             whatsapp.handleFailure(syncEx);
@@ -3625,6 +3689,11 @@ public final class WebAppStateService {
         // action entries, groups by mutation name, buckets per-state counts,
         // and commits one MdAppStateSyncMutationStats WAM event per mutation.
         startPeriodicReportSyncdStatsJob();
+
+        // Per WA Web WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS:
+        // start the daily syncd key stats reporting job which derives the
+        // per-key usage histogram and commits one SyncdKeyCount WAM event.
+        startPeriodicReportSyncdKeyStatsJob();
     }
 
     /**
@@ -3809,6 +3878,260 @@ public final class WebAppStateService {
     }
 
     /**
+     * Starts the daily syncd key stats reporting job.
+     *
+     * <p>Per WhatsApp Web {@code WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS}:
+     * schedules a recurring task that every {@code DAY_SECONDS} invokes
+     * {@link #reportSyncdKeyStats()} to derive the per-app-state-sync-key
+     * usage histogram and commit one {@code SyncdKeyCount} WAM event.
+     *
+     * @implNote WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS,
+     *           WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdReportKeyStatsJob", exports = "reportSyncdKeyStatsJob", adaptation = WhatsAppAdaptation.ADAPTED)
+    private void startPeriodicReportSyncdKeyStatsJob() {
+        stopPeriodicReportSyncdKeyStatsJob(); // WAWebTasksDefinitions: ensure no duplicate task is scheduled
+        scheduleNextPeriodicReportSyncdKeyStats();
+    }
+
+    /**
+     * Schedules the next execution of the daily syncd key stats reporting job.
+     *
+     * <p>Per WhatsApp Web {@code WAWebTasksDefinitions}: the task body returns
+     * {@code DAY_SECONDS} when the {@code gkx 26258} kill switch is OFF and
+     * {@code DAY_SECONDS * 3} when it is ON. Cobalt does not consult the
+     * gatekeeper and uses the un-gated daily cadence.
+     *
+     * @implNote WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS (return DAY_SECONDS / DAY_SECONDS*3)
+     */
+    private void scheduleNextPeriodicReportSyncdKeyStats() {
+        periodicReportSyncdKeyStatsJob = SchedulerUtils.scheduleDelayed(
+                Duration.ofDays(1), // WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS: gkx("26258") ? DAY_SECONDS*3 : DAY_SECONDS — Cobalt always uses DAY_SECONDS
+                () -> {
+                    try {
+                        reportSyncdKeyStats(); // WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob body
+                    } catch (Exception e) {
+                        LOGGER.warning("Periodic syncd key stats reporting job failed: " + e.getMessage()); // ADAPTED: WA Web job orchestrator logs per-task failures
+                    } finally {
+                        scheduleNextPeriodicReportSyncdKeyStats(); // WAWebTasksDefinitions: return DAY_SECONDS -> reschedule
+                    }
+                }
+        );
+    }
+
+    /**
+     * Stops the daily syncd key stats reporting job.
+     *
+     * @implNote WAWebTasksDefinitions.REPORT_SYNCD_KEY_STATS (cancellation)
+     */
+    public void stopPeriodicReportSyncdKeyStatsJob() {
+        var job = periodicReportSyncdKeyStatsJob;
+        if (job != null) {
+            job.cancel(false);
+            periodicReportSyncdKeyStatsJob = null;
+        }
+    }
+
+    /**
+     * Computes per-app-state-sync-key usage statistics from the local store
+     * and emits one {@code SyncdKeyCount} WAM event with the bucketed
+     * percentile counts.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob}:
+     * delegates to {@link #getKeyStats()} and commits a {@code SyncdKeyCountWamEvent}
+     * with {@code keysUsedInSnapshotCount}, {@code p80MuationsPerKey},
+     * {@code p95MuationsPerKey}, {@code totalKeyCount}, and (when defined)
+     * {@code syncdSessionLengthDays}.
+     *
+     * @implNote WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob,
+     *           WAWebSyncdWamUtils.getKeyStats
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdReportKeyStatsJob", exports = "reportSyncdKeyStatsJob", adaptation = WhatsAppAdaptation.ADAPTED)
+    void reportSyncdKeyStats() {
+        // WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob: if (!gkx("26258")) — Cobalt does not consult the kill-switch gatekeeper, so the job always runs
+        var stats = getKeyStats(); // WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob: var e = yield WAWebSyncdWamUtils.getKeyStats()
+        var event = new SyncdKeyCountEventBuilder()
+                .keysUsedInSnapshotCount(stats.keysUsedInSnapshotCount())   // WAWebSyncdReportKeyStatsJob: keysUsedInSnapshotCount: e.keysUsedInSnapshotCount
+                .p80MuationsPerKey(stats.p80MutationsPerKey())              // WAWebSyncdReportKeyStatsJob: p80MuationsPerKey: e.p80MuationsPerKey
+                .p95MuationsPerKey(stats.p95MutationsPerKey())              // WAWebSyncdReportKeyStatsJob: p95MuationsPerKey: e.p95MuationsPerKey
+                .totalKeyCount(stats.totalKeyCount());                      // WAWebSyncdReportKeyStatsJob: totalKeyCount: e.totalKeyCount
+        var sessionLengthDays = stats.syncdSessionLengthDays();
+        if (sessionLengthDays != null) { // WAWebSyncdReportKeyStatsJob.reportSyncdKeyStatsJob: e.syncdSessionLengthDays != null && (t.syncdSessionLengthDays = e.syncdSessionLengthDays)
+            event.syncdSessionLengthDays(sessionLengthDays);
+        }
+        whatsapp.wamService().commit(event.build()); // WAWebSyncdReportKeyStatsJob: new SyncdKeyCountWamEvent(t).commit()
+    }
+
+    /**
+     * Computes per-app-state-sync-key usage statistics across the entire local
+     * sync action store.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdWamUtils.getKeyStats}: collects all
+     * known app state sync keys via {@code getAllSyncKeysInTransaction}, all
+     * stored sync action entries across every collection, and the
+     * {@code session_start} primary version timestamp; computes the syncd
+     * session length in days as
+     * {@code Math.round((unixTimeMs() - sessionStart) / (1000 * 3600 * 24))};
+     * and delegates the bucket math to {@link #getKeyStatsInternal(Collection,
+     * Collection, Integer)}.
+     *
+     * @implNote WAWebSyncdWamUtils.getKeyStats
+     * @return the aggregated key statistics
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdWamUtils", exports = "getKeyStats", adaptation = WhatsAppAdaptation.ADAPTED)
+    KeyStats getKeyStats() {
+        // WAWebSyncdWamUtils.getKeyStats: var e = yield o("WAWebGetSyncKey").getAllSyncKeysInTransaction()
+        var keys = whatsapp.store().appStateKeys();
+        // WAWebSyncdWamUtils.getKeyStats: var t = yield o("WAWebSchemaSyncActions").getSyncActionsTable().all()
+        var entries = new ArrayList<SyncActionEntry>();
+        for (var patchType : SyncPatchType.values()) { // ADAPTED: WA Web reads the flat sync actions table; Cobalt iterates per-collection sync-action views
+            entries.addAll(whatsapp.store().getSyncActionEntries(patchType));
+        }
+        // WAWebSyncdWamUtils.getKeyStats: var n = yield c() — c() reads the session_start primary_version timestamp
+        var sessionStart = getSyncdSessionStartTimestamp();
+        // WAWebSyncdWamUtils.getKeyStats: var r = n == null ? void 0 : Math.round((WATimeUtils.unixTimeMs() - n) / (1000 * 3600 * 24))
+        Integer sessionLengthDays = null;
+        if (sessionStart != null) {
+            var deltaMs = System.currentTimeMillis() - sessionStart.toEpochMilli();
+            sessionLengthDays = (int) Math.round(deltaMs / (1000.0 * 3600.0 * 24.0));
+        }
+        // WAWebSyncdWamUtils.getKeyStats: return _(e, t, r)
+        return getKeyStatsInternal(keys, entries, sessionLengthDays);
+    }
+
+    /**
+     * Reads the {@code session_start} primary version timestamp from the
+     * stored sync action entries.
+     *
+     * <p>Per WhatsApp Web inner helper {@code c} of {@code WAWebSyncdWamUtils}:
+     * {@code yield getSyncActionsTable().get('["primary_version","session_start"]')}
+     * and returns {@code e?.timestamp}. Cobalt indexes sync action entries by
+     * their HMAC index instead of the JSON-encoded plaintext index, so this
+     * helper scans the {@code REGULAR_LOW} collection for an entry whose
+     * {@code actionIndex} equals the canonical {@code session_start} index.
+     *
+     * @implNote WAWebSyncdWamUtils — inner helper {@code c} (named
+     *           {@code getSessionStartTimestamp} in WA Web)
+     * @return the {@code session_start} timestamp, or {@code null} when no
+     *         {@code session_start} entry has been recorded yet
+     */
+    private Instant getSyncdSessionStartTimestamp() {
+        // WAWebSyncdWamUtils.c: var e = yield getSyncActionsTable().get('["primary_version","session_start"]')
+        for (var entry : whatsapp.store().getSyncActionEntries(SyncPatchType.REGULAR_LOW)) {
+            var actionIndex = entry.actionIndex();
+            if (actionIndex == null) {
+                continue;
+            }
+            // ADAPTED: WA Web does a primary-key lookup; Cobalt scans because the table is HMAC-keyed.
+            // The canonical index is the JSON array `["primary_version","session_start"]`.
+            if (!actionIndex.contains("primary_version") || !actionIndex.contains("session_start")) {
+                continue;
+            }
+            var actionValue = entry.actionValue();
+            if (actionValue == null) {
+                continue;
+            }
+            return actionValue.timestamp().orElse(null); // WAWebSyncdWamUtils.c: return e == null ? void 0 : e.timestamp
+        }
+        return null; // WAWebSyncdWamUtils.c: undefined when no row is found
+    }
+
+    /**
+     * Computes the {@code SyncdKeyCount} payload from the supplied keys,
+     * sync action entries, and optional session length.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdWamUtils.getKeyStatsInternal}: maps
+     * every entry's {@code keyId} to its base64 encoding, deduplicates the
+     * result for {@code keysUsedInSnapshotCount}, builds the per-key usage
+     * histogram, sorts the per-key counts ascending, and reports the
+     * {@code floor(N * 0.8) - 1} and {@code floor(N * 0.95) - 1} percentiles.
+     * The {@code totalKeyCount} field is the size of the supplied key
+     * collection (not the histogram size).
+     *
+     * @implNote WAWebSyncdWamUtils.getKeyStatsInternal
+     * @param keys the collection of all known app state sync keys
+     * @param entries the collection of all stored sync action entries
+     * @param syncdSessionLengthDays the syncd session length in days, or
+     *                               {@code null} when no {@code session_start}
+     *                               timestamp has been recorded
+     * @return the aggregated key statistics
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdWamUtils", exports = "getKeyStatsInternal", adaptation = WhatsAppAdaptation.DIRECT)
+    KeyStats getKeyStatsInternal(Collection<AppStateSyncKey> keys, Collection<SyncActionEntry> entries, Integer syncdSessionLengthDays) {
+        // WAWebSyncdWamUtils.getKeyStatsInternal: var r = t.map(function(e) { return WABase64.encodeB64(e.keyId) })
+        var encodedKeyIds = new ArrayList<String>(entries.size());
+        for (var entry : entries) {
+            var keyId = entry.keyId();
+            if (keyId == null) {
+                continue; // ADAPTED: WA Web assumes every row has a keyId; tolerate nulls because Cobalt's column is nullable
+            }
+            encodedKeyIds.add(Base64.getEncoder().encodeToString(keyId)); // WAWebSyncdWamUtils.getKeyStatsInternal: WABase64.encodeB64(e.keyId)
+        }
+        // WAWebSyncdWamUtils.getKeyStatsInternal: var a = Array.from(new Set(r))
+        var distinctKeyIds = new HashSet<>(encodedKeyIds);
+        // WAWebSyncdWamUtils.getKeyStatsInternal: var i = new Map; for (var l of r) i.set(l, (i.get(l) || 0) + 1)
+        var perKeyCounts = new HashMap<String, Integer>();
+        for (var encoded : encodedKeyIds) {
+            perKeyCounts.merge(encoded, 1, Integer::sum);
+        }
+        // WAWebSyncdWamUtils.getKeyStatsInternal: var s = Array.from(i.values()).sort()
+        // WA Web's `.sort()` with no comparator sorts as strings; for the small positive ints stored here
+        // numeric and lexicographic order coincide on inputs <10. Cobalt sorts numerically since the
+        // values are mutation counts, which is the intent of the percentile computation.
+        var sortedCounts = new ArrayList<>(perKeyCounts.values());
+        Collections.sort(sortedCounts);
+        // WAWebSyncdWamUtils.getKeyStatsInternal: var u = s.length, c = Math.floor(u * .8) - 1, d = Math.floor(u * .95) - 1
+        var size = sortedCounts.size();
+        var p80Index = (int) Math.floor(size * 0.8) - 1;
+        var p95Index = (int) Math.floor(size * 0.95) - 1;
+        // WAWebSyncdWamUtils.getKeyStatsInternal: return { totalKeyCount: e.length, keysUsedInSnapshotCount: a.length,
+        //                                                 p80MuationsPerKey: s[c], p95MuationsPerKey: s[d],
+        //                                                 syncdSessionLengthDays: n }
+        // Out-of-bounds indices map to undefined in JS; Cobalt represents that as null (the WAM event field is OptionalInt).
+        Integer p80 = (p80Index >= 0 && p80Index < size) ? sortedCounts.get(p80Index) : null; // WAWebSyncdWamUtils.getKeyStatsInternal: s[c]
+        Integer p95 = (p95Index >= 0 && p95Index < size) ? sortedCounts.get(p95Index) : null; // WAWebSyncdWamUtils.getKeyStatsInternal: s[d]
+        return new KeyStats(
+                keys.size(),                 // WAWebSyncdWamUtils.getKeyStatsInternal: totalKeyCount: e.length
+                distinctKeyIds.size(),       // WAWebSyncdWamUtils.getKeyStatsInternal: keysUsedInSnapshotCount: a.length
+                p80,                         // WAWebSyncdWamUtils.getKeyStatsInternal: p80MuationsPerKey: s[c]
+                p95,                         // WAWebSyncdWamUtils.getKeyStatsInternal: p95MuationsPerKey: s[d]
+                syncdSessionLengthDays       // WAWebSyncdWamUtils.getKeyStatsInternal: syncdSessionLengthDays: n
+        );
+    }
+
+    /**
+     * Aggregated per-app-state-sync-key statistics returned by
+     * {@link #getKeyStats()} and {@link #getKeyStatsInternal(Collection,
+     * Collection, Integer)}.
+     *
+     * @implNote WAWebSyncdWamUtils.getKeyStatsInternal — anonymous return
+     *           object {@code {totalKeyCount, keysUsedInSnapshotCount,
+     *           p80MuationsPerKey, p95MuationsPerKey, syncdSessionLengthDays}}
+     * @param totalKeyCount total number of app state sync keys present in the
+     *                      local store
+     * @param keysUsedInSnapshotCount number of distinct keys that have at
+     *                                least one stored sync action entry
+     * @param p80MutationsPerKey mutation count at the 80th percentile of the
+     *                           per-key histogram, or {@code null} when the
+     *                           histogram is empty
+     * @param p95MutationsPerKey mutation count at the 95th percentile of the
+     *                           per-key histogram, or {@code null} when the
+     *                           histogram is empty
+     * @param syncdSessionLengthDays days since the {@code session_start}
+     *                               primary version timestamp, or {@code null}
+     *                               when no {@code session_start} entry has
+     *                               been recorded
+     */
+    record KeyStats(
+            int totalKeyCount,
+            int keysUsedInSnapshotCount,
+            Integer p80MutationsPerKey,
+            Integer p95MutationsPerKey,
+            Integer syncdSessionLengthDays
+    ) {
+    }
+
+    /**
      * Stops the daily syncd stats reporting job.
      *
      * @implNote WAWebTasksDefinitions.REPORT_SYNCD_ACTION_STAT (cancellation)
@@ -3877,6 +4200,7 @@ public final class WebAppStateService {
     public void reset() {
         stopPeriodicSyncJob();
         stopPeriodicReportSyncdStatsJob();
+        stopPeriodicReportSyncdKeyStatsJob();
         syncKeyRotationService.stopPeriodicRotationJob();
         retryScheduler.close();
         missingSyncKeyTimeoutScheduler.shutdown();

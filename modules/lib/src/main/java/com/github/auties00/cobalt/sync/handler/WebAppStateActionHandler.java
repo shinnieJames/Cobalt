@@ -261,4 +261,30 @@ public interface WebAppStateActionHandler {
     ) {
         return false;
     }
+
+    /**
+     * Returns whether the mutation's index targets a LID-namespaced JID.
+     *
+     * <p>Per WhatsApp Web, the root {@code WAWebSyncdAction} prototype returns
+     * {@code false}; {@code ChatSyncdActionBase} overrides this to inspect the
+     * mutation index entry at {@code chatJidIndex} and check
+     * {@code WAWebWidFactory.createWid(jid).isLid()}. Because Cobalt flattens
+     * the WA Web class hierarchy into a single interface, individual chat-scoped
+     * handlers may override this default to perform the LID inspection inline.
+     *
+     * @implNote WAWebSyncdAction.isLidMutation — root returns {@code false};
+     *           {@code ChatSyncdActionBase.isLidMutation} reads the JID from
+     *           the index slot identified by {@code chatJidIndex} and checks
+     *           {@code WAWebWidFactory.createWid(jid).isLid()}
+     * @param mutation the mutation to inspect
+     * @return {@code true} if the mutation targets a LID JID, {@code false} otherwise
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "AccountSyncdActionBase", adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "ChatSyncdActionBase", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "ChatOrContactSyncdActionBase", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "MessageSyncdActionBase", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "ChatMessageRangeSyncdActionBase", adaptation = WhatsAppAdaptation.ADAPTED)
+    default boolean isLidMutation(DecryptedMutation.Trusted mutation) {
+        return false;
+    }
 }

@@ -101,8 +101,11 @@ public final class CompanionPairingService {
      * Length in bytes of the HKDF output used as the AES-GCM bundle
      * encryption key ({@value}) and as the derived ADV secret.
      *
-     * @implNote WAWebgetBundleEncryptionKey,
-     *     WAWebcreateAdvSecret
+     * @implNote WAWebAltDeviceLinkingAlgorithm.getBundleEncryptionKey
+     *     (local function {@code E}) and
+     *     WAWebAltDeviceLinkingAlgorithm.createAdvSecret (local function
+     *     {@code $}): both pass {@code 32} as the
+     *     {@code WACryptoHkdf.extractWithSaltAndExpand} length argument.
      */
     private static final int HKDF_OUTPUT_LENGTH = 32;
 
@@ -110,8 +113,10 @@ public final class CompanionPairingService {
      * ASCII HKDF {@code info} label used when deriving the AES-GCM bundle
      * encryption key from the X25519 ephemeral shared secret.
      *
-     * @implNote WAWebgetBundleEncryptionKey:
-     *     "link_code_pairing_key_bundle_encryption_key"
+     * @implNote WAWebAltDeviceLinkingAlgorithm.getBundleEncryptionKey
+     *     (local function {@code E}): passes
+     *     {@code "link_code_pairing_key_bundle_encryption_key"} as the
+     *     {@code info} argument to {@code WACryptoHkdf.extractWithSaltAndExpand}.
      */
     private static final String BUNDLE_ENCRYPTION_INFO = "link_code_pairing_key_bundle_encryption_key";
 
@@ -119,21 +124,26 @@ public final class CompanionPairingService {
      * ASCII HKDF {@code info} label used when deriving the ADV master
      * secret from the concatenated X25519 shared secrets.
      *
-     * @implNote WAWebcreateAdvSecret: "adv_secret"
+     * @implNote WAWebAltDeviceLinkingAlgorithm.createAdvSecret (local
+     *     function {@code $}): passes {@code "adv_secret"} as the
+     *     {@code info} argument to {@code WACryptoHkdf.extractWithSaltAndExpand}.
      */
     private static final String ADV_SECRET_INFO = "adv_secret";
 
     /**
-     * Crockford base32 alphabet. Uses the digits {@code 0-9} followed by the
-     * consonants {@code ABCDEFGHJKMNPQRSTVWXYZ} (omitting {@code I}, {@code L},
-     * {@code O}, {@code U}) so that five random bytes encode to eight
-     * characters that are easy to read aloud and copy by hand.
+     * WA Web's pairing-code base32 alphabet. Starts at {@code 1} (no
+     * {@code 0}), runs through {@code 9}, then appends
+     * {@code ABCDEFGHJKLMNPQRSTVWXYZ} (omitting {@code I}, {@code O},
+     * {@code U}), yielding 32 characters that are easy to read aloud and
+     * copy by hand. The alphabet deviates from canonical Crockford (which
+     * starts at {@code 0} and skips {@code L}): WA Web skips {@code 0}
+     * and keeps {@code L}.
      *
      * @implNote WAWebAltDeviceLinkingBase32Encode.bytesToCrockford:
-     *     "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+     *     {@code "123456789ABCDEFGHJKLMNPQRSTVWXYZ"}
      */
     private static final char[] CROCKFORD_ALPHABET =
-            "0123456789ABCDEFGHJKMNPQRSTVWXYZ".toCharArray();
+            "123456789ABCDEFGHJKLMNPQRSTVWXYZ".toCharArray();
 
     /**
      * Number of PBKDF2 iterations used by WA Web when deriving an AES-CTR
@@ -685,15 +695,24 @@ public final class CompanionPairingService {
     }
 
     /**
-     * Encodes exactly five bytes (40 bits) as an eight-character Crockford
-     * base32 string. Used to produce the short pairing code shown to the
-     * user.
+     * Encodes exactly five bytes (40 bits) as an eight-character
+     * base32 string using WA Web's variant of the Crockford alphabet
+     * ({@link #CROCKFORD_ALPHABET}). Used to produce the short pairing
+     * code shown to the user.
      *
+     * @apiNote WA Web's {@code bytesToCrockford} is written against an
+     *     arbitrary-length buffer with a {@code DataView} loop and a
+     *     trailing-bits branch; since the only call site passes a
+     *     5-byte {@code Uint8Array} (40 bits fits exactly into eight
+     *     5-bit groups), Cobalt specialises the loop to 8 straight-line
+     *     extractions that produce identical output for any 5-byte
+     *     input.
      * @param input the 5-byte buffer to encode
-     * @return an 8-character Crockford base32 string
+     * @return an 8-character base32 string over WA Web's alphabet
      * @throws IllegalArgumentException if {@code input.length != 5}
      * @implNote WAWebAltDeviceLinkingBase32Encode.bytesToCrockford: packs 5
-     *     bytes into eight 5-bit groups against the Crockford alphabet
+     *     bytes into eight 5-bit groups against the 32-character
+     *     alphabet {@code "123456789ABCDEFGHJKLMNPQRSTVWXYZ"}
      */
     private static String bytesToCrockford(byte[] input) {
         if (input.length != 5) {
@@ -774,26 +793,40 @@ public final class CompanionPairingService {
         var ephemeralShared = Curve25519.sharedKey(
                 companionEphemeralKeyPair.privateKey().toEncodedPoint(), primaryEphemeralPublic);
 
-        var gcmSalt = DataUtils.randomByteArray(HKDF_OUTPUT_LENGTH);
+        // WAWebAltDeviceLinkingAlgorithm.companionFinish (local function N): allocates
+        // three independent randoms before delegating to companionFinishInternal:
+        //   l = new Uint8Array(32) -> AAD/advSecret material salt (parameter "s" in w)
+        //   s = new Uint8Array(32) -> HKDF salt for bundle encryption key + wrapped prefix (parameter "u" in w)
+        //   u = new Uint8Array(12) -> AES-GCM IV (parameter "c" in w)
+        var advSecretMaterialSalt = DataUtils.randomByteArray(HKDF_OUTPUT_LENGTH);
+        var bundleHkdfSalt = DataUtils.randomByteArray(HKDF_OUTPUT_LENGTH);
         var gcmIv = DataUtils.randomByteArray(AES_GCM_IV_LENGTH);
 
+        // WACryptoHkdf.extractWithSaltAndExpand(ikm=ephemeralShared, salt=bundleHkdfSalt,
+        //   info="link_code_pairing_key_bundle_encryption_key", length=32)
+        // as invoked by WAWebAltDeviceLinkingAlgorithm.getBundleEncryptionKey (local function E).
         var bundleKeyParams = HKDFParameterSpec.ofExtract()
                 .addIKM(ephemeralShared)
-                .addSalt(gcmSalt)
+                .addSalt(bundleHkdfSalt)
                 .thenExpand(BUNDLE_ENCRYPTION_INFO.getBytes(StandardCharsets.US_ASCII), HKDF_OUTPUT_LENGTH);
         var bundleKey = kdf.deriveData(bundleKeyParams);
 
+        // WAWebAltDeviceLinkingAlgorithm.getKeyBundle (local function I): the AES-GCM
+        // plaintext is concatBuffers([companionIdentityPub, primaryIdentityPub, advSecretMaterialSalt]).
+        // These update() calls feed plaintext (not AAD — AAD would require updateAAD()).
         var companionIdentityPublic = companionIdentityKeyPair.publicKey().toEncodedPoint();
         var aesGcmCipher = Cipher.getInstance("AES/GCM/NoPadding");
         aesGcmCipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(bundleKey, "AES"), new GCMParameterSpec(GCM_TAG_BITS, gcmIv));
         aesGcmCipher.update(companionIdentityPublic);
         aesGcmCipher.update(primaryIdentityPublic);
-        aesGcmCipher.update(gcmSalt);
+        aesGcmCipher.update(advSecretMaterialSalt);
         var keyBundleCiphertext = aesGcmCipher.doFinal();
 
+        // WAWebAltDeviceLinkingAlgorithm.companionFinishInternal (local function w):
+        // Binary writes [u (bundleHkdfSalt-32), c (gcmIv-12), R (ciphertext)] into linkCodePairingWrappedKeyBundle.
         var wrappedKeyBundle = ByteBuffer
-                .allocate(gcmSalt.length + gcmIv.length + keyBundleCiphertext.length)
-                .put(gcmSalt)
+                .allocate(bundleHkdfSalt.length + gcmIv.length + keyBundleCiphertext.length)
+                .put(bundleHkdfSalt)
                 .put(gcmIv)
                 .put(keyBundleCiphertext)
                 .array();
@@ -801,10 +834,18 @@ public final class CompanionPairingService {
         var identityShared = Curve25519.sharedKey(
                 companionIdentityKeyPair.privateKey().toEncodedPoint(), primaryIdentityPublic);
 
+        // WACryptoHkdf.extractWithSaltAndExpand(ikm=concat(ephemeralShared,
+        //   identityShared, advSecretMaterialSalt), salt=null, info="adv_secret", length=32)
+        // as invoked by WAWebAltDeviceLinkingAlgorithm.createAdvSecret (local function $)
+        // after WAArrayBufferUtils.concatBuffers([ephemeralShared, identityShared, advSecretMaterialSalt]).
+        // The third element is parameter "s" in w (the 32-byte AAD-style salt), NOT "u" (the HKDF salt).
+        // salt=null in WA Web maps to extractSha256's 32-zero default; in JDK
+        // HKDFParameterSpec this is the implicit default when addSalt() is omitted.
+        // Multiple addIKM() calls concatenate ikm in call order, matching concatBuffers.
         var advSecretParams = HKDFParameterSpec.ofExtract()
                 .addIKM(ephemeralShared)
                 .addIKM(identityShared)
-                .addIKM(gcmSalt)
+                .addIKM(advSecretMaterialSalt)
                 .thenExpand(ADV_SECRET_INFO.getBytes(StandardCharsets.US_ASCII), HKDF_OUTPUT_LENGTH);
         var advSecret = kdf.deriveData(advSecretParams);
 

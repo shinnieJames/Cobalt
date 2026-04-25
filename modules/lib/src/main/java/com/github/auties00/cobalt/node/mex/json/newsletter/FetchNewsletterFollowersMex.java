@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -46,15 +45,30 @@ public sealed interface FetchNewsletterFollowersMex extends MexJsonOperation per
      * query variables and emits the outbound IQ stanza.
      *
      * @implNote WAWebMexFetchNewsletterFollowersJob.mexFetchNewsletterFollowers: adapts the {@code variables}
-     * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * object constructed inline in the JS implementation
+     * ({@code {input:{newsletter_id:e, count:Math.min(WAWebNewsletterGatingUtils.getMaxSubscriberNumber(), t)}}})
+     * into a dedicated Java class. The clamping against
+     * {@code getMaxSubscriberNumber()} is the caller's responsibility.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterFollowersJob")
     final class Request implements FetchNewsletterFollowersMex {
-        private final String input;
+        private final String newsletterId;
+        private final Integer count;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a request for the given newsletter and follower page size.
+         *
+         * @param newsletterId the newsletter JID, written into the
+         *                     {@code input.newsletter_id} variable when
+         *                     non-{@code null}
+         * @param count        the requested follower page size, written into
+         *                     {@code input.count} when non-{@code null}; the
+         *                     caller is responsible for clamping this to
+         *                     {@code WAWebNewsletterGatingUtils.getMaxSubscriberNumber()}
+         */
+        public Request(String newsletterId, Integer count) {
+            this.newsletterId = newsletterId;
+            this.count = count;
         }
 
         /**
@@ -62,10 +76,11 @@ public sealed interface FetchNewsletterFollowersMex extends MexJsonOperation per
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchNewsletterFollowersJob.mexFetchNewsletterFollowers: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@code variables} object inline as
+         * {@code {input:{newsletter_id:e, count:Math.min(getMaxSubscriberNumber(), t)}}}
+         * and delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes
+         * the JSON directly via {@code fastjson2.JSONWriter} and wraps it
+         * through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -81,13 +96,25 @@ public sealed interface FetchNewsletterFollowersMex extends MexJsonOperation per
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchNewsletterFollowersJob.mexFetchNewsletterFollowers
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // Emits {input:{newsletter_id:e, count:Math.min(getMaxSubscriberNumber(),t)}}; the inner
+                // object mirrors the JS object literal shape. Each scalar is omitted when null, leaving
+                // the GraphQL schema defaults to apply server-side.
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                if (newsletterId != null) {
+                    writer.writeName("newsletter_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(newsletterId);
                 }
+                if (count != null) {
+                    writer.writeName("count");
+                    writer.writeColon();
+                    writer.writeInt32(count);
+                }
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 

@@ -54,10 +54,11 @@ import java.util.List;
  *
  * <p>The crossposting branch (gated by
  * {@code WAWebCrosspostingBackendGatingUtils.crosspostSettingsSyncReceiverEnabled})
- * persists {@code shareToFB} / {@code shareToIG} preferences when the runtime
- * AB props enable it. Cobalt's {@link StatusPrivacyAction} model does not carry
- * these fields, so the receiver branch is intentionally omitted; see the
- * Owned Files report for details.
+ * persists {@code shareToFB} / {@code shareToIG} preferences via WA Web's
+ * {@code WAWebUserPrefsStatus} module. Cobalt's {@link StatusPrivacyAction}
+ * carries these fields on the protobuf, but the Cobalt store does not expose a
+ * dedicated FB/IG cross-posting persistence layer, so the receiver branch is a
+ * no-op.
  *
  * <p>Index format: {@code ["status_privacy"]}.
  *
@@ -318,10 +319,9 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
                         .excluded(denyList) // ADAPTED: STATUS_DENY_LIST -> PrivacySettingEntry.excluded
                         .build();
             }
-            case CLOSE_FRIENDS -> { // WAWebStatusPrivacySettingSync.applyMutations: if (c === CLOSE_FRIENDS || c === CUSTOM_LIST) break e
+            case CLOSE_FRIENDS, CUSTOM_LIST -> { // WAWebStatusPrivacySettingSync.applyMutations: if (c === CLOSE_FRIENDS || c === CUSTOM_LIST) break e
                 // WAWebStatusPrivacySettingSync.applyMutations: no entries written, _ stays []; entry remains null and no store mutation occurs
                 // WAWebStatusPrivacySettingSync.applyMutations: WA Web returns Success after the empty entry list yields a no-op promise
-                // CUSTOM_LIST: NO_WA_BASIS in Cobalt enum — see report Issues in Context Files (StatusPrivacyAction missing CUSTOM_LIST(4))
             }
         }
 
@@ -413,10 +413,11 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
      *       {@code "status_privacy"}.</li>
      * </ol>
      *
-     * <p>The {@code shareToFB}, {@code shareToIG}, and {@code customLists}
-     * fields are intentionally omitted: Cobalt's {@link StatusPrivacyAction}
-     * protobuf does not carry them. See the validation report for the missing
-     * field tracking.
+     * <p>The {@code shareToFB} / {@code shareToIG} fields are gated by
+     * {@code crosspostSettingsSyncSenderEnabled} in WA Web; Cobalt has no
+     * equivalent AB-prop gating and no FB/IG persistence layer, so they are
+     * left unset. The {@code customLists} field is always passed as an empty
+     * list to mirror WA Web's unconditional {@code customLists: []} override.
      *
      * @implNote WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation
      * @param timestamp the mutation timestamp
@@ -431,8 +432,8 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
         var statusPrivacy = new StatusPrivacyActionBuilder() // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: {statusPrivacy: {mode: e, userJid: n, ...}}
                 .mode(mode) // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: mode: e
                 .userJid(userJids == null ? List.of() : userJids) // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: userJid: n
-                // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: shareToFB/shareToIG (gated by crosspostSettingsSyncSenderEnabled) — not in Cobalt's StatusPrivacyAction model
-                // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: customLists: [] — not in Cobalt's StatusPrivacyAction model
+                .customLists(List.of()) // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: customLists: [] (always emitted)
+                // WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation: shareToFB/shareToIG (gated by crosspostSettingsSyncSenderEnabled) — Cobalt has no AB-prop gating layer
                 .build();
         var value = new SyncActionValueBuilder() // WAWebSyncdActionUtils.buildPendingMutation: encodeProtobuf(SyncActionValueSpec, {...l, timestamp: i})
                 .timestamp(timestamp) // WAWebSyncdActionUtils.buildPendingMutation: timestamp: t

@@ -50,14 +50,22 @@ import java.util.concurrent.StructuredTaskScope.Subtask;
 @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
 public final class DevicePreKeyHandler {
     /**
-     * Maximum number of devices per pre-key IQ query.
+     * Maximum number of devices included in a single pre-key IQ query.
      *
-     * @implNote WAWebFetchPrekeysJob.length: batches large device lists to avoid oversized
-     * IQ stanzas against the {@code encrypt} server namespace.
+     * <p>WA Web does not impose a per-IQ device cap of its own: the smax schema
+     * {@code WASmaxOutPreKeysFetchKeyBundlesRequest} declares the {@code <user>}
+     * children as {@code REPEATED_CHILD(..., 1, 1e5)}, i.e. between 1 and 100,000
+     * users per request, and {@code WAWebFetchPrekeysJob.fetchPrekeys} sends every
+     * caller-provided device in a single IQ. Cobalt batches at 100 to keep individual
+     * request payloads manageable and to fan out across virtual threads.
+     *
+     * @implNote NO_WA_BASIS: the {@code length} entry indexed against
+     * {@code WAWebFetchPrekeysJob} is a static-analysis artefact (there is no
+     * exported numeric constant; the bundle contains {@code l.length===0} array
+     * checks on local arrays). The real upstream cap is {@code 1e5} from the smax
+     * request mixin; Cobalt's 100 is a prudence ceiling chosen so failures affect
+     * fewer devices and so the parallel scope has multiple subtasks to dispatch.
      */
-    @WhatsAppWebExport(moduleName = "WAWebFetchPrekeysJob",
-            exports = "length",
-            adaptation = WhatsAppAdaptation.DIRECT)
     private static final int MAX_DEVICES_PER_QUERY = 100;
 
     /**
@@ -488,8 +496,12 @@ public final class DevicePreKeyHandler {
             exports = "fetchPrekeys",
             adaptation = WhatsAppAdaptation.DIRECT)
     private SignalPreKeyBundle parseUserPreKeyBundle(Node userNode) {
+        // WAWebFetchPrekeysJob.fetchPrekeys via WASmaxInPreKeysRegistrationIDMixin:
+        // <registration> content is exactly 4 raw bytes parsed as a big-endian
+        // unsigned integer, NOT an ASCII number string.
         var registrationId = userNode.getChild("registration")
-                .flatMap(Node::toContentInt)
+                .flatMap(Node::toContentBytes)
+                .map(bytes -> convertBytesToUint(bytes, 4))
                 .orElseThrow(() -> new IllegalArgumentException("Missing registration ID"));
 
         var identityKey = userNode.getChild("identity")
@@ -500,8 +512,11 @@ public final class DevicePreKeyHandler {
         var signedPreKeyNode = userNode.getChild("skey")
                 .orElseThrow(() -> new IllegalArgumentException("Missing signed prekey"));
 
+        // WAWebFetchPrekeysJob.fetchPrekeys via WASmaxInPreKeysKeyIDMixin:
+        // <id> content is exactly 3 raw bytes parsed as a big-endian unsigned integer.
         var signedPreKeyId = signedPreKeyNode.getChild("id")
-                .flatMap(Node::toContentInt)
+                .flatMap(Node::toContentBytes)
+                .map(bytes -> convertBytesToUint(bytes, 3))
                 .orElseThrow(() -> new IllegalArgumentException("Missing signed prekey ID"));
 
         var signedPreKeyValue = signedPreKeyNode.getChild("value")
@@ -525,8 +540,11 @@ public final class DevicePreKeyHandler {
         // One-time pre-key is optional: when the server ran out, only skey is returned
         var preKeyNode = userNode.getChild("key");
         if (preKeyNode.isPresent()) {
+            // WAWebFetchPrekeysJob.fetchPrekeys via WASmaxInPreKeysKeyIDMixin:
+            // <id> content is 3 raw bytes parsed as a big-endian unsigned integer.
             var preKeyId = preKeyNode.get().getChild("id")
-                    .flatMap(Node::toContentInt)
+                    .flatMap(Node::toContentBytes)
+                    .map(bytes -> convertBytesToUint(bytes, 3))
                     .orElse(null);
 
             var preKeyValue = preKeyNode.get().getChild("value")
@@ -541,6 +559,36 @@ public final class DevicePreKeyHandler {
         }
 
         return builder.build();
+    }
+
+    /**
+     * Converts a big-endian unsigned byte array to an int.
+     *
+     * <p>Mirrors the WA Web {@code WAParsableXmlNode.convertBytesToUint(bytes, byteCount)}
+     * helper used by every smax {@code KeyIDMixin} / {@code RegistrationIDMixin} parser:
+     * accumulates {@code n = n * 256 + bytes[i]} for the first {@code byteCount} bytes.
+     *
+     * <p>Pre-key wire fields use this encoding instead of an ASCII number string:
+     * registration ids are 4 bytes, signed-pre-key and one-time-pre-key ids are 3 bytes.
+     *
+     * @param bytes     the raw content bytes from the wire-format node
+     * @param byteCount the number of leading bytes to interpret
+     * @return the resulting big-endian unsigned integer
+     * @throws IllegalArgumentException if {@code bytes} has fewer than {@code byteCount} bytes
+     * @implNote WAParsableXmlNode.convertBytesToUint: identical accumulator implementation.
+     */
+    @WhatsAppWebExport(moduleName = "WAParsableXmlNode",
+            exports = "convertBytesToUint",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static int convertBytesToUint(byte[] bytes, int byteCount) {
+        if (bytes == null || bytes.length < byteCount) {
+            throw new IllegalArgumentException("Expected " + byteCount + " bytes, got " + (bytes == null ? 0 : bytes.length));
+        }
+        var n = 0;
+        for (var i = 0; i < byteCount; i++) {
+            n = (n << 8) | (bytes[i] & 0xFF);
+        }
+        return n;
     }
 
     /**
@@ -622,12 +670,13 @@ public final class DevicePreKeyHandler {
         var store = client.store();
 
         // WAWebGetIdentityKeysJob.getAndStoreIdentityKeys
-        // Filters users whose primary device already has a session, skipping redundant fetches
+        // Filters users whose primary device already has a stored identity key via
+        // bulkLoadIdentityKey (mirrored here as a per-address findIdentityByAddress lookup)
         var usersNeedingKeys = new ArrayList<Jid>();
         for (var userJid : userJids) {
             var primaryDeviceJid = userJid.toUserJid().withDevice(0);
             var address = primaryDeviceJid.toSignalAddress();
-            if (store.findSessionByAddress(address).isEmpty()) {
+            if (store.findIdentityByAddress(address).isEmpty()) {
                 usersNeedingKeys.add(userJid);
             }
         }
@@ -744,7 +793,9 @@ public final class DevicePreKeyHandler {
 
                 var address = deviceJid.toSignalAddress();
                 var identityKey = SignalIdentityPublicKey.ofDirect(identityKeyBytes);
-                store.addTrustedIdentity(address, identityKey);
+                // WAWebGetIdentityKeysJob.getAndStoreIdentityKeys: bulkCreateIdentity ->
+                // WAWebSignalProtocolStore.saveIdentity persists the identity key
+                store.saveIdentity(address, identityKey);
 
             } catch (Exception e) {
                 var jid = userNode.getAttribute("jid").map(Object::toString).orElse("unknown");
@@ -815,6 +866,6 @@ public final class DevicePreKeyHandler {
         var primaryDeviceJid = userJid.toUserJid().withDevice(0);
         var address = primaryDeviceJid.toSignalAddress();
         var identityKey = SignalIdentityPublicKey.ofDirect(accountSignatureKey);
-        store.addTrustedIdentity(address, identityKey);
+        store.saveIdentity(address, identityKey);
     }
 }

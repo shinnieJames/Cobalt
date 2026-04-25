@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -28,11 +27,13 @@ import java.util.Optional;
  * the corresponding WA Web GraphQL mutation. Manual edits will be
  * overwritten on the next generation run.
  *
- * @implNote WAWebMexGetDsbInfoJob.getDsbInfo: sends
- * {@code WAWebMexGetDsbInfoJobMutation} through
- * {@code WAWebMexClient.fetchQuery}.
+ * @implNote WAWebMexGetDsbInfoJob.mexGetDsbInfo: dispatches the compiled
+ * {@code WAWebMexGetDsbInfoJobMutation} document through
+ * {@code WAWebMexClient.fetchQuery}; {@code WAWebGetDsbInfoJob.getDsbInfo}
+ * wraps that call in a non-persisted UI-action job.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexGetDsbInfoJob")
+@WhatsAppWebModule(moduleName = "WAWebGetDsbInfoJob")
 @WhatsAppWebModule(moduleName = "WAWebMexGetDsbInfoJobMutation.graphql")
 public sealed interface GetDsbInfoMex extends MexJsonOperation permits GetDsbInfoMex.Request, GetDsbInfoMex.Response {
     /**
@@ -48,23 +49,40 @@ public sealed interface GetDsbInfoMex extends MexJsonOperation permits GetDsbInf
 
     /**
      * The request payload for this MEX mutation.
+     *
+     * @implNote WAWebMexGetDsbInfoJob.mexGetDsbInfo: wraps the supplied
+     * entity identifier as {@code {input: {entity_id: e}}} before passing
+     * the GraphQL variables to {@code WAWebMexClient.fetchQuery}.
      */
     final class Request implements GetDsbInfoMex {
-        private final String input;
+        private final String entityId;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request for the supplied entity identifier.
+         *
+         * @implNote WAWebMexGetDsbInfoJob.mexGetDsbInfo: the single positional
+         * argument {@code e} is the entity identifier embedded under
+         * {@code variables.input.entity_id}.
+         * @param entityId the entity identifier whose data subject request
+         *                 should be initiated
+         */
+        @WhatsAppWebExport(moduleName = "WAWebMexGetDsbInfoJob", exports = "mexGetDsbInfo",
+                adaptation = WhatsAppAdaptation.ADAPTED)
+        public Request(String entityId) {
+            this.entityId = entityId;
         }
 
         /**
          * Serialises the GraphQL variables as JSON and wraps them in a
          * {@code w:mex} IQ stanza.
          *
-         * @implNote WAWebMexGetDsbInfoJob.getDsbInfo: the single
-         * {@code input} variable carries the serialised request type.
+         * @implNote WAWebMexGetDsbInfoJob.mexGetDsbInfo: builds the
+         * {@code {input: {entity_id: e}}} variables envelope and forwards
+         * it to {@code WAWebMexClient.fetchQuery} together with the
+         * compiled mutation document.
          * @return the IQ {@link NodeBuilder} ready to be built and dispatched
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexGetDsbInfoJob", exports = "getDsbInfo",
+        @WhatsAppWebExport(moduleName = "WAWebMexGetDsbInfoJob", exports = "mexGetDsbInfo",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public NodeBuilder toNode() {
             try (var writer = JSONWriter.ofUTF8()) {
@@ -72,11 +90,15 @@ public sealed interface GetDsbInfoMex extends MexJsonOperation permits GetDsbInf
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
-                if (input != null) {
-                    writer.writeName("input");
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                if (entityId != null) {
+                    writer.writeName("entity_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(entityId);
                 }
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
                 try (var output = new StringWriter()) {
@@ -102,13 +124,14 @@ public sealed interface GetDsbInfoMex extends MexJsonOperation permits GetDsbInf
         /**
          * Parses the MEX response carried by an inbound IQ stanza.
          *
-         * @implNote WAWebMexGetDsbInfoJob.getDsbInfo: reads the
-         * {@code reference_number} assigned to the new data subject request.
+         * @implNote WAWebMexGetDsbInfoJob.mexGetDsbInfo: reads
+         * {@code xwa2_get_dsb_info.reference_number} from the GraphQL
+         * payload returned by {@code WAWebMexClient.fetchQuery}.
          * @param node the inbound IQ stanza carrying the {@code <result>} child
          * @return the parsed response, or {@code Optional.empty()} if the
          *         expected JSON shape is absent
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexGetDsbInfoJob", exports = "getDsbInfo",
+        @WhatsAppWebExport(moduleName = "WAWebMexGetDsbInfoJob", exports = "mexGetDsbInfo",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<Response> of(Node node) {
             return node.getChild("result")

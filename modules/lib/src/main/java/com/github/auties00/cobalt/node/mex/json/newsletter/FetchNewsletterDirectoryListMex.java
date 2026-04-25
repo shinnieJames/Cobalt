@@ -38,24 +38,62 @@ public sealed interface FetchNewsletterDirectoryListMex extends MexJsonOperation
      * to the {@code FetchNewsletterDirectoryList} compiled query.
      *
      * @implNote WAWebMexFetchNewsletterDirectoryListJobQuery.graphql: corresponds to the compiled
-     * document id registered for the {@code mexFetchNewsletterDirectoryList} query.
+     * document id {@code params.id} registered for the
+     * {@code WAWebMexFetchNewsletterDirectoryListJobQuery} compiled query.
      */
-    String QUERY_ID = "23877680335183432";
+    String QUERY_ID = "26125047313831973";
 
     /**
      * The request variant of {@link FetchNewsletterDirectoryListMex} that serialises the
      * query variables and emits the outbound IQ stanza.
      *
-     * @implNote WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList: adapts the {@code variables}
-     * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * @implNote WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList: adapts the
+     * {@code variables} object constructed inline in the JS implementation:
+     * {@code {input:{view, filters:{country_codes, categories}, limit, start_cursor},
+     * fetch_status_metadata}}. Cobalt exposes the same fields as constructor
+     * arguments and serialises them in the same order.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDirectoryListJob")
     final class Request implements FetchNewsletterDirectoryListMex {
-        private final String input;
+        private final NewsletterDirectoryListView view;
+        private final List<String> countryCodes;
+        private final List<String> categories;
+        private final Long limit;
+        private final String cursorToken;
+        private final boolean fetchStatusMetadata;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request for the newsletter directory list query.
+         *
+         * @param view                the directory list view (filter pill) to query;
+         *                            translated to the uppercase enum string by
+         *                            {@code u(i)} in the JS source
+         * @param countryCodes        the country codes to filter by, may be {@code null}
+         * @param categories          the categories to filter by as upper-case
+         *                            on-wire values (e.g. {@code "BUSINESS"}); WA Web
+         *                            obtains these via
+         *                            {@code WAWebNewsletterDirectoryCategoryUtils.getCategoryValueFromEnum}
+         * @param limit               the page size, may be {@code null}
+         * @param cursorToken         the start cursor for pagination, may be {@code null}
+         * @param fetchStatusMetadata whether to include
+         *                            {@code status_metadata} in the response, set
+         *                            from
+         *                            {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}
+         * @implNote WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList:
+         * mirrors the inline destructure {@code var t=e.categories,n=e.countryCodes,r=e.cursorToken,a=e.limit,i=e.view}.
+         */
+        public Request(NewsletterDirectoryListView view,
+                       List<String> countryCodes,
+                       List<String> categories,
+                       Long limit,
+                       String cursorToken,
+                       boolean fetchStatusMetadata) {
+            this.view = view;
+            this.countryCodes = countryCodes;
+            this.categories = categories;
+            this.limit = limit;
+            this.cursorToken = cursorToken;
+            this.fetchStatusMetadata = fetchStatusMetadata;
         }
 
         /**
@@ -82,13 +120,57 @@ public sealed interface FetchNewsletterDirectoryListMex extends MexJsonOperation
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // var l={input:{view:u(i),filters:{country_codes:n,categories:t.map(...)},limit:a,start_cursor:r}, ...}
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+
+                // WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList
+                // input.view = u(i) -> uppercase enum string
+                if (view != null) {
+                    writer.writeName("view");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(view.value());
                 }
+
+                // WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList
+                // input.filters = {country_codes:n, categories:t.map(getCategoryValueFromEnum)}
+                writer.writeName("filters");
+                writer.writeColon();
+                writer.startObject();
+                writer.writeName("country_codes");
+                writer.writeColon();
+                writeStringArray(writer, countryCodes);
+                writer.writeName("categories");
+                writer.writeColon();
+                writeStringArray(writer, categories);
+                writer.endObject();
+
+                // WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList
+                // input.limit = a
+                if (limit != null) {
+                    writer.writeName("limit");
+                    writer.writeColon();
+                    writer.writeInt64(limit);
+                }
+                // WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList
+                // input.start_cursor = r
+                if (cursorToken != null) {
+                    writer.writeName("start_cursor");
+                    writer.writeColon();
+                    writer.writeString(cursorToken);
+                }
+
+                writer.endObject();
+
+                // WAWebMexFetchNewsletterDirectoryListJob.mexFetchNewsletterDirectoryList
+                // fetch_status_metadata: o("WAWebNewsletterGatingUtils").isNewsletterStatusReceiverEnabled()
+                writer.writeName("fetch_status_metadata");
+                writer.writeColon();
+                writer.writeBool(fetchStatusMetadata);
+
                 writer.endObject();
                 writer.endObject();
 
@@ -101,6 +183,28 @@ public sealed interface FetchNewsletterDirectoryListMex extends MexJsonOperation
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }
+        }
+
+        /**
+         * Writes a string array, emitting an empty array when the input is
+         * {@code null} so that the on-wire shape always contains the
+         * {@code country_codes} and {@code categories} keys (matching the
+         * JS object literal which never omits them).
+         *
+         * @param writer the JSON writer to emit into
+         * @param values the string values to serialise, may be {@code null}
+         */
+        private static void writeStringArray(JSONWriter writer, List<String> values) {
+            writer.startArray();
+            if (values != null) {
+                for (var i = 0; i < values.size(); i++) {
+                    if (i > 0) {
+                        writer.writeComma();
+                    }
+                    writer.writeString(values.get(i));
+                }
+            }
+            writer.endArray();
         }
     }
 

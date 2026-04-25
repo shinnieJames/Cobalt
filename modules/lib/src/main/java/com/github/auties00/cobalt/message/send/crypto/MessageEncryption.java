@@ -32,6 +32,7 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WAWebBackendJobsCommon")
 @WhatsAppWebModule(moduleName = "WAWebSignalCipherApi")
 @WhatsAppWebModule(moduleName = "WAWebSignalSessionApi")
+@WhatsAppWebModule(moduleName = "WAWebCryptoLibrary")
 public final class MessageEncryption {
     /**
      * Logger for encryption diagnostics.
@@ -138,6 +139,8 @@ public final class MessageEncryption {
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSignalCipherApi", exports = "encryptSignalProto",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "encryptSignalProto",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public MessageEncryptedPayload encryptForDevice(Jid recipientJid, byte[] plaintext) {
         Objects.requireNonNull(recipientJid, "recipientJid cannot be null");
         Objects.requireNonNull(plaintext, "plaintext cannot be null");
@@ -218,6 +221,8 @@ public final class MessageEncryption {
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSignalCipherApi", exports = "encryptSenderKeyMsgSignalProto",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "encryptSenderKeyMsgSignalProto",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public MessageEncryptedPayload encryptForGroup(Jid groupJid, Jid senderJid, byte[] plaintext) {
         Objects.requireNonNull(groupJid, "groupJid cannot be null");
         Objects.requireNonNull(senderJid, "senderJid cannot be null");
@@ -271,6 +276,10 @@ public final class MessageEncryption {
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "encodeAndPad",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebSignalCommonUtils", exports = "writeRandomPadMax16",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WACryptoPkcs7", exports = "writeRandomPadMax16",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private static byte[] addPadding(byte[] plaintext) {
         Objects.requireNonNull(plaintext, "plaintext cannot be null");
 

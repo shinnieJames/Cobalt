@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -32,9 +33,49 @@ public sealed interface LogNewsletterExposuresMex extends MexJsonOperation permi
      * to the {@code LogNewsletterExposures} compiled mutation.
      *
      * @implNote WAWebMexLogNewsletterExposuresJobMutation.graphql: corresponds to the compiled
-     * document id registered for the {@code mexLogNewsletterExposures} mutation.
+     * document id registered for the {@code mexLogNewsletterExposures} mutation,
+     * extracted from the {@code params.id} field of the compiled GraphQL artifact.
      */
     String QUERY_ID = "25260800823586918";
+
+    /**
+     * A single exposure entry that pairs a newsletter id with the capability
+     * surface on which the exposure occurred.
+     *
+     * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: adapts each element of the
+     * {@code e} array argument: {@code e.map(function(e){var t=e.capability,
+     * n=e.newsletterJid; return {newsletter_id:n, capability:
+     * WAWebNewsletterQueryUtils.getNewsletterCapabilityFromEnum(t)}})}.
+     * Cobalt expects the caller to pre-resolve the capability into its raw
+     * server-side string token (e.g. {@code "INSIGHTS"},
+     * {@code "PHOTO_POLLS"}, ...), mirroring the result of
+     * {@code getNewsletterCapabilityFromEnum}.
+     * @param newsletterId the newsletter JID serialised as a string, exactly
+     *                     as it appears on the wire under the
+     *                     {@code newsletter_id} key
+     * @param capability   the resolved server-side capability token, exactly
+     *                     as it appears on the wire under the
+     *                     {@code capability} key
+     */
+    record Exposure(String newsletterId, String capability) {
+        /**
+         * Constructs an {@link Exposure} after validating both fields are
+         * non-{@code null}.
+         *
+         * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: WA Web does not validate
+         * the inputs before serialising them, but Cobalt rejects {@code null}
+         * values eagerly because they would be silently dropped by
+         * {@code fastjson2} and produce a malformed envelope.
+         * @param newsletterId the newsletter JID; must not be {@code null}
+         * @param capability   the resolved capability token; must not be
+         *                     {@code null}
+         * @throws NullPointerException if either parameter is {@code null}
+         */
+        public Exposure {
+            Objects.requireNonNull(newsletterId, "newsletterId cannot be null");
+            Objects.requireNonNull(capability, "capability cannot be null");
+        }
+    }
 
     /**
      * The request variant of {@link LogNewsletterExposuresMex} that serialises the
@@ -42,14 +83,28 @@ public sealed interface LogNewsletterExposuresMex extends MexJsonOperation permi
      *
      * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: adapts the {@code variables}
      * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * Java class. WA Web builds {@code {input:{exposures:[...]}}}: Cobalt
+     * mirrors the same nested envelope rather than accepting a flat string.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexLogNewsletterExposuresJob")
     final class Request implements LogNewsletterExposuresMex {
-        private final String input;
+        private final List<Exposure> exposures;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a {@link Request} from a batch of exposure entries.
+         *
+         * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: WA Web's exported
+         * function takes the {@code e} array directly and maps each entry
+         * into a {@code {newsletter_id, capability}} object. Cobalt accepts
+         * the pre-mapped {@link Exposure} records so the call site can
+         * resolve the capability enum once before queuing the request.
+         * @param exposures the batch of exposure entries; must not be
+         *                  {@code null}, but may be empty
+         * @throws NullPointerException if {@code exposures} is {@code null}
+         */
+        public Request(List<Exposure> exposures) {
+            Objects.requireNonNull(exposures, "exposures cannot be null");
+            this.exposures = List.copyOf(exposures);
         }
 
         /**
@@ -57,9 +112,13 @@ public sealed interface LogNewsletterExposuresMex extends MexJsonOperation permi
          * WhatsApp relay.
          *
          * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
+         * {@code variables} object inline as
+         * {@code {input:{exposures: e.map(({capability,newsletterJid}) =>
+         * ({newsletter_id:newsletterJid, capability:
+         * getNewsletterCapabilityFromEnum(capability)}))}}} and delegates to
+         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the same nested
+         * JSON envelope directly via {@code fastjson2.JSONWriter} and wraps
+         * the result through
          * {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
@@ -76,13 +135,36 @@ public sealed interface LogNewsletterExposuresMex extends MexJsonOperation permi
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // var t={input:{exposures: e.map(...)}}
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+
+                // WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures
+                // exposures: e.map(function(e){var t=e.capability,n=e.newsletterJid;
+                //                              return {newsletter_id:n, capability:getNewsletterCapabilityFromEnum(t)}})
+                writer.writeName("exposures");
+                writer.writeColon();
+                writer.startArray();
+                for (var i = 0; i < exposures.size(); i++) {
+                    if (i > 0) {
+                        writer.writeComma();
+                    }
+                    var exposure = exposures.get(i);
+                    writer.startObject();
+                    writer.writeName("newsletter_id");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeString(exposure.newsletterId());
+                    writer.writeName("capability");
+                    writer.writeColon();
+                    writer.writeString(exposure.capability());
+                    writer.endObject();
                 }
+                writer.endArray();
+
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 
@@ -103,11 +185,21 @@ public sealed interface LogNewsletterExposuresMex extends MexJsonOperation permi
      * returned by the server after a successful mutation.
      *
      * @implNote WAWebMexLogNewsletterExposuresJob: adapts the JSON root returned by the GraphQL
-     * mutation into a Java value object.
+     * mutation into a Java value object. The compiled GraphQL artifact only
+     * selects {@code __typename} on the {@code xwa2_newsletter_log_exposures}
+     * field, so success is signalled by the mere presence of that root.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexLogNewsletterExposuresJob")
     final class Response implements LogNewsletterExposuresMex {
 
+        /**
+         * Constructs an empty {@link Response}.
+         *
+         * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: WA Web ignores the
+         * response payload entirely (the function does not even {@code return}
+         * the awaited value). Cobalt still exposes a {@link Response}
+         * placeholder so callers can pattern-match on the sealed hierarchy.
+         */
         private Response() {
         }
 
@@ -133,7 +225,9 @@ public sealed interface LogNewsletterExposuresMex extends MexJsonOperation permi
          *
          * @implNote WAWebMexLogNewsletterExposuresJob.mexLogNewsletterExposures: mirrors the implicit
          * unwrapping that WA Web performs on the GraphQL response,
-         * extracting the {@code xwa2_newsletter_log_exposures} root.
+         * extracting the {@code xwa2_newsletter_log_exposures} root which the
+         * compiled GraphQL artifact populates on success with a single
+         * {@code __typename} selection.
          * @param json the UTF-8 encoded JSON payload
          * @return an {@link Optional} containing the parsed response, or
          *         empty if the envelope is missing expected fields

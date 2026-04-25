@@ -50,21 +50,36 @@ public sealed interface FetchNewsletterMessageReactionSenderListMex extends MexJ
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterMessageReactionSenderListJob")
     final class Request implements FetchNewsletterMessageReactionSenderListMex {
-        private final String input;
+        private final String newsletterId;
+        private final long serverId;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Creates a new request that targets the reaction senders for
+         * {@code (newsletterId, serverId)}.
+         *
+         * @implNote WAWebMexFetchNewsletterMessageReactionSenderListJob.mexFetchNewsletterMessageReactionSenderList: mirrors
+         * the JS function signature {@code function c(e, t)} where {@code e} is
+         * the newsletter id and {@code t} is the server-assigned message id.
+         * Both values land in the nested {@code variables.input} object.
+         * @param newsletterId the newsletter id (becomes {@code input.id});
+         *                     must not be {@code null}
+         * @param serverId     the server-assigned message id (becomes
+         *                     {@code input.server_id})
+         */
+        public Request(String newsletterId, long serverId) {
+            this.newsletterId = Objects.requireNonNull(newsletterId, "newsletterId");
+            this.serverId = serverId;
         }
 
         /**
          * Builds the IQ stanza that dispatches this operation to the
          * WhatsApp relay.
          *
-         * @implNote WAWebMexFetchNewsletterMessageReactionSenderListJob.mexFetchNewsletterMessageReactionSenderList: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * @implNote WAWebMexFetchNewsletterMessageReactionSenderListJob.mexFetchNewsletterMessageReactionSenderList: WA Web builds the
+         * variables object as {@code {input: {id: e, server_id: t}}} inline and
+         * delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes the
+         * same nested envelope directly via {@code fastjson2.JSONWriter} and
+         * wraps it through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -80,13 +95,18 @@ public sealed interface FetchNewsletterMessageReactionSenderListMex extends MexJ
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
-                // WAWebMexFetchNewsletterMessageReactionSenderListJob.mexFetchNewsletterMessageReactionSenderList
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
-                    writer.writeColon();
-                    writer.writeString(input);
-                }
+                // WAWebMexFetchNewsletterMessageReactionSenderListJob.mexFetchNewsletterMessageReactionSenderList:
+                // var a = { input: { id: e, server_id: t } }
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                writer.writeName("id");
+                writer.writeColon();
+                writer.writeString(newsletterId);
+                writer.writeName("server_id");
+                writer.writeColon();
+                writer.writeInt64(serverId);
+                writer.endObject();
                 writer.endObject();
                 writer.endObject();
 

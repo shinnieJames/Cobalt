@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.newsletter.Newsletter;
@@ -65,6 +67,7 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
      *
      * @implNote WAWebAccountLinkingConstants.AccountLinkingNotificationEvent.ACCOUNT_LINKED
      */
+    @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_ACCOUNT_LINKED = 1;
 
     /**
@@ -72,6 +75,7 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
      *
      * @implNote WAWebAccountLinkingConstants.AccountLinkingNotificationEvent.ACCOUNT_UNLINKED
      */
+    @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_ACCOUNT_UNLINKED = 2;
 
     /**
@@ -79,6 +83,7 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
      *
      * @implNote WAWebAccountLinkingConstants.AccountLinkingNotificationEvent.STATE_DELETED
      */
+    @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_STATE_DELETED = 4;
 
     /**
@@ -86,6 +91,7 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
      *
      * @implNote WAWebAccountLinkingConstants.AccountLinkingNotificationEvent.STATE_SUSPENDED
      */
+    @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_STATE_SUSPENDED = 5;
 
     /**
@@ -93,6 +99,7 @@ final class NotificationLinkingStreamHandler implements SocketStream.Handler {
      *
      * @implNote WAWebAccountLinkingConstants.AccountLinkingNotificationEvent.CLIENT_RESYNC
      */
+    @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkingNotificationEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     private static final int WAFFLE_EVENT_CLIENT_RESYNC = 6;
 
     /**

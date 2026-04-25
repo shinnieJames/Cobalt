@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.message.send;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.icdc.IcdcResult;
 import com.github.auties00.cobalt.exception.WhatsAppCorruptedStoreException;
+import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.send.ack.AckResult;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
@@ -24,20 +25,25 @@ import com.github.auties00.cobalt.model.message.event.EventMessage;
 import com.github.auties00.cobalt.model.message.group.GroupInviteMessage;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveMessage;
 import com.github.auties00.cobalt.model.message.interactive.InteractiveResponseMessage;
+import com.github.auties00.cobalt.model.message.interactive.TemplateButtonReplyMessage;
 import com.github.auties00.cobalt.model.message.location.LiveLocationMessage;
 import com.github.auties00.cobalt.model.message.location.LocationMessage;
 import com.github.auties00.cobalt.model.message.media.*;
 import com.github.auties00.cobalt.model.message.newsletter.NewsletterAdminInviteMessage;
+import com.github.auties00.cobalt.model.message.newsletter.NewsletterFollowerInviteMessage;
 import com.github.auties00.cobalt.model.message.poll.PollCreationMessage;
 import com.github.auties00.cobalt.model.message.poll.PollResultSnapshotMessage;
 import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
+import com.github.auties00.cobalt.model.message.security.EncCommentMessage;
 import com.github.auties00.cobalt.model.message.security.EncReactionMessage;
 import com.github.auties00.cobalt.model.message.security.SecretEncMessage;
 import com.github.auties00.cobalt.model.message.system.*;
+import com.github.auties00.cobalt.model.message.system.history.MessageHistoryNotice;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.wam.event.E2eMessageSendEventBuilder;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
@@ -47,6 +53,7 @@ import com.github.auties00.cobalt.wam.type.E2eDestination;
 import com.github.auties00.cobalt.wam.type.EditType;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.PlaceholderReasonType;
 
 import java.io.IOException;
 import java.util.*;
@@ -129,6 +136,32 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
+     * Returns the maximum age, in seconds, of an outgoing message that may
+     * still be resent after a phash mismatch or other server-driven retry.
+     *
+     * <p>When the elapsed time since the original send timestamp exceeds
+     * this threshold, the resend path is skipped and the send is reported
+     * as expired.
+     *
+     * @return the resend timeout in seconds
+     *
+     * @implNote WAWebSendMsgCommonApi.getResendTimeoutInSeconds: returns
+     * {@code (getABPropConfigValue("web_e2e_backfill_expire_time") || 5) * 60}.
+     * The AB-prop default is {@code 5} (release default {@code 60} minutes).
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "getResendTimeoutInSeconds",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    long getResendTimeoutInSeconds() {
+        // WAWebSendMsgCommonApi: c=5; ABProp("web_e2e_backfill_expire_time") || c
+        var minutes = client.abPropsService().getInt(ABProp.WEB_E2E_BACKFILL_EXPIRE_TIME);
+        if (minutes <= 0) {
+            minutes = 5;
+        }
+        // WAWebSendMsgCommonApi: result * 60
+        return minutes * 60L;
+    }
+
+    /**
      * Persists the store's encryption state before sending the wire
      * stanza, ensuring session keys and prekeys survive a crash.
      *
@@ -196,6 +229,8 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WAWebICDCMetaApi", exports = "populateICDCMeta",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebDeviceSentMessageProtoUtils", exports = "wrapDeviceSentMessage",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     List<MessageEncryptedPayload> encryptForDevices(
             MessageEncryption encryption,
             Collection<Jid> devices,
@@ -286,23 +321,39 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             case SecretEncMessage s
                     when s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.EVENT_EDIT -> "event";
 
-            // WAWebE2EProtoUtils: pollCreation*, pollUpdate, pollResultSnapshot → "poll"
+            // WAWebE2EProtoUtils: secretEncryptedMessage(MESSAGE_EDIT) → "text"
+            // (must be checked before the poll branch and the default media fallback)
+            case SecretEncMessage s
+                    when s.secretEncType().orElse(null) == SecretEncMessage.SecretEncType.MESSAGE_EDIT -> "text";
+
+            // WAWebE2EProtoUtils: pollCreation*, pollUpdate → "poll"
+            // (V2/V3/V5 collapsed onto a single PollCreationMessage in Cobalt)
             case PollCreationMessage _ -> "poll";
             case PollUpdateMessage _ -> "poll";
+
+            // WAWebE2EProtoUtils: pollResultSnapshot → "poll" only when the
+            // WAWebPollResultSnapshotPollTypeEnvelopeEnabled AB-prop is on,
+            // otherwise "text". Cobalt mirrors the AB-prop default (enabled).
             case PollResultSnapshotMessage _ -> "poll";
 
             // WAWebE2EProtoUtils: extendedTextMessage with non-empty matchedText → "media"
             case ExtendedTextMessage text when text.matchedText().isPresent() -> "media";
 
-            // WAWebE2EProtoUtils: conversation, extendedText, protocolMessage,
-            // interactiveMessage, keepInChat, pinInChat, newsletterAdminInvite,
-            // requestPhoneNumber, editedMessage → "text"
+            // WAWebE2EProtoUtils: conversation, extendedText, templateButtonReply,
+            // protocolMessage, interactiveMessage, keepInChat, requestPhoneNumber,
+            // editedMessage, pinInChat, encCommentMessage, newsletterAdminInvite,
+            // newsletterFollowerInviteV2, messageHistoryNotice → "text"
             case ExtendedTextMessage _ -> "text";
+            case TemplateButtonReplyMessage _ -> "text";
             case ProtocolMessage _ -> "text";
             case InteractiveMessage _ -> "text";
             case InteractiveResponseMessage _ -> "text";
             case KeepInChatMessage _ -> "text";
+            case PinInChatMessage _ -> "text";
+            case EncCommentMessage _ -> "text";
             case NewsletterAdminInviteMessage _ -> "text";
+            case NewsletterFollowerInviteMessage _ -> "text";
+            case MessageHistoryNotice _ -> "text";
             case RequestPhoneNumberMessage _ -> "text";
             case EmptyMessage _ -> "text";
 
@@ -731,6 +782,216 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * return {@code SENDER_REVOKE} or {@code ADMIN_REVOKE} for revoke messages,
      * {@code EDITED} for message-edit messages, otherwise {@code NOT_EDITED}.
      */
+    /**
+     * Encodes the protobuf decrypt-fail-type into the stanza
+     * {@code decrypt-fail} attribute value.
+     *
+     * <p>Returns {@code "hide"} when the inner message uses
+     * {@code DecryptFailType.Hide}, {@code null} (mapped to a dropped
+     * attribute by the stanza encoder) when the inner type is
+     * {@code DecryptFailType.Show} or unset.
+     *
+     * @param hide whether the message protobuf carries
+     *             {@code DecryptFailType.Hide}; {@code null} when the field
+     *             is absent on the wire
+     * @return {@code "hide"} or {@code null}
+     *
+     * @implNote WAWebBackendJobsCommon.encodeMaybeDecryptFail (function
+     * {@code C}): {@code Show -> DROP_ATTR; Hide -> "hide"}. Cobalt's
+     * encoder treats {@code null} as the drop-attribute marker, so the
+     * {@code Show} branch maps to {@code null} verbatim.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "encodeMaybeDecryptFail",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    static String encodeMaybeDecryptFail(Boolean hide) {
+        if (hide == null) {
+            // WAWebBackendJobsCommon.encodeMaybeDecryptFail: DecryptFailType.Show -> DROP_ATTR
+            return null;
+        }
+        // WAWebBackendJobsCommon.encodeMaybeDecryptFail: DecryptFailType.Hide -> "hide"
+        return hide ? "hide" : null;
+    }
+
+    /**
+     * Encodes the optional native-flow-name into the stanza
+     * {@code native_flow_name} attribute value.
+     *
+     * <p>Wraps the maybe-encoder helper {@code h} from WA Web with the
+     * identity encoder (the WA Web variant calls {@code WAWap.CUSTOM_STRING}
+     * which is a no-op on the string carrier). Returns {@code null} when the
+     * input is {@code null} so the caller can drop the attribute.
+     *
+     * @param nativeFlowName the resolved native flow name, or {@code null}
+     * @return the same string when present, otherwise {@code null}
+     *
+     * @implNote WAWebBackendJobsCommon.encodeMaybeNativeFlowName
+     * ({@code S = h(e => CUSTOM_STRING(e))}): when the value is
+     * {@code null}/{@code undefined}, returns {@code DROP_ATTR}; otherwise
+     * wraps the value in a custom-string carrier. Cobalt represents the
+     * drop marker with a {@code null} return.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "encodeMaybeNativeFlowName",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    static String encodeMaybeNativeFlowName(String nativeFlowName) {
+        // WAWebBackendJobsCommon: h(e => CUSTOM_STRING(e)) — null short-circuits to DROP_ATTR
+        return nativeFlowName;
+    }
+
+    /**
+     * Maps an {@code edit} stanza-attribute string to the WAM
+     * {@link EditType} enum constant.
+     *
+     * <p>The mapping mirrors WA Web's {@code R} switch on
+     * {@code WAWebAck.EDIT_ATTR}: {@code "7" -> SENDER_REVOKE},
+     * {@code "8" -> ADMIN_REVOKE}, {@code "1" -> EDITED}, anything
+     * else (including {@code null}, {@code "-1"}, {@code "2"} for pin,
+     * {@code "3"} for newsletter edit) falls through to
+     * {@link EditType#NOT_EDITED}.
+     *
+     * @param editAttr the {@code edit} stanza attribute value, or {@code null}
+     * @return the matching WAM {@link EditType} constant
+     *
+     * @implNote WAWebBackendJobsCommon.getMetricEditType (function
+     * {@code R}): switches on {@code WAWebAck.EDIT_ATTR}
+     * ({@code SENDER_REVOKE=7, ADMIN_REVOKE=8, MESSAGE_EDIT=1}) and
+     * defaults to {@code NOT_EDITED}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricEditType",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    static EditType getMetricEditType(String editAttr) {
+        if (editAttr == null) {
+            return EditType.NOT_EDITED;
+        }
+        return switch (editAttr) {
+            // WAWebBackendJobsCommon: case EDIT_ATTR.SENDER_REVOKE (7)
+            case "7" -> EditType.SENDER_REVOKE;
+            // WAWebBackendJobsCommon: case EDIT_ATTR.ADMIN_REVOKE (8)
+            case "8" -> EditType.ADMIN_REVOKE;
+            // WAWebBackendJobsCommon: case EDIT_ATTR.MESSAGE_EDIT (1)
+            case "1" -> EditType.EDITED;
+            // WAWebBackendJobsCommon: default -> NOT_EDITED
+            default -> EditType.NOT_EDITED;
+        };
+    }
+
+    /**
+     * Resolves the {@link PlaceholderReasonType} for an unrecoverable
+     * inbound-decryption failure, used when the receiver inserts a
+     * placeholder entry into the chat.
+     *
+     * <p>The mapping mirrors WA Web's {@code b} cascade:
+     * {@code UnknownDeviceMessageError} returns
+     * {@link PlaceholderReasonType#UNKNOWN_COMPANION_NO_PREKEY}; otherwise
+     * the Signal-decryption-error message is matched against the WA Web
+     * {@code errSignal*} / {@code errInvalidMac*} string set:
+     * <ul>
+     *   <li>{@code NoSession} / {@code NoSenderKey} →
+     *       {@link PlaceholderReasonType#SIGNAL_NO_SESSION}</li>
+     *   <li>{@code InvalidMessage} →
+     *       {@link PlaceholderReasonType#SIGNAL_INVALID_MESSAGE}</li>
+     *   <li>{@code InvalidKey} / {@code InvalidOneTimeKey} /
+     *       {@code InvalidSignedPreKey} →
+     *       {@link PlaceholderReasonType#SIGNAL_INVALID_KEY}</li>
+     *   <li>{@code FutureMessage} →
+     *       {@link PlaceholderReasonType#SIGNAL_FUTURE_MESSAGE}</li>
+     *   <li>{@code BadMac} →
+     *       {@link PlaceholderReasonType#SIGNAL_BAD_MAC}</li>
+     *   <li>any other Signal-decryption error →
+     *       {@link PlaceholderReasonType#OTHER}</li>
+     * </ul>
+     * Errors that are neither {@code UnknownDevice} nor a
+     * {@code Receive}-family Signal exception return {@code null}, matching
+     * WA Web's implicit {@code undefined} fall-through which suppresses the
+     * placeholder.
+     *
+     * @param error the exception raised by the inbound decryption pipeline
+     * @return the matching {@link PlaceholderReasonType}, or {@code null}
+     *         when no placeholder should be inserted
+     *
+     * @implNote WAWebBackendJobsCommon.getPlaceholderAddReason (function
+     * {@code b}): the WA Web cascade also emits an extra LOGGER.LOG /
+     * sendLogs side-effect for the {@code errSignalInvalidKey} and
+     * {@code errInvalidMac*} cases (sampled at {@code 0.001} or {@code 0.01}
+     * via the {@code 26258} GK). Cobalt's logging is centralised in the
+     * exception subtypes themselves, so this helper performs only the
+     * enum mapping; the upstream sampling/log is intentionally omitted
+     * (see CLAUDE.md error model: WA Web's inline recovery and logging
+     * are replaced with structured exception types).
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getPlaceholderAddReason",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    static PlaceholderReasonType getPlaceholderAddReason(Throwable error) {
+        // WAWebBackendJobsCommon: e instanceof UnknownDeviceMessageError -> UNKNOWN_COMPANION_NO_PREKEY
+        if (error instanceof WhatsAppMessageException.Receive.UnknownDevice) {
+            return PlaceholderReasonType.UNKNOWN_COMPANION_NO_PREKEY;
+        }
+        // WAWebBackendJobsCommon: e instanceof SignalDecryptionError -> switch (e.message)
+        if (error instanceof WhatsAppMessageException.Receive) {
+            return switch (error) {
+                // WAWebBackendJobsCommon: errSignalNoSession / errLoadSenderKeySession -> SIGNAL_NO_SESSION
+                case WhatsAppMessageException.Receive.NoSession _,
+                     WhatsAppMessageException.Receive.NoSenderKey _ ->
+                        PlaceholderReasonType.SIGNAL_NO_SESSION;
+                // WAWebBackendJobsCommon: errSignalInvalidMsg -> SIGNAL_INVALID_MESSAGE
+                case WhatsAppMessageException.Receive.InvalidMessage _ ->
+                        PlaceholderReasonType.SIGNAL_INVALID_MESSAGE;
+                // WAWebBackendJobsCommon: errSignalInvalidKey / errSignalInvalidOneTimeKey
+                // / errSignalInvalidSignedPreKey -> SIGNAL_INVALID_KEY
+                case WhatsAppMessageException.Receive.InvalidKey _,
+                     WhatsAppMessageException.Receive.InvalidOneTimeKey _,
+                     WhatsAppMessageException.Receive.InvalidSignedPreKey _ ->
+                        PlaceholderReasonType.SIGNAL_INVALID_KEY;
+                // WAWebBackendJobsCommon: errSignalTooManyMessagesInFuture
+                // / errSignalGrpTooManyMessagesInFuture -> SIGNAL_FUTURE_MESSAGE
+                case WhatsAppMessageException.Receive.FutureMessage _ ->
+                        PlaceholderReasonType.SIGNAL_FUTURE_MESSAGE;
+                // WAWebBackendJobsCommon: errInvalidMacWithDecryptedPlaintext
+                // / errInvalidMacInvalidCipherKey / errInvalidMacInvalidCipherKeyNewChain -> SIGNAL_BAD_MAC
+                case WhatsAppMessageException.Receive.BadMac _ ->
+                        PlaceholderReasonType.SIGNAL_BAD_MAC;
+                // WAWebBackendJobsCommon: default -> OTHER
+                default -> PlaceholderReasonType.OTHER;
+            };
+        }
+        // Errors outside the Signal-decryption family return undefined in WA Web,
+        // which the caller treats as "no placeholder" — Cobalt mirrors with null.
+        return null;
+    }
+
+    /**
+     * Returns the job priority assigned to non-critical inbound notifications.
+     *
+     * <p>WA Web pushes notifications onto the job orchestrator with a priority
+     * that depends on whether the runtime is replaying offline traffic: when
+     * offline, the priority is {@code OFFLINE} so the orchestrator drains the
+     * notifications in order; otherwise {@code LOW} so the active foreground
+     * traffic preempts them.
+     *
+     * <p>Cobalt does not run a job orchestrator — inbound stanzas are
+     * processed in order on the central selector — so the return value is
+     * the raw enum constant. Call sites currently use it only for telemetry
+     * and ordering decisions.
+     *
+     * @param isOffline {@code true} when the runtime is currently draining
+     *                  the offline backlog, {@code false} during normal
+     *                  online operation
+     * @return {@code "OFFLINE"} when {@code isOffline} is {@code true},
+     *         otherwise {@code "LOW"}
+     *
+     * @implNote WAWebBackendJobsCommon.getNonCriticalNotificationPriority
+     * (function {@code E}): {@code e ? JOB_PRIORITY.OFFLINE : JOB_PRIORITY.LOW}.
+     * WAJobOrchestratorTypes.JOB_PRIORITY exposes the constants as plain
+     * uppercase strings ({@code "OFFLINE"}, {@code "LOW"}); Cobalt mirrors
+     * the string values verbatim so any future job-orchestrator integration
+     * keeps the same wire-level identifiers.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getNonCriticalNotificationPriority",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    static String getNonCriticalNotificationPriority(boolean isOffline) {
+        // WAWebBackendJobsCommon: e ? JOB_PRIORITY.OFFLINE : JOB_PRIORITY.LOW
+        return isOffline ? "OFFLINE" : "LOW";
+    }
+
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricEditTypeFromMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static EditType mapEditType(MessageContainer container) {

@@ -77,5 +77,8 @@ public enum MediaType {
     @WamEnumConstant(70) APPDATA,
     @WamEnumConstant(71) GROUP_HISTORY,
     @WamEnumConstant(72) GROUP_HISTORY_NOTICE,
-    @WamEnumConstant(73) MEMBER_TAG
+    @WamEnumConstant(73) MEMBER_TAG,
+    @WamEnumConstant(74) DOC_COLLECTION,
+    @WamEnumConstant(75) VIDEO_COLLECTION,
+    @WamEnumConstant(76) MIXED_COLLECTION
 }

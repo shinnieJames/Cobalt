@@ -161,24 +161,32 @@ public final class NewsletterReactionSettings {
     /**
      * Enumerates the four reaction policies that may be configured for a
      * newsletter.
+     *
+     * @implNote WA Web's
+     *           {@code WAWebCommonNewsletterEnums.NewsletterReactionCodesSetting}
+     *           assigns {@code All:0}, {@code Basic:1}, {@code Blocklist:2},
+     *           {@code None:3}. Cobalt preserves these wire indices exactly
+     *           and appends an {@code UNKNOWN} sentinel at {@code -1}-like
+     *           wire index {@code 4} to cover unrecognised server values
+     *           without disturbing existing indices.
      */
     @ProtobufEnum
     public enum Type {
         /**
-         * The policy was not reported by the server or is unrecognized by
-         * this version of the client.
-         */
-        UNKNOWN(0),
-
-        /**
          * Every emoji is accepted as a reaction.
          */
-        ALL(1),
+        ALL(0),
 
         /**
          * Only a curated set of basic emoji is accepted as a reaction.
          */
-        BASIC(2),
+        BASIC(1),
+
+        /**
+         * Every emoji is accepted except those listed in
+         * {@link NewsletterReactionSettings#blockedCodes()}.
+         */
+        BLOCKLIST(2),
 
         /**
          * No reactions are accepted.
@@ -186,10 +194,14 @@ public final class NewsletterReactionSettings {
         NONE(3),
 
         /**
-         * Every emoji is accepted except those listed in
-         * {@link NewsletterReactionSettings#blockedCodes()}.
+         * The policy was not reported by the server or is unrecognized by
+         * this version of the client.
+         *
+         * @implNote NO_WA_BASIS: defensive sentinel added by Cobalt; not
+         *           present in
+         *           {@code WAWebCommonNewsletterEnums.NewsletterReactionCodesSetting}.
          */
-        BLOCKLIST(4);
+        UNKNOWN(4);
 
         /**
          * Lookup table from the lowercase enum name to the constant, used

@@ -195,6 +195,8 @@ public final class MessageDecryption {
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSignalCipherApi", exports = "decryptSignalProto",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "decryptSignalProto",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public byte[] decryptFromDevice(byte[] ciphertext, Jid senderJid, MessageEncryptionType encryptionType) {
         Objects.requireNonNull(ciphertext, "ciphertext cannot be null");
         Objects.requireNonNull(senderJid, "senderJid cannot be null");
@@ -331,6 +333,8 @@ public final class MessageDecryption {
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptEnc", exports = "decryptEnc",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSignalCipherApi", exports = "decryptGroupSignalProto",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "decryptGroupSignalProto",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public byte[] decryptFromGroup(byte[] ciphertext, Jid groupJid, Jid senderJid) {
         Objects.requireNonNull(ciphertext, "ciphertext cannot be null");

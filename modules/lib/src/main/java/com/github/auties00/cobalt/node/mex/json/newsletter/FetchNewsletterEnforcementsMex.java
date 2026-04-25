@@ -39,7 +39,7 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
      * @implNote WAWebMexFetchNewsletterEnforcementsJobQuery.graphql: corresponds to the compiled
      * document id registered for the {@code mexFetchNewsletterEnforcements} query.
      */
-    String QUERY_ID = "25440958522248700";
+    String QUERY_ID = "25987882310910935";
 
     /**
      * The request variant of {@link FetchNewsletterEnforcementsMex} that serialises the
@@ -1081,11 +1081,11 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
          */
         public static final class ViolatingMessages {
             private final BaseEnforcementData baseEnforcementData;
-            private final String serverMsgId;
+            private final ContentData contentData;
 
-            private ViolatingMessages(BaseEnforcementData baseEnforcementData, String serverMsgId) {
+            private ViolatingMessages(BaseEnforcementData baseEnforcementData, ContentData contentData) {
                 this.baseEnforcementData = baseEnforcementData;
-                this.serverMsgId = serverMsgId;
+                this.contentData = contentData;
             }
 
             /**
@@ -1098,12 +1098,96 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
             }
 
             /**
-             * Returns the {@code server_msg_id} field.
+             * Returns the {@code content_data} field.
              *
              * @return an {@link Optional} containing the value, or empty if absent
              */
-            public Optional<String> serverMsgId() {
-                return Optional.ofNullable(serverMsgId);
+            public Optional<ContentData> contentData() {
+                return Optional.ofNullable(contentData);
+            }
+
+            /**
+             * A parsed {@code content_data} polymorphic object.
+             *
+             * @implNote WAWebMexFetchNewsletterEnforcementsJobQuery.graphql: adapts the inline fragments on the
+             * {@code content_data} {@code LinkedField}, which selects
+             * {@code server_msg_id} from {@code XWA2ChannelServerMsgData} or
+             * {@code server_id} from {@code XWA2ChannelStatusData}.
+             */
+            public static final class ContentData {
+                private final String typename;
+                private final String serverMsgId;
+                private final String serverId;
+
+                private ContentData(String typename, String serverMsgId, String serverId) {
+                    this.typename = typename;
+                    this.serverMsgId = serverMsgId;
+                    this.serverId = serverId;
+                }
+
+                /**
+                 * Returns the {@code __typename} discriminator.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> typename() {
+                    return Optional.ofNullable(typename);
+                }
+
+                /**
+                 * Returns the {@code server_msg_id} field from the
+                 * {@code XWA2ChannelServerMsgData} inline fragment.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> serverMsgId() {
+                    return Optional.ofNullable(serverMsgId);
+                }
+
+                /**
+                 * Returns the {@code server_id} field from the
+                 * {@code XWA2ChannelStatusData} inline fragment.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> serverId() {
+                    return Optional.ofNullable(serverId);
+                }
+
+                /**
+                 * Parses a {@code ContentData} from the given JSON object.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 */
+                static Optional<ContentData> of(JSONObject obj) {
+                    if (obj == null) {
+                        return Optional.empty();
+                    }
+
+                    var typename = obj.getString("__typename");
+                    var serverMsgId = obj.getString("server_msg_id");
+                    var serverId = obj.getString("server_id");
+                    return Optional.of(new ContentData(typename, serverMsgId, serverId));
+                }
+
+                /**
+                 * Parses a list of {@code ContentData} from the given JSON array.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 */
+                static List<ContentData> ofArray(JSONArray arr) {
+                    if (arr == null) {
+                        return List.of();
+                    }
+
+                    var result = new ArrayList<ContentData>(arr.size());
+                    for (var i = 0; i < arr.size(); i++) {
+                        of(arr.getJSONObject(i)).ifPresent(result::add);
+                    }
+                    return result;
+                }
             }
 
             /**
@@ -1498,8 +1582,8 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
                 }
 
                 var baseEnforcementData = BaseEnforcementData.of(obj.getJSONObject("base_enforcement_data")).orElse(null);
-                var serverMsgId = obj.getString("server_msg_id");
-                return Optional.of(new ViolatingMessages(baseEnforcementData, serverMsgId));
+                var contentData = ContentData.of(obj.getJSONObject("content_data")).orElse(null);
+                return Optional.of(new ViolatingMessages(baseEnforcementData, contentData));
             }
 
             /**
@@ -1526,9 +1610,9 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
          */
         public static final class Geosuspensions {
             private final BaseEnforcementData baseEnforcementData;
-            private final String countryCodes;
+            private final List<String> countryCodes;
 
-            private Geosuspensions(BaseEnforcementData baseEnforcementData, String countryCodes) {
+            private Geosuspensions(BaseEnforcementData baseEnforcementData, List<String> countryCodes) {
                 this.baseEnforcementData = baseEnforcementData;
                 this.countryCodes = countryCodes;
             }
@@ -1545,10 +1629,15 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
             /**
              * Returns the {@code country_codes} field.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @implNote WAWebMexFetchNewsletterEnforcementsJob.mexFetchNewsletterEnforcements: WA Web maps each
+             * raw 2-letter ISO code through {@code WAWebAsISOCountryCode.asISOCountryCode}
+             * and enriches it with a localized country name from
+             * {@code WAWebLocaleModules.getCountryData()}. Cobalt exposes the
+             * raw codes only; locale enrichment is a UI concern left to callers.
+             * @return the list of raw country codes, empty if absent
              */
-            public Optional<String> countryCodes() {
-                return Optional.ofNullable(countryCodes);
+            public List<String> countryCodes() {
+                return countryCodes;
             }
 
             /**
@@ -2162,7 +2251,22 @@ public sealed interface FetchNewsletterEnforcementsMex extends MexJsonOperation 
                 }
 
                 var baseEnforcementData = BaseEnforcementData.of(obj.getJSONObject("base_enforcement_data")).orElse(null);
-                var countryCodes = obj.getString("country_codes");
+                // WAWebMexFetchNewsletterEnforcementsJob.mexFetchNewsletterEnforcements
+                // Reads country_codes as a list of raw ISO 2-letter strings; WA Web enriches via WAWebAsISOCountryCode/WAWebLocaleModules in UI code
+                var countryCodesArr = obj.getJSONArray("country_codes");
+                List<String> countryCodes;
+                if (countryCodesArr == null) {
+                    countryCodes = List.of();
+                } else {
+                    var codes = new ArrayList<String>(countryCodesArr.size());
+                    for (var i = 0; i < countryCodesArr.size(); i++) {
+                        var code = countryCodesArr.getString(i);
+                        if (code != null) {
+                            codes.add(code);
+                        }
+                    }
+                    countryCodes = List.copyOf(codes);
+                }
                 return Optional.of(new Geosuspensions(baseEnforcementData, countryCodes));
             }
 

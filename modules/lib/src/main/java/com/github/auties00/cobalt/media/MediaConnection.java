@@ -12,9 +12,11 @@ import com.github.auties00.cobalt.model.media.MediaPath;
 import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
+import com.github.auties00.cobalt.util.MediaMetricUtils;
 
 import com.github.auties00.cobalt.media.MediaHost.Operation;
-import com.github.auties00.cobalt.media.MediaHost.RouteSelectionResult;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -67,6 +69,7 @@ import java.util.*;
 @WhatsAppWebModule(moduleName = "WAWebMmsClientFormatDownloadUrl")
 @WhatsAppWebModule(moduleName = "WAWebMmsClientFormatHashUrl")
 @WhatsAppWebModule(moduleName = "WAWebMmsClientIsErrorRetryable")
+@WhatsAppWebModule(moduleName = "WAWebMmsClientMmsBackoffOptions")
 @WhatsAppWebModule(moduleName = "WAWebMmsCdnUrlValidationUtils")
 @WhatsAppWebModule(moduleName = "WABase64UrlSafe")
 @WhatsAppWebModule(moduleName = "WAWebWamMediaMetricUtils")
@@ -265,8 +268,12 @@ public final class MediaConnection {
      * @param response the IQ response node containing a {@code media_conn}
      *                 child
      * @return the parsed media connection
-     * @throws IllegalArgumentException if the response does not contain a
-     *         valid {@code media_conn} child node
+     * @throws java.util.NoSuchElementException if the response is missing the
+     *         {@code media_conn} child or one of the mandatory
+     *         {@code auth}, {@code ttl}, {@code auth_ttl}, or
+     *         {@code max_buckets} attributes
+     * @throws IllegalArgumentException if a mandatory integer attribute is
+     *         present but cannot be parsed as an {@code int}
      */
     @WhatsAppWebExport(moduleName = "WAMediaConnParser", exports = "mediaConnParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -283,18 +290,20 @@ public final class MediaConnection {
         var auth = mediaConn.getRequiredAttributeAsString("auth");
 
         // WAMediaConnParser.mediaConnParser
-        // Reads the raw routes TTL; WA Web stores it as a future unix time and
-        // later subtracts unixTime() to recover the seconds-to-live value
-        var ttl = mediaConn.getAttributeAsInt("ttl", 0);
+        // Reads the mandatory routes TTL; WA Web's r.attrFutureTime("ttl") calls
+        // r.attrInt(...) which throws when the attribute is missing, so a missing
+        // value here is a server protocol violation rather than a soft default
+        var ttl = mediaConn.getRequiredAttributeAsInt("ttl");
 
         // WAMediaConnParser.mediaConnParser
-        // Reads the raw auth token TTL; WA Web uses the same future-time trick
-        // before subtracting unixTime() in queryMediaConn
-        var authTtl = mediaConn.getAttributeAsInt("auth_ttl", 0);
+        // Reads the mandatory auth token TTL; WA Web's r.attrFutureTime("auth_ttl")
+        // also routes through r.attrInt(...) which throws on absence
+        var authTtl = mediaConn.getRequiredAttributeAsInt("auth_ttl");
 
         // WAMediaConnParser.mediaConnParser
-        // Reads the maximum bucket count for deterministic download routing
-        var maxBuckets = mediaConn.getAttributeAsInt("max_buckets", 0);
+        // Reads the mandatory maximum bucket count; WA Web's r.attrInt("max_buckets")
+        // throws when absent
+        var maxBuckets = mediaConn.getRequiredAttributeAsInt("max_buckets");
 
         // WAMediaConnParser.mediaConnParser
         // Reads the clamped max_manual_retry attribute falling back to 3
@@ -349,6 +358,10 @@ public final class MediaConnection {
         // Reads the mandatory hostname attribute of this host entry
         var hostname = hostNode.getRequiredAttributeAsString("hostname");
 
+        // WAMediaConnParser.mediaConnParser host parser
+        // class: e.maybeAttrString("class") - optional deployment-tier tag
+        var hostClass = hostNode.getAttributeAsString("class");
+
         // WAMediaConnParser.mediaConnParser
         // Collects the optional IPv4 and IPv6 advertised by the server
         var ips = new ArrayList<String>();
@@ -388,24 +401,29 @@ public final class MediaConnection {
         if (isFallback) {
             return new MediaHost.Fallback(
                     hostname,
+                    hostClass,
                     List.copyOf(ips),
                     downloadBuckets,
                     downloadTypes,
                     uploadTypes
             );
         } else {
-            // WAMediaConnParser.mediaConnParser
-            // Extracts the optional nested fallback hostname and IPs for a
-            // primary host so that selectHost can rotate to them on failure
+            // WAMediaConnParser.mediaConnParser local function s
+            // Extracts the optional nested fallback hostname, fallback class,
+            // and fallback IPs for a primary host so that selectHost can
+            // rotate to them on failure
             var fallbackHostname = hostNode.getAttributeAsString("fallback_hostname");
+            var fallbackClass = hostNode.getAttributeAsString("fallback_class");
             var fallbackIps = new ArrayList<String>();
             hostNode.getAttributeAsString("fallback_ip4").ifPresent(fallbackIps::add);
             hostNode.getAttributeAsString("fallback_ip6").ifPresent(fallbackIps::add);
 
             return new MediaHost.Primary(
                     hostname,
+                    hostClass,
                     List.copyOf(ips),
                     fallbackHostname,
+                    fallbackClass,
                     List.copyOf(fallbackIps),
                     downloadBuckets,
                     downloadTypes,
@@ -517,7 +535,69 @@ public final class MediaConnection {
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientSelectHost", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsBackoffOptions", exports = "default",
+            adaptation = WhatsAppAdaptation.DIRECT)
     private static final int MAX_ATTEMPT_COUNT = 4;
+
+    /**
+     * The minimum backoff timeout in milliseconds applied between consecutive
+     * retry attempts of a media upload or download.
+     *
+     * <p>Mirrors the {@code minTimeout: 1000} entry of
+     * {@code WAWebMmsClientMmsBackoffOptions}, which is consumed by
+     * {@code WAExponentialBackoff.exponentialBackoff} together with the
+     * defaults of {@code WAExponentialBackoffIterator} ({@code factor: 2},
+     * {@code jitter: 0}) to produce the retry-delay schedule
+     * {@code 1000ms, 2000ms, 4000ms} between the four attempts of
+     * {@link #MAX_ATTEMPT_COUNT}.
+     *
+     * @implNote WAWebMmsClientMmsBackoffOptions: {@code minTimeout: 1000}.
+     * WAExponentialBackoffIterator.defaults: {@code factor: 2, jitter: 0,
+     * maxTimeout: Infinity}. Cobalt applies a deterministic
+     * {@code minTimeout * 2^attempt} sleep via {@link Thread#sleep(long)}
+     * on the virtual thread running the retry loop, matching WA Web's
+     * {@code WABackoff.backoff} pacing with jitter disabled.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsBackoffOptions", exports = "default",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static final long MIN_BACKOFF_TIMEOUT_MILLIS = 1000L;
+
+    /**
+     * Sleeps the caller's virtual thread for the exponential-backoff delay
+     * associated with the given retry attempt number, matching the pacing of
+     * {@code WAExponentialBackoff.exponentialBackoff} configured with
+     * {@code WAWebMmsClientMmsBackoffOptions}.
+     *
+     * <p>The delay for attempt {@code n} (0-based) is
+     * {@code MIN_BACKOFF_TIMEOUT_MILLIS * 2^n}, producing the sequence
+     * {@code 1000ms, 2000ms, 4000ms} before attempts {@code 1, 2, 3}. No
+     * sleep is performed for attempt {@code 0}.
+     *
+     * <p>If the sleep is interrupted the method restores the thread's
+     * interrupt flag and returns immediately; callers that observe the flag
+     * can abort the retry loop.
+     *
+     * @implNote WABackoff.backoff: {@code setTimeout(retry, t.value)} between
+     * retries, where {@code t.value} is produced by
+     * {@code WAExponentialBackoffIterator}. WAWebMmsClientMmsBackoffOptions:
+     * {@code minTimeout: 1000, retries: 3}. Jitter is disabled
+     * ({@code jitter: 0}), so the sleep schedule is deterministic.
+     * @param attemptCount the zero-based attempt index that just failed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsBackoffOptions", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static void sleepForBackoff(int attemptCount) {
+        if (attemptCount < 0) {
+            return;
+        }
+        // WAExponentialBackoffIterator: minTimeout * factor^n with factor=2 and jitter=0
+        var delayMillis = MIN_BACKOFF_TIMEOUT_MILLIS << attemptCount;
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * Picks the CDN hostname that should be used for the current retry
@@ -695,7 +775,7 @@ public final class MediaConnection {
                         // WAWebMmsClientMmsUpload.default
                         // Sends the HTTP POST with the encrypted payload and
                         // returns the validated JSON response
-                        var uploadResult = tryUpload(client, hostname, path.get(), provider.mediaPath(), fileEncSha256, fileSha256, tempFile);
+                        var uploadResult = tryUpload(client, hostname, path.get(), fileEncSha256, fileSha256, tempFile);
 
                         // WAWebMmsClientMmsUpload.default
                         // Pulls directPath, url, and handle out of the JSON
@@ -724,8 +804,10 @@ public final class MediaConnection {
                         return true;
                     } catch (WhatsAppMediaException.Upload uploadException) {
                         // WAWebMmsClientIsErrorRetryable.isErrorRetryable
-                        // Stops retrying on non-retryable errors (413, 415,
-                        // 507, and most 4xx); 401, 408, and 5xx are retryable
+                        // Stops retrying on non-retryable errors (404, 408,
+                        // 410, 413, 415, 507, and the rest of 4xx); 401, any
+                        // generic 5xx other than 507, and network-level
+                        // failures (no status code) are retryable
                         if (!isRetryable(uploadException)) {
                             throw uploadException;
                         }
@@ -734,6 +816,13 @@ public final class MediaConnection {
                         // Resets lastFetchMadeProgress so selectHost rotates
                         // to a different host on the next attempt
                         lastFetchMadeProgress = false;
+
+                        // WAWebMmsClientMmsBackoffOptions: minTimeout=1000, retries=3
+                        // Sleeps minTimeout*2^attempt ms before the next retry, matching
+                        // the exponentialBackoff schedule used by WAWebMmsClient.upload
+                        if (attemptCount < MAX_ATTEMPT_COUNT - 1) {
+                            sleepForBackoff(attemptCount);
+                        }
                     }
                 }
 
@@ -759,9 +848,22 @@ public final class MediaConnection {
      * {@code WAWebMmsClientFormatHashUrl.default}: the encrypted file hash
      * is URL-safe base64 encoded (padding preserved) and appended to the
      * media path segment, while the authentication token, a token duplicate,
-     * a random {@code media_id} value, and an optional
-     * {@code server_transcode} flag are appended as query parameters by
-     * {@code WAWebMmsClientFormatUploadUrl.default}.
+     * and a random {@code media_id} value are appended as query parameters
+     * by {@code WAWebMmsClientFormatUploadUrl.default}.
+     *
+     * <p>WA Web's {@code WAWebMmsClientFormatUploadUrl.default} also forwards
+     * a {@code byteRange} ({@code bytestart}/{@code byteend} parameters) for
+     * resumed uploads, optional {@code resume}/{@code stream}/{@code final_hash}
+     * parameters consumed by the streaming upload variant
+     * ({@code WAWebMmsClientUploadStreamer}), an optional
+     * {@code server_thumb_gen} parameter for server-side thumbnail generation,
+     * and an optional {@code server_transcode} parameter for newsletter-video
+     * uploads (gated behind the
+     * {@code web_channel_video_server_transcode_upload} A/B prop, default
+     * {@code false}). Cobalt currently performs single-shot uploads with no
+     * resume, no streaming, no server-side thumbnail generation, and follows
+     * the WA Web default for the transcode A/B prop, so none of these
+     * parameters are appended on the wire.
      *
      * <p>On a non-200 response this method raises a
      * {@link WhatsAppMediaException.Upload} with the HTTP status code
@@ -780,12 +882,13 @@ public final class MediaConnection {
      * {@code u()} response validator in the WA Web module.
      *
      * @implNote WAWebMmsClientMmsUpload.default: HTTP POST and status code
-     * mapping. WAWebMmsClientFormatUploadUrl.default: query parameter
-     * assembly. WAWebMmsClientFormatHashUrl.default: URL path construction.
+     * mapping. URL assembly (path + query) is delegated to
+     * {@link #formatUploadUrl(String, String, String, long)}, which carries
+     * the {@code WAWebMmsClientFormatUploadUrl.default} and
+     * {@code WAWebMmsClientFormatHashUrl.default} provenance annotations.
      * @param client        the HTTP client to use
      * @param hostname      the CDN hostname
      * @param path          the CDN path segment
-     * @param mediaPath     the media path type for the upload
      * @param fileEncSha256 the encrypted file SHA-256, or {@code null}
      * @param fileSha256    the plaintext file SHA-256
      * @param body          the path to the temporary file containing the
@@ -797,11 +900,7 @@ public final class MediaConnection {
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientMmsUpload", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    @WhatsAppWebExport(moduleName = "WAWebMmsClientFormatUploadUrl", exports = "default",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    @WhatsAppWebExport(moduleName = "WAWebMmsClientFormatHashUrl", exports = "default",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    private JSONObject tryUpload(HttpClient client, String hostname, String path, MediaPath mediaPath, byte[] fileEncSha256, byte[] fileSha256, Path body) throws WhatsAppMediaException.Upload {
+    private JSONObject tryUpload(HttpClient client, String hostname, String path, byte[] fileEncSha256, byte[] fileSha256, Path body) throws WhatsAppMediaException.Upload {
         try {
             // WAWebMmsClientFormatHashUrl.default
             // Encodes the encrypted hash (or the plaintext hash when
@@ -809,33 +908,11 @@ public final class MediaConnection {
             var token = Base64.getUrlEncoder()
                     .encodeToString(Objects.requireNonNullElse(fileEncSha256, fileSha256));
 
-            // WAWebMmsClientFormatHashUrl.default
-            // Builds the path portion "https://<host>/<path>/<hash-token>"
-            var basePath = "https://" + hostname + "/" + path + "/" + token;
-
-            // WAWebMmsClientFormatUploadUrl.default
-            // Assembles the upload query parameters in the same order as
-            // WA Web: auth, token, media_id, optional server_transcode
-            var queryParams = new LinkedHashMap<String, String>();
-            queryParams.put("auth", this.auth);
-            queryParams.put("token", token);
-
-            // WAWebWamMediaMetricUtils.generateMediaEventId
-            // Random media_id used to correlate metrics across retries
-            queryParams.put("media_id", String.valueOf(generateMediaId()));
-
-            // WAWebMmsClientFormatUploadUrl.default
-            // Requests server-side transcoding for newsletter video uploads
-            // to match the ChannelVideoServerTranscodeGating behaviour
-            if (mediaPath == MediaPath.NEWSLETTER_VIDEO) {
-                queryParams.put("server_transcode", "1");
-            }
-
-            // WAWebMmsClientFormatHashUrl.default
-            // Serializes the query parameters exactly as URLSearchParams does,
-            // filtering out any null values before encoding
-            var queryString = encodeQueryString(queryParams);
-            var uri = URI.create(basePath + queryString);
+            // WAWebMmsClientFormatUploadUrl.default + WAWebMmsClientFormatHashUrl.default
+            // Builds the upload URL string by delegating to formatUploadUrl,
+            // which handles the path concatenation and query-parameter
+            // assembly in the same shape as the WA Web modules.
+            var uri = URI.create(formatUploadUrl(hostname, path, token, generateMediaId()));
             var requestBuilder = HttpRequest.newBuilder()
                     .uri(uri)
                     .POST(HttpRequest.BodyPublishers.ofFile(body));
@@ -893,6 +970,12 @@ public final class MediaConnection {
      * metric utility so that server-side analytics can de-duplicate events
      * across retries.
      *
+     * <p>Delegates to
+     * {@link MediaMetricUtils#generateMediaEventId()} so every call site that
+     * needs a media-event id (the upload {@code media_id} query parameter, the
+     * {@code WebcMediaErrorUnknownDetailsWamEvent.mediaId} property, future
+     * media metrics) shares the same generator.
+     *
      * @implNote WAWebWamMediaMetricUtils.generateMediaEventId:
      * {@code 1 + Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}.
      * @return a random positive long value suitable for use as a media ID
@@ -901,9 +984,71 @@ public final class MediaConnection {
             adaptation = WhatsAppAdaptation.DIRECT)
     private static long generateMediaId() {
         // WAWebWamMediaMetricUtils.generateMediaEventId
-        // Generates 1 + floor(MAX_SAFE_INTEGER * random()) where
-        // MAX_SAFE_INTEGER is 9007199254740991
-        return 1 + (long) Math.floor(9007199254740991.0 * Math.random());
+        return MediaMetricUtils.generateMediaEventId();
+    }
+
+    /**
+     * Builds the upload URL for an authenticated media POST against the
+     * WhatsApp CDN.
+     *
+     * <p>Mirrors the composition of {@code WAWebMmsClientFormatUploadUrl.default}
+     * with {@code WAWebMmsClientFormatHashUrl.default}: the {@code path}
+     * segment is appended to the host, the URL-safe base64 of the file hash
+     * is the next path component (the {@code WAWebMmsClientFormatHashUrl}
+     * "hash token"), and the {@code auth} / {@code token} / {@code media_id}
+     * query parameters are appended in WA Web's
+     * {@code URLSearchParams}-insertion order.
+     *
+     * <p>The WA Web export also propagates an optional {@code byteRange}
+     * (resume), {@code query.resume} / {@code query.stream} /
+     * {@code query.final_hash} (streaming-upload variant), a
+     * {@code query.server_thumb_gen} flag, and a {@code server_transcode}
+     * parameter for newsletter-video uploads gated behind the
+     * {@code web_channel_video_server_transcode_upload} A/B prop. None of
+     * these are exercised by Cobalt's single-shot upload path; see
+     * {@link com.github.auties00.cobalt.props.ABProp#WEB_CHANNEL_VIDEO_SERVER_TRANSCODE_UPLOAD}
+     * for the prop and the {@link #upload} javadoc for the streaming-feature
+     * gap.
+     *
+     * @implNote WAWebMmsClientFormatUploadUrl.default;
+     *           WAWebMmsClientFormatHashUrl.default.
+     * @param hostname the CDN hostname (e.g. {@code mmg.whatsapp.net})
+     * @param path     the CDN path segment for the media type (e.g.
+     *                 {@code mms/image} or {@code newsletter/newsletter-video})
+     * @param token    the URL-safe base64 of the encrypted file hash; reused
+     *                 as both the path "hash token" and the {@code token}
+     *                 query parameter, matching how
+     *                 {@code WAWebMmsClientMmsUpload} forwards the same
+     *                 value as {@code encFilehash} and {@code token}
+     * @param mediaId  the random media event id used to correlate metrics
+     *                 across retries
+     * @return the fully-assembled upload URL string
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMmsClientFormatUploadUrl", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebMmsClientFormatHashUrl", exports = "default",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    String formatUploadUrl(String hostname, String path, String token, long mediaId) {
+        // WAWebMmsClientFormatHashUrl.default
+        // Builds the path portion "https://<host>/<path>/<hash-token>"
+        var basePath = "https://" + hostname + "/" + path + "/" + token;
+
+        // WAWebMmsClientFormatUploadUrl.default
+        // Assembles the upload query parameters in the same insertion order
+        // as WA Web's URLSearchParams construction: auth, token, media_id.
+        // Other parameters supported by the JS export (resume, stream,
+        // final_hash, bytestart, byteend, server_thumb_gen, server_transcode)
+        // are intentionally omitted here; see the method-level Javadoc for
+        // the rationale.
+        var queryParams = new LinkedHashMap<String, String>();
+        queryParams.put("auth", this.auth);
+        queryParams.put("token", token);
+        queryParams.put("media_id", String.valueOf(mediaId));
+
+        // WAWebMmsClientFormatHashUrl.default
+        // Serializes the query parameters exactly as URLSearchParams does,
+        // filtering out any null values before encoding.
+        return basePath + encodeQueryString(queryParams);
     }
 
     /**
@@ -945,51 +1090,67 @@ public final class MediaConnection {
      * Tests whether a media upload error is worth retrying with a different
      * host.
      *
-     * <p>Mirrors {@code WAWebMmsClientIsErrorRetryable}:
+     * <p>Mirrors {@code WAWebMmsClientIsErrorRetryable.isErrorRetryable}, which
+     * is the function {@code WAWebMmsClient} uses as the retry gate (the sibling
+     * export {@code isRetriableStatusCode} is not consulted from the upload/
+     * download retry loops):
      * <ul>
-     *   <li>Missing status code (network error): retryable</li>
+     *   <li>Missing status code (network error / {@code HttpNetworkError}):
+     *       retryable</li>
      *   <li>401 ({@code MMSUnauthorizedError}): retryable</li>
-     *   <li>408 (request timeout): retryable</li>
      *   <li>507 ({@code MMSThrottleError}): not retryable</li>
-     *   <li>Other 5xx: retryable</li>
-     *   <li>All other status codes (413, 415, and the rest): not retryable</li>
+     *   <li>Other 5xx (generic {@code HttpStatusCodeError} with
+     *       {@code status >= 500}): retryable</li>
+     *   <li>All other status codes (404, 408, 410, 413, 415, 403, and the
+     *       rest): not retryable</li>
      * </ul>
      *
-     * @implNote WAWebMmsClientIsErrorRetryable.isRetriableStatusCode,
-     * WAWebMmsClientIsErrorRetryable.isErrorRetryable.
+     * @implNote WAWebMmsClientIsErrorRetryable.isErrorRetryable. The 408
+     *     branch from {@code isRetriableStatusCode} is intentionally absent:
+     *     a server-side 408 response is wrapped as a generic
+     *     {@code HttpStatusCodeError(408)}, which fails the
+     *     {@code status >= 500} predicate inside {@code isErrorRetryable} and
+     *     is therefore non-retryable. WA Web only treats timeouts as retryable
+     *     when XHR raises an {@code ontimeout} event, which produces an
+     *     {@code HttpTimedOutError extends HttpNetworkError} (no status code,
+     *     classified as a network error). Cobalt represents that case via
+     *     {@link WhatsAppMediaException.Upload#httpStatusCode()} returning
+     *     empty, which is already handled by the network-error branch above.
      * @param exception the upload exception to test
      * @return {@code true} if the error is retryable, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientIsErrorRetryable",
-            exports = {"isRetriableStatusCode", "isErrorRetryable"},
+            exports = "isErrorRetryable",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static boolean isRetryable(WhatsAppMediaException.Upload exception) {
         // WAWebMmsClientIsErrorRetryable.isErrorRetryable
-        // Missing HTTP status means network-level failure (fetch TypeError)
-        // and is treated as retryable
+        // Missing HTTP status means network-level failure
+        // (HttpNetworkError / HttpTimedOutError / NoMediaHostsError) and
+        // matches the instanceof HttpNetworkError branch in WA Web
         var optStatus = exception.httpStatusCode();
         if (optStatus.isEmpty()) {
             return true;
         }
         var status = optStatus.getAsInt();
 
-        // WAWebMmsClientIsErrorRetryable.isRetriableStatusCode
-        // 408 is an explicit retryable case, 507 (throttle) is always fatal,
-        // any other 5xx is retryable
-        if (status == 408) {
-            return true;
-        }
-        if (status == 507) {
-            return false;
-        }
-        if (status >= 500) {
+        // WAWebMmsClientIsErrorRetryable.isErrorRetryable
+        // 401 (MMSUnauthorizedError) is retryable so that selectHost can
+        // rotate to a fresh host for re-auth
+        if (status == 401) {
             return true;
         }
 
         // WAWebMmsClientIsErrorRetryable.isErrorRetryable
-        // 401 (MMSUnauthorizedError) is retryable so that selectHost can
-        // rotate to a fresh host for re-auth
-        return status == 401;
+        // 507 (MMSThrottleError) is the explicit short-circuit: even though
+        // it is a 5xx code it is not retryable
+        if (status == 507) {
+            return false;
+        }
+
+        // WAWebMmsClientIsErrorRetryable.isErrorRetryable
+        // Generic HttpStatusCodeError with status >= 500 is retryable;
+        // every other status (including 408) falls through to non-retryable
+        return status >= 500;
     }
 
     /**
@@ -1000,15 +1161,21 @@ public final class MediaConnection {
      * resolves a fresh host through {@link MediaHost#routeSelection} and
      * rotates across candidate hosts with {@link #selectHost} on each
      * retry, mirroring {@code WAWebMmsClient.download}. Non-retryable
-     * errors (404, 410, 507, and the rest of 4xx) propagate immediately;
-     * retryable errors (401, 408, 5xx, network failures) advance the loop
-     * to the next attempt.
+     * errors (404, 408, 410, 507, and the rest of 4xx) propagate
+     * immediately; retryable errors (401, 5xx other than 507, and network
+     * failures with no status code) advance the loop to the next attempt.
      *
      * @implNote WAWebMmsClient.download: retry loop and selectHost rotation.
      * WAWebMmsClientMmsDownload.mms4Download: per-request HTTP GET.
-     * WAWebMmsClientFormatDownloadUrl.default: URL construction.
-     * @param provider the media provider describing the media type and
-     *                 carrying the direct path and optional URL
+     * WAWebMmsClientFormatDownloadUrl.default: URL construction. The
+     * {@code abPropsService} parameter is consulted for the
+     * {@code low_cache_hit_rate_media_types} CSV that controls
+     * {@code _nc_map=whatsapp-nofna} and the
+     * {@code web_deprecate_mms4_hash_based_download} flag that gates the
+     * hash-only fallback.
+     * @param provider        the media provider describing the media type and
+     *                        carrying the direct path and optional URL
+     * @param abPropsService  the AB props service for media-flow feature flags
      * @return an {@link InputStream} containing the downloaded media content
      * @throws WhatsAppMediaException.Download if no host could service the
      *         download, the direct path is missing, or a non-retryable HTTP
@@ -1016,8 +1183,9 @@ public final class MediaConnection {
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClient", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public InputStream download(MediaProvider provider) throws WhatsAppMediaException {
+    public InputStream download(MediaProvider provider, ABPropsService abPropsService) throws WhatsAppMediaException {
         Objects.requireNonNull(provider, "provider cannot be null");
+        Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
 
         // WAWebMmsClient.download
         // Attempts the cached static URL first so that previously-issued
@@ -1069,10 +1237,12 @@ public final class MediaConnection {
         );
 
         // WAWebMediaHostsRouteSelection.routeSelection
-        // Computes the download bucket that WA Web would attach to the
-        // selected host via setSelectedBucket(p); fallback hosts never
-        // carry a bucket so only the selected host's bucket is stored
-        var selectedBucket = computeSelectedBucket(encFileHash);
+        // The bucket that WA Web would have stashed on selectedHost via
+        // setSelectedBucket(p) is now exposed directly by routeSelection
+        // as route.selectedBucket(); it is present only when the selected
+        // host came from the bucket-map branch (never from the fall-through
+        // linear scan), exactly matching WA Web's (d=c)==null||d.setSelectedBucket(p)
+        var selectedBucket = route.selectedBucket().orElse(null);
         var selectedHostname = route.selectedHost()
                 .map(MediaHost::hostname)
                 .orElse(null);
@@ -1107,7 +1277,7 @@ public final class MediaConnection {
             // Builds the full download URL from the host, directPath or
             // encFilehash, media type, and bucket
             var downloadUrl = formatDownloadUrl(
-                    hostname, defaultDirectPath, encFileHash, mediaType, hostBucket
+                    hostname, defaultDirectPath, encFileHash, mediaType, hostBucket, abPropsService
             );
 
             try {
@@ -1116,8 +1286,9 @@ public final class MediaConnection {
                 return tryDownload(provider, downloadUrl);
             } catch (WhatsAppMediaException.Download downloadException) {
                 // WAWebMmsClientIsErrorRetryable.isErrorRetryable
-                // Same retry rules as upload: 401/408/5xx and network errors
-                // are retryable, 404/410/413/415/507 are fatal
+                // Same retry rules as upload: 401, generic 5xx (except 507),
+                // and network-level failures (no status code) are retryable;
+                // 404/408/410/413/415/507/403 are fatal
                 if (!isDownloadRetryable(downloadException)) {
                     throw downloadException;
                 }
@@ -1126,6 +1297,13 @@ public final class MediaConnection {
                 // Clears lastFetchMadeProgress so selectHost rotates to a
                 // different host on the next attempt
                 lastFetchMadeProgress = false;
+
+                // WAWebMmsClientMmsBackoffOptions: minTimeout=1000, retries=3
+                // Sleeps minTimeout*2^attempt ms before the next retry, matching
+                // the exponentialBackoff schedule used by WAWebMmsClient.download
+                if (attemptCount < MAX_ATTEMPT_COUNT - 1) {
+                    sleepForBackoff(attemptCount);
+                }
             }
         }
 
@@ -1137,13 +1315,25 @@ public final class MediaConnection {
      * returns the final CDN download URL.
      *
      * <p>When a direct path is available, the URL is built as
-     * {@code https://{hostname}{directPath}?hash=...&_nc_cat=...&mode=...&mms-type=...&__wa-mms=}
+     * {@code https://{hostname}{directPath}?hash=...&_nc_cat=...&_nc_map=...&mode=...&mms-type=...&__wa-mms=}
      * via {@link #buildDirectPathUrl}. When only the encrypted file hash is
      * available, the URL is built as
      * {@code https://{hostname}/{path}/{urlSafeBase64(encFileHash)}?mode=...&__wa-mms=}
      * via {@link #formatHashUrl}.
      *
-     * @implNote WAWebMmsClientFormatDownloadUrl.default.
+     * <p>The hash-URL fallback is gated by the
+     * {@code web_deprecate_mms4_hash_based_download} AB prop: when the prop is
+     * enabled and no direct path is provided, the method throws unconditionally
+     * with {@code "No direct path is available for download, abort"} regardless
+     * of whether {@code encFileHash} is present, mirroring the WA Web error
+     * path that records {@code "media-fault: missing direct path"} via the
+     * logger before throwing.
+     *
+     * @implNote WAWebMmsClientFormatDownloadUrl.default. Mode is always
+     *           {@code "auto"} because Cobalt's {@link #download(MediaProvider,
+     *           ABPropsService)} entry point does not expose the WA Web
+     *           {@code mode} parameter, and the WA Web {@code byteRange} is not
+     *           plumbed because Cobalt always streams the full payload.
      * @param hostname       the CDN hostname
      * @param directPath     the direct path, or {@code null} if unavailable
      * @param encFileHash    the base64-encoded encrypted file hash, or
@@ -1151,18 +1341,23 @@ public final class MediaConnection {
      * @param mediaType      the media path type
      * @param downloadBucket the selected download bucket, or {@code null} if
      *                       no bucket was selected
+     * @param abPropsService the AB props service used to read the
+     *                       {@code low_cache_hit_rate_media_types} CSV and the
+     *                       {@code web_deprecate_mms4_hash_based_download} flag
      * @return the fully constructed download URL
      * @throws WhatsAppMediaException.Download if neither direct path nor
-     *         encrypted file hash is available
+     *         encrypted file hash is available, or if the hash-URL fallback is
+     *         deprecated by the AB prop and no direct path was provided
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientFormatDownloadUrl", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private String formatDownloadUrl(
+    String formatDownloadUrl(
             String hostname,
             String directPath,
             String encFileHash,
             MediaPath mediaType,
-            Integer downloadBucket
+            Integer downloadBucket,
+            ABPropsService abPropsService
     ) throws WhatsAppMediaException.Download {
         // WAWebMmsClientFormatDownloadUrl.default
         // Projects the server media type id so it can be attached as the
@@ -1171,12 +1366,24 @@ public final class MediaConnection {
         if (directPath != null && !directPath.isEmpty()) {
             // WAWebMmsClientFormatDownloadUrl.default
             // Direct-path branch: query carries mode, mms-type, and the
-            // __wa-mms marker (WAWebSharedConstants)
+            // __wa-mms marker (WAWebSharedConstants); WA Web also injects
+            // bytestart/byteend when a byteRange is supplied, but Cobalt's
+            // download API never requests partial ranges
             var query = new LinkedHashMap<String, String>();
             query.put("mode", "auto");
             query.put("mms-type", mediaTypeId);
             query.put("__wa-mms", "");
-            return buildDirectPathUrl(hostname, directPath, encFileHash, downloadBucket, query);
+            return buildDirectPathUrl(hostname, directPath, encFileHash, downloadBucket, mediaType, query, abPropsService);
+        }
+
+        // WAWebMmsClientFormatDownloadUrl.default
+        // When directPath is absent and the deprecation AB prop is on, WA Web
+        // logs "media-fault: missing direct path" and throws with the
+        // "No direct path is available" message regardless of whether the hash
+        // is present
+        if (abPropsService.getBool(ABProp.WEB_DEPRECATE_MMS4_HASH_BASED_DOWNLOAD)) {
+            throw new WhatsAppMediaException.Download(
+                    "No direct path is available for download, abort");
         }
 
         // WAWebMmsClientFormatDownloadUrl.default
@@ -1228,7 +1435,9 @@ public final class MediaConnection {
             String directPath,
             String encFileHash,
             Integer downloadBucket,
-            Map<String, String> query
+            MediaPath mediaType,
+            Map<String, String> query,
+            ABPropsService abPropsService
     ) throws WhatsAppMediaException.Download {
         // WAWebMmsClientFormatDownloadUrl.default
         // Parses the directPath as a URL relative to "https://<hostname>" so
@@ -1270,6 +1479,21 @@ public final class MediaConnection {
         // Attaches the download bucket as the "_nc_cat" query parameter
         if (downloadBucket != null) {
             params.put("_nc_cat", downloadBucket.toString());
+        }
+
+        // WAWebMmsClientFormatDownloadUrl.default
+        // Reads the comma-separated list of media types eligible for the
+        // "whatsapp-nofna" cache-affinity hint and sets _nc_map for matching
+        // types: in WA Web the prop default is "ptt,audio,document,ppic"
+        var lowCacheHitTypes = abPropsService.getString(ABProp.LOW_CACHE_HIT_RATE_MEDIA_TYPES);
+        var mediaTypeId = mediaType.id().orElse(null);
+        if (lowCacheHitTypes != null && !lowCacheHitTypes.isEmpty() && mediaTypeId != null) {
+            for (var candidate : lowCacheHitTypes.split(",")) {
+                if (candidate.equals(mediaTypeId)) {
+                    params.put("_nc_map", "whatsapp-nofna");
+                    break;
+                }
+            }
         }
 
         // WAWebMmsClientFormatDownloadUrl.default
@@ -1358,44 +1582,10 @@ public final class MediaConnection {
     }
 
     /**
-     * Computes the bucket number that should be attached to the selected
-     * host for a download request.
-     *
-     * <p>When {@code encFileHash} is {@code null}, the bucket defaults to
-     * {@code 0}. When vcache aggregation is enabled (currently never
-     * enabled in Cobalt) and {@link #maxBuckets} is positive, the bucket is
-     * computed as {@code base64Modulo(encFileHash, maxBuckets) + 100}.
-     * Otherwise no bucket-based routing applies and {@code null} is
-     * returned.
-     *
-     * @implNote WAWebMediaHostsRouteSelection.routeSelection: bucket
-     * computation that precedes {@code setSelectedBucket(p)}.
-     * @param encFileHash the base64-encoded encrypted file hash, or
-     *                    {@code null}
-     * @return the selected bucket number, or {@code null} if no bucket applies
-     */
-    @WhatsAppWebExport(moduleName = "WAWebMediaHostsRouteSelection", exports = "routeSelection",
-            adaptation = WhatsAppAdaptation.DIRECT)
-    private Integer computeSelectedBucket(String encFileHash) {
-        // WAWebMediaHostsRouteSelection.routeSelection
-        // When there is no encFilehash the bucket is 0 unconditionally,
-        // matching "n == null ? p = 0" in the WA Web source
-        if (encFileHash == null) {
-            return 0;
-        }
-
-        // WAWebMediaHostsRouteSelection.routeSelection
-        // The bucketed branch (m && i != null) requires the vcache
-        // aggregation AB prop which Cobalt does not currently honour, so
-        // the method returns null to signal "no bucket"
-        return null;
-    }
-
-    /**
      * Performs one HTTP GET download against a fully-formed CDN URL.
      *
      * <p>Validates the HTTP status code through
-     * {@link #validateMmsResponse(int, String)} and wraps the body in a
+     * {@link #validateMmsResponse(int, String, String)} and wraps the body in a
      * {@link MediaDownloadInputStream} so that the caller sees decrypted,
      * integrity-checked bytes. The returned stream owns the underlying
      * {@link HttpClient} and closes it when consumed or closed by the
@@ -1426,10 +1616,20 @@ public final class MediaConnection {
 
             // WAWebMmsClientMmsDownload.validateMmsResponse
             // Maps non-200 responses to the appropriate Download exception
-            // subtype before propagating to the retry loop
+            // subtype before propagating to the retry loop. WA Web's
+            // validateMmsResponse calls response.text() before classifying so
+            // that 403 with body "URL signature expired" is reclassified as
+            // MediaNotFoundError; Cobalt drains the response body to a string
+            // here to feed the same check.
             if (response.statusCode() != 200) {
+                String body;
+                try (var rawStream = response.body()) {
+                    body = new String(rawStream.readAllBytes(), StandardCharsets.UTF_8);
+                } catch (IOException _) {
+                    body = null;
+                }
                 client.close();
-                validateMmsResponse(response.statusCode(), downloadUrl);
+                validateMmsResponse(response.statusCode(), downloadUrl, body);
             }
 
             // WAWebMmsClientMmsDownload.mms4Download
@@ -1465,25 +1665,32 @@ public final class MediaConnection {
      * <p>Mirrors the WA Web error mapping:
      * <ul>
      *   <li>401: {@link WhatsAppMediaException#HTTP_UNAUTHORIZED}</li>
-     *   <li>403: inspects the URL's {@code oe} parameter; when the
-     *       signature has expired the error is reclassified as
-     *       {@link WhatsAppMediaException#HTTP_NOT_FOUND}, otherwise
-     *       {@link WhatsAppMediaException#HTTP_FORBIDDEN} is used</li>
+     *   <li>403: when the response body contains
+     *       {@code "URL signature expired"} the error is reclassified as
+     *       {@link WhatsAppMediaException#HTTP_NOT_FOUND}; otherwise the
+     *       URL's {@code oe} parameter is parsed and an expired signature
+     *       again maps to {@link WhatsAppMediaException#HTTP_NOT_FOUND};
+     *       failing both, {@link WhatsAppMediaException#HTTP_FORBIDDEN} is
+     *       used</li>
      *   <li>404 and 410: {@link WhatsAppMediaException#HTTP_NOT_FOUND}</li>
      *   <li>507: {@link WhatsAppMediaException#HTTP_THROTTLE}</li>
      *   <li>other: the raw status code</li>
      * </ul>
      *
-     * <p>WA Web additionally reads the response body on 403 to check for
-     * "URL signature expired"; Cobalt already consumed the stream by the
-     * time this method is called, so only the URL {@code oe} date check is
-     * performed.
+     * <p>The {@code body} parameter is the textual response payload read by
+     * the GET caller before this method runs. HEAD callers pass {@code null}
+     * because HEAD responses carry no body, which is also what WA Web
+     * effectively sees when {@code response.text()} resolves to an empty
+     * string for HEAD requests.
      *
      * @implNote WAWebMmsClientMmsDownload.validateMmsResponse combined with
      * WAWebMmsCdnUrlValidationUtils.parseCdnUrlParams for the {@code oe}
      * expiry lookup.
      * @param statusCode  the HTTP status code from the CDN response
      * @param url         the download URL, used for expiry date parsing
+     * @param body        the textual response body for the GET path, or
+     *                    {@code null} for the HEAD path where no body is
+     *                    available
      * @throws WhatsAppMediaException.Download always, since this method is only
      *         called for non-OK responses
      */
@@ -1491,7 +1698,7 @@ public final class MediaConnection {
             adaptation = WhatsAppAdaptation.DIRECT)
     @WhatsAppWebExport(moduleName = "WAWebMmsCdnUrlValidationUtils", exports = "parseCdnUrlParams",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private static void validateMmsResponse(int statusCode, String url) throws WhatsAppMediaException.Download {
+    private static void validateMmsResponse(int statusCode, String url, String body) throws WhatsAppMediaException.Download {
         // WAWebMmsClientMmsDownload.validateMmsResponse
         // 401 maps to MMSUnauthorizedError in the upstream error taxonomy
         if (statusCode == 401) {
@@ -1500,6 +1707,15 @@ public final class MediaConnection {
         }
 
         if (statusCode == 403) {
+            // WAWebMmsClientMmsDownload.validateMmsResponse
+            // WA Web reads the body via response.text() and matches the literal
+            // string "URL signature expired" before falling through to the URL
+            // expiry probe; this branch reclassifies as MediaNotFoundError
+            if (body != null && body.contains("URL signature expired")) {
+                throw new WhatsAppMediaException.Download(WhatsAppMediaException.HTTP_NOT_FOUND,
+                        "mmsDownload: media not found (URL signature expired)");
+            }
+
             // WAWebMmsCdnUrlValidationUtils.parseCdnUrlParams
             // Reads the "oe" query parameter which encodes the URL signature
             // expiry as a hexadecimal unix timestamp; if the URL is expired
@@ -1566,46 +1782,98 @@ public final class MediaConnection {
      * {@link #isRetryable(WhatsAppMediaException.Upload)} applied to
      * download-class exceptions:
      * <ul>
-     *   <li>Missing status code (network error): retryable</li>
+     *   <li>Missing status code (network error / {@code HttpNetworkError}):
+     *       retryable</li>
      *   <li>401 ({@code MMSUnauthorizedError}): retryable</li>
-     *   <li>408 (request timeout): retryable</li>
      *   <li>507 ({@code MMSThrottleError}): not retryable</li>
-     *   <li>Other 5xx: retryable</li>
-     *   <li>All other status codes (404, 410, 403, and the rest): not retryable</li>
+     *   <li>Other 5xx (generic {@code HttpStatusCodeError} with
+     *       {@code status >= 500}): retryable</li>
+     *   <li>All other status codes (404, 408, 410, 403, 413, 415, and the
+     *       rest): not retryable</li>
      * </ul>
      *
-     * @implNote WAWebMmsClientIsErrorRetryable.isRetriableStatusCode,
-     * WAWebMmsClientIsErrorRetryable.isErrorRetryable.
+     * @implNote WAWebMmsClientIsErrorRetryable.isErrorRetryable, which is
+     *     what {@code WAWebMmsClient} actually invokes as the retry gate.
+     *     408 is intentionally non-retryable: a server-returned 408 becomes
+     *     a generic {@code HttpStatusCodeError(408)} that fails the
+     *     {@code status >= 500} check inside {@code isErrorRetryable}. WA Web
+     *     reaches the retryable {@code HttpTimedOutError extends HttpNetworkError}
+     *     branch only via {@code XMLHttpRequest.ontimeout}, which surfaces in
+     *     Cobalt as a {@link WhatsAppMediaException.Download} with no status
+     *     code (handled by the network-error branch above).
      * @param exception the download exception to test
      * @return {@code true} if the error is retryable, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientIsErrorRetryable",
-            exports = {"isRetriableStatusCode", "isErrorRetryable"},
+            exports = "isErrorRetryable",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static boolean isDownloadRetryable(WhatsAppMediaException.Download exception) {
         // WAWebMmsClientIsErrorRetryable.isErrorRetryable
-        // Network-level failures have no status code and are retryable
+        // Network-level failures (HttpNetworkError, HttpTimedOutError,
+        // NoMediaHostsError) have no status code and are retryable
         var optStatus = exception.httpStatusCode();
         if (optStatus.isEmpty()) {
             return true;
         }
         var status = optStatus.getAsInt();
 
-        // WAWebMmsClientIsErrorRetryable.isRetriableStatusCode
-        // 408 retryable, 507 fatal, other 5xx retryable
-        if (status == 408) {
-            return true;
-        }
-        if (status == 507) {
-            return false;
-        }
-        if (status >= 500) {
+        // WAWebMmsClientIsErrorRetryable.isErrorRetryable
+        // 401 (MMSUnauthorizedError) is always retryable
+        if (status == 401) {
             return true;
         }
 
         // WAWebMmsClientIsErrorRetryable.isErrorRetryable
-        // 401 (MMSUnauthorizedError) is always retryable
-        return status == 401;
+        // 507 (MMSThrottleError) short-circuits the >=500 branch as fatal
+        if (status == 507) {
+            return false;
+        }
+
+        // WAWebMmsClientIsErrorRetryable.isErrorRetryable
+        // Generic HttpStatusCodeError with status >= 500 is retryable;
+        // 408 and every other 4xx fall through to non-retryable
+        return status >= 500;
+    }
+
+    /**
+     * Tests whether a raw HTTP status code is retryable in isolation, ignoring
+     * the wrapping exception subtype.
+     *
+     * <p>Mirrors the second sibling export of {@code WAWebMmsClientIsErrorRetryable}:
+     * 408 ({@code Request Timeout}) is retryable, 507 ({@code Insufficient
+     * Storage} / {@code MMSThrottleError}) is not, every other status is
+     * retryable iff it is 5xx. This rule set is more permissive than
+     * {@link #isRetryable(WhatsAppMediaException.Upload)} and
+     * {@link #isDownloadRetryable(WhatsAppMediaException.Download)} because it
+     * does not consult the exception subtype taxonomy.
+     *
+     * <p>The function is preserved for parity with the WA Web module surface;
+     * the upstream bundle exports it but only invokes
+     * {@code isErrorRetryable} from the {@code WAWebMmsClient} retry loops, so
+     * Cobalt likewise has no internal caller. It is retained so any future
+     * consumer can adopt the same numeric predicate.
+     *
+     * @implNote WAWebMmsClientIsErrorRetryable.isRetriableStatusCode:
+     *     {@code e===408?!0:e===507?!1:e>=500}.
+     * @param statusCode the HTTP status code to classify
+     * @return {@code true} if the status alone marks the response as retryable
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMmsClientIsErrorRetryable",
+            exports = "isRetriableStatusCode",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    @SuppressWarnings("unused")
+    private static boolean isRetriableStatusCode(int statusCode) {
+        // WAWebMmsClientIsErrorRetryable.isRetriableStatusCode
+        // 408 short-circuits to retryable
+        if (statusCode == 408) {
+            return true;
+        }
+        // WAWebMmsClientIsErrorRetryable.isRetriableStatusCode
+        // 507 short-circuits to non-retryable, otherwise retryable iff 5xx
+        if (statusCode == 507) {
+            return false;
+        }
+        return statusCode >= 500;
     }
 
     /**
@@ -1615,14 +1883,18 @@ public final class MediaConnection {
      * <p>Sends an HTTP HEAD request using the download URL format. A 200
      * response indicates the media is available; any other status triggers
      * the standard error mapping from
-     * {@link #validateMmsResponse(int, String)}.
+     * {@link #validateMmsResponse(int, String, String)}.
      *
      * @implNote WAWebMmsClientMmsDownload.mmsCheckExistence, which issues
      * a HEAD request and runs it through {@code validateMmsResponse}.
-     * @param hostname    the CDN hostname
-     * @param mediaType   the media path type
-     * @param directPath  the CDN direct path, or {@code null}
-     * @param encFileHash the base64-encoded encrypted file hash, or {@code null}
+     * @param hostname       the CDN hostname
+     * @param mediaType      the media path type
+     * @param directPath     the CDN direct path, or {@code null}
+     * @param encFileHash    the base64-encoded encrypted file hash, or {@code null}
+     * @param abPropsService the AB props service consulted by the underlying
+     *                       URL formatter for the
+     *                       {@code low_cache_hit_rate_media_types} CSV and the
+     *                       {@code web_deprecate_mms4_hash_based_download} flag
      * @throws WhatsAppMediaException.Download if the media does not exist
      *         (non-OK HTTP status) or a network error occurs
      */
@@ -1632,12 +1904,13 @@ public final class MediaConnection {
             String hostname,
             MediaPath mediaType,
             String directPath,
-            String encFileHash
+            String encFileHash,
+            ABPropsService abPropsService
     ) throws WhatsAppMediaException.Download {
         // WAWebMmsClientMmsDownload.mmsCheckExistence
         // Delegates to the shared HEAD helper; success is signalled by the
         // absence of a thrown exception
-        sendHeadRequest(hostname, mediaType, directPath, encFileHash, "mmsCheckExistence");
+        sendHeadRequest(hostname, mediaType, directPath, encFileHash, "mmsCheckExistence", abPropsService);
     }
 
     /**
@@ -1649,10 +1922,14 @@ public final class MediaConnection {
      * compute bandwidth estimates before invoking a full download.
      *
      * @implNote WAWebMmsClientMmsDownload.mmsGetEncryptedMediaSize.
-     * @param hostname    the CDN hostname
-     * @param mediaType   the media path type
-     * @param directPath  the CDN direct path, or {@code null}
-     * @param encFileHash the base64-encoded encrypted file hash, or {@code null}
+     * @param hostname       the CDN hostname
+     * @param mediaType      the media path type
+     * @param directPath     the CDN direct path, or {@code null}
+     * @param encFileHash    the base64-encoded encrypted file hash, or {@code null}
+     * @param abPropsService the AB props service consulted by the underlying
+     *                       URL formatter for the
+     *                       {@code low_cache_hit_rate_media_types} CSV and the
+     *                       {@code web_deprecate_mms4_hash_based_download} flag
      * @return the encrypted media file size in bytes
      * @throws WhatsAppMediaException.Download if the Content-Length header is
      *         missing, the server returns a non-OK status, or a network error
@@ -1664,12 +1941,13 @@ public final class MediaConnection {
             String hostname,
             MediaPath mediaType,
             String directPath,
-            String encFileHash
+            String encFileHash,
+            ABPropsService abPropsService
     ) throws WhatsAppMediaException.Download {
         // WAWebMmsClientMmsDownload.mmsGetEncryptedMediaSize
         // Shares the HEAD helper with mmsCheckExistence and parses the
         // Content-Length header from the response
-        var response = sendHeadRequest(hostname, mediaType, directPath, encFileHash, "mmsGetEncryptedMediaSize");
+        var response = sendHeadRequest(hostname, mediaType, directPath, encFileHash, "mmsGetEncryptedMediaSize", abPropsService);
 
         // WAWebMmsClientMmsDownload.mmsGetEncryptedMediaSize
         // Missing Content-Length maps to UnableToGetContentLengthError in
@@ -1691,15 +1969,19 @@ public final class MediaConnection {
      * <p>Shared helper for {@link #checkExistence} and
      * {@link #getEncryptedMediaSize}. Constructs the URL via
      * {@link #formatDownloadUrl} with mode {@code "auto"} and validates the
-     * status code via {@link #validateMmsResponse(int, String)}.
+     * status code via {@link #validateMmsResponse(int, String, String)}.
      *
      * @implNote WAWebMmsClientMmsDownload: shared HEAD helper used by
      * {@code mmsCheckExistence} and {@code mmsGetEncryptedMediaSize}.
-     * @param hostname     the CDN hostname
-     * @param mediaType    the media path type
-     * @param directPath   the CDN direct path, or {@code null}
-     * @param encFileHash  the base64-encoded encrypted file hash, or {@code null}
-     * @param functionName the caller function name for error context
+     * @param hostname       the CDN hostname
+     * @param mediaType      the media path type
+     * @param directPath     the CDN direct path, or {@code null}
+     * @param encFileHash    the base64-encoded encrypted file hash, or {@code null}
+     * @param functionName   the caller function name for error context
+     * @param abPropsService the AB props service consulted by the URL
+     *                       formatter for the {@code low_cache_hit_rate_media_types}
+     *                       CSV and the
+     *                       {@code web_deprecate_mms4_hash_based_download} flag
      * @return the HTTP response from the HEAD request
      * @throws WhatsAppMediaException.Download if no path is available, the
      *         server returns a non-OK status, or a network error occurs
@@ -1712,12 +1994,13 @@ public final class MediaConnection {
             MediaPath mediaType,
             String directPath,
             String encFileHash,
-            String functionName
+            String functionName,
+            ABPropsService abPropsService
     ) throws WhatsAppMediaException.Download {
         // WAWebMmsClientMmsDownload.mmsCheckExistence
         // Builds the download URL with mode "auto" so the CDN returns the
         // HEAD metadata for the target media
-        var url = formatDownloadUrl(hostname, directPath, encFileHash, mediaType, null);
+        var url = formatDownloadUrl(hostname, directPath, encFileHash, mediaType, null, abPropsService);
 
         try (var client = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.ALWAYS)
@@ -1730,9 +2013,11 @@ public final class MediaConnection {
 
             // WAWebMmsClientMmsDownload.mmsCheckExistence
             // Non-200 responses flow through the standard Download error
-            // mapping before returning
+            // mapping before returning. HEAD responses carry no body, so
+            // Cobalt passes null for the body argument; this matches WA Web
+            // where response.text() resolves to an empty string for HEAD.
             if (response.statusCode() != 200) {
-                validateMmsResponse(response.statusCode(), url);
+                validateMmsResponse(response.statusCode(), url, null);
             }
 
             return response;

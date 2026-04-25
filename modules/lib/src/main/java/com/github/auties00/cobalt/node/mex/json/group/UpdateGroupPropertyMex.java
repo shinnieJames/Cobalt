@@ -11,7 +11,6 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -49,9 +48,25 @@ public sealed interface UpdateGroupPropertyMex extends MexJsonOperation permits 
      * The request payload for this MEX mutation.
      */
     final class Request implements UpdateGroupPropertyMex {
+        /**
+         * The target group id bound to the {@code group_id} GraphQL variable.
+         */
         private final String groupId;
+
+        /**
+         * The serialised property update payload bound to the {@code update}
+         * GraphQL variable.
+         */
         private final String update;
 
+        /**
+         * Constructs a new request carrying the {@code group_id} and
+         * {@code update} GraphQL variables for the mutation.
+         *
+         * @param groupId the target group id
+         * @param update  the serialised JSON payload describing the property
+         *                change
+         */
         public Request(String groupId, String update) {
             this.groupId = groupId;
             this.update = update;
@@ -61,12 +76,13 @@ public sealed interface UpdateGroupPropertyMex extends MexJsonOperation permits 
          * Serialises the GraphQL variables as JSON and wraps them in a
          * {@code w:mex} IQ stanza.
          *
-         * @implNote WAWebMexUpdateGroupPropertyJobMutation.graphql: the two
-         * variables are the target {@code group_id} and the serialised
-         * {@code update} payload describing the property change.
+         * @implNote WAWebMexUpdateGroupPropertyJobMutation.graphql: mirrors
+         * the compiled mutation's {@code argumentDefinitions} (named
+         * {@code group_id} and {@code update}) which are bound to the
+         * {@code xwa2_group_update_property} selection at dispatch time.
          * @return the IQ {@link NodeBuilder} ready to be built and dispatched
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexUpdateGroupPropertyJobMutation.graphql", exports = "params.id",
+        @WhatsAppWebExport(moduleName = "WAWebMexUpdateGroupPropertyJobMutation.graphql", exports = "argumentDefinitions",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public NodeBuilder toNode() {
             try (var writer = JSONWriter.ofUTF8()) {
@@ -100,9 +116,25 @@ public sealed interface UpdateGroupPropertyMex extends MexJsonOperation permits 
      * The parsed response for this MEX mutation.
      */
     final class Response implements UpdateGroupPropertyMex {
+        /**
+         * The group id echoed back by the {@code xwa2_group_update_property}
+         * payload.
+         */
         private final String id;
+
+        /**
+         * The resulting group state reported by the relay; expected to be
+         * {@code "ACTIVE"} on success.
+         */
         private final String state;
 
+        /**
+         * Constructs a new response from the parsed scalar fields of the
+         * {@code xwa2_group_update_property} envelope.
+         *
+         * @param id    the echoed group id, or {@code null} if absent
+         * @param state the resulting group state, or {@code null} if absent
+         */
         private Response(String id, String state) {
             this.id = id;
             this.state = state;
@@ -111,14 +143,15 @@ public sealed interface UpdateGroupPropertyMex extends MexJsonOperation permits 
         /**
          * Parses the MEX response carried by an inbound IQ stanza.
          *
-         * @implNote WAWebMexUpdateGroupPropertyJobMutation.graphql: reads
-         * the group {@code id} and resulting {@code state} from the mutation
-         * payload.
+         * @implNote WAWebMexUpdateGroupPropertyJobMutation.graphql: mirrors
+         * the compiled mutation's {@code selections} on the
+         * {@code xwa2_group_update_property} linked field, exposing the
+         * {@code id} and {@code state} scalar fields the relay returns.
          * @param node the inbound IQ stanza carrying the {@code <result>} child
          * @return the parsed response, or {@code Optional.empty()} if the
          *         expected JSON shape is absent
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexUpdateGroupPropertyJobMutation.graphql", exports = "params.id",
+        @WhatsAppWebExport(moduleName = "WAWebMexUpdateGroupPropertyJobMutation.graphql", exports = "selections",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<Response> of(Node node) {
             return node.getChild("result")
@@ -144,6 +177,19 @@ public sealed interface UpdateGroupPropertyMex extends MexJsonOperation permits 
             return Optional.ofNullable(state);
         }
 
+        /**
+         * Parses the JSON payload carried by the {@code <result>} child of
+         * the inbound IQ stanza into a {@link Response}.
+         *
+         * @implNote WAWebMexUpdateGroupPropertyJob.mexUpdateGroupPropertyJob:
+         * mirrors the JS access pattern
+         * {@code (n = a.xwa2_group_update_property) != null ? n : {}} by
+         * returning {@link Optional#empty()} when the envelope is missing.
+         * @param json the UTF-8 encoded JSON payload
+         * @return an {@link Optional} containing the parsed response, or
+         *         empty if the {@code data.xwa2_group_update_property}
+         *         envelope is absent
+         */
         private static Optional<Response> of(byte[] json) {
             var jsonObject = JSON.parseObject(json);
             if (jsonObject == null) {

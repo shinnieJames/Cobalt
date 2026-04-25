@@ -105,6 +105,24 @@ abstract class MediaInputStream extends InputStream {
     static final int IV_LENGTH = 16;
 
     /**
+     * The AES-CBC block size in bytes.
+     *
+     * <p>Used both when sizing the ciphertext staging buffer so that
+     * {@code Cipher.doFinal} can emit one trailing PKCS5 padding block
+     * without reallocation, and as the stride length that the partial
+     * chunk variant of {@code hmacAndDecrypt} relies on when re-chaining
+     * the IV between chunks.
+     *
+     * @implNote WAMediaCrypto.CBC_BLOCK_SIZE: module constant {@code C = 16}.
+     * Cobalt also exposes this value at runtime via {@link javax.crypto.Cipher#getBlockSize()}
+     * on the AES cipher instance; the two are guaranteed to match for
+     * {@code AES/CBC/PKCS5Padding}.
+     */
+    @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "CBC_BLOCK_SIZE",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    static final int CBC_BLOCK_SIZE = 16;
+
+    /**
      * The underlying raw input stream providing the source data.
      *
      * <p>For the upload pipeline this carries plaintext to be encrypted;

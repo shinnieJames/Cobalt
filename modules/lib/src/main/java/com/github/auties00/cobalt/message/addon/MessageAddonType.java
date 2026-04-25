@@ -6,18 +6,22 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
  * Enumerates the use-case labels that WhatsApp mixes into the HKDF info
- * parameter when deriving an addon-specific encryption key.
+ * parameter when deriving a message-secret-derived encryption or MAC key.
  *
- * <p>Every dual-encrypted addon (poll votes, reactions inside CAG threads,
- * encrypted comments, event responses, event edits, poll edits, poll
- * add-options, message edits) binds its key derivation to one of these
- * labels so that keys derived for different use cases never collide even
- * when the parent message, sender, and stanza id are identical.
+ * <p>Eight of the nine variants drive dual-encrypted addons (poll votes,
+ * reactions inside CAG threads, encrypted comments, event responses, event
+ * edits, poll edits, poll add-options, message edits): each binds its HKDF
+ * derivation to a distinct label so that keys derived for different use cases
+ * never collide even when the parent message, sender, and stanza id are
+ * identical. The ninth variant, {@link #REPORT_TOKEN}, is used by the
+ * reporting-token flow to derive the HMAC key that authenticates abuse
+ * reports, not for AES-GCM encryption.
  *
- * <p>Each value also records whether the addon uses additional authenticated
- * data in AES-GCM. Only poll votes and event responses set that flag,
- * matching WA Web's inline check that only emits AAD for those two
- * {@code MsgKind} variants.
+ * <p>Each value also records whether the use case applies additional
+ * authenticated data in AES-GCM. Only poll votes and event responses set
+ * that flag, matching WA Web's inline check that only emits AAD for those
+ * two {@code MsgKind} variants. The flag is always {@code false} for
+ * {@link #REPORT_TOKEN} because reporting tokens do not use AES-GCM.
  *
  * @implNote WAUseCaseSecret.UseCaseSecretModificationType: enumerated as
  * {@code $InternalEnum({POLL_VOTE:"Poll Vote",ENC_REACTION:"Enc Reaction",
@@ -26,8 +30,13 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
  * POLL_EDIT_ENCRYPTED:"Poll Edit",POLL_ADD_OPTION:"Poll Add Option",
  * MESSAGE_EDIT:"Message Edit"})}. WAWebAddonEncryption.C maps each
  * {@code WAWebMsgType.MsgKind} to one of these labels and to the matching
- * protobuf spec. The {@code REPORT_TOKEN} label is intentionally omitted
- * here because it is used only for reporting tokens, not for addon messages.
+ * protobuf spec. WAWebReportingTokenUtils.genReportingTokenKeyFromMessageSecret
+ * passes {@link #REPORT_TOKEN} into the same {@code WABinary.Binary.build}
+ * construction when deriving the reporting token key.
+ * Cobalt simplifies {@code EVENT_EDIT_ENCRYPTED} to {@link #EVENT_EDIT} and
+ * {@code POLL_EDIT_ENCRYPTED} to {@link #POLL_EDIT}; the enum constant names
+ * drop the redundant {@code _ENCRYPTED} suffix but the associated wire strings
+ * ({@code "Event Edit"}, {@code "Poll Edit"}) are preserved byte-for-byte.
  */
 @WhatsAppWebModule(moduleName = "WAUseCaseSecret")
 @WhatsAppWebModule(moduleName = "WAWebAddonEncryption")
@@ -79,6 +88,23 @@ public enum MessageAddonType {
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
     ENC_COMMENT("Enc Comment", false),
+
+    /**
+     * Reporting token label.
+     *
+     * <p>Unlike the other variants, this label does not drive AES-GCM
+     * encryption of an addon payload. It is mixed into the HKDF info when
+     * deriving the 32-byte HMAC key used to compute franking tags that the
+     * server verifies on abuse reports. The reporting-token flow lives in
+     * {@code WAWebReportingTokenUtils} rather than {@code WAWebAddonEncryption}.
+     *
+     * @implNote WAUseCaseSecret.UseCaseSecretModificationType.REPORT_TOKEN:
+     * {@code "Report Token"}. WAWebReportingTokenUtils.genReportingTokenKeyFromMessageSecret
+     * passes this value as the fourth argument to {@code Binary.build}.
+     */
+    @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    REPORT_TOKEN("Report Token", false),
 
     /**
      * Event response addon (RSVP).

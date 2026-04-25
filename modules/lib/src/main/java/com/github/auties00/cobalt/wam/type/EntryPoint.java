@@ -78,5 +78,15 @@ public enum EntryPoint {
     @WamEnumConstant(71) PRODUCT_INFO_LIST,
     @WamEnumConstant(72) SIMULATION_CONVERSATION,
     @WamEnumConstant(73) DEPENDENT_MESSAGE_REQUESTS_FOLDER,
-    @WamEnumConstant(74) DEPENDENT_CONVERSATION_MESSAGE_REQUEST
+    @WamEnumConstant(74) DEPENDENT_CONVERSATION_MESSAGE_REQUEST,
+    @WamEnumConstant(75) CTWA_CHAT_THREAD,
+    @WamEnumConstant(76) BB_CHAT_OVERFLOW_MENU,
+    @WamEnumConstant(77) BB_TOOLS_PAGE,
+    @WamEnumConstant(78) BB_REVIEW,
+    @WamEnumConstant(79) CHAT_OVERFLOW_MENU,
+    @WamEnumConstant(80) IN_THREAD_CHAT,
+    @WamEnumConstant(81) SETTINGS_TAB,
+    @WamEnumConstant(82) CONNECTIONS,
+    @WamEnumConstant(83) KNOWLEDGE,
+    @WamEnumConstant(84) GDRIVE_VALUE_PROP
 }

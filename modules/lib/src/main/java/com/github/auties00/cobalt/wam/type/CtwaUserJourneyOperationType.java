@@ -83,5 +83,10 @@ public enum CtwaUserJourneyOperationType {
     @WamEnumConstant(77) AD_PREVIEW_FETCH_FROM_DEEPLINK_V2_STARTED,
     @WamEnumConstant(78) AD_PREVIEW_FETCH_FROM_DEEPLINK_V2_SUCCESS,
     @WamEnumConstant(79) AD_PREVIEW_FETCH_FROM_DEEPLINK_V2_FAILED,
-    @WamEnumConstant(80) AD_PREVIEW_DEEPLINK_V1_CLICKED
+    @WamEnumConstant(80) AD_PREVIEW_DEEPLINK_V1_CLICKED,
+    @WamEnumConstant(81) FOLLOW_UP_USYNC_SKIPPED,
+    @WamEnumConstant(82) INLINE_USYNC_STARTED,
+    @WamEnumConstant(83) INLINE_USYNC_COMPLETED,
+    @WamEnumConstant(84) FOLLOW_UP_USYNC_STARTED,
+    @WamEnumConstant(85) FOLLOW_UP_USYNC_COMPLETED
 }

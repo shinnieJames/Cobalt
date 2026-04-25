@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.device;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.SyncActionEmptyArgs;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
@@ -102,29 +104,49 @@ public final class WaffleAccountLinkStateAction implements SyncAction<SyncAction
     /**
      * Enumerates the possible states of the link between the WhatsApp account
      * and a Meta Accounts Center identity.
+     *
+     * @implNote WAWebAccountLinkingConstants.AccountLinkState - the WA Web
+     *           constants module defines this as
+     *           {@code $InternalEnum.Mirrored(["Active","Paused","Unlinked","Unknown"])}
+     *           which yields ordinal indices {@code Active=0, Paused=1,
+     *           Unlinked=2, Unknown=3}; the Cobalt enum preserves those exact
+     *           indices via {@link ProtobufEnumIndex}.
      */
     @ProtobufEnum(name = "SyncActionValue.WaffleAccountLinkStateAction.AccountLinkState")
+    @WhatsAppWebExport(moduleName = "WAWebAccountLinkingConstants", exports = "AccountLinkState", adaptation = WhatsAppAdaptation.DIRECT)
     public static enum AccountLinkState {
         /**
          * The link between the WhatsApp account and the Meta Accounts Center
          * identity is active and functional.
+         *
+         * @implNote WAWebAccountLinkingConstants.AccountLinkState.Active
+         *           (mirrored enum ordinal {@code 0})
          */
-        ACTIVE(0),
+        ACTIVE(0), // WAWebAccountLinkingConstants.AccountLinkState.Active
         /**
          * The link exists but has been suspended, typically by the user from
          * the Meta Accounts Center UI.
+         *
+         * @implNote WAWebAccountLinkingConstants.AccountLinkState.Paused
+         *           (mirrored enum ordinal {@code 1})
          */
-        PAUSED(1),
+        PAUSED(1), // WAWebAccountLinkingConstants.AccountLinkState.Paused
         /**
          * The link has been dissolved and the WhatsApp account is no longer
          * associated with a Meta Accounts Center identity.
+         *
+         * @implNote WAWebAccountLinkingConstants.AccountLinkState.Unlinked
+         *           (mirrored enum ordinal {@code 2})
          */
-        UNLINKED(2),
+        UNLINKED(2), // WAWebAccountLinkingConstants.AccountLinkState.Unlinked
         /**
          * The link state is unknown. Per WA Web {@code WAWebAccountLinkingConstants.AccountLinkState}
          * (mirrored enum with {@code Active}, {@code Paused}, {@code Unlinked},
          * {@code Unknown}): values outside the known range map to
          * {@code Unknown} via {@code mapToAccountLinkState}.
+         *
+         * @implNote WAWebAccountLinkingConstants.AccountLinkState.Unknown
+         *           (mirrored enum ordinal {@code 3})
          */
         UNKNOWN(3); // WAWebAccountLinkingConstants.AccountLinkState.Unknown
 

@@ -102,8 +102,8 @@ public final class ReportingStanza {
     public Node build(ChatMessageInfo messageInfo, Jid selfJid, Jid remoteJid) {
         // WAWebMessagingGatingUtils.isReportingTokenSendingEnabled:
         // rt_sender_reporting_token_version > 0
-        var senderVersion = abPropsService.getInt(ABProp.RT_SENDER_REPORTING_TOKEN_VERSION);
-        if (senderVersion <= 0) {
+        var senderVersion = getSenderReportingTokenVersion();
+        if (!isReportingTokenSendingEnabled(senderVersion)) {
             return null;
         }
 
@@ -161,6 +161,49 @@ public final class ReportingStanza {
                     "Failed to generate reporting token: {0}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Returns the sender reporting token version that the client should
+     * advertise when generating outgoing reporting tokens.
+     *
+     * <p>A value of {@code 0} (or less) disables reporting-token generation.
+     * The actual integer is consumed by
+     * {@link com.github.auties00.cobalt.message.send.token.ReportingToken#generate}
+     * to select the HMAC key-derivation scheme used for the token.
+     *
+     * @return the sender reporting token version from
+     *         {@code rt_sender_reporting_token_version}
+     *
+     * @implNote WAWebMessagingGatingUtils.getSenderReportingTokenVersion:
+     * {@code return o("WAWebABProps").getABPropConfigValue("rt_sender_reporting_token_version")}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessagingGatingUtils",
+            exports = "getSenderReportingTokenVersion", adaptation = WhatsAppAdaptation.DIRECT)
+    int getSenderReportingTokenVersion() {
+        return abPropsService.getInt(ABProp.RT_SENDER_REPORTING_TOKEN_VERSION);
+    }
+
+    /**
+     * Returns whether reporting-token generation is enabled for outgoing
+     * messages.
+     *
+     * <p>WA Web defines this gate as
+     * {@code getSenderReportingTokenVersion() > 0}. A non-zero version
+     * selects the HMAC scheme; zero disables generation entirely.
+     *
+     * @param senderVersion the sender reporting token version as returned
+     *                      by {@link #getSenderReportingTokenVersion()}
+     * @return {@code true} if the sender version is strictly positive
+     *
+     * @implNote WAWebMessagingGatingUtils.isReportingTokenSendingEnabled:
+     * {@code return g()>0} where {@code g()} is
+     * {@code getSenderReportingTokenVersion()}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessagingGatingUtils",
+            exports = "isReportingTokenSendingEnabled", adaptation = WhatsAppAdaptation.DIRECT)
+    static boolean isReportingTokenSendingEnabled(int senderVersion) {
+        return senderVersion > 0;
     }
 
     /**

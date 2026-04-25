@@ -55,6 +55,18 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
     public static final ClearChatHandler INSTANCE = new ClearChatHandler();
 
     /**
+     * Index slot of the chat JID inside the mutation index parts array.
+     *
+     * <p>Per WhatsApp Web {@code WAWebClearChatSync}: the constructor sets
+     * {@code chatJidIndex = 1}, so the chat JID is at {@code indexParts[1]}
+     * (i.e. after the action name {@code "clearChat"} at slot {@code 0}).
+     *
+     * @implNote WAWebClearChatSync — class field {@code chatJidIndex = 1}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
+    private static final int CHAT_JID_INDEX = 1;
+
+    /**
      * Private constructor to enforce singleton pattern.
      *
      * @implNote WAWebClearChatSync — class constructor sets
@@ -161,9 +173,9 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
 
         try { // WAWebClearChatSync.applyMutations: try/catch wrapping per-mutation logic
             var indexParts = JSON.parseArray(mutation.index()); // WAWebClearChatSync.applyMutations: var t = e.indexParts
-            var chatJidString = indexParts.getString(1); // WAWebClearChatSync.applyMutations: var a = t[1]
-            var deleteStarredString = indexParts.getString(2); // WAWebClearChatSync.applyMutations: var s = t[2]
-            var deleteMediaString = indexParts.getString(3); // WAWebClearChatSync.applyMutations: var d = t[3]
+            var chatJidString = indexParts.getString(CHAT_JID_INDEX); // WAWebClearChatSync.applyMutations: var a = t[1] (chatJidIndex = 1)
+            var deleteStarredString = indexParts.getString(CHAT_JID_INDEX + 1); // WAWebClearChatSync.applyMutations: var s = t[2]
+            var deleteMediaString = indexParts.getString(CHAT_JID_INDEX + 2); // WAWebClearChatSync.applyMutations: var d = t[3]
 
             if (chatJidString == null || chatJidString.isEmpty() // WAWebClearChatSync.applyMutations: if (!a || !s || !d || !isWid(a))
                     || deleteStarredString == null || deleteStarredString.isEmpty()
@@ -390,5 +402,37 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
                 version() // WAWebClearChatSync.getClearChatMutation: version: this.getVersion()
         );
         return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw mutation object; Cobalt wraps it in SyncPendingMutation for the outgoing queue
+    }
+
+    /**
+     * Returns whether the mutation's chat JID is a LID-namespaced JID.
+     *
+     * <p>Per WhatsApp Web {@code ChatSyncdActionBase.isLidMutation}: reads the
+     * mutation index slot at {@code chatJidIndex} (= {@code 1} for clear-chat),
+     * constructs a Wid via {@code WAWebWidFactory.createWid}, and returns
+     * {@code wid.isLid()}. {@code ChatMessageRangeSyncdActionBase} (the WA Web
+     * superclass of {@code WAWebClearChatSync}) inherits this from
+     * {@code ChatSyncdActionBase}.
+     *
+     * @implNote WAWebSyncdAction.ChatSyncdActionBase.isLidMutation — index slot
+     *           lookup and {@code WAWebWidFactory.createWid(...).isLid()} check
+     * @param mutation the mutation to inspect
+     * @return {@code true} when the chat JID at index {@value #CHAT_JID_INDEX}
+     *         is in the LID domain, {@code false} otherwise
+     */
+    @Override
+    @WhatsAppWebExport(moduleName = "WAWebSyncdAction", exports = "ChatSyncdActionBase", adaptation = WhatsAppAdaptation.ADAPTED)
+    public boolean isLidMutation(DecryptedMutation.Trusted mutation) {
+        try {
+            var indexParts = JSON.parseArray(mutation.index()); // WAWebSyncdAction.ChatSyncdActionBase.isLidMutation: var n = t[e.chatJidIndex]
+            var chatJidString = indexParts.getString(CHAT_JID_INDEX);
+            if (chatJidString == null || chatJidString.isEmpty()) { // WAWebSyncdAction.ChatSyncdActionBase.isLidMutation: n == null ? false
+                return false;
+            }
+            var chatJid = Jid.of(chatJidString); // WAWebSyncdAction.ChatSyncdActionBase.isLidMutation: createWid(n)
+            return chatJid != null && chatJid.hasLidServer(); // WAWebSyncdAction.ChatSyncdActionBase.isLidMutation: createWid(n).isLid()
+        } catch (Exception e) { // ADAPTED: malformed index returns false rather than propagating
+            return false;
+        }
     }
 }

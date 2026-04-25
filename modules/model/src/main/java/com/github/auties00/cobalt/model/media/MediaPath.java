@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.media;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import it.auties.protobuf.annotation.ProtobufEnum;
 
 import java.util.*;
@@ -32,8 +35,25 @@ import java.util.*;
  * <p>Use {@link #ofId(String)} to resolve a server identifier received from
  * the wire into the corresponding constant, and {@link #known()} to enumerate
  * every concrete media type.
+ *
+ * @implNote Mirrors WhatsApp Web's {@code WAServerMediaType} catalog. The WA
+ *           Web module exports the flat {@code SERVER_MEDIA} array of every
+ *           routable identifier together with a {@code castToServerMediaType}
+ *           validator and a {@code getMediaType} dispatcher keyed on the
+ *           application-level tag. Cobalt collapses the identifier-only bag
+ *           into this enum so that each constant can also carry its CDN path,
+ *           HKDF key label, and inflation flag. The WA Web catalog is a strict
+ *           subset of this enum; additional constants such as {@link #PTV},
+ *           {@link #PRODUCT_CATALOG_IMAGE}, {@link #NATIVE_AD_IMAGE},
+ *           {@link #WAFFLE_IMAGE}, and the newsletter PTV variant originate
+ *           from other WA modules (WAWebMmsThumbnail, WAWebProductCatalog,
+ *           WAWebAdsImage, WAWebWaffleMedia) that extend the routable set in
+ *           practice even though they are absent from the static
+ *           {@code SERVER_MEDIA} array.
  */
 @ProtobufEnum
+@WhatsAppWebModule(moduleName = "WAServerMediaType")
+@WhatsAppWebModule(moduleName = "WAMediaHkdfInfo")
 public enum MediaPath {
     /**
      * Sentinel value indicating that no media is attached.
@@ -316,12 +336,29 @@ public enum MediaPath {
      * The HKDF info string used when deriving encryption keys for preview
      * media. Unlike per-type info strings, this single value is shared across
      * every preview variant.
+     *
+     * @implNote WAMediaHkdfInfo.getPreviewMediaHkdfInfo: returns the literal
+     *           {@code "Messenger Preview Keys"} unconditionally. Cobalt
+     *           hoists the literal into a constant on this enum so that the
+     *           same field exposes both per-type info strings (via
+     *           {@link #keyName()}) and the preview info string.
      */
+    @WhatsAppWebExport(moduleName = "WAMediaHkdfInfo", exports = "getPreviewMediaHkdfInfo",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public static final String PREVIEW_HKDF_INFO = "Messenger Preview Keys";
 
     /**
      * The set of all concrete media types, excluding {@link #NONE}.
+     *
+     * @implNote WAServerMediaType exports the routable identifiers as the
+     *           flat array {@code SERVER_MEDIA}. Cobalt mirrors it as the
+     *           unmodifiable {@link Set} returned by {@link #known()}. The
+     *           backing set is a superset of the WA Web array because Cobalt
+     *           also includes media types that WA Web exports from sibling
+     *           modules rather than from {@code WAServerMediaType} itself.
      */
+    @WhatsAppWebExport(moduleName = "WAServerMediaType", exports = "SERVER_MEDIA",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private static final Set<MediaPath> KNOWN;
 
     /**
@@ -348,8 +385,14 @@ public enum MediaPath {
     /**
      * Returns the set of all concrete media types, excluding {@link #NONE}.
      *
+     * @implNote Accessor counterpart to WA Web's {@code SERVER_MEDIA}
+     *           array. Returns every routable identifier that Cobalt knows
+     *           about; see the class-level javadoc for the note on how this
+     *           set is a superset of the static WA Web array.
      * @return an unmodifiable set of every known media path
      */
+    @WhatsAppWebExport(moduleName = "WAServerMediaType", exports = "SERVER_MEDIA",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public static Set<MediaPath> known() {
         return KNOWN;
     }
@@ -362,10 +405,19 @@ public enum MediaPath {
      * and passing {@code "product-catalog-image"} returns
      * {@link #PRODUCT_CATALOG_IMAGE}.
      *
+     * @implNote WA Web exposes the same behaviour as the
+     *           {@code castToServerMediaType} helper, which walks a switch
+     *           over the {@code SERVER_MEDIA} string literals and returns
+     *           the input unchanged when matched or {@code null} otherwise.
+     *           Cobalt replaces the returned raw string with the matching
+     *           {@link MediaPath} constant so that downstream code can work
+     *           in terms of the enum rather than the server identifier.
      * @param id the server-side identifier
      * @return an {@link Optional} containing the matching media path, or
      *         empty if no constant has this identifier
      */
+    @WhatsAppWebExport(moduleName = "WAServerMediaType", exports = "castToServerMediaType",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public static Optional<MediaPath> ofId(String id) {
         return Optional.ofNullable(BY_ID.get(id));
     }
@@ -409,9 +461,20 @@ public enum MediaPath {
      * Returns the HKDF info string used when deriving the per-type encryption
      * key for this media type.
      *
+     * @implNote WAMediaHkdfInfo.getMediaHkdfInfo: switches on the media type
+     *           string and returns one of the {@code "WhatsApp <Type> Keys"}
+     *           literals, throwing for any unrecognised value. Cobalt instead
+     *           stores the per-type literal directly on each {@link MediaPath}
+     *           constant and exposes it through this accessor: known media
+     *           types that are end-to-end encrypted return the same literal
+     *           strings WA Web returns, while every other constant (including
+     *           non-encrypted types such as profile pictures) returns an empty
+     *           {@link Optional} rather than throwing.
      * @return an {@link Optional} containing the HKDF info string, or empty if
      *         the media type is not end-to-end encrypted
      */
+    @WhatsAppWebExport(moduleName = "WAMediaHkdfInfo", exports = "getMediaHkdfInfo",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<String> keyName() {
         return Optional.ofNullable(keyName);
     }

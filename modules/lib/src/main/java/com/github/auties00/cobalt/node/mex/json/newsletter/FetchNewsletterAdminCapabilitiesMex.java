@@ -11,7 +11,8 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -107,12 +108,10 @@ public sealed interface FetchNewsletterAdminCapabilitiesMex extends MexJsonOpera
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterAdminCapabilitiesJob")
     final class Response implements FetchNewsletterAdminCapabilitiesMex {
-        private final String capabilities;
-        private final String id;
+        private final List<String> capabilities;
 
-        private Response(String capabilities, String id) {
+        private Response(List<String> capabilities) {
             this.capabilities = capabilities;
-            this.id = id;
         }
 
         /**
@@ -132,21 +131,20 @@ public sealed interface FetchNewsletterAdminCapabilitiesMex extends MexJsonOpera
         }
 
         /**
-         * Returns the {@code capabilities} field.
+         * Returns the raw newsletter capability values granted to the
+         * authenticated admin.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @implNote WAWebMexFetchNewsletterAdminCapabilitiesJob.mexFetchNewsletterAdminCapabilities: WA Web reads
+         * {@code r.xwa2_newsletter_admin?.capabilities} and maps each entry
+         * via {@code WAWebNewsletterModelUtils.getNewsletterCapabilityFromValue}
+         * before wrapping the result in a {@code Set}. Cobalt returns the
+         * raw string values; the enum mapping lives in the newsletter model
+         * utilities.
+         * @return an unmodifiable {@link List} of capability identifiers; never
+         *         {@code null} but possibly empty
          */
-        public Optional<String> capabilities() {
-            return Optional.ofNullable(capabilities);
-        }
-
-        /**
-         * Returns the {@code id} field.
-         *
-         * @return an {@link Optional} containing the value, or empty if absent
-         */
-        public Optional<String> id() {
-            return Optional.ofNullable(id);
+        public List<String> capabilities() {
+            return capabilities;
         }
 
         /**
@@ -176,16 +174,26 @@ public sealed interface FetchNewsletterAdminCapabilitiesMex extends MexJsonOpera
             }
 
             // WAWebMexFetchNewsletterAdminCapabilitiesJob.mexFetchNewsletterAdminCapabilities
-            // Extracts the operation-specific root keyed by xwa2_newsletter_admin
+            // Extracts the operation-specific root keyed by xwa2_newsletter_admin (r.xwa2_newsletter_admin)
             var root = data.getJSONObject("xwa2_newsletter_admin");
             if (root == null) {
                 return Optional.empty();
             }
 
-            var capabilities = root.getString("capabilities");
-            var id = root.getString("id");
+            // WAWebMexFetchNewsletterAdminCapabilitiesJob.mexFetchNewsletterAdminCapabilities
+            // var a = r.xwa2_newsletter_admin?.capabilities; var i = a==null ? [] : a.map(...)
+            var capabilitiesArray = root.getJSONArray("capabilities");
+            var capabilities = new ArrayList<String>();
+            if (capabilitiesArray != null) {
+                for (var i = 0; i < capabilitiesArray.size(); i++) {
+                    var value = capabilitiesArray.getString(i);
+                    if (value != null) {
+                        capabilities.add(value);
+                    }
+                }
+            }
 
-            return Optional.of(new Response(capabilities, id));
+            return Optional.of(new Response(List.copyOf(capabilities)));
         }
     }
 }

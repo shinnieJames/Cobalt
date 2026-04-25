@@ -1,9 +1,15 @@
 package com.github.auties00.cobalt.message.dedup;
 
+import com.github.auties00.cobalt.message.receive.stanza.MessageReceiveEncryptedPayload;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.message.MessageKey;
+import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -71,6 +77,40 @@ public final class MessageDedup {
     }
 
     /**
+     * Returns whether the pending-message cache is currently enabled by
+     * the server-side AB prop.
+     *
+     * <p>WA Web gates every call to {@code addPendingMessage} behind this
+     * check so that servers can roll the dedup feature back without a
+     * client redeploy. Cobalt callers should do the same: check this
+     * predicate before invoking {@link #add(String)} or
+     * {@link #add(MessageKey, Instant, List)}.
+     *
+     * @param abPropsService the AB props service used to read the
+     *                       {@link ABProp#WEB_PENDING_MESSAGE_CACHE_ENABLED}
+     *                       flag
+     * @return {@code true} when the server has flipped the
+     *         {@code web_pending_message_cache_enabled} AB prop on
+     * @throws NullPointerException if {@code abPropsService} is
+     *         {@code null}
+     * @implNote WAWebMessageDedupUtils.isPengingMessageCacheEnabled:
+     * returns
+     * {@code WAWebABProps.getABPropConfigValue("web_pending_message_cache_enabled")}.
+     * Cobalt routes the same lookup through {@link ABPropsService}
+     * because AB props are injected via DI rather than reached through a
+     * module-level singleton.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageDedupUtils", exports = "isPengingMessageCacheEnabled",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static boolean isCacheEnabled(ABPropsService abPropsService) {
+        Objects.requireNonNull(abPropsService, "abPropsService");
+
+        // WAWebMessageDedupUtils.isPengingMessageCacheEnabled
+        // Returns WAWebABProps.getABPropConfigValue("web_pending_message_cache_enabled")
+        return abPropsService.getBool(ABProp.WEB_PENDING_MESSAGE_CACHE_ENABLED);
+    }
+
+    /**
      * Registers a message key as pending and returns its new reference
      * count.
      *
@@ -105,6 +145,38 @@ public final class MessageDedup {
     }
 
     /**
+     * Registers an incoming message as pending using the canonical
+     * WA Web composite key derived from the message key, timestamp, and
+     * encrypted-payload list, and returns its new reference count.
+     *
+     * <p>This is the direct analogue of WA Web's
+     * {@code addPendingMessage(key, ts, encs)} export: the composite
+     * dedup string is built by
+     * {@link PendingMessageKey#create(MessageKey, Instant, List)} before
+     * being stored so that two callers observing the same stanza always
+     * agree on the identity of an in-flight message.
+     *
+     * @param key       the logical message key
+     * @param timestamp the message timestamp, serialised as epoch seconds
+     * @param encs      the list of encrypted payloads carried on the
+     *                  incoming {@code <message>} stanza
+     * @return the new reference count for the composite key
+     * @throws NullPointerException if any argument is {@code null}
+     * @implNote WAWebMessageDedupUtils.addPendingMessage: computes
+     * {@code createPendingMessageKey(t, n, r)} and increments the
+     * module-level counter. Cobalt delegates the string-key primitive to
+     * {@link #add(String)} after composing the same canonical key via
+     * {@link PendingMessageKey#create(MessageKey, Instant, List)}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageDedupUtils", exports = "addPendingMessage",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public int add(MessageKey key, Instant timestamp, List<MessageReceiveEncryptedPayload> encs) {
+        // WAWebMessageDedupUtils.addPendingMessage
+        // Builds the composite key via WAWebPendingMessageKey.createPendingMessageKey(t, n, r)
+        return add(PendingMessageKey.create(key, timestamp, encs));
+    }
+
+    /**
      * Returns whether a message key is currently registered as pending.
      *
      * <p>When the key is present a debug log entry is emitted with the same
@@ -136,6 +208,39 @@ public final class MessageDedup {
         LOGGER.log(System.Logger.Level.DEBUG,
                 "[message-dedup] message {0} is pending, total: {1}", key, count);
         return true;
+    }
+
+    /**
+     * Returns whether an incoming message is already registered as
+     * pending, using the canonical WA Web composite key derived from the
+     * message key, timestamp, and encrypted-payload list.
+     *
+     * <p>This is the direct analogue of WA Web's
+     * {@code hasPendingMessage(key, ts, encs)} export: the composite key
+     * is built by
+     * {@link PendingMessageKey#create(MessageKey, Instant, List)} before
+     * the lookup so callers that already hold the canonical key parts
+     * avoid composing it themselves.
+     *
+     * @param key       the logical message key
+     * @param timestamp the message timestamp, serialised as epoch seconds
+     * @param encs      the list of encrypted payloads carried on the
+     *                  incoming {@code <message>} stanza
+     * @return {@code true} if the composite key is already registered
+     * @throws NullPointerException if any argument is {@code null}
+     * @implNote WAWebMessageDedupUtils.hasPendingMessage: looks up the
+     * module-level counter with {@code createPendingMessageKey(e, t, n)}
+     * and returns {@code true} whenever the counter is non-null. Cobalt
+     * delegates the string-key primitive to {@link #isPending(String)}
+     * after composing the same canonical key via
+     * {@link PendingMessageKey#create(MessageKey, Instant, List)}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMessageDedupUtils", exports = "hasPendingMessage",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public boolean isPending(MessageKey key, Instant timestamp, List<MessageReceiveEncryptedPayload> encs) {
+        // WAWebMessageDedupUtils.hasPendingMessage
+        // Builds the composite key via WAWebPendingMessageKey.createPendingMessageKey(e, t, n)
+        return isPending(PendingMessageKey.create(key, timestamp, encs));
     }
 
     /**

@@ -7,6 +7,7 @@ import com.alibaba.fastjson2.JSONWriter;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.mex.json.MexJsonOperation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -51,12 +52,28 @@ public sealed interface FetchNewsletterDehydratedMex extends MexJsonOperation pe
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDehydratedJob")
     final class Request implements FetchNewsletterDehydratedMex {
-        private final Boolean fetchWamoSub;
-        private final String input;
+        private final Jid key;
+        private final String viewRole;
+        private final boolean fetchWamoSub;
 
-        public Request(Boolean fetchWamoSub, String input) {
+        /**
+         * Constructs a request for the dehydrated representation of the given
+         * newsletter key.
+         *
+         * @implNote WAWebMexFetchNewsletterDehydratedJob.mexGetNewsletterDehydrated: WA Web's
+         * {@code function u(t, a, i)} accepts the key {@code t}, the
+         * {@code view_role} {@code a} and an options object {@code i} carrying
+         * {@code fetchWamoSub}. The {@code type} variable is derived from
+         * {@code WAWebWid.isNewsletter(t) ? "JID" : "INVITE"}.
+         * @param key          the newsletter Jid or invite identifier
+         * @param viewRole     the GraphQL {@code view_role} variable
+         * @param fetchWamoSub whether to request the optional
+         *                     {@code wamo_sub} fragment selections
+         */
+        public Request(Jid key, String viewRole, boolean fetchWamoSub) {
+            this.key = Objects.requireNonNull(key, "key cannot be null");
+            this.viewRole = viewRole;
             this.fetchWamoSub = fetchWamoSub;
-            this.input = input;
         }
 
         /**
@@ -64,10 +81,11 @@ public sealed interface FetchNewsletterDehydratedMex extends MexJsonOperation pe
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchNewsletterDehydratedJob.mexGetNewsletterDehydrated: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@code variables} object inline as
+         * {@code {input: {key: t, type: u, view_role: a}, fetch_wamo_sub: i.fetchWamoSub === true}}
+         * and delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes
+         * the JSON directly via {@code fastjson2.JSONWriter} and wraps it
+         * through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -83,20 +101,30 @@ public sealed interface FetchNewsletterDehydratedMex extends MexJsonOperation pe
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchNewsletterDehydratedJob.mexGetNewsletterDehydrated
-                // Emits the fetch_wamo_sub boolean variable when present
-                if (fetchWamoSub != null) {
-                    writer.writeName("fetch_wamo_sub");
-                    writer.writeColon();
-                    writer.writeBool(fetchWamoSub);
-                }
+                // Builds the input object: {key: t, type: WAWebWid.isNewsletter(t) ? "JID" : "INVITE", view_role: a}
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                writer.writeName("key");
+                writer.writeColon();
+                writer.writeString(key.toString());
+                writer.writeName("type");
+                writer.writeColon();
+                // WAWebWid.isNewsletter(t) ? "JID" : "INVITE"
+                writer.writeString(key.hasNewsletterServer() ? "JID" : "INVITE");
+                writer.writeName("view_role");
+                writer.writeColon();
+                writer.writeString(viewRole);
+                writer.endObject();
+
                 // WAWebMexFetchNewsletterDehydratedJob.mexGetNewsletterDehydrated
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
-                    writer.writeColon();
-                    writer.writeString(input);
-                }
+                // fetch_wamo_sub: i.fetchWamoSub === true (always emitted, defaults to false)
+                writer.writeName("fetch_wamo_sub");
+                writer.writeColon();
+                writer.writeBool(fetchWamoSub);
+
                 writer.endObject();
                 writer.endObject();
 

@@ -23,5 +23,7 @@ public enum WebtpEventType {
     @WamEnumConstant(16) PDF_RECEIVER_ERROR,
     @WamEnumConstant(17) PDF_RECEIVER_CANCEL,
     @WamEnumConstant(18) PDF_RECEIVER_CONTINUE,
-    @WamEnumConstant(19) PDF_RECEIVER_FILE_FORWARDED
+    @WamEnumConstant(19) PDF_RECEIVER_FILE_FORWARDED,
+    @WamEnumConstant(20) PDF_SHARER_AUTO_PROCEED_CHECKBOX,
+    @WamEnumConstant(21) PDF_SHARER_CONTINUE_AUTO_PROCEED
 }

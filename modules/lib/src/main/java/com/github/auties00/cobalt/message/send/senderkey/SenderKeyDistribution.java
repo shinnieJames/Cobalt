@@ -261,6 +261,8 @@ public final class SenderKeyDistribution {
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "getCompanionDsmPhashMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebDeviceSentMessageProtoUtils", exports = "wrapDeviceSentMessage",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public List<MessageEncryptedPayload> encryptCompanionDsmPhash(
             MessageContainer message,
             Collection<Jid> companionDevices,
@@ -351,6 +353,8 @@ public final class SenderKeyDistribution {
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "generateMsgProtobufs",
             adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebDeviceSentMessageProtoUtils", exports = "wrapDeviceSentMessage",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private Map<Jid, MessageContainer> generateMsgProtobufs(
             MessageContainer baseContainer,
             Collection<Jid> devices,

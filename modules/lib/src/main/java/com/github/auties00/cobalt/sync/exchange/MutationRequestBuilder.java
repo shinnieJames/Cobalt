@@ -488,7 +488,37 @@ public final class MutationRequestBuilder {
      *           {@link DecryptedMutation.Trusted} paired with the caller-supplied operation;
      *           the {@code binarySyncData → value → binarySyncAction} round-trip is absorbed
      *           by {@link EncryptedMutation#of(SyncPendingMutation, MutationKeys, byte[])}
-     *           which re-serializes the value when it builds the outgoing {@code SyncActionData}),
+     *           which re-serializes the value when it builds the outgoing {@code SyncActionData}.
+     *           Per-field mapping for the WA Web pending-mutation object literal:
+     *           {@code collection: e.collection} is flattened — the rotation generator runs
+     *           inside a {@code patchType}-scoped loop so the collection name is implicit;
+     *           {@code index: e.index} maps to {@code entry.actionIndex()};
+     *           {@code binarySyncAction: a} (the re-encoded {@code SyncActionValue} bytes) is
+     *           produced lazily inside {@link EncryptedMutation#of(SyncPendingMutation, MutationKeys, byte[])}
+     *           rather than eagerly here, so {@link DecryptedMutation.Trusted} carries the
+     *           decoded {@link com.github.auties00.cobalt.model.sync.SyncActionValue} and lets
+     *           the encryption step serialize once;
+     *           {@code operation: t} maps to the caller-supplied {@link SyncdOperation}
+     *           ({@code SET} for the rotation-set path, {@code REMOVE} for the rotation-remove
+     *           path);
+     *           {@code version: e.version} maps to {@code entry.actionVersion()};
+     *           {@code timestamp: e.timestamp} is not preserved on
+     *           {@link DecryptedMutation.Trusted} because Cobalt's {@link SyncActionEntry}
+     *           does not store a per-action timestamp (WA Web's {@code SyncActionEntry} carries
+     *           one only because it is populated from a freshly received mutation that has the
+     *           timestamp from the wire). Cobalt synthesizes {@link java.time.Instant#now()}
+     *           solely to satisfy the {@code Trusted} record's non-null contract; the field is
+     *           never read on the rotation path — neither
+     *           {@link EncryptedMutation#of(SyncPendingMutation, MutationKeys, byte[])} (which
+     *           uses {@link com.github.auties00.cobalt.model.sync.SyncActionValue#timestamp()}
+     *           from the decoded value) nor the upload-metadata pairing in
+     *           {@link #buildPatchProtobuf} (which only reads {@code index}, {@code value},
+     *           {@code actionVersion}) consume it;
+     *           {@code action: e.action} has no Cobalt counterpart — WA Web's stored
+     *           {@code action} mirror is the higher-level {@code SyncActionMessage} envelope
+     *           used for in-memory reactive collections, while Cobalt collapses that envelope
+     *           into the {@link com.github.auties00.cobalt.model.sync.SyncActionValue} held by
+     *           {@code entry.actionValue()}, which is the same payload re-derived on demand.
      *           WAWebSyncdWamAppState.addKeyRotationRemoveCount (skipped per Cobalt's
      *           telemetry policy — WA Web reports the rotation REMOVE count as a WAM metric).
      *           ADAPTED: the orphan-REMOVE filter step of {@code _generateMutationsToUpload}
@@ -548,13 +578,16 @@ public final class MutationRequestBuilder {
                 continue;
             }
 
-            // ADAPTED: WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — re-encode as SET
+            // ADAPTED: WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — inlined here.
+            // WA Web returns {collection,index,binarySyncAction,operation,version,timestamp,action};
+            // Cobalt collapses the 7-field literal into a Trusted record (see method-level @implNote
+            // for the per-field mapping table).
             var trusted = new DecryptedMutation.Trusted(
-                    entry.actionIndex(),
-                    entry.actionValue(),
-                    SyncdOperation.SET, // WAWebSyncdRequestBuilderBuild.x — SyncdMutation$SyncdOperation.SET
-                    Instant.now(),
-                    entry.actionVersion()
+                    entry.actionIndex(), // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — index: e.index
+                    entry.actionValue(), // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — replaces {binarySyncAction: a, action: e.action}; a = encodeProtobuf(SyncActionValueSpec, decode(SyncActionDataSpec, e.binarySyncData).value) is performed lazily inside EncryptedMutation.of
+                    SyncdOperation.SET, // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — operation: t (caller passes SyncdMutation$SyncdOperation.SET at WAWebSyncdRequestBuilderBuild.x)
+                    Instant.now(), // ADAPTED: WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — timestamp: e.timestamp; SyncActionEntry has no timestamp field, so a placeholder is used; field is never read on this path
+                    entry.actionVersion() // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — version: e.version
             );
             keyRotationSourcesOut.add(trusted);
             var pending = new SyncPendingMutation(trusted, 0);
@@ -589,13 +622,16 @@ public final class MutationRequestBuilder {
                 continue;
             }
 
-            // ADAPTED: WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — re-encode as REMOVE
+            // ADAPTED: WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — inlined here.
+            // WA Web returns {collection,index,binarySyncAction,operation,version,timestamp,action};
+            // Cobalt collapses the 7-field literal into a Trusted record (see method-level @implNote
+            // for the per-field mapping table).
             var removeTrusted = new DecryptedMutation.Trusted(
-                    entry.actionIndex(),
-                    entry.actionValue(),
-                    SyncdOperation.REMOVE, // WAWebSyncdRequestBuilderBuild.$ — SyncdMutation$SyncdOperation.REMOVE
-                    Instant.now(),
-                    entry.actionVersion()
+                    entry.actionIndex(), // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — index: e.index
+                    entry.actionValue(), // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — replaces {binarySyncAction: a, action: e.action}; the SyncActionValue carried here is re-serialized inside EncryptedMutation.of
+                    SyncdOperation.REMOVE, // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — operation: t (caller passes SyncdMutation$SyncdOperation.REMOVE at WAWebSyncdRequestBuilderBuild.$)
+                    Instant.now(), // ADAPTED: WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — timestamp: e.timestamp; placeholder, never read on this path
+                    entry.actionVersion() // WAWebSyncdRequestBuilderTypesConverter.syncActionsToPendingMutations — version: e.version
             );
             keyRotationSourcesOut.add(removeTrusted);
             var removePending = new SyncPendingMutation(removeTrusted, 0);
@@ -763,6 +799,7 @@ public final class MutationRequestBuilder {
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdMMSUpload", exports = "uploadPatch", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSyncdMMSUpload", exports = "buildExternalBlobReference", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSyncdNetCallbacksApi", exports = "uploadSyncExternalPatch", adaptation = WhatsAppAdaptation.ADAPTED)
     private ExternalBlobReference uploadExternalMutations(List<SyncdMutation> mutations) {
         var syncdMutations = new SyncdMutationsBuilder()
                 .mutations(mutations)
@@ -981,7 +1018,16 @@ public final class MutationRequestBuilder {
      *           {@code e => e.index} maps to {@code patch.mutation().index()}
      *           because Cobalt's {@link SyncPendingMutation} wraps the mutation
      *           inside a {@link DecryptedMutation.Trusted} record rather than
-     *           exposing {@code index} as a direct property.
+     *           exposing {@code index} as a direct property. The sibling
+     *           exports {@code compactKmpPatch} and {@code compactKmpPatchArray}
+     *           in the same WA Web module are not ported: they exist only as
+     *           JS-to-Kotlin FFI glue for the experimental KMP syncd engine
+     *           ({@code WAWebKmpSyncdRequestBuilder.buildOutgoingRequestWithKmp}),
+     *           which Cobalt intentionally does not implement (see the
+     *           {@code kmp_syncd_engine_outgoing_processor_enabled} AB prop
+     *           handling above). Those helpers dedupe by {@code encodedIndex}
+     *           on the Kotlin-side mutation shape; Cobalt's JVM-only
+     *           {@link SyncPendingMutation} has no {@code encodedIndex} field.
      * @param patches the pending mutations to compact
      * @return the compacted mutations
      */

@@ -387,10 +387,13 @@ public abstract sealed class MediaUploadInputStream extends MediaInputStream {
 
             this.plaintextBuffer = new byte[BUFFER_LENGTH];
 
-            // ADAPTED: WAMediaCrypto.CBC_BLOCK_SIZE
+            // WAMediaCrypto.CBC_BLOCK_SIZE
             // Reserves one extra AES block so doFinal's padded output
-            // fits in the ciphertext buffer without reallocation
-            this.ciphertextBuffer = new byte[BUFFER_LENGTH + cipher.getBlockSize()];
+            // fits in the ciphertext buffer without reallocation. For
+            // streaming cipher.update the output never exceeds BUFFER_LENGTH
+            // because BUFFER_LENGTH is block-aligned (8192 = 512 * 16) so
+            // the cipher's internal carry stays at zero across calls.
+            this.ciphertextBuffer = new byte[BUFFER_LENGTH + CBC_BLOCK_SIZE];
             this.outputBuffer = new byte[BUFFER_LENGTH];
             this.plaintextLength = 0;
         }

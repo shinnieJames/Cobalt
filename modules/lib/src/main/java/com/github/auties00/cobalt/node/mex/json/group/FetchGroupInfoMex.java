@@ -17,7 +17,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -37,7 +36,7 @@ import java.util.OptionalLong;
  * the corresponding WA Web GraphQL query. Manual edits will be overwritten
  * on the next generation run.
  *
- * @implNote WAWebMexFetchGroupInfoJob.mexFetchGroupInfo: sends
+ * @implNote WAWebMexFetchGroupInfoJob.mexGetGroupInfo: sends
  * {@code WAWebMexFetchGroupInfoJobQuery} through
  * {@code WAWebMexClient.fetchQuery} and reads the full
  * {@code xwa2_group_query_by_id} envelope.
@@ -54,7 +53,7 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
-    String QUERY_ID = "24996236089970735";
+    String QUERY_ID = "26197094166585473";
 
     /**
      * The request payload for this MEX query.
@@ -76,12 +75,14 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
          * Serialises the GraphQL variables as JSON and wraps them in a
          * {@code w:mex} IQ stanza.
          *
-         * @implNote WAWebMexFetchGroupInfoJob.mexFetchGroupInfo: variables
+         * @implNote WAWebMexFetchGroupInfoJob.mexGetGroupInfo: variables
          * are {@code id}, {@code include_username}, {@code participants_phash}
-         * and {@code query_context}.
+         * and {@code query_context}; the underlying
+         * {@code WAWebMexFetchGroupInfoJob._/fetchGetGroupInfo} helper does
+         * the actual {@code WAWebMexClient.fetchQuery} dispatch.
          * @return the IQ {@link NodeBuilder} ready to be built and dispatched
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJob", exports = "mexFetchGroupInfo",
+        @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJob", exports = "mexGetGroupInfo",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public NodeBuilder toNode() {
             try (var writer = JSONWriter.ofUTF8()) {
@@ -154,13 +155,19 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
         /**
          * Parses the MEX response carried by an inbound IQ stanza.
          *
-         * @implNote WAWebMexFetchGroupInfoJob.mexFetchGroupInfo: reads the
-         * full {@code data.xwa2_group_query_by_id} envelope.
+         * @implNote WAWebMexFetchGroupInfoJob.mexGetGroupInfo: reads the
+         * full {@code data.xwa2_group_query_by_id} envelope. WA Web's
+         * post-processing step (synthesising domain {@code groupInfo} via
+         * {@code WAWebWidFactory.createWid}, computing {@code __typename}
+         * branches and projecting {@code XWA2CommunityGroup} /
+         * {@code XWA2CommunityDefaultSubGroup} / {@code XWA2CommunitySubGroup}
+         * variants) is not performed here: Cobalt exposes the raw GraphQL
+         * envelope and lets domain-layer consumers project it.
          * @param node the inbound IQ stanza carrying the {@code <result>} child
          * @return the parsed response, or {@code Optional.empty()} if the
          *         expected JSON shape is absent
          */
-        @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJob", exports = "mexFetchGroupInfo",
+        @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupInfoJob", exports = "mexGetGroupInfo",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<Response> of(Node node) {
             return node.getChild("result")
@@ -1160,6 +1167,7 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
             private final String announcement;
             private final String locked;
             private final String memberLinkMode;
+            private final String memberShareGroupHistoryMode;
             private final Boolean membershipApprovalModeEnabled;
             private final String generalChat;
             private final Boolean autoAddDisabled;
@@ -1167,7 +1175,7 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
             private final String capi;
             private final String support;
 
-            private Properties(Boolean allowNonAdminSubGroupCreation, String closedByMembershipApprovalMode, LimitSharing limitSharing, LidMigrationState lidMigrationState, Ephemeral ephemeral, GrowthLocked2 growthLocked2, String memberAddMode, String parentGroupJid, String groupSafetyCheck, Boolean allowAdminReports, String announcement, String locked, String memberLinkMode, Boolean membershipApprovalModeEnabled, String generalChat, Boolean autoAddDisabled, String hiddenGroup, String capi, String support) {
+            private Properties(Boolean allowNonAdminSubGroupCreation, String closedByMembershipApprovalMode, LimitSharing limitSharing, LidMigrationState lidMigrationState, Ephemeral ephemeral, GrowthLocked2 growthLocked2, String memberAddMode, String parentGroupJid, String groupSafetyCheck, Boolean allowAdminReports, String announcement, String locked, String memberLinkMode, String memberShareGroupHistoryMode, Boolean membershipApprovalModeEnabled, String generalChat, Boolean autoAddDisabled, String hiddenGroup, String capi, String support) {
                 this.allowNonAdminSubGroupCreation = allowNonAdminSubGroupCreation;
                 this.closedByMembershipApprovalMode = closedByMembershipApprovalMode;
                 this.limitSharing = limitSharing;
@@ -1181,6 +1189,7 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
                 this.announcement = announcement;
                 this.locked = locked;
                 this.memberLinkMode = memberLinkMode;
+                this.memberShareGroupHistoryMode = memberShareGroupHistoryMode;
                 this.membershipApprovalModeEnabled = membershipApprovalModeEnabled;
                 this.generalChat = generalChat;
                 this.autoAddDisabled = autoAddDisabled;
@@ -1304,6 +1313,15 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
              */
             public Optional<String> memberLinkMode() {
                 return Optional.ofNullable(memberLinkMode);
+            }
+
+            /**
+             * Returns the {@code member_share_group_history_mode} field.
+             *
+             * @return an {@link Optional} containing the value, or empty if absent
+             */
+            public Optional<String> memberShareGroupHistoryMode() {
+                return Optional.ofNullable(memberShareGroupHistoryMode);
             }
 
             /**
@@ -1596,13 +1614,14 @@ public sealed interface FetchGroupInfoMex extends MexJsonOperation permits Fetch
                 var announcement = obj.getString("announcement");
                 var locked = obj.getString("locked");
                 var memberLinkMode = obj.getString("member_link_mode");
+                var memberShareGroupHistoryMode = obj.getString("member_share_group_history_mode");
                 var membershipApprovalModeEnabled = obj.getBoolean("membership_approval_mode_enabled");
                 var generalChat = obj.getString("general_chat");
                 var autoAddDisabled = obj.getBoolean("auto_add_disabled");
                 var hiddenGroup = obj.getString("hidden_group");
                 var capi = obj.getString("capi");
                 var support = obj.getString("support");
-                return Optional.of(new Properties(allowNonAdminSubGroupCreation, closedByMembershipApprovalMode, limitSharing, lidMigrationState, ephemeral, growthLocked2, memberAddMode, parentGroupJid, groupSafetyCheck, allowAdminReports, announcement, locked, memberLinkMode, membershipApprovalModeEnabled, generalChat, autoAddDisabled, hiddenGroup, capi, support));
+                return Optional.of(new Properties(allowNonAdminSubGroupCreation, closedByMembershipApprovalMode, limitSharing, lidMigrationState, ephemeral, growthLocked2, memberAddMode, parentGroupJid, groupSafetyCheck, allowAdminReports, announcement, locked, memberLinkMode, memberShareGroupHistoryMode, membershipApprovalModeEnabled, generalChat, autoAddDisabled, hiddenGroup, capi, support));
             }
 
             /**

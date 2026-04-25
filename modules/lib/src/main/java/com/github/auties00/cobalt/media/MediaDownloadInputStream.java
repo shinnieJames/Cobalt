@@ -555,7 +555,17 @@ final class MediaDownloadInputStream extends MediaInputStream {
                                 // WAMediaCrypto.hmacAndDecrypt
                                 // Finalises the HMAC and compares its first
                                 // 10 bytes against the trailer in constant
-                                // time (N function in the WA Web source)
+                                // time (N function in the WA Web source).
+                                // WA Web throws a HmacValidationError("hmacAndDecrypt
+                                // hmac mismatch") on failure; per Cobalt's
+                                // sealed exception model the equivalent
+                                // signal is WhatsAppMediaException.Download.
+                                // WA Web also rejects trailers outside 10..32
+                                // bytes with HmacValidationError("Bad hmac
+                                // size"); Cobalt always reads a fixed
+                                // MAC_LENGTH trailer so the size check is
+                                // structurally enforced at buffer allocation
+                                // time rather than as a runtime throw.
                                 var actualCiphertextMac = mac.doFinal();
                                 if (!MessageDigest.isEqual(
                                         Arrays.copyOf(macBuffer, MAC_LENGTH),

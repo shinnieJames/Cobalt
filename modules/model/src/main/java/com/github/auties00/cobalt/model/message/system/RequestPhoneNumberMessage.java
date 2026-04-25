@@ -1,5 +1,8 @@
 package com.github.auties00.cobalt.model.message.system;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 
@@ -18,14 +21,35 @@ import java.util.Optional;
  *
  * <p>The message carries only the quoted-message context so that clients can
  * thread the request underneath the original interaction that triggered it.
+ *
+ * @implNote The WA Web generator {@code WAWebGenerateRequestPhoneNumberMessageProto}
+ *           is a tiny factory of the shape
+ *           {@code function(e){var t=e.contextInfo;return{requestPhoneNumberMessage:{contextInfo:t}}}}.
+ *           It takes an input object holding a {@code contextInfo}, then wraps
+ *           it as an outer {@code Message} protobuf whose only populated field
+ *           is {@code requestPhoneNumberMessage}, which in turn carries the
+ *           same {@code contextInfo}. Cobalt represents the structure
+ *           statically: this class is the inner
+ *           {@code {requestPhoneNumberMessage: {contextInfo}}} object and the
+ *           surrounding wrapper is
+ *           {@code MessageContainer.requestPhoneNumberMessage} at proto index
+ *           54. Construction goes through the generated
+ *           {@code RequestPhoneNumberMessageBuilder}, which is the direct
+ *           analog of the JS factory call site.
  */
 @ProtobufMessage(name = "Message.RequestPhoneNumberMessage")
+@WhatsAppWebModule(moduleName = "WAWebGenerateRequestPhoneNumberMessageProto")
 public final class RequestPhoneNumberMessage implements ContextualMessage {
     /**
      * The conversational context attached to this request, including the
      * quoted message if any.
+     *
+     * @implNote The WA Web generator
+     *           {@code WAWebGenerateRequestPhoneNumberMessageProto} forwards
+     *           its input {@code contextInfo} verbatim onto this field.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
+    @WhatsAppWebExport(moduleName = "WAWebGenerateRequestPhoneNumberMessageProto", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     ContextInfo contextInfo;
 
 

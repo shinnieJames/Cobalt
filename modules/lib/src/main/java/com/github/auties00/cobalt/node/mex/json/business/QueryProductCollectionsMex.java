@@ -66,31 +66,49 @@ public sealed interface QueryProductCollectionsMex extends MexJsonOperation perm
         private final String businessJid;
         private final int collectionLimit;
         private final int itemLimit;
+        private final String afterCursor;
         private final int width;
         private final int height;
-        private final String afterCursor;
+        private final String directConnectionEncryptedInfo;
+        private final String variantInfoFields;
+        private final Integer variantThumbnailHeight;
+        private final Integer variantThumbnailWidth;
 
         /**
          * Creates a new collections query request.
          *
-         * @param businessJid     the target business JID owning the catalog
-         * @param collectionLimit the maximum number of collections per page
-         * @param itemLimit       the maximum number of products returned
-         *                        inside every collection
-         * @param width           the requested image width in pixels used
-         *                        when the relay rewrites image URLs
-         * @param height          the requested image height in pixels
-         * @param afterCursor     the pagination cursor returned by a
-         *                        previous page, or {@code null} for the
-         *                        first page
+         * @param businessJid                   the target business JID owning the catalog
+         * @param collectionLimit               the maximum number of collections per page
+         * @param itemLimit                     the maximum number of products returned
+         *                                      inside every collection
+         * @param afterCursor                   the pagination cursor returned by a
+         *                                      previous page, or {@code null} for the
+         *                                      first page
+         * @param width                         the requested image width in pixels used
+         *                                      when the relay rewrites image URLs
+         * @param height                        the requested image height in pixels
+         * @param directConnectionEncryptedInfo the optional direct-connection encrypted
+         *                                      payload, or {@code null} when not used
+         * @param variantInfoFields             the optional variant-info field selector,
+         *                                      or {@code null} when not requested
+         * @param variantThumbnailHeight        the optional variant thumbnail height in
+         *                                      pixels, or {@code null} when not requested
+         * @param variantThumbnailWidth         the optional variant thumbnail width in
+         *                                      pixels, or {@code null} when not requested
          */
-        public Request(String businessJid, int collectionLimit, int itemLimit, int width, int height, String afterCursor) {
+        public Request(String businessJid, int collectionLimit, int itemLimit, String afterCursor, int width, int height,
+                       String directConnectionEncryptedInfo, String variantInfoFields,
+                       Integer variantThumbnailHeight, Integer variantThumbnailWidth) {
             this.businessJid = businessJid;
             this.collectionLimit = collectionLimit;
             this.itemLimit = itemLimit;
+            this.afterCursor = afterCursor;
             this.width = width;
             this.height = height;
-            this.afterCursor = afterCursor;
+            this.directConnectionEncryptedInfo = directConnectionEncryptedInfo;
+            this.variantInfoFields = variantInfoFields;
+            this.variantThumbnailHeight = variantThumbnailHeight;
+            this.variantThumbnailWidth = variantThumbnailWidth;
         }
 
         /**
@@ -100,8 +118,13 @@ public sealed interface QueryProductCollectionsMex extends MexJsonOperation perm
          * @implNote WAWebQueryProductCollections: mirrors the
          * {@code request.collections} variable shape with
          * {@code biz_jid}, {@code collection_limit}, {@code item_limit},
-         * {@code width}, {@code height} and an optional {@code after}
-         * cursor, every numeric field stringified as WA expects.
+         * {@code after}, {@code width}, {@code height},
+         * {@code direct_connection_encrypted_info},
+         * {@code variant_info_fields}, {@code variant_thumbnail_height} and
+         * {@code variant_thumbnail_width}, in that order, with every numeric
+         * field stringified as WA expects. Optional string fields and the
+         * {@code after} cursor are emitted as JSON {@code null} when absent
+         * to preserve byte-for-byte parity with the WA Web payload.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -119,25 +142,65 @@ public sealed interface QueryProductCollectionsMex extends MexJsonOperation perm
                 writer.writeName("collections");
                 writer.writeColon();
                 writer.startObject();
+                // WAWebQueryProductCollections.default: biz_jid: a.toString()
                 writer.writeName("biz_jid");
                 writer.writeColon();
                 writer.writeString(businessJid);
+                // WAWebQueryProductCollections.default: collection_limit: String(s)
                 writer.writeName("collection_limit");
                 writer.writeColon();
                 writer.writeString(Integer.toString(collectionLimit));
+                // WAWebQueryProductCollections.default: item_limit: String(c)
                 writer.writeName("item_limit");
                 writer.writeColon();
                 writer.writeString(Integer.toString(itemLimit));
+                // WAWebQueryProductCollections.default: after: r (nullable string passthrough)
+                writer.writeName("after");
+                writer.writeColon();
+                if (afterCursor == null) {
+                    writer.writeNull();
+                } else {
+                    writer.writeString(afterCursor);
+                }
+                // WAWebQueryProductCollections.default: width: String(_)
                 writer.writeName("width");
                 writer.writeColon();
                 writer.writeString(Integer.toString(width));
+                // WAWebQueryProductCollections.default: height: String(l)
                 writer.writeName("height");
                 writer.writeColon();
                 writer.writeString(Integer.toString(height));
-                if (afterCursor != null) {
-                    writer.writeName("after");
-                    writer.writeColon();
-                    writer.writeString(afterCursor);
+                // WAWebQueryProductCollections.default: direct_connection_encrypted_info: i
+                writer.writeName("direct_connection_encrypted_info");
+                writer.writeColon();
+                if (directConnectionEncryptedInfo == null) {
+                    writer.writeNull();
+                } else {
+                    writer.writeString(directConnectionEncryptedInfo);
+                }
+                // WAWebQueryProductCollections.default: variant_info_fields: d
+                writer.writeName("variant_info_fields");
+                writer.writeColon();
+                if (variantInfoFields == null) {
+                    writer.writeNull();
+                } else {
+                    writer.writeString(variantInfoFields);
+                }
+                // WAWebQueryProductCollections.default: variant_thumbnail_height: m!=null?String(m):null
+                writer.writeName("variant_thumbnail_height");
+                writer.writeColon();
+                if (variantThumbnailHeight == null) {
+                    writer.writeNull();
+                } else {
+                    writer.writeString(Integer.toString(variantThumbnailHeight));
+                }
+                // WAWebQueryProductCollections.default: variant_thumbnail_width: p!=null?String(p):null
+                writer.writeName("variant_thumbnail_width");
+                writer.writeColon();
+                if (variantThumbnailWidth == null) {
+                    writer.writeNull();
+                } else {
+                    writer.writeString(Integer.toString(variantThumbnailWidth));
                 }
                 writer.endObject();
                 writer.endObject();

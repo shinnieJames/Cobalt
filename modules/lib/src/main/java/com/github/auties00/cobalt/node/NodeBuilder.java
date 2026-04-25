@@ -2,7 +2,9 @@
 
 package com.github.auties00.cobalt.node;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 
@@ -87,10 +89,17 @@ public final class NodeBuilder {
     /**
      * Adds a text attribute to the node if the value is not null.
      *
+     * @implNote Implements WAWap's {@code DROP_ATTR} sentinel pattern by
+     *           skipping the attribute when {@code value} is {@code null}.
+     *           In WA Web the caller passes the {@code DROP_ATTR} sentinel
+     *           to {@code makeWapNode} which then filters it out; Cobalt's
+     *           builder turns this into a per-call null check.
      * @param key the attribute key
      * @param value the attribute value, or null to skip adding this attribute
      * @return this builder for method chaining
      */
+    @WhatsAppWebExport(moduleName = "WAWap", exports = "DROP_ATTR",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public NodeBuilder attribute(String key, String value) {
         if(value != null) {
             this.attributes.put(key, new NodeAttribute.TextAttribute(value));
@@ -423,6 +432,10 @@ public final class NodeBuilder {
      * @return the constructed Node instance
      * @see Node
      */
+    @WhatsAppWebExport(moduleName = "WAWap", exports = "makeWapNode",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWap", exports = "wap",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public Node build() {
         var description = Objects.requireNonNullElse(this.description, "");
         if(textContent != null) {

@@ -40,7 +40,7 @@ public sealed interface FetchNewsletterDirectoryCategoriesPreviewMex extends Mex
      * @implNote WAWebMexFetchNewsletterDirectoryCategoriesPreviewJobQuery.graphql: corresponds to the compiled
      * document id registered for the {@code mexFetchNewsletterDirectoryCategoriesPreview} query.
      */
-    String QUERY_ID = "9933023926735802";
+    String QUERY_ID = "35266481849605779";
 
     /**
      * The request variant of {@link FetchNewsletterDirectoryCategoriesPreviewMex} that serialises the

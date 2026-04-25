@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -37,25 +36,50 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
      * The numeric GraphQL query identifier assigned by the WhatsApp relay
      * to the {@code FetchRecommendedNewsletters} compiled query.
      *
-     * @implNote WAWebMexFetchRecommendedNewslettersJobQuery.graphql: corresponds to the compiled
-     * document id registered for the {@code mexFetchRecommendedNewsletters} query.
+     * @implNote WAWebMexFetchRecommendedNewslettersJobQuery.graphql: corresponds to the
+     * {@code params.id} field of the compiled GraphQL document
+     * ({@code id:"25806748772361516"}) bundled in the WA Web client.
      */
-    String QUERY_ID = "9654784331306061";
+    String QUERY_ID = "25806748772361516";
 
     /**
      * The request variant of {@link FetchRecommendedNewslettersMex} that serialises the
      * query variables and emits the outbound IQ stanza.
      *
-     * @implNote WAWebMexFetchRecommendedNewslettersJob.mexFetchRecommendedNewsletters: adapts the {@code variables}
-     * object constructed inline in the JS implementation into a dedicated
-     * Java class.
+     * @implNote WAWebMexFetchRecommendedNewslettersJob.mexFetchRecommendedNewsletters: adapts the
+     * {@code variables} object constructed inline in the JS implementation
+     * ({@code {input:{limit:t,country_codes:r}, fetch_status_metadata: WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}})
+     * into a dedicated Java class. The two positional parameters of the JS
+     * function ({@code limit} and {@code country_codes}) become fields on this
+     * record-like class, and the gating flag is also exposed so callers can
+     * decide whether to request newsletter status metadata.
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchRecommendedNewslettersJob")
     final class Request implements FetchRecommendedNewslettersMex {
-        private final String input;
+        private final Long limit;
+        private final List<String> countryCodes;
+        private final boolean fetchStatusMetadata;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request with the given variables.
+         *
+         * @param limit               the maximum number of recommended
+         *                            newsletters to return, or {@code null}
+         *                            to omit the field (the relay then
+         *                            applies its default page size)
+         * @param countryCodes        the list of ISO country codes used to
+         *                            scope the recommendation, or
+         *                            {@code null} to omit the field
+         * @param fetchStatusMetadata {@code true} to request the optional
+         *                            {@code status_metadata} sub-selection,
+         *                            mirroring
+         *                            {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}
+         *                            in the JS source
+         */
+        public Request(Long limit, List<String> countryCodes, boolean fetchStatusMetadata) {
+            this.limit = limit;
+            this.countryCodes = countryCodes;
+            this.fetchStatusMetadata = fetchStatusMetadata;
         }
 
         /**
@@ -63,10 +87,11 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
          * WhatsApp relay.
          *
          * @implNote WAWebMexFetchRecommendedNewslettersJob.mexFetchRecommendedNewsletters: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@code variables} object inline as
+         * {@code {input:{limit:t,country_codes:r}, fetch_status_metadata: <bool>}}
+         * and delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes
+         * the JSON directly via {@code fastjson2.JSONWriter} and wraps it
+         * through {@link MexJsonOperation#createMexNode(String, String)}.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -82,13 +107,38 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchRecommendedNewslettersJob.mexFetchRecommendedNewsletters
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
+                // Emits {input:{limit:t, country_codes:r}}; the inner object is emitted even when both children are null
+                // to mirror the JS object literal shape.
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+                if (limit != null) {
+                    writer.writeName("limit");
                     writer.writeColon();
-                    writer.writeString(input);
+                    writer.writeInt64(limit);
                 }
+                if (countryCodes != null) {
+                    writer.writeName("country_codes");
+                    writer.writeColon();
+                    writer.startArray();
+                    for (var i = 0; i < countryCodes.size(); i++) {
+                        if (i > 0) {
+                            writer.writeComma();
+                        }
+                        writer.writeString(countryCodes.get(i));
+                    }
+                    writer.endArray();
+                }
+                writer.endObject();
+
+                // WAWebMexFetchRecommendedNewslettersJob.mexFetchRecommendedNewsletters
+                // Emits the sibling {fetch_status_metadata: <bool>} field, mirroring the JS variables literal
+                writer.writeName("fetch_status_metadata");
+                writer.writeColon();
+                writer.writeBool(fetchStatusMetadata);
+
                 writer.endObject();
                 writer.endObject();
 
@@ -251,11 +301,13 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
             private final String id;
             private final State state;
             private final ThreadMetadata threadMetadata;
+            private final StatusMetadata statusMetadata;
 
-            private Result(String id, State state, ThreadMetadata threadMetadata) {
+            private Result(String id, State state, ThreadMetadata threadMetadata, StatusMetadata statusMetadata) {
                 this.id = id;
                 this.state = state;
                 this.threadMetadata = threadMetadata;
+                this.statusMetadata = statusMetadata;
             }
 
             /**
@@ -283,6 +335,19 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
              */
             public Optional<ThreadMetadata> threadMetadata() {
                 return Optional.ofNullable(threadMetadata);
+            }
+
+            /**
+             * Returns the {@code status_metadata} field.
+             *
+             * @implNote WAWebMexFetchRecommendedNewslettersJobQuery.graphql: present in the
+             * response only when the request opted in via
+             * {@code fetch_status_metadata = true}
+             * (Relay {@code Condition} with {@code passingValue:!0}).
+             * @return an {@link Optional} containing the value, or empty if absent
+             */
+            public Optional<StatusMetadata> statusMetadata() {
+                return Optional.ofNullable(statusMetadata);
             }
 
             /**
@@ -707,6 +772,77 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
             }
 
             /**
+             * A parsed {@code StatusMetadata} object exposing per-newsletter
+             * status counters returned when {@code fetch_status_metadata}
+             * was set on the request.
+             *
+             * @implNote WAWebMexFetchRecommendedNewslettersJobQuery.graphql: corresponds to the
+             * {@code XWA2NewsletterStatusMetadata} concrete type, included
+             * conditionally on the {@code fetch_status_metadata} variable.
+             */
+            public static final class StatusMetadata {
+                private final String lastStatusServerId;
+                private final Long lastStatusSentTime;
+
+                private StatusMetadata(String lastStatusServerId, Long lastStatusSentTime) {
+                    this.lastStatusServerId = lastStatusServerId;
+                    this.lastStatusSentTime = lastStatusSentTime;
+                }
+
+                /**
+                 * Returns the {@code last_status_server_id} field.
+                 *
+                 * @return an {@link Optional} containing the value, or empty if absent
+                 */
+                public Optional<String> lastStatusServerId() {
+                    return Optional.ofNullable(lastStatusServerId);
+                }
+
+                /**
+                 * Returns the {@code last_status_sent_time} field.
+                 *
+                 * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+                 */
+                public Optional<Instant> lastStatusSentTime() {
+                    return Optional.ofNullable(lastStatusSentTime).map(Instant::ofEpochSecond);
+                }
+
+                /**
+                 * Parses a {@code StatusMetadata} from the given JSON object.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 */
+                static Optional<StatusMetadata> of(JSONObject obj) {
+                    if (obj == null) {
+                        return Optional.empty();
+                    }
+
+                    var lastStatusServerId = obj.getString("last_status_server_id");
+                    var lastStatusSentTime = obj.getLong("last_status_sent_time");
+                    return Optional.of(new StatusMetadata(lastStatusServerId, lastStatusSentTime));
+                }
+
+                /**
+                 * Parses a list of {@code StatusMetadata} from the given JSON array.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 */
+                static List<StatusMetadata> ofArray(JSONArray arr) {
+                    if (arr == null) {
+                        return List.of();
+                    }
+
+                    var result = new ArrayList<StatusMetadata>(arr.size());
+                    for (var i = 0; i < arr.size(); i++) {
+                        of(arr.getJSONObject(i)).ifPresent(result::add);
+                    }
+                    return result;
+                }
+            }
+
+            /**
              * Parses a {@code Result} from the given JSON object.
              *
              * @param obj the JSON object to parse
@@ -720,7 +856,8 @@ public sealed interface FetchRecommendedNewslettersMex extends MexJsonOperation 
                 var id = obj.getString("id");
                 var state = State.of(obj.getJSONObject("state")).orElse(null);
                 var threadMetadata = ThreadMetadata.of(obj.getJSONObject("thread_metadata")).orElse(null);
-                return Optional.of(new Result(id, state, threadMetadata));
+                var statusMetadata = StatusMetadata.of(obj.getJSONObject("status_metadata")).orElse(null);
+                return Optional.of(new Result(id, state, threadMetadata, statusMetadata));
             }
 
             /**

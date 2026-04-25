@@ -28,8 +28,8 @@ import java.util.Map;
  * @implNote WAWapDict: exposes the same five dictionaries
  *           ({@code SINGLE_BYTE_TOKEN}, {@code DICTIONARY_0_TOKEN},
  *           {@code DICTIONARY_1_TOKEN}, {@code DICTIONARY_2_TOKEN},
- *           {@code DICTIONARY_3_TOKEN}) plus the
- *           {@code DICT_VERSION} constant.
+ *           {@code DICTIONARY_3_TOKEN}), the {@code DICTIONARIES}
+ *           aggregate and the {@code DICT_VERSION} constant.
  * @see Node
  * @see NodeEncoder
  * @see NodeDecoder
@@ -46,12 +46,24 @@ public final class NodeTokens {
     public static final int DICTIONARY_VERSION = 3;
 
     /**
-     * Dictionary of strings encoded as a single byte (index 0-235).
+     * Dictionary of strings encoded as a single byte.
      *
-     * @implNote WAWapDict.SINGLE_BYTE_TOKEN
+     * @implNote WAWapDict.SINGLE_BYTE_TOKEN: the JS export is a 235-entry
+     *           array whose first entry {@code "xmlstreamstart"} is indexed
+     *           by wire byte {@code 1} (wire byte {@code 0} is reserved for
+     *           {@link NodeTags#LIST_EMPTY}). Cobalt pads the array with a
+     *           sentinel empty string at index {@code 0} so the wire byte
+     *           is directly usable as a zero-based array index in
+     *           {@link #get(int)}, trading one wasted slot for a subtraction
+     *           at every encoder/decoder call site. The on-wire bytes and
+     *           the set of reachable tokens are identical to WA Web: the
+     *           sentinel is never emitted or returned because the
+     *           {@code isEmpty()} short-circuit in {@link NodeEncoder} and
+     *           the {@code LIST_EMPTY} dispatch in {@link NodeDecoder}
+     *           handle the empty-string case independently.
      */
     @WhatsAppWebExport(moduleName = "WAWapDict", exports = "SINGLE_BYTE_TOKEN",
-            adaptation = WhatsAppAdaptation.DIRECT)
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public static final NodeTokens SINGLE_BYTE_TOKENS = new NodeTokens("", "xmlstreamstart", "xmlstreamend", "s.whatsapp.net", "type", "participant", "from", "receipt", "id", "notification", "disappearing_mode", "status", "jid", "broadcast", "user", "devices", "device_hash", "to", "offline", "message", "result", "class", "xmlns", "duration", "notify", "iq", "t", "ack", "g.us", "enc", "urn:xmpp:whatsapp:push", "presence", "config_value", "picture", "verified_name", "config_code", "key-index-list", "contact", "mediatype", "routing_info", "edge_routing", "get", "read", "urn:xmpp:ping", "fallback_hostname", "0", "chatstate", "business_hours_config", "unavailable", "download_buckets", "skmsg", "verified_level", "composing", "handshake", "device-list", "media", "text", "fallback_ip4", "media_conn", "device", "creation", "location", "config", "item", "fallback_ip6", "count", "w:profile:picture", "image", "business", "2", "hostname", "call-creator", "display_name", "relaylatency", "platform", "abprops", "success", "msg", "offline_preview", "prop", "key-index", "v", "day_of_week", "pkmsg", "version", "1", "ping", "w:p", "download", "video", "set", "specific_hours", "props", "primary", "unknown", "hash", "commerce_experience", "last", "subscribe", "max_buckets", "call", "profile", "member_since_text", "close_time", "call-id", "sticker", "mode", "participants", "value", "query", "profile_options", "open_time", "code", "list", "host", "ts", "contacts", "upload", "lid", "preview", "update", "usync", "w:stats", "delivery", "auth_ttl", "context", "fail", "cart_enabled", "appdata", "category", "atn", "direct_connection", "decrypt-fail", "relay_id", "mmg-fallback.whatsapp.net", "target", "available", "name", "last_id", "mmg.whatsapp.net", "categories", "401", "is_new", "index", "tctoken", "ip4", "token_id", "latency", "recipient", "edit", "ip6", "add", "thumbnail-document", "26", "paused", "true", "identity", "stream:error", "key", "sidelist", "background", "audio", "3", "thumbnail-image", "biz-cover-photo", "cat", "gcm", "thumbnail-video", "error", "auth", "deny", "serial", "in", "registration", "thumbnail-link", "remove", "00", "gif", "thumbnail-gif", "tag", "capability", "multicast", "item-not-found", "description", "business_hours", "config_expo_key", "md-app-state", "expiration", "fallback", "ttl", "300", "md-msg-hist", "device_orientation", "out", "w:m", "open_24h", "side_list", "token", "inactive", "01", "document", "te2", "played", "encrypt", "msgr", "hide", "direct_path", "12", "state", "not-authorized", "url", "terminate", "signature", "status-revoke-delay", "02", "te", "linked_accounts", "trusted_contact", "timezone", "ptt", "kyc-id", "privacy_token", "readreceipts", "appointment_only", "address", "expected_ts", "privacy", "7", "android", "interactive", "device-identity", "enabled", "attribute_padding", "1080", "03", "screen_height");
 
     /**
@@ -93,6 +105,28 @@ public final class NodeTokens {
     @WhatsAppWebExport(moduleName = "WAWapDict", exports = "DICTIONARY_3_TOKEN",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final NodeTokens DICTIONARY_3_TOKENS = new NodeTokens("1724", "profile_picture", "1071", "1314", "1605", "407", "990", "1710", "746", "pricing_model", "056", "059", "061", "1119", "6027", "65", "877", "1607", "05d", "917", "seen", "1516", "49", "470", "973", "1037", "1350", "1394", "1480", "1796", "keys", "794", "1536", "1594", "2378", "1333", "1524", "1825", "116", "309", "52", "808", "827", "909", "495", "1660", "361", "957", "google", "1357", "1565", "1967", "996", "1775", "586", "736", "1052", "1670", "bank", "177", "1416", "2194", "2222", "1454", "1839", "1275", "53", "997", "1629", "6028", "smba", "1378", "1410", "05c", "1849", "727", "create", "1559", "536", "1106", "1310", "1944", "670", "1297", "1316", "1762", "en", "1148", "1295", "1551", "1853", "1890", "1208", "1784", "7200", "05f", "178", "1283", "1332", "381", "643", "1056", "1238", "2024", "2387", "179", "981", "1547", "1705", "05e", "290", "903", "1069", "1285", "2436", "062", "251", "560", "582", "719", "56", "1700", "2321", "325", "448", "613", "777", "791", "51", "488", "902", "Asia/Almaty", "is_hidden", "1398", "1527", "1893", "1999", "2367", "2642", "237", "busy", "065", "067", "233", "590", "993", "1511", "54", "723", "860", "363", "487", "522", "605", "995", "1321", "1691", "1865", "2447", "2462", "NON_TRANSACTIONAL", "433", "871", "432", "1004", "1207", "2032", "2050", "2379", "2446", "279", "636", "703", "904", "248", "370", "691", "700", "1068", "1655", "2334", "060", "063", "364", "533", "534", "567", "1191", "1210", "1473", "1827", "069", "701", "2531", "514", "prev_dhash", "064", "496", "790", "1046", "1139", "1505", "1521", "1108", "207", "544", "637", "final", "1173", "1293", "1694", "1939", "1951", "1993", "2353", "2515", "504", "601", "857", "modify", "spam_request", "p_121_aa_1101_test4", "866", "1427", "1502", "1638", "1744", "2153", "068", "382", "725", "1704", "1864", "1990", "2003", "Asia/Dubai", "508", "531", "1387", "1474", "1632", "2307", "2386", "819", "2014", "066", "387", "1468", "1706", "2186", "2261", "471", "728", "1147", "1372", "1961");
+
+    /**
+     * Ordered list of the four two-byte-prefixed dictionaries, in the same
+     * order as their {@link NodeTags#DICTIONARY_0}..{@link NodeTags#DICTIONARY_3}
+     * prefix tags.
+     *
+     * @implNote WAWapDict.DICTIONARIES: WA Web exposes this as a top-level
+     *           array {@code [DICTIONARY_0_TOKEN, DICTIONARY_1_TOKEN,
+     *           DICTIONARY_2_TOKEN, DICTIONARY_3_TOKEN]} used to look up a
+     *           dictionary by its 0-based index. Cobalt mirrors the same
+     *           ordering in this array; the encoder and decoder otherwise
+     *           dispatch on the explicit {@code DICTIONARY_N} tag via
+     *           per-field references.
+     */
+    @WhatsAppWebExport(moduleName = "WAWapDict", exports = "DICTIONARIES",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static final NodeTokens[] DICTIONARIES = {
+            DICTIONARY_0_TOKENS,
+            DICTIONARY_1_TOKENS,
+            DICTIONARY_2_TOKENS,
+            DICTIONARY_3_TOKENS
+    };
 
     /**
      * Ordered list of strings where each entry's position is its token

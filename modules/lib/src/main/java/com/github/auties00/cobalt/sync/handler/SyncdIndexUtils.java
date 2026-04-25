@@ -5,7 +5,9 @@ import com.alibaba.fastjson2.JSONArray;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Logger;
 
@@ -30,6 +33,13 @@ import java.util.logging.Logger;
  * used by every sync action and for assembling the message-key tuple
  * embedded in message-oriented mutation indices.
  *
+ * <p>Consolidates {@code WAWebSyncdUtils} as well, whose three exports
+ * ({@code constructMsgKeySegments},
+ * {@code constructMsgKeySegmentsFromMsgKey}, {@code extractParticipantForSync})
+ * produce the {@code [remote, id, fromMe, participant]} tuple with
+ * {@code {legacy:true}} JID serialization and the
+ * {@code !remote.isUser() && !fromMe} participant gate.
+ *
  * <p>The helpers {@link #syncKeyToMsgKey} and
  * {@link #msgKeyToDbIdWithoutFromMeParticipant} are also consumed by
  * {@code WAWebSyncdResolveMessages.resolveMessagesForMutations}, whose
@@ -40,11 +50,12 @@ import java.util.logging.Logger;
  * DB query are not replicated because Cobalt resolves chats directly via
  * {@code WhatsAppStore.findChatByJid} without a message-existence probe.
  *
- * @implNote WAWebSyncdIndexUtils, WAWebSyncdActionUtils, WAWebSyncdResolveMessages
+ * @implNote WAWebSyncdIndexUtils, WAWebSyncdActionUtils, WAWebSyncdResolveMessages, WAWebSyncdUtils
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdIndexUtils")
 @WhatsAppWebModule(moduleName = "WAWebSyncdActionUtils")
 @WhatsAppWebModule(moduleName = "WAWebSyncdResolveMessages")
+@WhatsAppWebModule(moduleName = "WAWebSyncdUtils")
 public final class SyncdIndexUtils {
     /**
      * Position of the action name within a parsed sync action index array.
@@ -195,6 +206,210 @@ public final class SyncdIndexUtils {
                 fromMeStr, // WAWebSyncdActionUtils.p: t?"1":"0"
                 participantStr // WAWebSyncdActionUtils.p: r!=null && !t ? r : "0"
         );
+    }
+
+    /**
+     * Builds the four-segment message-key tuple used as the identity portion
+     * of every message-oriented sync-action index, keyed directly off a
+     * {@link ChatMessageInfo}.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdUtils.constructMsgKeySegments}:
+     * {@code function e(e){return l(e.id)}} — unwraps the embedded
+     * {@code MessageKey} and delegates to
+     * {@link #constructMsgKeySegmentsFromMsgKey(MessageKey)}. The parameter
+     * is the full message wrapper (equivalent to WA Web's message value
+     * object whose {@code id} field holds the {@code MsgKey}).
+     *
+     * @implNote WAWebSyncdUtils.constructMsgKeySegments (function e)
+     * @param info the chat message whose key is being encoded
+     * @return the four-element segment list
+     *         {@code [remote, id, fromMe, participant]}
+     * @throws NullPointerException if {@code info} is {@code null}
+     * @see #constructMsgKeySegmentsFromMsgKey(MessageKey)
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdUtils", exports = "constructMsgKeySegments", adaptation = WhatsAppAdaptation.DIRECT)
+    public static List<String> constructMsgKeySegments(ChatMessageInfo info) {
+        // WAWebSyncdUtils.constructMsgKeySegments (function e): return l(e.id)
+        Objects.requireNonNull(info, "info cannot be null");
+        return constructMsgKeySegmentsFromMsgKey(info.key()); // WAWebSyncdUtils.e: l(e.id)
+    }
+
+    /**
+     * Builds the four-segment message-key tuple used as the identity portion
+     * of every message-oriented sync-action index.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdUtils.constructMsgKeySegmentsFromMsgKey}:
+     * {@code function l(e){var t=s(e);return[e.remote.toString({legacy:!0}),
+     * e.id,e.fromMe?"1":"0",t]}}. The remote JID is serialized using
+     * {@code {legacy:true}} semantics (mapping the legacy {@code c.us}
+     * server domain onto the canonical {@code s.whatsapp.net} wire
+     * representation); the participant segment is delegated to
+     * {@link #extractParticipantForSync(MessageKey)} which returns the
+     * literal {@code "0"} for outgoing or 1:1 messages.
+     *
+     * <p>Unlike {@link #buildMessageKey(Jid, String, boolean, Jid)}, which
+     * maps to {@code WAWebSyncdActionUtils.buildMessageKey} and accepts
+     * pre-decomposed fields with the caller responsible for gating the
+     * participant, this method accepts a raw {@link MessageKey} and applies
+     * the full {@code extractParticipantForSync} predicate.
+     *
+     * @implNote WAWebSyncdUtils.constructMsgKeySegmentsFromMsgKey (function l)
+     * @param key the message key to encode; must carry a non-{@code null}
+     *            {@code parentJid} and a non-{@code null} {@code id}
+     * @return the four-element segment list
+     *         {@code [remote, id, fromMe, participant]}
+     * @throws NullPointerException     if {@code key} is {@code null}
+     * @throws IllegalArgumentException if {@code key} has no {@code parentJid}
+     *                                  or no {@code id}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdUtils", exports = "constructMsgKeySegmentsFromMsgKey", adaptation = WhatsAppAdaptation.DIRECT)
+    public static List<String> constructMsgKeySegmentsFromMsgKey(MessageKey key) {
+        // WAWebSyncdUtils.constructMsgKeySegmentsFromMsgKey (function l):
+        // var t = s(e); return [e.remote.toString({legacy:!0}), e.id, e.fromMe?"1":"0", t]
+        Objects.requireNonNull(key, "key cannot be null");
+        var remoteJid = key.parentJid() // WAWebSyncdUtils.l: e.remote
+                .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
+        var id = key.id() // WAWebSyncdUtils.l: e.id
+                .orElseThrow(() -> new IllegalArgumentException("key must carry an id"));
+        var participantSegment = extractParticipantForSync(key); // WAWebSyncdUtils.l: var t = s(e)
+        return List.of(
+                toLegacyJidString(remoteJid), // WAWebSyncdUtils.l: e.remote.toString({legacy:!0})
+                id, // WAWebSyncdUtils.l: e.id
+                key.fromMe() ? "1" : "0", // WAWebSyncdUtils.l: e.fromMe?"1":"0"
+                participantSegment // WAWebSyncdUtils.l: t
+        );
+    }
+
+    /**
+     * Returns the participant segment of a message-key sync tuple.
+     *
+     * <p>Per WhatsApp Web {@code WAWebSyncdUtils.extractParticipantForSync}:
+     * {@code function s(e){var t="0"; return e.participant && !e.remote.isUser()
+     * && !e.fromMe && (t=e.participant.toString({legacy:!0})), t}}. The
+     * participant string is only emitted when all three conditions hold:
+     * <ul>
+     *   <li>The key records a dedicated participant (sender JID distinct
+     *       from the chat JID).</li>
+     *   <li>The remote JID is not a single-user chat JID, i.e. it is a
+     *       group, broadcast, newsletter, or other multi-participant JID
+     *       per {@link Jid}-based equivalents of {@code Wid.isUser}.</li>
+     *   <li>The message was not sent by the current user.</li>
+     * </ul>
+     * When any condition fails, the literal {@code "0"} is returned so that
+     * the index tuple retains a fixed arity.
+     *
+     * <p>Cobalt uses the raw {@link MessageKey#senderJid} field rather than
+     * {@link MessageKey#senderJid()} because the latter carries 1:1 fallback
+     * semantics (returns {@code parentJid} when no dedicated sender is
+     * stored) that would wrongly emit the chat JID as participant on
+     * single-user chats.
+     *
+     * @implNote WAWebSyncdUtils.extractParticipantForSync (function s)
+     * @param key the message key whose participant segment is required;
+     *            must carry a non-{@code null} {@code parentJid}
+     * @return the serialized participant JID, or the literal {@code "0"}
+     *         when the predicate is not satisfied
+     * @throws NullPointerException     if {@code key} is {@code null}
+     * @throws IllegalArgumentException if {@code key} has no {@code parentJid}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebSyncdUtils", exports = "extractParticipantForSync", adaptation = WhatsAppAdaptation.ADAPTED)
+    public static String extractParticipantForSync(MessageKey key) {
+        // WAWebSyncdUtils.extractParticipantForSync (function s):
+        // var t = "0"; return e.participant && !e.remote.isUser() && !e.fromMe
+        //               && (t = e.participant.toString({legacy:!0})), t
+        Objects.requireNonNull(key, "key cannot be null");
+        var remoteJid = key.parentJid() // WAWebSyncdUtils.s: e.remote
+                .orElseThrow(() -> new IllegalArgumentException("key must carry a parentJid"));
+        // ADAPTED: Cobalt's MessageKey.senderJid() falls back to parentJid when the
+        // raw sender field is null, so we read the raw field via a short-circuit
+        // predicate that mirrors WA Web's `e.participant` truthiness check.
+        var rawParticipant = rawSenderJid(key); // WAWebSyncdUtils.s: e.participant
+        if (rawParticipant != null // WAWebSyncdUtils.s: e.participant &&
+                && !isUserJid(remoteJid) // WAWebSyncdUtils.s: !e.remote.isUser()
+                && !key.fromMe()) { // WAWebSyncdUtils.s: !e.fromMe
+            return toLegacyJidString(rawParticipant); // WAWebSyncdUtils.s: e.participant.toString({legacy:!0})
+        }
+        return "0"; // WAWebSyncdUtils.s: t = "0"
+    }
+
+    /**
+     * Returns the dedicated sender JID recorded on a {@link MessageKey},
+     * without the 1:1-fallback semantics of {@link MessageKey#senderJid()}.
+     *
+     * <p>Cobalt's {@link MessageKey#senderJid()} accessor falls back to
+     * {@link MessageKey#parentJid()} when no explicit sender was stored,
+     * which is convenient for business logic but incorrect for the
+     * {@code extractParticipantForSync} predicate because it would erase
+     * the "no dedicated participant" sentinel that WA Web relies on.
+     * This helper discriminates between a deliberately-set sender and
+     * the parent-fallback by JID equality: when the sender equals the
+     * parent JID the fallback is assumed and {@code null} is returned.
+     *
+     * @implNote NO_WA_BASIS — Cobalt-specific accessor to work around the
+     *           {@link MessageKey#senderJid()} fallback that does not exist
+     *           in WA Web's {@code MsgKey} model
+     * @param key the message key whose raw sender is required
+     * @return the raw sender JID, or {@code null} when none was set
+     */
+    private static Jid rawSenderJid(MessageKey key) {
+        // ADAPTED helper: MessageKey.senderJid() returns parentJid when the raw
+        // senderJid field is null (1:1 convenience fallback). WA Web's
+        // `e.participant` check treats that situation as falsy; recover that
+        // semantics by discriminating on JID equality with parentJid.
+        var parent = key.parentJid().orElse(null);
+        var sender = key.senderJid().orElse(null);
+        if (sender == null) {
+            return null;
+        }
+        if (parent != null && parent.equals(sender)) {
+            return null; // fallback case: no dedicated sender was set
+        }
+        return sender;
+    }
+
+    /**
+     * Serializes a {@link Jid} using WhatsApp Web's {@code {legacy:true}}
+     * wire convention.
+     *
+     * <p>Per WhatsApp Web {@code WAWebWid.toString}: when the legacy flag is
+     * set, a JID whose server is the legacy user domain {@code c.us} is
+     * emitted as if it were on the current standard user domain
+     * {@code s.whatsapp.net}. All other servers pass through unchanged and
+     * produce the same output as the default {@link Jid#toString()}.
+     *
+     * <p>This matches the serialization used by every sync-index consumer
+     * that explicitly requests the legacy form, and is applied by
+     * {@link #constructMsgKeySegmentsFromMsgKey(MessageKey)} and
+     * {@link #extractParticipantForSync(MessageKey)} so that stored
+     * mutation indices remain stable across the historical {@code c.us}
+     * transition.
+     *
+     * @implNote WAWebWid.toString with {@code {legacy:true}}: maps
+     *           {@code c.us} to {@code s.whatsapp.net}, otherwise returns
+     *           the serialized form
+     * @param jid the JID to serialize
+     * @return the JID in legacy-wire form
+     * @throws NullPointerException if {@code jid} is {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWid", exports = "toString", adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String toLegacyJidString(Jid jid) {
+        // WAWebWid.toString({legacy:!0}): r = t.legacy && this.server === "c.us" ? "s.whatsapp.net" : this.server
+        // Only the c.us server remap branch is reachable without formatFull/forLog;
+        // for any other server the {legacy:true} argument is a no-op and the
+        // default `_serialized` value is returned.
+        Objects.requireNonNull(jid, "jid cannot be null");
+        if (!jid.server().equals(JidServer.legacyUser())) { // WAWebWid.toString: this.server === "c.us" gate
+            return jid.toString(); // WAWebWid.toString: return this._serialized
+        }
+        // Legacy user server remap: swap the @c.us suffix for @s.whatsapp.net.
+        // Jid.toString already produces a well-formed user[_agent][:device]@server
+        // string, and the only server-dependent segment is the trailing domain.
+        var serialized = jid.toString();
+        var atIndex = serialized.lastIndexOf('@');
+        if (atIndex < 0) {
+            return JidServer.user().toString(); // server-only c.us -> s.whatsapp.net (defensive)
+        }
+        return serialized.substring(0, atIndex + 1) + JidServer.user();
     }
 
     /**

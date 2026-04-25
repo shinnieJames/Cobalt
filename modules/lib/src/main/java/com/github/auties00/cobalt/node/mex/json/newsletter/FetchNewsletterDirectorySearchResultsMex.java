@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -52,10 +51,36 @@ public sealed interface FetchNewsletterDirectorySearchResultsMex extends MexJson
      */
     @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDirectorySearchResultsJob")
     final class Request implements FetchNewsletterDirectorySearchResultsMex {
-        private final String input;
+        private final String searchText;
+        private final List<String> categories;
+        private final Long limit;
+        private final String cursorToken;
+        private final boolean fetchStatusMetadata;
 
-        public Request(String input) {
-            this.input = input;
+        /**
+         * Constructs a new request for the newsletter directory search query.
+         *
+         * @param searchText          the free-text search query; corresponds to {@code e.searchText} in the JS source
+         * @param categories          the categories filter as upper-case on-wire values
+         *                            (e.g. {@code "BUSINESS"}); WA Web obtains these via
+         *                            {@code WAWebNewsletterDirectoryCategoryUtils.getCategoryValueFromEnum}
+         * @param limit               the page size, may be {@code null}
+         * @param cursorToken         the start cursor for pagination, may be {@code null}
+         * @param fetchStatusMetadata whether to include {@code status_metadata} in the response, set
+         *                            from {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}
+         * @implNote WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults:
+         * mirrors the inline destructure {@code var t=e.categories,n=e.cursorToken,r=e.limit,a=e.searchText}.
+         */
+        public Request(String searchText,
+                       List<String> categories,
+                       Long limit,
+                       String cursorToken,
+                       boolean fetchStatusMetadata) {
+            this.searchText = searchText;
+            this.categories = categories;
+            this.limit = limit;
+            this.cursorToken = cursorToken;
+            this.fetchStatusMetadata = fetchStatusMetadata;
         }
 
         /**
@@ -82,13 +107,57 @@ public sealed interface FetchNewsletterDirectorySearchResultsMex extends MexJson
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
+
                 // WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults
-                // Emits the input variable when present
-                if (input != null) {
-                    writer.writeName("input");
-                    writer.writeColon();
-                    writer.writeString(input);
+                // var i={input:{search_text:a,categories:t.map(...),limit:r,start_cursor:n}, fetch_status_metadata:...}
+                writer.writeName("input");
+                writer.writeColon();
+                writer.startObject();
+
+                // WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults
+                // input.search_text = a
+                writer.writeName("search_text");
+                writer.writeColon();
+                writer.writeString(searchText);
+
+                // WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults
+                // input.categories = t.map(WAWebNewsletterDirectoryCategoryUtils.getCategoryValueFromEnum)
+                writer.writeName("categories");
+                writer.writeColon();
+                writer.startArray();
+                if (categories != null) {
+                    for (var i = 0; i < categories.size(); i++) {
+                        if (i > 0) {
+                            writer.writeComma();
+                        }
+                        writer.writeString(categories.get(i));
+                    }
                 }
+                writer.endArray();
+
+                // WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults
+                // input.limit = r
+                if (limit != null) {
+                    writer.writeName("limit");
+                    writer.writeColon();
+                    writer.writeInt64(limit);
+                }
+                // WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults
+                // input.start_cursor = n
+                if (cursorToken != null) {
+                    writer.writeName("start_cursor");
+                    writer.writeColon();
+                    writer.writeString(cursorToken);
+                }
+
+                writer.endObject();
+
+                // WAWebMexFetchNewsletterDirectorySearchResultsJob.mexFetchNewsletterDirectorySearchResults
+                // fetch_status_metadata: o("WAWebNewsletterGatingUtils").isNewsletterStatusReceiverEnabled()
+                writer.writeName("fetch_status_metadata");
+                writer.writeColon();
+                writer.writeBool(fetchStatusMetadata);
+
                 writer.endObject();
                 writer.endObject();
 

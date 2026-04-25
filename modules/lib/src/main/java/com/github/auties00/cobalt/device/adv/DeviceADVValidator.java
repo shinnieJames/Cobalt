@@ -43,7 +43,12 @@ import java.util.Optional;
  * {@link com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParser}.
  *
  * @implNote WAWebAdvSignatureApi: provides signature verification for E2EE and hosted devices.
- * WAWebHandleAdvDeviceNotificationUtils: handles key index list validation.
+ * WAWebHandleAdvDeviceNotificationUtils: handles key index list validation. The
+ * {@code decodeSignedKeyIndexBytesBatchInWorker} export is intentionally omitted: it is a
+ * Web Worker offload of {@code decodeSignedKeyIndexBytes} that exists purely to keep the
+ * main JS thread responsive. Cobalt has no worker realm and uses virtual threads; callers
+ * invoke {@link #validateAndDecodeSignedKeyIndexList(byte[])} directly per item, which is
+ * semantically equivalent.
  * WAWebBizCoexGatingUtils: provides bizHostedDevicesEnabled gating.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvSignatureApi")

@@ -4,7 +4,6 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.JidServer;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.mex.MexOperation;
 
@@ -22,7 +21,12 @@ import com.github.auties00.cobalt.node.mex.MexOperation;
  * Argo path through {@code WAWebMexClient.fetchQuery} / {@code
  * WAWebMexNativeClient.fetchQuery}. In WA Web the transport choice is driven
  * by the GraphQL query metadata; in Cobalt it is expressed as a separate
- * sealed sub-hierarchy.
+ * sealed sub-hierarchy. The current WA Web snapshot
+ * ({@code WAWebMexNativeClient}, {@code WAWebMexRelayEnvironment.sendMexIq})
+ * dispatches every MEX operation through the JSON path - the Argo branch is
+ * preserved here as a forward-looking ADAPTED extension that emits an
+ * identical outer IQ envelope so it can be enabled without further changes
+ * if WA Web introduces an Argo-encoded MEX endpoint.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexClient")
 @WhatsAppWebModule(moduleName = "WAWebMexNativeClient")
@@ -33,11 +37,13 @@ public non-sealed interface MexArgoOperation extends MexOperation {
      * <p>The returned {@link NodeBuilder} is not yet built so callers can
      * attach additional attributes before the stanza is dispatched.
      *
-     * @implNote WAWebMexClient.fetchQuery: in WA Web the Argo payload is
-     * attached as the binary body of the {@code <query>} stanza with
-     * {@code query_id} identifying the compiled GraphQL operation. The IQ
-     * is routed to the user server with {@code type="get"} and namespace
-     * {@code w:mex}, matching Cobalt's output exactly.
+     * @implNote WAWebMexRelayEnvironment.sendMexIq: the canonical WA Web
+     * transport call constructs
+     * {@code wap("iq", {id: generateId(), to: S_WHATSAPP_NET, type: "get",
+     * xmlns: "w:mex"}, WapNode("query", {query_id: CUSTOM_STRING(t)}, bytes))}.
+     * Cobalt emits the same stanza shape with the Argo payload occupying the
+     * same byte-array body slot the JSON variant uses for its UTF-8 envelope;
+     * the outer IQ attributes are byte-for-byte identical.
      * @param queryId the numeric query identifier assigned to the compiled
      *                GraphQL operation by the WA relay
      * @param argoPayload the Argo-encoded GraphQL variables
@@ -46,17 +52,19 @@ public non-sealed interface MexArgoOperation extends MexOperation {
      */
     @WhatsAppWebExport(moduleName = "WAWebMexClient", exports = "fetchQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebMexNativeClient", exports = "fetchQuery",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     static NodeBuilder createMexNode(String queryId, byte[] argoPayload) {
-        // WAWebMexClient.fetchQuery
-        // Builds the inner <query> element carrying the query_id attribute and the Argo payload bytes
+        // WAWebMexRelayEnvironment.sendMexIq: WapNode("query", {query_id: CUSTOM_STRING(t)},
+        // <argoPayload bytes>) - identical to JSON variant but with raw Argo bytes
         var queryNode = new NodeBuilder()
                 .description("query")
                 .attribute("query_id", queryId)
                 .content(argoPayload)
                 .build();
 
-        // WAWebMexClient.fetchQuery
-        // Wraps the query in an IQ stanza routed to the user server under the w:mex namespace
+        // WAWebMexRelayEnvironment.sendMexIq: wap("iq", {id, to: S_WHATSAPP_NET,
+        // type: "get", xmlns: "w:mex"}, queryNode) - id is added by sendNode when missing
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:mex")

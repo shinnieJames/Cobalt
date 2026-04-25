@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.PhoneNumberToLIDMapping;
 import com.github.auties00.cobalt.model.media.MediaVisibility;
 import com.github.auties00.cobalt.model.media.StickerMetadata;
+import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.PrivacySystemMessage;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
 import com.github.auties00.cobalt.model.setting.GlobalSettings;
@@ -584,8 +585,8 @@ public abstract sealed class HistorySync {
              * Messages keyed by id, ordered by insertion to preserve history
              * ordering.
              */
-            @ProtobufProperty(index = 2, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
-            final ConcurrentLinkedHashMap<String, HistorySyncMsg> messages;
+            @ProtobufProperty(index = 2, type = ProtobufType.MESSAGE)
+            final Messages<HistorySyncMsg> messages;
 
             /**
              * Constructs a history-sync chat with the inherited chat fields
@@ -646,7 +647,7 @@ public abstract sealed class HistorySync {
              * @param maibaAiThreadEnabled whether the Maiba AI thread is enabled
              * @param messages the ordered message map
              */
-            Chat(Jid jid, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Instant pinnedTimestamp, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, Jid accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled, ConcurrentLinkedHashMap<String, HistorySyncMsg> messages) {
+            Chat(Jid jid, Jid newJid, Jid oldJid, Instant lastMsgTimestamp, Integer unreadCount, Boolean readOnly, Boolean endOfHistoryTransfer, ChatEphemeralTimer ephemeralExpiration, Instant ephemeralSettingTimestamp, EndOfHistoryTransferType endOfHistoryTransferType, Instant conversationTimestamp, String name, String pHash, Boolean notSpam, Boolean archived, ChatDisappearingMode disappearingMode, Integer unreadMentionCount, Boolean markedAsUnread, List<GroupParticipant> participant, byte[] tcToken, Instant tcTokenTimestamp, byte[] contactPrimaryIdentityKey, Instant pinnedTimestamp, ChatMute mute, WallpaperSettings wallpaper, MediaVisibility mediaVisibility, Instant tcTokenSenderTimestamp, Boolean suspended, Boolean terminated, Long createdAt, String createdBy, String description, Boolean support, Boolean isParentGroup, String parentGroupId, Boolean isDefaultSubgroup, String displayName, Jid phoneNumberJid, Boolean shareOwnPhoneNumber, Boolean phoneNumberhDuplicateLidThread, Jid lid, String username, String lidOriginType, Integer commentsCount, Boolean locked, PrivacySystemMessage systemMessageToInsert, Boolean capiCreatedGroup, Jid accountLid, Boolean limitSharing, Instant limitSharingSettingTimestamp, ChatLimitSharing.TriggerType limitSharingTrigger, Boolean limitSharingInitiatedByMe, Boolean maibaAiThreadEnabled, Messages messages) {
                 super(jid, newJid, oldJid, lastMsgTimestamp, unreadCount, readOnly, endOfHistoryTransfer, ephemeralExpiration, ephemeralSettingTimestamp, endOfHistoryTransferType, conversationTimestamp, name, pHash, notSpam, archived, disappearingMode, unreadMentionCount, markedAsUnread, participant, tcToken, tcTokenTimestamp, contactPrimaryIdentityKey, pinnedTimestamp, mute, wallpaper, mediaVisibility, tcTokenSenderTimestamp, suspended, terminated, createdAt, createdBy, description, support, isParentGroup, parentGroupId, isDefaultSubgroup, displayName, phoneNumberJid, shareOwnPhoneNumber, phoneNumberhDuplicateLidThread, lid, username, lidOriginType, commentsCount, locked, systemMessageToInsert, capiCreatedGroup, accountLid, limitSharing, limitSharingSettingTimestamp, limitSharingTrigger, limitSharingInitiatedByMe, maibaAiThreadEnabled);
                 this.messages = messages;
             }
@@ -660,143 +661,32 @@ public abstract sealed class HistorySync {
              */
             @Override
             public SequencedCollection<ChatMessageInfo> messages() {
-                return createMessagesView(messages.sequencedValues());
-            }
-
-            /**
-             * Creates an unmodifiable, lazily-projecting view of the given
-             * envelope sequence as a sequenced collection of messages.
-             *
-             * @param data the source sequence of history-sync envelopes
-             * @return a read-only view that yields each envelope's message
-             */
-            private SequencedCollection<ChatMessageInfo> createMessagesView(SequencedCollection<HistorySyncMsg> data) {
-                return new SequencedCollection<>() {
-                    @Override
-                    public SequencedCollection<ChatMessageInfo> reversed() {
-                        return createMessagesView(data.reversed());
-                    }
-
-                    @Override
-                    public int size() {
-                        return data.size();
-                    }
-
-                    @Override
-                    public boolean isEmpty() {
-                        return data.isEmpty();
-                    }
-
-                    @Override
-                    public boolean contains(Object o) {
-                        if(!(o instanceof ChatMessageInfo chatMessageInfo)) {
-                            return false;
-                        }
-
-                        var id = chatMessageInfo.key().id();
-                        return id.isPresent()
-                               && messages.containsKey(id.get());
-                    }
-
-                    @Override
-                    public Iterator<ChatMessageInfo> iterator() {
-                        var delegate = data.iterator();
-                        return new Iterator<>() {
-                            @Override
-                            public boolean hasNext() {
-                                return delegate.hasNext();
-                            }
-
-                            @Override
-                            public ChatMessageInfo next() {
-                                var result = delegate.next();
-                                return result != null ? result.message : null;
-                            }
-                        };
-                    }
-
-                    @Override
-                    public Object[] toArray() {
-                        return data.toArray();
-                    }
-
-                    @Override
-                    public <T> T[] toArray(T[] a) {
-                        return data.toArray(a);
-                    }
-
-                    @Override
-                    public boolean add(ChatMessageInfo info) {
-                        throw new UnsupportedOperationException();
-                    }
-
-                    @Override
-                    public boolean remove(Object o) {
-                        throw new UnsupportedOperationException();
-                    }
-
-                    @Override
-                    public boolean containsAll(Collection<?> c) {
-                        for (var entry : c) {
-                            if (!contains(entry)) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    }
-
-                    @Override
-                    public boolean addAll(Collection<? extends ChatMessageInfo> c) {
-                        throw new UnsupportedOperationException();
-                    }
-
-                    @Override
-                    public boolean removeAll(Collection<?> c) {
-                        throw new UnsupportedOperationException();
-                    }
-
-                    @Override
-                    public boolean retainAll(Collection<?> c) {
-                        throw new UnsupportedOperationException();
-                    }
-
-                    @Override
-                    public void clear() {
-                        throw new UnsupportedOperationException();
-                    }
-                };
+                return messages.toView();
             }
 
             /**
              * Appends a message to the history-sync message map, wrapping it
-             * in a {@link HistorySyncMsg} envelope with a sentinel order id.
+             * in a {@link HistorySyncMsg} envelope with no ordering id.
              *
              * @param info the message to add
-             * @throws NullPointerException if {@code info} or its key id is {@code null}
+             * @throws NullPointerException if {@code info} is {@code null}
              */
             @Override
             public void addMessage(ChatMessageInfo info) {
                 Objects.requireNonNull(info, "info cannot be null");
-                var id = info.key()
-                        .id()
-                        .orElseThrow(() -> new NullPointerException("id cannot be null"));
-                var msg = new HistorySyncMsgBuilder()
-                        .msgOrderId(-1L)
-                        .message(info)
-                        .build();
-                messages.put(id, msg);
+                messages.add(info);
             }
 
             /**
-             * Checks whether a message with the given id currently exists in
-             * the history-sync chat.
+             * Removes the message with the given id from the history-sync
+             * chat.
              *
-             * @param id the message id to probe
-             * @return {@code true} if an entry with that id is present
+             * @param id the message id to remove
+             * @return {@code true} if an entry was removed
              */
             @Override
             public boolean removeMessage(String id) {
-                return messages.get(id) != null;
+                return messages.removeById(id);
             }
 
             /**
@@ -815,12 +705,7 @@ public abstract sealed class HistorySync {
              */
             @Override
             public Optional<ChatMessageInfo> getMessageById(String id) {
-                var msg = messages.get(id);
-                if(msg == null) {
-                    return Optional.empty();
-                } else {
-                    return msg.message();
-                }
+                return messages.getMessageById(id);
             }
 
             /**
@@ -830,12 +715,7 @@ public abstract sealed class HistorySync {
              */
             @Override
             public Optional<ChatMessageInfo> newestMessage() {
-                var entry = messages.lastEntry();
-                if(entry == null) {
-                    return Optional.empty();
-                } else {
-                    return entry.getValue().message();
-                }
+                return messages.lastMessage();
             }
 
             /**
@@ -845,11 +725,414 @@ public abstract sealed class HistorySync {
              */
             @Override
             public Optional<ChatMessageInfo> oldestMessage() {
-                var entry = messages.firstEntry();
-                if(entry == null) {
-                    return Optional.empty();
-                } else {
-                    return entry.getValue().message();
+                return messages.firstMessage();
+            }
+
+            /**
+             * Ordered, thread-safe collection of {@link HistorySyncMsg}
+             * envelopes keyed by message id.
+             *
+             * <p>Backed by a {@link ConcurrentLinkedHashMap} that preserves
+             * insertion order, so iteration, {@link #firstMessage()} and
+             * {@link #lastMessage()} reflect the conversation sequence as it
+             * was received from the primary device.
+             */
+            // TODO: Remove me when daedalus is prod ready
+            static final class Messages<T extends HistorySyncMsg> implements SequencedCollection<T> {
+                /**
+                 * Backing map keyed by the message id, preserving insertion
+                 * order for sequenced access.
+                 */
+                private final ConcurrentLinkedHashMap<String, T> backing;
+
+                /**
+                 * Constructs an empty history-sync message collection.
+                 */
+                Messages() {
+                    this.backing = new ConcurrentLinkedHashMap<>();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public SequencedCollection<T> reversed() {
+                    return backing.sequencedValues().reversed();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public int size() {
+                    return backing.size();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public boolean isEmpty() {
+                    return backing.isEmpty();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 *
+                 * <p>Membership is checked by the id carried by the envelope's
+                 * {@link ChatMessageInfo#key()}, not by value equality.
+                 */
+                @Override
+                public boolean contains(Object o) {
+                    return o instanceof HistorySyncMsg historySyncMsg && historySyncMsg.message()
+                            .map(ChatMessageInfo::key)
+                            .flatMap(MessageKey::id)
+                            .filter(backing::containsKey)
+                            .isPresent();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public Iterator<T> iterator() {
+                    return backing.sequencedValues().iterator();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public Object[] toArray() {
+                    return backing.sequencedValues().toArray();
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public <T> T[] toArray(T[] a) {
+                    return backing.sequencedValues().toArray(a);
+                }
+
+                /**
+                 * {@inheritDoc}
+                 *
+                 * @return {@code true} if the envelope was stored; {@code false}
+                 *         if it carried no message or no key id
+                 */
+                @Override
+                public boolean add(T messageInfo) {
+                    Objects.requireNonNull(messageInfo);
+                    var id = messageInfo.message()
+                            .flatMap(message -> message.key().id());
+                    if (id.isEmpty()) {
+                        return false;
+                    }
+                    backing.put(id.get(), messageInfo);
+                    return true;
+                }
+
+                /**
+                 * Adds a bare {@link ChatMessageInfo} by wrapping it in a
+                 * {@link HistorySyncMsg} envelope with no ordering id.
+                 *
+                 * @param info the chat message to add
+                 * @return {@code true} if the entry was stored; {@code false}
+                 *         if the message has no key id
+                 * @throws NullPointerException if {@code info} is {@code null}
+                 */
+                public boolean add(ChatMessageInfo info) {
+                    Objects.requireNonNull(info);
+                    var id = info.key().id().orElse(null);
+                    if (id == null) {
+                        return false;
+                    }
+                    backing.put(id, (T) new HistorySyncMsg(info, null));
+                    return true;
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public boolean remove(Object o) {
+                    return o instanceof HistorySyncMsg historySyncMsg && historySyncMsg.message()
+                            .map(ChatMessageInfo::key)
+                            .flatMap(MessageKey::id)
+                            .filter(id -> backing.remove(id) != null)
+                            .isPresent();
+                }
+
+                /**
+                 * Removes the envelope stored under the given message id.
+                 *
+                 * @param id the message id
+                 * @return {@code true} if an entry was removed
+                 * @throws NullPointerException if {@code id} is {@code null}
+                 */
+                public boolean removeById(String id) {
+                    Objects.requireNonNull(id);
+                    return backing.remove(id) != null;
+                }
+
+                /**
+                 * Returns the chat message stored under the given id, if any.
+                 *
+                 * @param id the message id
+                 * @return the matching chat message, or empty if absent or if
+                 *         the envelope carries no inner message
+                 * @throws NullPointerException if {@code id} is {@code null}
+                 */
+                public Optional<ChatMessageInfo> getMessageById(String id) {
+                    Objects.requireNonNull(id);
+                    var envelope = backing.get(id);
+                    return envelope == null
+                            ? Optional.empty()
+                            : envelope.message();
+                }
+
+                /**
+                 * Returns the oldest chat message, following insertion order.
+                 *
+                 * @return the first chat message, or empty if the collection
+                 *         is empty or its first envelope carries no inner
+                 *         message
+                 */
+                public Optional<ChatMessageInfo> firstMessage() {
+                    var entry = backing.firstEntry();
+                    return entry == null
+                            ? Optional.empty()
+                            : entry.getValue().message();
+                }
+
+                /**
+                 * Returns the newest chat message, following insertion order.
+                 *
+                 * @return the last chat message, or empty if the collection
+                 *         is empty or its last envelope carries no inner
+                 *         message
+                 */
+                public Optional<ChatMessageInfo> lastMessage() {
+                    var entry = backing.lastEntry();
+                    return entry == null
+                            ? Optional.empty()
+                            : entry.getValue().message();
+                }
+
+                /**
+                 * Returns an unmodifiable, live sequenced view of the chat
+                 * messages carried by this collection, projected through
+                 * {@link HistorySyncMsg#message()}.
+                 *
+                 * <p>Each call does not materialise a snapshot: reads delegate
+                 * to the backing sequenced collection of envelopes and unwrap
+                 * the inner {@link ChatMessageInfo} lazily.
+                 *
+                 * @return a non-null, unmodifiable sequenced collection of
+                 *         chat messages backed by this map
+                 */
+                public SequencedCollection<ChatMessageInfo> toView() {
+                    return toView(backing.sequencedValues());
+                }
+
+                /**
+                 * Returns an unmodifiable sequenced view over the given
+                 * {@link HistorySyncMsg} source, projecting each envelope
+                 * through {@link HistorySyncMsg#message()}.
+                 *
+                 * <p>All read operations delegate to {@code source}, so the
+                 * view reflects subsequent mutations of the backing map.
+                 * Mutating operations throw {@link UnsupportedOperationException}.
+                 *
+                 * @param source the source collection of envelopes to project
+                 * @return an unmodifiable sequenced view over {@code source}
+                 */
+                private SequencedCollection<ChatMessageInfo> toView(SequencedCollection<T> source) {
+                    return new SequencedCollection<>() {
+                        @Override
+                        public SequencedCollection<ChatMessageInfo> reversed() {
+                            return toView(source.reversed());
+                        }
+
+                        @Override
+                        public int size() {
+                            return source.size();
+                        }
+
+                        @Override
+                        public boolean isEmpty() {
+                            return source.isEmpty();
+                        }
+
+                        @Override
+                        public boolean contains(Object o) {
+                            return o instanceof ChatMessageInfo needle
+                                   && source.stream().anyMatch(envelope -> envelope.message().filter(needle::equals).isPresent());
+                        }
+
+                        @Override
+                        public Iterator<ChatMessageInfo> iterator() {
+                            var inner = source.iterator();
+                            return new Iterator<>() {
+                                @Override
+                                public boolean hasNext() {
+                                    return inner.hasNext();
+                                }
+
+                                @Override
+                                public ChatMessageInfo next() {
+                                    return inner.next().message().orElse(null);
+                                }
+                            };
+                        }
+
+                        @Override
+                        public Object[] toArray() {
+                            var size = source.size();
+                            var result = new Object[size];
+                            var i = 0;
+                            for (var envelope : source) {
+                                if (i == size) {
+                                    break;
+                                }
+                                result[i++] = envelope.message().orElse(null);
+                            }
+                            return result;
+                        }
+
+                        @Override
+                        @SuppressWarnings("unchecked")
+                        public <T> T[] toArray(T[] a) {
+                            var size = source.size();
+                            var result = a.length >= size ? a : Arrays.copyOf(a, size);
+                            var i = 0;
+                            for (var envelope : source) {
+                                if (i == size) {
+                                    break;
+                                }
+                                result[i++] = (T) envelope.message().orElse(null);
+                            }
+                            if (result.length > i) {
+                                result[i] = null;
+                            }
+                            return result;
+                        }
+
+                        @Override
+                        public boolean containsAll(Collection<?> c) {
+                            Objects.requireNonNull(c);
+                            return c.stream().allMatch(this::contains);
+                        }
+
+                        @Override
+                        public boolean add(ChatMessageInfo e) {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public boolean remove(Object o) {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public boolean addAll(Collection<? extends ChatMessageInfo> c) {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public boolean removeAll(Collection<?> c) {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public boolean retainAll(Collection<?> c) {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public void clear() {
+                            throw new UnsupportedOperationException();
+                        }
+                    };
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public boolean containsAll(Collection<?> collection) {
+                    Objects.requireNonNull(collection);
+                    return collection.stream()
+                            .allMatch(this::contains);
+                }
+
+                /**
+                 * {@inheritDoc}
+                 *
+                 * @return {@code true} if at least one envelope was stored
+                 */
+                @Override
+                public boolean addAll(Collection<? extends T> collection) {
+                    Objects.requireNonNull(collection);
+                    var changed = false;
+                    for (var entry : collection) {
+                        changed |= add(entry);
+                    }
+                    return changed;
+                }
+
+                /**
+                 * {@inheritDoc}
+                 *
+                 * @return {@code true} if at least one envelope was removed
+                 */
+                @Override
+                public boolean removeAll(Collection<?> collection) {
+                    Objects.requireNonNull(collection);
+                    var changed = false;
+                    for (var entry : collection) {
+                        changed |= remove(entry);
+                    }
+                    return changed;
+                }
+
+                /**
+                 * {@inheritDoc}
+                 *
+                 * @return {@code true} if at least one envelope was removed
+                 */
+                @Override
+                public boolean retainAll(Collection<?> collection) {
+                    Objects.requireNonNull(collection);
+                    Map<String, HistorySyncMsg> lookup = HashMap.newHashMap(collection.size());
+                    for (var entry : collection) {
+                        if (!(entry instanceof HistorySyncMsg historySyncMsg)) {
+                            continue;
+                        }
+                        historySyncMsg.message()
+                                .map(ChatMessageInfo::key)
+                                .flatMap(MessageKey::id)
+                                .ifPresent(id -> lookup.put(id, historySyncMsg));
+                    }
+                    var changed = false;
+                    var iterator = backing.entrySet().iterator();
+                    while (iterator.hasNext()) {
+                        var entry = iterator.next();
+                        if (!lookup.containsKey(entry.getKey())) {
+                            iterator.remove();
+                            changed = true;
+                        }
+                    }
+                    return changed;
+                }
+
+                /**
+                 * {@inheritDoc}
+                 */
+                @Override
+                public void clear() {
+                    backing.clear();
                 }
             }
         }

@@ -47,6 +47,35 @@ public final class DeviceUSyncQueryBuilder {
     private static final int MAX_USERS_PER_QUERY = 500;
 
     /**
+     * Wire-protocol addressing-mode discriminator for the {@code addressing_mode}
+     * attribute on the contact USync query element: phone-number addressing.
+     *
+     * <p>WhatsApp Web exports a frozen object {@code USYNC_ADDRESSING_MODE = {PN: "pn",
+     * LID: "lid"}} from {@code WAWebUsync} that callers branch on when building the
+     * contact protocol query element. Cobalt mirrors the constant as plain string
+     * fields because no enum coercion is required at the wire layer; they are written
+     * verbatim into the {@code addressing_mode} attribute when present.
+     *
+     * @implNote WAWebUsync.USYNC_ADDRESSING_MODE.PN: literal value {@code "pn"}.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebUsync",
+            exports = "USYNC_ADDRESSING_MODE",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public static final String USYNC_ADDRESSING_MODE_PN = "pn";
+
+    /**
+     * Wire-protocol addressing-mode discriminator for the {@code addressing_mode}
+     * attribute on the contact USync query element: long-identifier (LID) addressing.
+     *
+     * @implNote WAWebUsync.USYNC_ADDRESSING_MODE.LID: literal value {@code "lid"}.
+     * @see #USYNC_ADDRESSING_MODE_PN
+     */
+    @WhatsAppWebExport(moduleName = "WAWebUsync",
+            exports = "USYNC_ADDRESSING_MODE",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public static final String USYNC_ADDRESSING_MODE_LID = "lid";
+
+    /**
      * Prevents instantiation of this utility class.
      *
      * @throws UnsupportedOperationException always
@@ -107,6 +136,14 @@ public final class DeviceUSyncQueryBuilder {
      * @implNote WAWebUsync.USyncQuery.$3: builds the complete IQ stanza with usync node containing
      * query (with protocol elements) and list (with user elements). The IQ id attribute is
      * added by the transport layer when sending.
+     * @implNote ADAPTED: WAWebUsyncUsername.USyncUsernameProtocol is a protocol descriptor class
+     * in WA Web with {@code getName()="username"}, {@code getQueryElement()} returning
+     * {@code WAWap.wap("username", null)} (an empty {@code <username/>} node), and
+     * {@code getUserElement()} returning {@code null}. Cobalt inlines this as a boolean flag:
+     * when {@code includeUsernameProtocol} is true an empty {@code <username/>} child is appended
+     * to the {@code <query>} node. Because {@code getUserElement} always returns {@code null}
+     * in WA Web, no per-user element is ever emitted, and no {@code <user>} child is added for
+     * the username protocol here either.
      * @param userJids                the user JIDs to include in this batch
      * @param context                 the context string for the usync request
      * @param hashInfos               hash information for delta updates, or {@code null}
@@ -115,6 +152,9 @@ public final class DeviceUSyncQueryBuilder {
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
+            exports = "USyncUsernameProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private static NodeBuilder buildEntry(Collection<Jid> userJids, String context, Map<Jid, DeviceListHashInfo> hashInfos, boolean includeUsernameProtocol) {
         // WAWap.generateId(): generates session ID in WhatsApp format
@@ -138,7 +178,9 @@ public final class DeviceUSyncQueryBuilder {
                 .attribute("version", "2")
                 .build();
 
-        // WAWebUsyncUsername.USyncUsernameProtocol: simple empty element for username protocol
+        // WAWebUsyncUsername.USyncUsernameProtocol.getQueryElement: WAWap.wap("username", null)
+        // yields an empty <username/> element. getUserElement always returns null so no per-user
+        // <username> child is emitted.
         Node queryNode;
         if (includeUsernameProtocol) {
             var usernameNode = new NodeBuilder()
@@ -155,21 +197,26 @@ public final class DeviceUSyncQueryBuilder {
                     .build();
         }
 
-        // WAWebUsync.USyncQuery: builds the usync node with session ID, mode, and context
+        // WAWebUsync.USyncQuery.$3: WAWap.wap("usync", {sid, index:"0", last:"true",
+        // mode, context}) — attribute insertion order matches the JS object literal
+        // exactly so that the encoded WAP byte stream is identical to live traffic.
         var usyncNode = new NodeBuilder()
                 .description("usync")
                 .attribute("sid", sessionId)
-                .attribute("mode", "query")
-                .attribute("last", "true")
                 .attribute("index", "0")
+                .attribute("last", "true")
+                .attribute("mode", "query")
                 .attribute("context", context)
                 .content(queryNode, listNode)
                 .build();
 
+        // WAWebUsync.USyncQuery.$3: WAWap.wap("iq", {to: S_WHATSAPP_NET, xmlns: "usync",
+        // type: "get", id: generateId()}) — attribute order mirrors JS source. The id
+        // attribute is appended by the transport layer at send time.
         return new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "usync")
                 .attribute("to", JidServer.user())
+                .attribute("xmlns", "usync")
                 .attribute("type", "get")
                 .content(usyncNode);
     }

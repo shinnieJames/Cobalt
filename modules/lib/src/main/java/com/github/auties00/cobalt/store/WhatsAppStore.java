@@ -87,6 +87,38 @@ import java.util.*;
  * {@code WAWebUserPrefsBase}. Each field/accessor pair on this interface
  * carries its own {@code @implNote} pointing at the originating WA Web
  * schema, collection or prefs module.
+ *
+ * <p>The three lifecycle exports of {@code WAWebModelStorageInitialize}
+ * are absorbed as follows:
+ * <ul>
+ *   <li>{@code initializeWithoutGKs}: WA Web's per-table {@code addTable()}
+ *       fan-out plus {@code WAWebModelStorageUtils.createStorage(...)}
+ *       and {@code .initialize()} are replaced by the
+ *       {@link WhatsAppStoreFactory#create(com.github.auties00.cobalt.client.WhatsAppClientType, java.util.UUID)
+ *       create} / {@link WhatsAppStoreFactory#load(com.github.auties00.cobalt.client.WhatsAppClientType, java.util.UUID)
+ *       load} factory entry points invoked by the {@code WhatsAppClient}
+ *       constructor. Cobalt has no schema-rollout step because every WA
+ *       Web {@code WAWebSchema*} table maps to a {@code ConcurrentHashMap}
+ *       field that is unconditionally present. The column-packing /
+ *       {@code WAWebDbRolloutUtil} / {@code WAWebStorageGatingUtils}
+ *       branches are not modelled because they only choose between
+ *       IndexedDB schema layouts, which Cobalt does not have.</li>
+ *   <li>{@code destroy}: WA Web's combination of
+ *       {@code WAWebModelStorageUtils.destroyStorage()} (drop all tables)
+ *       and the fall-back {@code new Dexie(DATABASE_NAME).delete()}
+ *       collapses into {@link #delete()}, which is invoked by
+ *       {@code WhatsAppClient.disconnect0} when the session reason is
+ *       {@code LOGGED_OUT} or {@code BANNED}. The
+ *       {@code .finally(s = null)} step that resets WA Web's cached
+ *       init promise has no Cobalt counterpart because Cobalt does not
+ *       cache an init promise at the module level &mdash; each new
+ *       client instantiates a fresh store via the factory.</li>
+ *   <li>{@code clearInitializePromise}: no Cobalt analog. WA Web exposes
+ *       this as a test-only reset of the module-level {@code s} promise
+ *       cache that {@code initializeWithoutGKs} memoizes. Cobalt has no
+ *       such cache because {@link WhatsAppStoreFactory} is stateless and
+ *       each call materializes a new aggregate.</li>
+ * </ul>
  */
 @WhatsAppWebModule(moduleName = "WAWebModelStorageInitialize")
 @WhatsAppWebModule(moduleName = "WAWebCollections")
@@ -124,8 +156,30 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Permanently deletes this session from storage.
      *
      * <p>After this method returns, the session data cannot be recovered.
+     *
+     * @implNote {@code WAWebModelStorageInitialize.destroy} performs
+     *           {@code WAWebModelStorageUtils.destroyStorage().catch(() ->
+     *           dexieCastToPromise(new Dexie(DATABASE_NAME).delete())).finally(() ->
+     *           s = null)} to drop every IndexedDB table on logout and
+     *           reset the cached init promise. Cobalt collapses both the
+     *           soft-drop and the hard-delete branches into this single
+     *           method because all WA Web schema tables map to in-memory
+     *           {@code ConcurrentHashMap} fields that are released along
+     *           with the store instance, so only the persistent backing
+     *           directory must be removed; the {@code s = null} step has
+     *           no analog because Cobalt does not memoize an init promise.
+     *           Called by {@code WhatsAppClient.disconnect0} when the
+     *           disconnect reason is {@code LOGGED_OUT} or {@code BANNED},
+     *           matching the WA Web call-site that runs at logout.
+     *
      * @throws IOException if the session cannot be deleted
      */
+    @WhatsAppWebExport(moduleName = "WAWebModelStorageInitialize",
+            exports = "destroy",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebSignalStorage",
+            exports = "destroy",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     void delete() throws IOException;
 
     /**
@@ -816,6 +870,57 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void cleanupSignalSessions(Jid deviceJid);
 
     /**
+     * Persists Alice's X3DH base key for a pre-key message so the receive
+     * path can dedupe replays of the same {@code originalMsgId}.
+     *
+     * @param address       the peer Signal address that initiated the
+     *                      session
+     * @param originalMsgId the {@code originalMsgId} carried by the pre-key
+     *                      stanza
+     * @param baseKey       the 32-byte X3DH ephemeral public key extracted
+     *                      from the pre-key message
+     * @throws NullPointerException if any argument is {@code null}
+     */
+    void saveSessionBaseKey(SignalProtocolAddress address, String originalMsgId, byte[] baseKey);
+
+    /**
+     * Returns the previously-saved Alice base key for a
+     * {@code (address, originalMsgId)} pair, if any.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @return an {@link Optional} containing the 32-byte base key, or
+     *         {@link Optional#empty()} if no entry exists
+     * @throws NullPointerException if any argument is {@code null}
+     */
+    Optional<byte[]> findSessionBaseKey(SignalProtocolAddress address, String originalMsgId);
+
+    /**
+     * Reports whether a stored base key matches the candidate one for the
+     * given {@code (address, originalMsgId)} pair.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @param candidate     the candidate base key extracted from the
+     *                      newly-received pre-key message
+     * @return {@code true} if a base key was previously stored for this
+     *         pair and equals {@code candidate}, {@code false} otherwise
+     * @throws NullPointerException if any argument is {@code null}
+     */
+    boolean hasSameBaseKey(SignalProtocolAddress address, String originalMsgId, byte[] candidate);
+
+    /**
+     * Removes the persisted base key for a {@code (address, originalMsgId)}
+     * pair, if any.
+     *
+     * @param address       the peer Signal address
+     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @return {@code true} if an entry was removed
+     * @throws NullPointerException if any argument is {@code null}
+     */
+    boolean removeSessionBaseKey(SignalProtocolAddress address, String originalMsgId);
+
+    /**
      * Returns all contacts stored in this session.
      *
      * @return an unmodifiable collection of all contacts
@@ -1407,9 +1512,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<Label> removeLabel(String labelId);
 
     /**
-     * Returns all app state sync keys.
+     * Returns all app state sync keys currently held in the store.
      *
-     * @return an unmodifiable sequenced collection of sync keys
+     * <p>Per WhatsApp Web {@code WAWebGetSyncKey.getAllSyncKeysInTransaction}:
+     * runs {@code SyncKeyStore.getAll()} inside a {@code SyncKeyStore}
+     * transaction, which delegates to
+     * {@code WAWebSyncdDb.getAllSyncKeys() ->
+     * getSyncKeysTable().all().map(convertToSyncKeyFromRow)}.
+     *
+     * <p>Cobalt collapses the IndexedDB cursor into a direct
+     * iteration over the in-memory map preserving insertion order.
+     *
+     * @return an unmodifiable {@link SequencedCollection} of every
+     *         {@link AppStateSyncKey} known to the store; empty if no
+     *         keys have been stored yet
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1419,10 +1535,24 @@ public interface WhatsAppStore extends SignalProtocolStore {
     SequencedCollection<AppStateSyncKey> appStateKeys();
 
     /**
-     * Finds an app state sync key by its key ID.
+     * Returns the app state sync key with the given raw {@code keyId},
+     * if one is stored.
      *
-     * @param id the key ID, must not be {@code null}
-     * @return an {@code Optional} containing the key if found
+     * <p>Per WhatsApp Web {@code WAWebGetSyncKey.getSyncKeyInTransaction_DO_NOT_USE}:
+     * runs {@code SyncKeyStore.get(keyId)} inside a transaction, which
+     * delegates to {@code WAWebSyncdDb.getSyncKey(keyId) ->
+     * getSyncKeysTable().get(new Uint8Array(fromSyncKeyId(keyId)))}.
+     * The {@code _DO_NOT_USE} suffix marks this lookup as a direct,
+     * non-validated read intended only for low-level subsystems —
+     * callers should normally consult
+     * {@code WAWebSyncdKeyManagement.getNewestKeyPair} or the
+     * higher-level helpers instead.
+     *
+     * @param id the raw 6-byte sync key identifier; must not be
+     *           {@code null}
+     * @return an {@link Optional} containing the matching
+     *         {@link AppStateSyncKey}, or {@link Optional#empty()} if
+     *         no key with this id is stored
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1432,9 +1562,25 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<AppStateSyncKey> findWebAppStateKeyById(byte[] id);
 
     /**
-     * Adds multiple app state sync keys.
+     * Inserts or replaces a batch of app state sync keys.
      *
-     * @param keys the collection of keys to add, must not be {@code null}
+     * <p>Per WhatsApp Web {@code WAWebGetSyncKey.setSyncKeyInTransaction}:
+     * runs {@code SyncKeyStore.set(key)} inside a transaction, which
+     * delegates to {@code WAWebSyncdDb.createSyncKey(key) ->
+     * getSyncKeysTable().createOrReplace(convertFromSyncKeyToRow(key))}.
+     *
+     * <p>Cobalt accepts a {@link Collection} per call rather than a
+     * single key because the sync-key rotation and key-share paths
+     * ({@code SyncKeyRotationService}) batch their store writes; WA
+     * Web instead invokes {@code setSyncKeyInTransaction} once per
+     * key from {@code WAWebSyncdHandleKeyShare.handleKeyShare} and
+     * {@code WAWebSyncdKeyManagement}. Implementations skip keys
+     * whose {@code keyData.keyData} payload is absent or empty —
+     * a defensive guard not present in WA Web because its callers
+     * always supply fully-populated keys.
+     *
+     * @param keys the collection of keys to add or update; must not be
+     *             {@code null}
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1444,21 +1590,44 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void addWebAppStateKeys(Collection<AppStateSyncKey> keys);
 
     /**
-     * Removes all app state sync keys whose timestamp is at or before the given instant.
+     * Marks every app state sync key whose generation timestamp is at
+     * or before the given instant as expired by zeroing its timestamp.
      *
-     * <p>Per WhatsApp Web {@code SyncKeyStore.expire}: marks keys as expired
-     * by removing them from the store. This is called when receiving sentinel
-     * mutations signaling key expiration.
+     * <p>This is a Cobalt-only helper without a direct WhatsApp Web
+     * basis: WA Web's {@code SyncKeyStore} only exposes
+     * {@code expire(epoch)} (mapped to
+     * {@link #expireAppStateKeysByEpoch(int)}) and
+     * {@code clear()}. The method is currently unused and is
+     * retained pending cleanup by the phantom-sweep agent.
      *
-     * @param threshold the cutoff instant; keys with timestamps at or before
-     *                  this value are removed
+     * @param threshold the cutoff instant; keys with timestamps at or
+     *                  before this value have their timestamp set to
+     *                  {@link java.time.Instant#EPOCH}
+     * @implNote NO_WA_BASIS — phantom helper, not invoked anywhere in
+     *           the current codebase.
      */
     void expireAppStateKeys(Instant threshold);
 
     /**
-     * Expires all app state sync keys whose derived epoch matches the provided epoch.
+     * Marks every app state sync key whose derived epoch equals the
+     * provided value as expired by zeroing its
+     * {@link AppStateSyncKey} timestamp.
      *
-     * @param epoch the sync key epoch to expire
+     * <p>Per WhatsApp Web {@code WAWebGetSyncKey.expireSyncKeyInTransaction}:
+     * runs {@code SyncKeyStore.expire(epoch)} inside a transaction,
+     * which delegates to {@code WAWebSyncdDb.expireSyncKey(epoch)}:
+     * <pre>{@code
+     *   const t = yield getSyncKeysTable().equals(["keyEpoch"], epoch);
+     *   t.forEach(e => getSyncKeysTable().merge({keyId: e.keyId},
+     *                                          {timestamp: 0}));
+     * }</pre>
+     *
+     * <p>This is a soft-mark expiration, NOT a deletion — keys remain
+     * in the store but their timestamp is reset to
+     * {@link java.time.Instant#EPOCH} so subsequent freshness checks
+     * treat them as expired.
+     *
+     * @param epoch the sync key epoch whose keys should be expired
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncKey",
@@ -1529,8 +1698,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param entry     the entry to store
      */
     @WhatsAppWebExport(
-            moduleName = "WAWebGetSyncAction",
-            exports = "getSyncActionsByCollectionAndIndexesInTransaction",
+            moduleName = "WAWebSyncActionStore",
+            exports = "WAWebSyncActionStore",
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     void putSyncActionEntry(SyncPatchType patchType, byte[] indexMac, SyncActionEntry entry);
@@ -1577,9 +1746,67 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<SyncActionEntry> getSyncActionEntries(SyncPatchType patchType);
 
     /**
-     * Returns all missing sync keys being tracked.
+     * Returns the total number of sync action entries currently held in the
+     * store across every {@link SyncPatchType} collection.
      *
-     * @return an unmodifiable collection of missing sync keys
+     * <p>Mirrors WhatsApp Web's
+     * {@code WAWebGetSyncAction.countSyncActionsInTransaction}, which performs
+     * {@code SyncActionStore.count()} (an IndexedDB {@code count()} on the
+     * {@code sync-actions} object store) inside a {@code RunInTransaction}
+     * envelope. The WA Web table is unpartitioned because its primary key is
+     * the plaintext {@code index} which spans all collections; Cobalt
+     * partitions storage by {@link SyncPatchType} and therefore returns the
+     * sum of per-patch-type entry counts.
+     *
+     * @return the total number of sync action entries currently stored
+     * @implNote {@code WAWebSyncActionStore.count} delegates to
+     *           {@code WAWebSchemaSyncActions.getSyncActionsTable().count()};
+     *           Cobalt sums {@link Collection#size()} over each per-patch-type
+     *           map.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetSyncAction",
+            exports = "countSyncActionsInTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    int countSyncActionEntries();
+
+    /**
+     * Returns every sync action entry currently held in the store across
+     * every {@link SyncPatchType} collection.
+     *
+     * <p>Mirrors WhatsApp Web's {@code WAWebGetSyncAction.getAllSyncActions},
+     * which performs {@code SyncActionStore.getAll()} (an IndexedDB
+     * {@code .all()} on the {@code sync-actions} object store) inside a
+     * {@code RunInTransaction} envelope and returns every row converted to a
+     * {@code SyncAction}.
+     *
+     * @return an unmodifiable collection of every stored entry, never
+     *         {@code null}; empty if no entries are stored
+     * @implNote {@code WAWebSyncActionStore.getAll} flattens the unpartitioned
+     *           {@code sync-actions} table; Cobalt concatenates the values of
+     *           each per-patch-type map.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetSyncAction",
+            exports = "getAllSyncActions",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    Collection<SyncActionEntry> getAllSyncActionEntries();
+
+    /**
+     * Returns every missing sync key entry currently being tracked.
+     *
+     * <p>Mirrors {@code WAWebGetMissingKey.getAllMissingKeysInTransaction},
+     * which wraps {@code WAWebMissingKeyStore.getAll} in a
+     * {@code MissingKeyStore} {@code RunInTransaction} envelope and ultimately
+     * returns every row of the {@code missing-keys} IndexedDB table.
+     *
+     * @return an unmodifiable collection of every stored missing-key entry,
+     *         never {@code null}; empty when no keys are tracked
+     * @implNote {@code WAWebMissingKeyStore.getAll} delegates to
+     *           {@code WAWebSyncdDb.getAllMissingKeys}; Cobalt simply exposes
+     *           the values of the in-memory map.
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetMissingKey",
@@ -1589,10 +1816,23 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<MissingDeviceSyncKey> missingSyncKeys();
 
     /**
-     * Finds a missing sync key by its ID.
+     * Finds the missing sync key entry whose primary key matches the given
+     * raw {@code keyId} bytes.
      *
-     * @param keyId the key ID
-     * @return an {@code Optional} containing the missing key entry if found
+     * <p>Single-element form of WA Web's
+     * {@code bulkGetMissingKeysInTransaction}: that JS export accepts a list
+     * of {@code keyHex} strings and returns the matching rows out of the
+     * {@code missing-keys} table; Cobalt instead takes the raw key bytes and
+     * encodes them with {@link java.util.HexFormat} to obtain the same
+     * {@code keyHex} primary key.
+     *
+     * @param keyId the raw key identifier bytes to look up
+     * @return an {@link Optional} containing the entry if present,
+     *         {@link Optional#empty()} otherwise
+     * @implNote {@code WAWebMissingKeyStore.bulkGet} delegates to
+     *           {@code WAWebSyncdDb.bulkGetMissingKeys}; the missing-keys
+     *           table uses {@code keyHex} as primary key
+     *           ({@code WAWebSchemaMissingKeys.addTable}).
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetMissingKey",
@@ -1602,21 +1842,90 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<MissingDeviceSyncKey> findMissingSyncKey(byte[] keyId);
 
     /**
-     * Adds or updates a missing sync key entry.
+     * Returns the number of missing sync keys currently being tracked.
      *
-     * @param missingKey the missing key entry to add
+     * <p>Mirrors {@code WAWebGetMissingKey.getMissingKeyCountTransaction},
+     * which wraps {@code WAWebMissingKeyStore.count} in a
+     * {@code MissingKeyStore} {@code RunInTransaction} envelope.
+     *
+     * @return the number of missing-key entries; {@code 0} when none are
+     *         tracked
+     * @implNote {@code WAWebMissingKeyStore.count} delegates to
+     *           {@code WAWebSyncdDb.getMissingKeyCount}; Cobalt simply
+     *           returns the size of the in-memory map.
      */
     @WhatsAppWebExport(
-            moduleName = "WAWebSyncdStoreMissingKeys",
-            exports = "addMissingKeys",
+            moduleName = "WAWebGetMissingKey",
+            exports = "getMissingKeyCountTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    int missingSyncKeyCount();
+
+    /**
+     * Adds or updates a single missing sync key entry.
+     *
+     * <p>The entry is keyed by its raw {@code keyId} bytes encoded as a hex
+     * string, mirroring the {@code keyHex} primary-key column declared by
+     * {@code WAWebSchemaMissingKeys} on the {@code missing-keys} IndexedDB
+     * table; an existing record with the same {@code keyHex} is replaced.
+     *
+     * <p>This is the single-element form of
+     * {@link #addMissingSyncKeys(Collection)} and corresponds to the JS
+     * primitive {@code WAWebGetMissingKey.bulkUpdateMissingKeysInTransaction}
+     * invoked with a one-element list. WA Web's higher-level
+     * {@code WAWebSyncdStoreMissingKeys.addMissingKeys} workflow reaches this
+     * primitive after building the {@code {keyHex, keyId, timestamp,
+     * deviceResponses}} record list.
+     *
+     * @param missingKey the missing-key entry to add or replace
+     * @implNote Single-element delegation to
+     *           {@code WAWebGetMissingKey.bulkUpdateMissingKeysInTransaction},
+     *           which forwards to {@code WAWebMissingKeyStore.bulkUpdate} and
+     *           ultimately to {@code WAWebSyncdDb.createOrUpdateMissingKeys}.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetMissingKey",
+            exports = "bulkUpdateMissingKeysInTransaction",
             adaptation = WhatsAppAdaptation.ADAPTED
     )
     void addMissingSyncKey(MissingDeviceSyncKey missingKey);
 
     /**
-     * Removes a missing sync key entry.
+     * Adds or updates the given missing sync key entries in bulk.
      *
-     * @param keyId the key ID to remove
+     * <p>Each entry is keyed by its raw {@code keyId} bytes encoded as a hex
+     * string, replacing any existing record with the same {@code keyHex}.
+     * This is the direct counterpart of WA Web's
+     * {@code bulkUpdateMissingKeysInTransaction}, which forwards the supplied
+     * list to {@code WAWebMissingKeyStore.bulkUpdate} inside a single
+     * {@code MissingKeyStore} transaction.
+     *
+     * <p>Passing an empty collection is a no-op; {@code null} is not
+     * accepted.
+     *
+     * @param missingKeys the missing-key entries to upsert
+     * @implNote Mirrors
+     *           {@code WAWebGetMissingKey.bulkUpdateMissingKeysInTransaction},
+     *           which delegates to {@code WAWebMissingKeyStore.bulkUpdate} and
+     *           ultimately to {@code WAWebSyncdDb.createOrUpdateMissingKeys}.
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetMissingKey",
+            exports = "bulkUpdateMissingKeysInTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    void addMissingSyncKeys(Collection<MissingDeviceSyncKey> missingKeys);
+
+    /**
+     * Removes the missing sync key entry whose primary key matches the given
+     * raw {@code keyId} bytes.
+     *
+     * <p>Single-element form of {@code WAWebMissingKeyStore.bulkRemove}, the
+     * IDB-level primitive that
+     * {@code WAWebSyncdStoreMissingKeys.updateMissingKeys} uses to evict a
+     * key once a companion device has supplied it.
+     *
+     * @param keyId the raw key identifier bytes to remove
      */
     void removeMissingSyncKey(byte[] keyId);
 
@@ -1712,6 +2021,31 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @param collectionName the collection name
      */
     void markWebAppStateErrorFatal(SyncPatchType collectionName);
+
+    /**
+     * Returns whether the specified collection is currently flagged as having
+     * suffered a fatal MAC mismatch.
+     *
+     * <p>Mirrors WA Web's {@code getIsCollectionInMacMismatchFatalInTransaction}
+     * which reads the persistent {@code isCollectionInMacMismatchFatal} boolean
+     * from the {@code CollectionVersionStore} entry. Once set, the flag persists
+     * across all collection state transitions.
+     *
+     * @implNote WAWebGetCollectionVersion.getIsCollectionInMacMismatchFatalInTransaction
+     *           — {@code n.get(e).then(e => e?.isCollectionInMacMismatchFatal)}.
+     *           The {@code undefined} fallback (when no entry exists) is handled by
+     *           {@link #findWebAppState(SyncPatchType)} which returns a default
+     *           {@link SyncCollectionMetadata} with {@code macMismatch == false}.
+     * @param collectionName the collection name
+     * @return {@code true} if the collection is in the fatal MAC mismatch state,
+     *         {@code false} otherwise
+     */
+    @WhatsAppWebExport(
+            moduleName = "WAWebGetCollectionVersion",
+            exports = "getIsCollectionInMacMismatchFatalInTransaction",
+            adaptation = WhatsAppAdaptation.ADAPTED
+    )
+    boolean isCollectionInMacMismatchFatal(SyncPatchType collectionName);
 
     /**
      * Marks a web app state collection in MAC mismatch state.
@@ -2110,6 +2444,44 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Clears the coex hosted verification cache.
      */
     void clearCoexHostedVerificationCache();
+
+    /**
+     * Records that the stored click-to-WhatsApp (CTWA) UTM payload for the
+     * given chat has been consumed, so that {@link #hasReadUtmForChat(Jid)}
+     * returns {@code true} on subsequent reads until the entry is evicted
+     * via {@link #deleteUtmReadChatId(Jid)} or {@link #clearUtmReadChatIds()}.
+     *
+     * @param chatJid the chat JID whose UTM payload has just been read;
+     *                {@code null} is ignored
+     */
+    void markUtmReadForChat(Jid chatJid);
+
+    /**
+     * Returns whether the CTWA UTM payload for the given chat has already
+     * been consumed during this session.
+     *
+     * @param chatJid the chat JID to check
+     * @return {@code true} if the chat's UTM payload was read during this
+     *         session and the entry has not since been evicted
+     */
+    boolean hasReadUtmForChat(Jid chatJid);
+
+    /**
+     * Evicts the given chat from the UTM-read cache, so that its UTM payload
+     * will be re-read the next time it is requested. Invoked when a fresh
+     * UTM value is persisted for the chat, matching WA Web's
+     * {@code WAWebUpdateUtmAction.addUtmToChat} flow.
+     *
+     * @param chatJid the chat JID to forget; {@code null} is ignored
+     */
+    void deleteUtmReadChatId(Jid chatJid);
+
+    /**
+     * Clears every entry from the UTM-read cache. Mirrors the
+     * {@code clearAll} lifecycle hook of {@code WAWebChatUtmCache}, which
+     * is called during logout / account-swap.
+     */
+    void clearUtmReadChatIds();
 
     /**
      * Returns the set of contacts currently blocked by this account.
@@ -2654,6 +3026,177 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @return this store instance for method chaining
      */
     WhatsAppStore setGroupAbPropsEmergencyPushTimestamp(Instant timestamp); // WAWebABPropsLocalStorage.setGroupAbPropsEmergencyPushTimestamp
+
+    /**
+     * Returns the AB-props {@code abKey} string most recently received from
+     * the server.
+     *
+     * <p>WhatsApp Web persists this value as the {@code abKey} field of the
+     * JSON object stored under the {@code ABPROPS} {@code localStorage} key,
+     * and surfaces it as the WAM {@code abKey2} global (field {@code 4473}).
+     *
+     * @implNote WAWebABPropsLocalStorage.getABKey
+     * @return an {@link Optional} containing the AB key, or empty if none has
+     *         been received yet
+     */
+    Optional<String> abPropsAbKey(); // WAWebABPropsLocalStorage.getABKey
+
+    /**
+     * Sets the AB-props {@code abKey} string.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     * @param abKey the AB key, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbPropsAbKey(String abKey); // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * Returns the AB-props {@code hash} string used for delta-update
+     * negotiation with the server.
+     *
+     * <p>WhatsApp Web persists this value as the {@code hash} field of the
+     * JSON object stored under the {@code ABPROPS} {@code localStorage} key.
+     *
+     * @implNote WAWebABPropsLocalStorage.getHash
+     * @return an {@link Optional} containing the AB-props hash, or empty if
+     *         no sync has completed yet
+     */
+    Optional<String> abPropsHash(); // WAWebABPropsLocalStorage.getHash
+
+    /**
+     * Sets the AB-props {@code hash} string.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     * @param hash the AB-props hash, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbPropsHash(String hash); // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * Returns the AB-props refresh interval, in seconds.
+     *
+     * <p>WhatsApp Web persists this value as the {@code refresh} field of the
+     * JSON object stored under the {@code ABPROPS} {@code localStorage} key
+     * and parses it as an integer when retrieved. The server-supplied value
+     * is clamped into the inclusive range {@code [600, 604800]} when written
+     * by {@code updateAttributesLocalStorage}, and falls back to one day
+     * ({@code 86400}) when no value has been persisted.
+     *
+     * @implNote WAWebABPropsLocalStorage.getRefresh — when no value has been
+     *           recorded, the JS export returns {@code parseInt(86400, 10)};
+     *           Cobalt returns the same constant via {@link #abPropsRefresh()}
+     *           after defaulting through the underlying field.
+     * @return the AB-props refresh interval in seconds, or {@code 86400} when
+     *         no value has been recorded
+     */
+    long abPropsRefresh(); // WAWebABPropsLocalStorage.getRefresh
+
+    /**
+     * Sets the AB-props refresh interval, in seconds.
+     *
+     * <p>The supplied value is clamped into the inclusive range
+     * {@code [600, 604800]} to mirror the bounds enforced by
+     * {@code updateAttributesLocalStorage}.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     * @param refreshSeconds the desired refresh interval in seconds
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbPropsRefresh(long refreshSeconds); // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * Returns the timestamp at which the most recent successful AB-props
+     * sync occurred.
+     *
+     * <p>WhatsApp Web persists this value as the {@code lastSyncTime} field
+     * of the JSON object stored under the {@code ABPROPS} {@code localStorage}
+     * key, expressed as milliseconds since the Unix epoch.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage —
+     *           {@code lastSyncTime} parameter
+     * @return an {@link Optional} containing the last sync timestamp, or
+     *         empty if no sync has been recorded
+     */
+    Optional<Instant> abPropsLastSyncTime(); // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * Sets the timestamp of the most recent successful AB-props sync.
+     *
+     * @implNote WAWebABPropsLocalStorage.updateAttributesLocalStorage
+     * @param lastSyncTime the sync completion instant, or {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbPropsLastSyncTime(Instant lastSyncTime); // WAWebABPropsLocalStorage.updateAttributesLocalStorage
+
+    /**
+     * Returns the AB-props refresh id received from the server on the most
+     * recent sync.
+     *
+     * <p>WhatsApp Web persists this value under the
+     * {@code ABPROPS_REFRESH_ID} {@code localStorage} key and uses it as the
+     * {@code propsRefreshId} request attribute when justknobx {@code 3330}
+     * is enabled. The JS export {@code getRefreshId} initialises the slot to
+     * {@code 0} the first time it is read and never returns a negative value.
+     *
+     * @implNote WAWebABPropsLocalStorage.getRefreshId
+     * @return the AB-props refresh id ({@code 0} if never set)
+     */
+    long abPropsRefreshId(); // WAWebABPropsLocalStorage.getRefreshId
+
+    /**
+     * Sets the AB-props refresh id.
+     *
+     * @implNote WAWebABPropsLocalStorage.setRefreshId
+     * @param refreshId the refresh id received from the server
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbPropsRefreshId(long refreshId); // WAWebABPropsLocalStorage.setRefreshId
+
+    /**
+     * Returns the web-only AB-props refresh id used to gate the justknobx
+     * {@code 2086} emergency push request.
+     *
+     * <p>WhatsApp Web persists this value under the
+     * {@code UserPrefs.AbpropsWebRefreshId} key. The JS export
+     * {@code getWebRefreshId} initialises the slot to {@code 0} the first
+     * time it is read.
+     *
+     * @implNote WAWebABPropsLocalStorage.getWebRefreshId
+     * @return the web AB-props refresh id ({@code 0} if never set)
+     */
+    long abPropsWebRefreshId(); // WAWebABPropsLocalStorage.getWebRefreshId
+
+    /**
+     * Sets the web-only AB-props refresh id.
+     *
+     * @implNote WAWebABPropsLocalStorage.setWebRefreshId
+     * @param webRefreshId the refresh id received from the server
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAbPropsWebRefreshId(long webRefreshId); // WAWebABPropsLocalStorage.setWebRefreshId
+
+    /**
+     * Returns the group AB-props refresh id received from the server on the
+     * most recent sync.
+     *
+     * <p>WhatsApp Web persists this value under the
+     * {@code GROUP_ABPROPS_REFRESH_ID} {@code localStorage} key. The JS
+     * export {@code getGroupAbPropsRefreshId} returns {@code 0} when the
+     * value has never been set.
+     *
+     * @implNote WAWebABPropsLocalStorage.getGroupAbPropsRefreshId
+     * @return the group AB-props refresh id ({@code 0} if never set)
+     */
+    long groupAbPropsRefreshId(); // WAWebABPropsLocalStorage.getGroupAbPropsRefreshId
+
+    /**
+     * Sets the group AB-props refresh id.
+     *
+     * @implNote WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
+     * @param groupRefreshId the refresh id received from the server
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setGroupAbPropsRefreshId(long groupRefreshId); // WAWebABPropsLocalStorage.setGroupAbPropsRefreshId
 
     /**
      * Removes every recent sticker that is flagged as an avatar sticker and

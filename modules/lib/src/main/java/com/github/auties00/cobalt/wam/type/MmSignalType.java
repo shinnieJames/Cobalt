@@ -31,5 +31,8 @@ public enum MmSignalType {
     @WamEnumConstant(23) URL_CTA_CLICK,
     @WamEnumConstant(24) APP_CTA_CLICK,
     @WamEnumConstant(25) BODY_URL_CLICK,
-    @WamEnumConstant(26) USER_BLOCK_REASON_SCAM_OR_FRAUD
+    @WamEnumConstant(26) USER_BLOCK_REASON_SCAM_OR_FRAUD,
+    @WamEnumConstant(27) MESSAGE,
+    @WamEnumConstant(28) USER_ARCHIVE,
+    @WamEnumConstant(29) BODY_URL_LONG_PRESS
 }

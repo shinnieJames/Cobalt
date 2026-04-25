@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.exception;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.error.DisconnectReason;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
@@ -190,6 +192,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError("unable to validate snapshot mac")}
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class SnapshotMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
          * The sync collection (patch type) that failed validation.
@@ -275,6 +279,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError("unable to validate patch mac")}
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class PatchMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
          * The sync collection (patch type) that failed validation.
@@ -355,6 +361,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError("decryption failure: valueMAC mismatch")}
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class ValueMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new value MAC mismatch exception.
@@ -396,6 +404,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError("decryption failure: indexMAC mismatch")}
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class IndexMacMismatch extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new index MAC mismatch exception.
@@ -441,6 +451,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdMissingKeyError
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdMissingKeyError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class MissingKey extends WhatsAppWebAppStateSyncException {
         /**
          * The identifier of the missing encryption key.
@@ -505,6 +517,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
     @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class MissingKeyOnAllDevices extends WhatsAppWebAppStateSyncException {
         /**
          * The identifier of the missing encryption key.
@@ -586,6 +600,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
     @WhatsAppWebModule(moduleName = "WAWebSyncdMetricFatalError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class TimeoutWhileWaitingForMissingKey extends WhatsAppWebAppStateSyncException {
         /**
          * The identifier of the missing encryption key whose wait timeout expired.
@@ -662,6 +678,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError(e.message)} in WASyncdKmpEncryptionManager
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class DecryptionFailed extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new decryption failed exception wrapping a cause.
@@ -728,6 +746,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *           the generic error bubble and the caller decides).
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdNetCallbacksApi")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class ExternalDownloadFailed extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new external download failed exception.
@@ -779,6 +799,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      *           {@code WhatsAppClientErrorHandler} decides the final action.
      */
     @WhatsAppWebModule(moduleName = "WAWebNonMessageDataRequestHandler")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class ExternalDecodeFailed extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new external decode failed exception.
@@ -821,6 +843,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - MAC computation failures are fatal in WA Web
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class MacComputationFailed extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new MAC computation failed exception.
@@ -856,6 +880,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws fatal error on missing timestamp
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class MissingActionTimestamp extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new missing action timestamp exception.
@@ -890,6 +916,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws fatal error on duplicate mutation indices
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class DuplicateIndexInPatch extends WhatsAppWebAppStateSyncException {
         /**
          * The sync collection that contained the duplicate index.
@@ -936,6 +964,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws fatal error on duplicate patch versions
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class DuplicatePatchVersion extends WhatsAppWebAppStateSyncException {
         /**
          * The sync collection that contained the duplicate patch version.
@@ -1010,6 +1040,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - catch-all for unclassified errors
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class UnexpectedError extends WhatsAppWebAppStateSyncException {
         /**
          * Constructs a new unexpected error exception wrapping a cause.
@@ -1052,6 +1084,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError("syncd: has missing patches")}
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class MissingPatches extends WhatsAppWebAppStateSyncException {
         /**
          * The sync collection that has missing patches.
@@ -1142,6 +1176,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdFatalError - WA Web throws {@code new SyncdFatalError("received terminal patch with exit code: ...")}
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class TerminalPatch extends WhatsAppWebAppStateSyncException {
         /**
          * The sync collection that received the terminal patch.
@@ -1208,6 +1244,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdRetryableError - WA Web handles 409 as a retryable conflict
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class Conflict extends WhatsAppWebAppStateSyncException {
         /**
          * Whether the server indicated more patches are available after the conflict.
@@ -1255,6 +1293,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * @implNote WAWebSyncdError.SyncdRetryableError - WA Web creates {@code new SyncdRetryableError(t, n)} with backoff
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdError")
+    @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
+                       adaptation = WhatsAppAdaptation.ADAPTED)
     public static final class RetryableServerError extends WhatsAppWebAppStateSyncException {
         /**
          * The server error code that triggered this retryable error.

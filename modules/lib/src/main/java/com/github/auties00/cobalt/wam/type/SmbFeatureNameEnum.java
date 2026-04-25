@@ -15,5 +15,12 @@ public enum SmbFeatureNameEnum {
     @WamEnumConstant(7) LEARNING_HUB,
     @WamEnumConstant(8) BUSINESS_BROADCAST,
     @WamEnumConstant(9) ALERTS_CENTER,
-    @WamEnumConstant(10) GOOGLE_ELIGIBILITY_OPT_OUT
+    @WamEnumConstant(10) GOOGLE_ELIGIBILITY_OPT_OUT,
+    @WamEnumConstant(11) QUICK_REPLY_REQUEST_CONTACT_INFO,
+    @WamEnumConstant(12) BUSINESS_ACCOUNT_LINKING,
+    @WamEnumConstant(13) DEVICE_LINKING,
+    @WamEnumConstant(14) QUICK_REPLY,
+    @WamEnumConstant(15) AUTOMATED_MESSAGE,
+    @WamEnumConstant(16) CONSUMER_DOWNGRADE,
+    @WamEnumConstant(17) CUSTOMER_MANAGER
 }

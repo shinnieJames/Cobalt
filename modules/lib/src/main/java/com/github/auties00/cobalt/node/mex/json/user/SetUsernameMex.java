@@ -67,9 +67,18 @@ public sealed interface SetUsernameMex extends MexJsonOperation permits SetUsern
          * Serialises the GraphQL variables as JSON and wraps them in a
          * {@code w:mex} IQ stanza.
          *
-         * @implNote WAWebMexSetUsernameJob.mexSetUsernameQueryJob: the
-         * variables {@code input}, {@code reserved}, {@code session_id} and
-         * {@code source} mirror the WA Web call signature.
+         * <p>Mirrors the WA Web {@code isStringNullOrEmpty(t.input) ? {} : t}
+         * gate: when {@code input} is {@code null} or empty, the variables
+         * object is emitted as {@code {}} regardless of the other fields. When
+         * {@code input} is present, all four variables ({@code input},
+         * {@code reserved}, {@code session_id}, {@code source}) are forwarded
+         * verbatim so the GraphQL relay receives the full payload {@code t}.
+         *
+         * @implNote WAWebMexSetUsernameJob.mexSetUsernameQueryJob: invokes
+         * {@code WAWebMexClient.fetchQuery(mutation,
+         * isStringNullOrEmpty(t.input) ? {} : t)}. Cobalt reproduces the same
+         * conditional, omitting the entire variables payload when the input
+         * username is missing.
          * @return the IQ {@link NodeBuilder} ready to be built and dispatched
          */
         @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
@@ -80,25 +89,26 @@ public sealed interface SetUsernameMex extends MexJsonOperation permits SetUsern
                 writer.writeName("variables");
                 writer.writeColon();
                 writer.startObject();
-                if (input != null) {
+                // WAWebMexSetUsernameJob.mexSetUsernameQueryJob: isStringNullOrEmpty(t.input) ? {} : t
+                if (input != null && !input.isEmpty()) {
                     writer.writeName("input");
                     writer.writeColon();
                     writer.writeString(input);
-                }
-                if (reserved != null) {
-                    writer.writeName("reserved");
-                    writer.writeColon();
-                    writer.writeBool(reserved);
-                }
-                if (sessionId != null) {
-                    writer.writeName("session_id");
-                    writer.writeColon();
-                    writer.writeString(sessionId);
-                }
-                if (source != null) {
-                    writer.writeName("source");
-                    writer.writeColon();
-                    writer.writeString(source);
+                    if (reserved != null) {
+                        writer.writeName("reserved");
+                        writer.writeColon();
+                        writer.writeBool(reserved);
+                    }
+                    if (sessionId != null) {
+                        writer.writeName("session_id");
+                        writer.writeColon();
+                        writer.writeString(sessionId);
+                    }
+                    if (source != null) {
+                        writer.writeName("source");
+                        writer.writeColon();
+                        writer.writeString(source);
+                    }
                 }
                 writer.endObject();
                 writer.endObject();
@@ -146,6 +156,26 @@ public sealed interface SetUsernameMex extends MexJsonOperation permits SetUsern
          */
         public Optional<String> result() {
             return Optional.ofNullable(result);
+        }
+
+        /**
+         * Returns whether the username mutation succeeded.
+         *
+         * <p>Mirrors the WA Web {@code mexSetUsernameQueryJob} return value,
+         * which evaluates {@code result?.xwa2_username_set?.result === "SUCCESS"}
+         * after awaiting the relay response.
+         *
+         * @implNote WAWebMexSetUsernameJob.mexSetUsernameQueryJob: returns
+         * {@code ((a=l.xwa2_username_set)==null?void 0:a.result)==="SUCCESS"}.
+         * @return {@code true} if the {@code result} field equals
+         *         {@code "SUCCESS"}, {@code false} otherwise (including when
+         *         the field is absent)
+         */
+        @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameJob", exports = "mexSetUsernameQueryJob",
+                adaptation = WhatsAppAdaptation.DIRECT)
+        public boolean isSuccess() {
+            // WAWebMexSetUsernameJob.mexSetUsernameQueryJob: (a==null?void 0:a.result)==="SUCCESS"
+            return Objects.equals(result, "SUCCESS");
         }
 
         private static Optional<Response> of(byte[] json) {

@@ -17,7 +17,7 @@ import java.lang.annotation.*;
  * public final class IcdcComputer { ... }
  * }</pre>
  */
-@Target(ElementType.TYPE)
+@Target({ElementType.TYPE, ElementType.PACKAGE})
 @Retention(RetentionPolicy.SOURCE)
 @Repeatable(WhatsAppWebModules.class)
 @Documented

@@ -41,34 +41,48 @@ public record ExternalEntryPoint(
      * Maximum age of an external entry point before it is considered
      * expired and discarded.
      *
-     * @implNote WAWebExternalEntryPointPrefs: uses
-     * {@code WATimeUtils.WEEK_MILLISECONDS} (7 days) as the expiry
-     * threshold.
+     * <p>WA Web reads this constant from
+     * {@code WATimeUtils.WEEK_MILLISECONDS}, which is exported as
+     * {@code 6048e5} milliseconds — exactly seven days.
+     *
+     * @implNote WAWebExternalEntryPointPrefs: references
+     * {@code o("WATimeUtils").WEEK_MILLISECONDS} as the expiry
+     * threshold inside {@code function u(e)}.
      */
+    @WhatsAppWebExport(moduleName = "WATimeUtils", exports = "WEEK_MILLISECONDS",
+            adaptation = WhatsAppAdaptation.DIRECT)
     private static final Duration MAX_AGE = Duration.ofDays(7);
 
     /**
      * Returns whether this entry point has expired.
      *
-     * <p>An entry point is expired when more than one week has
-     * elapsed since its {@link #addedTime()}.
+     * <p>An entry point is expired when strictly more than one week
+     * has elapsed since its {@link #addedTime()}, matching the JS
+     * source's strict {@code >} comparison.
      *
      * @return {@code true} if expired
-     * @implNote WAWebExternalEntryPointPrefs: checks
-     * {@code Date.now() - e.addedTime > WEEK_MILLISECONDS}.
+     * @implNote WAWebExternalEntryPointPrefs: function
+     * {@code u(e){var t=Date.now(); return t-e.addedTime > WEEK_MILLISECONDS}}.
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalEntryPointPrefs", exports = "getExternalEntryPoint",
             adaptation = WhatsAppAdaptation.DIRECT)
     public boolean isExpired() {
+        // WAWebExternalEntryPointPrefs: t - e.addedTime > WEEK_MILLISECONDS
         return Duration.between(addedTime, Instant.now()).compareTo(MAX_AGE) > 0;
     }
 
     /**
      * Returns the partner name as an {@link Optional}.
      *
+     * <p>The JS source stores {@code partnerName} as a possibly-null
+     * string ({@code partnerName: r != null ? r : null}); Cobalt
+     * exposes it through this Optional accessor while keeping the raw
+     * nullable field for direct mirroring.
+     *
      * @return the partner name, or empty if {@code null}
-     * @implNote WAWebExternalEntryPointPrefs: {@code partnerName} can
-     * be {@code null}.
+     * @implNote WAWebExternalEntryPointPrefs: {@code partnerName} field
+     * is set to the fourth argument of {@code saveExternalEntryPoint}
+     * coerced to {@code null} when undefined.
      */
     public Optional<String> optionalPartnerName() {
         return Optional.ofNullable(partnerName);

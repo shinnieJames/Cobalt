@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -52,9 +51,9 @@ public sealed interface UpdateNewsletterMex extends MexJsonOperation permits Upd
     @WhatsAppWebModule(moduleName = "WAWebMexUpdateNewsletterJob")
     final class Request implements UpdateNewsletterMex {
         private final String newsletterId;
-        private final String updates;
+        private final JSONObject updates;
 
-        public Request(String newsletterId, String updates) {
+        public Request(String newsletterId, JSONObject updates) {
             this.newsletterId = newsletterId;
             this.updates = updates;
         }
@@ -64,10 +63,14 @@ public sealed interface UpdateNewsletterMex extends MexJsonOperation permits Upd
          * WhatsApp relay.
          *
          * @implNote WAWebMexUpdateNewsletterJob.mexUpdateNewsletter: WA Web constructs the
-         * {@code variables} object inline and delegates to
-         * {@code WAWebMexClient.fetchQuery}. Cobalt writes the JSON directly
-         * via {@code fastjson2.JSONWriter} and wraps it through
-         * {@link MexJsonOperation#createMexNode(String, String)}.
+         * {@code variables} object inline as
+         * {@code {newsletter_id, updates: {name, description, picture, settings}}}
+         * and delegates to {@code WAWebMexClient.fetchQuery}. Cobalt writes
+         * the same nested object via {@code fastjson2.JSONWriter} and wraps
+         * it through {@link MexJsonOperation#createMexNode(String, String)}.
+         * The {@code updates} variable is emitted as a structured JSON
+         * object, not a string-encoded payload, matching the GraphQL input
+         * type expected by the relay.
          * @return a {@link NodeBuilder} carrying the IQ envelope and the
          *         serialised GraphQL variables
          */
@@ -92,11 +95,12 @@ public sealed interface UpdateNewsletterMex extends MexJsonOperation permits Upd
                 }
 
                 // WAWebMexUpdateNewsletterJob.mexUpdateNewsletter
-                // Emits the updates variable when present
+                // Emits the updates variable as a nested JSON object (NOT a quoted JSON string),
+                // mirroring the inline {name, description, picture, settings} object built in JS
                 if (updates != null) {
                     writer.writeName("updates");
                     writer.writeColon();
-                    writer.writeString(updates);
+                    writer.writeAny(updates);
                 }
                 writer.endObject();
                 writer.endObject();

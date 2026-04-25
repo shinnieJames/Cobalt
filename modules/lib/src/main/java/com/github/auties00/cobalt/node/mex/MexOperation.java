@@ -39,6 +39,14 @@ import com.github.auties00.cobalt.node.mex.json.MexJsonOperation;
  * on every concrete operation mirrors the WA Web call site by emitting the
  * same {@code iq} stanza, while the {@code Response.of(Node)} factory mirrors
  * WA Web's inline response destructuring.
+ * @implNote WAWebMexClient.graphql: the {@code graphql} export re-exported
+ * from {@code WAWebRelayClient} is a Relay compile-time tag function whose
+ * runtime body is {@code throw err("Invariant Violation")}. It exists only so
+ * the Relay compiler can identify GraphQL template literals during the build;
+ * the bundle replaces every {@code graphql`...`} call site with a compiled
+ * query object before shipping. Cobalt does not use Relay and instead
+ * persists pre-compiled {@code query_id} constants on each concrete MEX
+ * operation, so this tag function has no Java counterpart by design.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexClient")
 public sealed interface MexOperation permits MexJsonOperation, MexArgoOperation {

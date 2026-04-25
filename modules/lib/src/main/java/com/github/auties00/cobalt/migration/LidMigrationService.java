@@ -2443,11 +2443,32 @@ public final class LidMigrationService {
      *           helpers with me-user special casing. Cobalt consolidates
      *           them into this method, reading {@code store.jid()} and
      *           {@code store.lid()} for the me-user fast path.
+     *           <p>
+     *           Three sub-exports are folded into this single method:
+     *           <ul>
+     *             <li>{@code WAWebApiContact.getAlternateUserWid(P)} — the
+     *                 outer dispatcher whose JS form is
+     *                 {@code e.isLid() ? getPhoneNumber(e) : getCurrentLid(e)};
+     *                 WA throws when {@code e.device != null}, but every
+     *                 caller in Cobalt already passes a user-level JID so the
+     *                 throw is redundant.</li>
+     *             <li>{@code WAWebApiContact.getPhoneNumber(A)} — the LID-to-PN
+     *                 lookup with the me-user fast path.</li>
+     *             <li>{@code WAWebApiContact.getCurrentLid(w)} — the PN-to-LID
+     *                 lookup with the me-user fast path.</li>
+     *           </ul>
+     *           Cobalt accepts a {@code null} JID and returns {@code null}
+     *           rather than throwing because the migration callers downstream
+     *           already need to coalesce {@code null} into a fall-through path.
      * @param userJid the user JID (must already be stripped of
      *                device/agent data)
      * @return the alternate JID, or {@code null} if not found
      */
     @WhatsAppWebExport(moduleName = "WAWebApiContact", exports = "getAlternateUserWid",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebApiContact", exports = "getPhoneNumber",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebApiContact", exports = "getCurrentLid",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private Jid getAlternateUserWid(Jid userJid) {
         if (userJid == null) {
