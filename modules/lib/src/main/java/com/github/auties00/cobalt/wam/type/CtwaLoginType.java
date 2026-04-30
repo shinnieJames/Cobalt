@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumCtwaLoginType")
 @WamEnum
 public enum CtwaLoginType {
     @WamEnumConstant(0) CTWA_LOGIN_TYPE_FB_NATIVE,

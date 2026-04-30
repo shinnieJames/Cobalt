@@ -1,14 +1,17 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.LidMigrationSourceType;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebLidMigrationDailyWamEvent")
 @WamEvent(id = 5842)
 public interface LidMigrationDailyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)
@@ -38,14 +41,14 @@ public interface LidMigrationDailyEvent extends WamEventSpec {
     @WamProperty(index = 13, type = WamType.INTEGER)
     OptionalInt numberOfPnGroups();
 
-    @WamProperty(index = 14, type = WamType.INTEGER)
-    OptionalInt numberOfRegularPnChats();
-
     @WamProperty(index = 2, type = WamType.INTEGER)
     OptionalInt numberOfPnhCtwaThreadsKnownMapping();
 
     @WamProperty(index = 3, type = WamType.INTEGER)
     OptionalInt numberOfPnhCtwaThreadsMissingMapping();
+
+    @WamProperty(index = 14, type = WamType.INTEGER)
+    OptionalInt numberOfRegularPnChats();
 
     @WamProperty(index = 4, type = WamType.INTEGER)
     OptionalInt numberOfSplitThreads();

@@ -1,10 +1,13 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
-import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.MmDirectionFrom;
 import com.github.auties00.cobalt.wam.type.OnePdSignalNotSharedReason;
 import com.github.auties00.cobalt.wam.type.SignalCanceledReason;
 import com.github.auties00.cobalt.wam.type.SignalMessageState;
@@ -18,6 +21,7 @@ import com.github.auties00.cobalt.wam.type.SpSignalNotSharedReason;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMmSignalSharingVerificationEventWamEvent")
 @WamEvent(id = 6554, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)
@@ -38,6 +42,9 @@ public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
     @WamProperty(index = 22, type = WamType.BOOLEAN)
     Optional<Boolean> isIabRestore();
 
+    @WamProperty(index = 24, type = WamType.BOOLEAN)
+    Optional<Boolean> isLatestConversionToken();
+
     @WamProperty(index = 20, type = WamType.BOOLEAN)
     Optional<Boolean> isNetworkAvailable();
 
@@ -46,6 +53,15 @@ public interface MmSignalSharingVerificationEventEvent extends WamEventSpec {
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> isUserDisclosed();
+
+    @WamProperty(index = 25, type = WamType.INTEGER)
+    OptionalInt mmConversationDepth();
+
+    @WamProperty(index = 26, type = WamType.INTEGER)
+    OptionalInt mmConversationRepeat();
+
+    @WamProperty(index = 27, type = WamType.ENUM)
+    Optional<MmDirectionFrom> mmDirectionFrom();
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<OnePdSignalNotSharedReason> onePdSignalNotSharedReason();

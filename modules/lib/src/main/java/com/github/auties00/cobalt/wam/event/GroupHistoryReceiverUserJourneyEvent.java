@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GroupHistoryReceiverUserJourneyActionType;
 import com.github.auties00.cobalt.wam.type.TsSurface;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebGroupHistoryReceiverUserJourneyWamEvent")
 @WamEvent(id = 7064)
 public interface GroupHistoryReceiverUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.BOOLEAN)

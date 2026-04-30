@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChannelEntryPoint;
 import com.github.auties00.cobalt.wam.type.ChannelEntryPointApp;
@@ -10,11 +12,13 @@ import com.github.auties00.cobalt.wam.type.ChannelEntryPointMetadata;
 import com.github.auties00.cobalt.wam.type.ChannelEventSurface;
 import com.github.auties00.cobalt.wam.type.ChannelEventType;
 import com.github.auties00.cobalt.wam.type.ChannelEventUnit;
+import com.github.auties00.cobalt.wam.type.CoreEventTriggerType;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebChannelCoreEventWamEvent")
 @WamEvent(id = 4692)
 public interface ChannelCoreEventEvent extends WamEventSpec {
     @WamProperty(index = 8, type = WamType.INTEGER)
@@ -50,6 +54,9 @@ public interface ChannelCoreEventEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> cid();
 
+    @WamProperty(index = 21, type = WamType.ENUM)
+    Optional<CoreEventTriggerType> coreEventTrigger();
+
     @WamProperty(index = 9, type = WamType.INTEGER)
     OptionalInt directoryChannelIndex();
 
@@ -64,6 +71,9 @@ public interface ChannelCoreEventEvent extends WamEventSpec {
 
     @WamProperty(index = 13, type = WamType.INTEGER)
     OptionalInt similarChannelsSessionId();
+
+    @WamProperty(index = 20, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
 
     @WamProperty(index = 17, type = WamType.STRING)
     Optional<String> unifiedSessionId();

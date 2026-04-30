@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ConnectionType;
 import com.github.auties00.cobalt.wam.type.HttpProtocolVersionType;
@@ -23,6 +25,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMediaUpload2WamEvent")
 @WamEvent(id = 1588)
 public interface MediaUpload2Event extends WamEventSpec {
     @WamProperty(index = 63, type = WamType.STRING)

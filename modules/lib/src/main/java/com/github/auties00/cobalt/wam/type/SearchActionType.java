@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSearchActionType")
 @WamEnum
 public enum SearchActionType {
     @WamEnumConstant(1) NULL_STATE_SHOW,
@@ -14,5 +17,6 @@ public enum SearchActionType {
     @WamEnumConstant(7) SEARCH_BUTTON_CLICK,
     @WamEnumConstant(8) AIRPLANE_BUTTON_CLICK,
     @WamEnumConstant(9) ASK_META_AI_BUTTON_CLICK,
-    @WamEnumConstant(10) NO_RESULT_STATE_ASK_META_AI_CLICK
+    @WamEnumConstant(10) NO_RESULT_STATE_ASK_META_AI_CLICK,
+    @WamEnumConstant(11) WEARABLES_REQUEST
 }

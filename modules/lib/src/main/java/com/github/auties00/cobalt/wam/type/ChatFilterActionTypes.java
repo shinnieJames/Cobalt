@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumChatFilterActionTypes")
 @WamEnum
 public enum ChatFilterActionTypes {
     @WamEnumConstant(1) OPEN,
@@ -261,5 +264,15 @@ public enum ChatFilterActionTypes {
     @WamEnumConstant(259) JOIN_PREVIEW_BOTTOM_SHEET_TAPPED,
     @WamEnumConstant(260) JOIN_PREVIEW_BOTTOM_SHEET_DISMISSED_CLOSE_BUTTON,
     @WamEnumConstant(261) JOIN_PREVIEW_BOTTOM_SHEET_DISMISSED_OUTSIDE_TAP,
-    @WamEnumConstant(262) JOIN_PREVIEW_BOTTOM_SHEET_DISMISSED_SWIPE_DOWN
+    @WamEnumConstant(262) JOIN_PREVIEW_BOTTOM_SHEET_DISMISSED_SWIPE_DOWN,
+    @WamEnumConstant(263) COMPOSER_TAP,
+    @WamEnumConstant(264) ATTACHMENT_TAP,
+    @WamEnumConstant(265) CAMERA_TAP,
+    @WamEnumConstant(266) GALLERY_TAP,
+    @WamEnumConstant(267) PTT_TAP,
+    @WamEnumConstant(268) VOICE_TAP,
+    @WamEnumConstant(269) THREE_DOT_MENU_TAP,
+    @WamEnumConstant(270) CONVERSATION_STARTER_TAP,
+    @WamEnumConstant(271) DOCUMENT_TAP,
+    @WamEnumConstant(272) THREADING_HISTORY_TAP
 }

@@ -1,14 +1,17 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.MessageContextMenuActionType;
 import com.github.auties00.cobalt.wam.type.MessageContextMenuOptionType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebMessageContextMenuActionsWamEvent")
 @WamEvent(id = 3694)
 public interface MessageContextMenuActionsEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.BOOLEAN)

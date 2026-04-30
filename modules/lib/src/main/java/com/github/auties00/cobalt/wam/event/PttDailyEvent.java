@@ -1,12 +1,15 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebPttDailyWamEvent")
 @WamEvent(id = 2938)
 public interface PttDailyEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.INTEGER)

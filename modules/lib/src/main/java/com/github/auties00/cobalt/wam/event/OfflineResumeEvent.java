@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.OfflineResumeResultType;
 
@@ -10,6 +12,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebOfflineResumeWamEvent")
 @WamEvent(id = 3112)
 public interface OfflineResumeEvent extends WamEventSpec {
     @WamProperty(index = 35, type = WamType.BOOLEAN)

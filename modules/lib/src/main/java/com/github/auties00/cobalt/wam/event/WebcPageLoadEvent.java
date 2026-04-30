@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebcAppcacheStatusCode;
 import com.github.auties00.cobalt.wam.type.WebcNavigationType;
@@ -11,6 +13,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcPageLoadWamEvent")
 @WamEvent(id = 642)
 public interface WebcPageLoadEvent extends WamEventSpec {
     @WamProperty(index = 29, type = WamType.ENUM)

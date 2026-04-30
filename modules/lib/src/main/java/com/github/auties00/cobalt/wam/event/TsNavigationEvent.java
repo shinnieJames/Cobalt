@@ -1,11 +1,14 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.EntryPointConversationInitiated;
 import com.github.auties00.cobalt.wam.type.ProductArea;
+import com.github.auties00.cobalt.wam.type.RadioType;
 import com.github.auties00.cobalt.wam.type.ReferrerAction;
 import com.github.auties00.cobalt.wam.type.ThreadType;
 import com.github.auties00.cobalt.wam.type.TsSurface;
@@ -14,6 +17,7 @@ import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebTsNavigationWamEvent")
 @WamEvent(id = 4334)
 public interface TsNavigationEvent extends WamEventSpec {
     @WamProperty(index = 39, type = WamType.STRING)
@@ -66,6 +70,21 @@ public interface TsNavigationEvent extends WamEventSpec {
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<TsSurface> navigationSource();
+
+    @WamProperty(index = 43, type = WamType.INTEGER)
+    OptionalInt networkIsWifiCanonicalOpNumber();
+
+    @WamProperty(index = 41, type = WamType.INTEGER)
+    OptionalInt networkIsWifiOpNumber();
+
+    @WamProperty(index = 44, type = WamType.INTEGER)
+    OptionalInt networkRadioTypeCanonicalOpNumber();
+
+    @WamProperty(index = 40, type = WamType.ENUM)
+    Optional<RadioType> networkRadioTypeEventLevel();
+
+    @WamProperty(index = 42, type = WamType.INTEGER)
+    OptionalInt networkRadioTypeOpNumber();
 
     @WamProperty(index = 31, type = WamType.ENUM)
     Optional<ReferrerAction> referrerAction();

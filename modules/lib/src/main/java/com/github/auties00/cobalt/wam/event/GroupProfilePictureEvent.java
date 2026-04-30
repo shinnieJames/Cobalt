@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GroupProfileActionType;
 import com.github.auties00.cobalt.wam.type.PreciseSizeBucket;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.ProfilePictureType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebGroupProfilePictureWamEvent")
 @WamEvent(id = 3652)
 public interface GroupProfilePictureEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)

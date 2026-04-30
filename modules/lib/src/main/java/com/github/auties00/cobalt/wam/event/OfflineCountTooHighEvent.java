@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.CallStanzaType;
 import com.github.auties00.cobalt.wam.type.E2eDeviceType;
@@ -15,6 +17,7 @@ import com.github.auties00.cobalt.wam.type.StanzaType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebOfflineCountTooHighWamEvent")
 @WamEvent(id = 2638)
 public interface OfflineCountTooHighEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.ENUM)

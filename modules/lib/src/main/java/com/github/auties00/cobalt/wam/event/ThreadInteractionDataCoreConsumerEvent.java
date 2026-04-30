@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChatMutedType;
 import com.github.auties00.cobalt.wam.type.ChatType;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebThreadInteractionDataCoreConsumerWamEvent")
 @WamEvent(id = 6466)
 public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     @WamProperty(index = 138, type = WamType.INTEGER)
@@ -126,6 +129,12 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
     @WamProperty(index = 34, type = WamType.INTEGER)
     OptionalInt forwardPhotoMessagesSent();
 
+    @WamProperty(index = 134, type = WamType.INTEGER)
+    OptionalInt forwardPtvMessagesReceived();
+
+    @WamProperty(index = 135, type = WamType.INTEGER)
+    OptionalInt forwardPtvMessagesSent();
+
     @WamProperty(index = 35, type = WamType.INTEGER)
     OptionalInt forwardStickerMessagesReceived();
 
@@ -146,12 +155,6 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
 
     @WamProperty(index = 41, type = WamType.INTEGER)
     OptionalInt forwardVideoMessagesReceived();
-
-    @WamProperty(index = 134, type = WamType.INTEGER)
-    OptionalInt forwardPtvMessagesReceived();
-
-    @WamProperty(index = 135, type = WamType.INTEGER)
-    OptionalInt forwardPtvMessagesSent();
 
     @WamProperty(index = 42, type = WamType.INTEGER)
     OptionalInt forwardVideoMessagesSent();
@@ -197,6 +200,9 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
 
     @WamProperty(index = 120, type = WamType.INTEGER)
     OptionalInt groupStatusRepliesOwnToOwn();
+
+    @WamProperty(index = 145, type = WamType.BOOLEAN)
+    Optional<Boolean> hasReplied1On1();
 
     @WamProperty(index = 50, type = WamType.BOOLEAN)
     Optional<Boolean> hasUsername();
@@ -278,6 +284,9 @@ public interface ThreadInteractionDataCoreConsumerEvent extends WamEventSpec {
 
     @WamProperty(index = 68, type = WamType.INTEGER)
     OptionalInt messagesUnread();
+
+    @WamProperty(index = 146, type = WamType.BOOLEAN)
+    Optional<Boolean> oppositePartyHasProfilePhoto();
 
     @WamProperty(index = 125, type = WamType.BOOLEAN)
     Optional<Boolean> oppositePartyLimitSharingOption();

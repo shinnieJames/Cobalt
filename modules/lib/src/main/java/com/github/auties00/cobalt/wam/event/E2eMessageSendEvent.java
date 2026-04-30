@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
@@ -18,12 +20,14 @@ import com.github.auties00.cobalt.wam.type.GroupEncryptionType;
 import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageDistributionEnumType;
+import com.github.auties00.cobalt.wam.type.ReachabilityStatus;
 import com.github.auties00.cobalt.wam.type.RevokeType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebE2eMessageSendWamEvent")
 @WamEvent(id = 476, betaWeight = 20, releaseWeight = 20)
 public interface E2eMessageSendEvent extends WamEventSpec {
     @WamProperty(index = 15, type = WamType.ENUM)
@@ -67,6 +71,9 @@ public interface E2eMessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 22, type = WamType.ENUM)
     Optional<GroupEncryptionType> groupEncryptionState();
+
+    @WamProperty(index = 26, type = WamType.ENUM)
+    Optional<ReachabilityStatus> initialSendAttemptReachabilityStatus();
 
     @WamProperty(index = 21, type = WamType.ENUM)
     Optional<InvisibleMessageCategoryType> invisibleMessageCategory();

@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumTsSurface")
 @WamEnum
 public enum TsSurface {
     @WamEnumConstant(1) UNKNOWN,
@@ -236,5 +239,6 @@ public enum TsSurface {
     @WamEnumConstant(230) REPORT,
     @WamEnumConstant(231) ABOUT_WHATSAPP_BUSINESS,
     @WamEnumConstant(232) SEND_CONTACTS,
-    @WamEnumConstant(233) FOA_BIZ_PROFILE
+    @WamEnumConstant(233) FOA_BIZ_PROFILE,
+    @WamEnumConstant(234) META_AI_NEW_CHAT
 }

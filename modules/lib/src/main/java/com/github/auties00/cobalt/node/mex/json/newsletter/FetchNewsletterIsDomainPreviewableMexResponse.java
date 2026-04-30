@@ -79,7 +79,7 @@ public final class FetchNewsletterIsDomainPreviewableMexResponse implements MexO
         /**
          * Returns the {@code is_previewable} field.
          *
-         * @return true
+         * @return true if {@code isPreviawable} is {@code true}, false otherwise or if absent
          */
         public boolean isPreviewable() {
             return isPreviewable != null && isPreviewable;

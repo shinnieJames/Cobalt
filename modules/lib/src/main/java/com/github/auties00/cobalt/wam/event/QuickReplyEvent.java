@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.LastMessageDirection;
 import com.github.auties00.cobalt.wam.type.QuickReplyAction;
@@ -14,6 +16,7 @@ import com.github.auties00.cobalt.wam.type.QuickReplyType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebQuickReplyWamEvent")
 @WamEvent(id = 1468)
 public interface QuickReplyEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.INTEGER)

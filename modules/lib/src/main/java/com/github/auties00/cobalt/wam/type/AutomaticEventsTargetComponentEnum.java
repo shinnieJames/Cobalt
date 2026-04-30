@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumAutomaticEventsTargetComponentEnum")
 @WamEnum
 public enum AutomaticEventsTargetComponentEnum {
     @WamEnumConstant(0) SYSTEM_MESSAGE,
@@ -32,5 +35,11 @@ public enum AutomaticEventsTargetComponentEnum {
     @WamEnumConstant(24) LIST_SETTINGS_AE_ROW_OFFBOARDING,
     @WamEnumConstant(25) LIST_SETTINGS_AE_ROW_ONBOARDING,
     @WamEnumConstant(26) LIST_SETTINGS_AE_ROW_OFFBOARDED_CLICK,
-    @WamEnumConstant(27) LIST_SETTINGS_AE_ROW_ONBOARDED_CLICK
+    @WamEnumConstant(27) LIST_SETTINGS_AE_ROW_ONBOARDED_CLICK,
+    @WamEnumConstant(28) AE_ONBOARDING_BIOMETRIC_SCREEN,
+    @WamEnumConstant(29) AE_ONBOARDING_BIOMETRIC_SKIPPED,
+    @WamEnumConstant(30) AE_ONBOARDING_BIOMETRIC_BYPASS,
+    @WamEnumConstant(31) AE_ONBOARDING_BIOMETRIC_SUCCESS,
+    @WamEnumConstant(32) AE_ONBOARDING_BIOMETRIC_CANCELLED,
+    @WamEnumConstant(33) AE_ONBOARDING_BIOMETRIC_ERROR
 }

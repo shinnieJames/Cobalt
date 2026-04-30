@@ -1,9 +1,12 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.MmDirectionFrom;
 import com.github.auties00.cobalt.wam.type.OnePdSignalNotSharedReason;
 import com.github.auties00.cobalt.wam.type.SignalCanceledReason;
 import com.github.auties00.cobalt.wam.type.SignalMessageState;
@@ -15,17 +18,31 @@ import com.github.auties00.cobalt.wam.type.SignalType;
 import com.github.auties00.cobalt.wam.type.SpSignalNotSharedReason;
 
 import java.util.Optional;
+import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMmSignalSharingVerificationFsEventWamEvent")
 @WamEvent(id = 6798)
 public interface MmSignalSharingVerificationFsEventEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.BOOLEAN)
     Optional<Boolean> isCompanionDevice();
+
+    @WamProperty(index = 15, type = WamType.BOOLEAN)
+    Optional<Boolean> isLatestConversionToken();
 
     @WamProperty(index = 13, type = WamType.BOOLEAN)
     Optional<Boolean> isShimmingSignal();
 
     @WamProperty(index = 2, type = WamType.BOOLEAN)
     Optional<Boolean> isUserDisclosed();
+
+    @WamProperty(index = 16, type = WamType.INTEGER)
+    OptionalInt mmConversationDepth();
+
+    @WamProperty(index = 17, type = WamType.INTEGER)
+    OptionalInt mmConversationRepeat();
+
+    @WamProperty(index = 18, type = WamType.ENUM)
+    Optional<MmDirectionFrom> mmDirectionFrom();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<OnePdSignalNotSharedReason> onePdSignalNotSharedReason();
@@ -50,6 +67,9 @@ public interface MmSignalSharingVerificationFsEventEvent extends WamEventSpec {
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<SignalType> signalType();
+
+    @WamProperty(index = 14, type = WamType.STRING)
+    Optional<String> signalTypeOrigin();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<SpSignalNotSharedReason> spSignalNotSharedReason();

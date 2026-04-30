@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumActionType")
 @WamEnum
 public enum ActionType {
     @WamEnumConstant(0) NOT_NOW,
@@ -78,5 +81,14 @@ public enum ActionType {
     @WamEnumConstant(70) SERVER_INVITE_CODE_RETRIEVED_FROM_DEEPLINK,
     @WamEnumConstant(71) DISMISS,
     @WamEnumConstant(72) USER_INVITE_CODE_RETRIEVED_FROM_APP_INSTALL,
-    @WamEnumConstant(73) USER_INVITE_CODE_RETRIEVED_FROM_DEEPLINK
+    @WamEnumConstant(73) USER_INVITE_CODE_RETRIEVED_FROM_DEEPLINK,
+    @WamEnumConstant(74) CONTINUE_AS_TAPPED,
+    @WamEnumConstant(75) CONTINUE_AS_ACCOUNT_TAPPED,
+    @WamEnumConstant(76) REMOVE_ACCOUNT_TAPPED,
+    @WamEnumConstant(77) REMOVE_CONFIRMED,
+    @WamEnumConstant(78) REMOVE_CANCELLED,
+    @WamEnumConstant(79) NOT_YOU_TAPPED,
+    @WamEnumConstant(80) AUTO_LOGIN,
+    @WamEnumConstant(81) BIOMETRICS_VERIFY_SUCCESS,
+    @WamEnumConstant(82) BIOMETRICS_VERIFY_FAIL
 }

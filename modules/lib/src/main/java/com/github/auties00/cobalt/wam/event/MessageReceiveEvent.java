@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
@@ -29,8 +31,12 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMessageReceiveWamEvent")
 @WamEvent(id = 450, releaseWeight = 5)
 public interface MessageReceiveEvent extends WamEventSpec {
+    @WamProperty(index = 61, type = WamType.INTEGER)
+    OptionalInt afterReadDuration();
+
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<AgentEngagementEnumType> agentEngagementType();
 
@@ -87,6 +93,9 @@ public interface MessageReceiveEvent extends WamEventSpec {
 
     @WamProperty(index = 19, type = WamType.BOOLEAN)
     Optional<Boolean> isAReply();
+
+    @WamProperty(index = 62, type = WamType.BOOLEAN)
+    Optional<Boolean> isAfterRead();
 
     @WamProperty(index = 18, type = WamType.BOOLEAN)
     Optional<Boolean> isForwardedForward();
@@ -160,6 +169,12 @@ public interface MessageReceiveEvent extends WamEventSpec {
     @WamProperty(index = 47, type = WamType.BOOLEAN)
     Optional<Boolean> processingDeferred();
 
+    @WamProperty(index = 58, type = WamType.STRING)
+    Optional<String> receivedContactCardType();
+
+    @WamProperty(index = 59, type = WamType.STRING)
+    Optional<String> receivedContactMetadataTypes();
+
     @WamProperty(index = 50, type = WamType.INTEGER)
     OptionalInt receivedPhoneNumberContactSize();
 
@@ -189,6 +204,9 @@ public interface MessageReceiveEvent extends WamEventSpec {
 
     @WamProperty(index = 31, type = WamType.BOOLEAN)
     Optional<Boolean> stickerIsFromStickerMaker();
+
+    @WamProperty(index = 60, type = WamType.BOOLEAN)
+    Optional<Boolean> stickerIsPremium();
 
     @WamProperty(index = 32, type = WamType.ENUM)
     Optional<StickerMakerSourceType> stickerMakerSourceType();

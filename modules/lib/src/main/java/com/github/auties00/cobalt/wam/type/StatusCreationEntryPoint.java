@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumStatusCreationEntryPoint")
 @WamEnum
 public enum StatusCreationEntryPoint {
     @WamEnumConstant(1) EXTERNAL_SHARE,
@@ -57,5 +60,6 @@ public enum StatusCreationEntryPoint {
     @WamEnumConstant(51) CHATS_TAB_SELF_POG,
     @WamEnumConstant(52) CHATS_TAB_NEW_CHAT,
     @WamEnumConstant(53) GROUP_STATUS_CHAT_HEADER_PROFILE_RING,
-    @WamEnumConstant(54) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN
+    @WamEnumConstant(54) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN,
+    @WamEnumConstant(55) CLOSE_SHARING_MIMICRY
 }

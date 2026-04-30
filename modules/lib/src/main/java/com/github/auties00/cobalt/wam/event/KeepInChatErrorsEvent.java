@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.KicActionType;
 import com.github.auties00.cobalt.wam.type.KicErrorCodeType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.KicErrorCodeType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebKeepInChatErrorsWamEvent")
 @WamEvent(id = 3698)
 public interface KeepInChatErrorsEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.BOOLEAN)

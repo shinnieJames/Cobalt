@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.PttResultType;
 import com.github.auties00.cobalt.wam.type.PttSourceType;
@@ -12,6 +14,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebPttWamEvent")
 @WamEvent(id = 458)
 public interface PttEvent extends WamEventSpec {
     @WamProperty(index = 15, type = WamType.BOOLEAN)
@@ -55,6 +58,42 @@ public interface PttEvent extends WamEventSpec {
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> pttLock();
+
+    @WamProperty(index = 38, type = WamType.FLOAT)
+    OptionalDouble pttOggPageWriteBucketGte10msPct();
+
+    @WamProperty(index = 39, type = WamType.FLOAT)
+    OptionalDouble pttOggPageWriteBucketLt10msPct();
+
+    @WamProperty(index = 40, type = WamType.FLOAT)
+    OptionalDouble pttOggPageWriteBucketLt2msPct();
+
+    @WamProperty(index = 41, type = WamType.FLOAT)
+    OptionalDouble pttOggPageWriteBucketLt4msPct();
+
+    @WamProperty(index = 42, type = WamType.FLOAT)
+    OptionalDouble pttOggPageWriteBucketLt6msPct();
+
+    @WamProperty(index = 43, type = WamType.FLOAT)
+    OptionalDouble pttOggPageWriteBucketLt8msPct();
+
+    @WamProperty(index = 44, type = WamType.FLOAT)
+    OptionalDouble pttOpusEncodeBucketGte10msPct();
+
+    @WamProperty(index = 45, type = WamType.FLOAT)
+    OptionalDouble pttOpusEncodeBucketLt10msPct();
+
+    @WamProperty(index = 46, type = WamType.FLOAT)
+    OptionalDouble pttOpusEncodeBucketLt2msPct();
+
+    @WamProperty(index = 47, type = WamType.FLOAT)
+    OptionalDouble pttOpusEncodeBucketLt4msPct();
+
+    @WamProperty(index = 48, type = WamType.FLOAT)
+    OptionalDouble pttOpusEncodeBucketLt6msPct();
+
+    @WamProperty(index = 49, type = WamType.FLOAT)
+    OptionalDouble pttOpusEncodeBucketLt8msPct();
 
     @WamProperty(index = 9, type = WamType.INTEGER)
     OptionalInt pttPauseCnt();

@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSearchUserJourneyAction")
 @WamEnum
 public enum SearchUserJourneyAction {
     @WamEnumConstant(1) SEARCH_CTA_CLICKED,
@@ -24,5 +27,9 @@ public enum SearchUserJourneyAction {
     @WamEnumConstant(17) KEYBOARD_RETURN_BUTTON_CLICK,
     @WamEnumConstant(18) RECENT_SEARCHES_CLEAR_ALL_CLICK,
     @WamEnumConstant(19) INVITE_RESULT_CLICK,
-    @WamEnumConstant(20) SEND_INVITE_CLICK
+    @WamEnumConstant(20) SEND_INVITE_CLICK,
+    @WamEnumConstant(21) DOWNSTREAM_SEND,
+    @WamEnumConstant(22) DOWNSTREAM_EXIT,
+    @WamEnumConstant(23) DOWNSTREAM_DWELL,
+    @WamEnumConstant(24) DOWNSTREAM_CALL
 }

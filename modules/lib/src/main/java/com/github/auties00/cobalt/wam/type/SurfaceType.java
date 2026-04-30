@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSurfaceType")
 @WamEnum
 public enum SurfaceType {
     @WamEnumConstant(1) CHAT,
@@ -297,5 +300,9 @@ public enum SurfaceType {
     @WamEnumConstant(290) GEN_AI_GDRIVE_KNOWLEDGE_REPO,
     @WamEnumConstant(291) GEN_AI_GDRIVE_VALUE_PROP,
     @WamEnumConstant(292) GEN_AI_GDRIVE_FILE_PICKER,
-    @WamEnumConstant(293) GEN_AI_GDRIVE_AFTER_SETUP
+    @WamEnumConstant(293) GEN_AI_GDRIVE_AFTER_SETUP,
+    @WamEnumConstant(294) GEN_AI_AGENT_INACTIVE_SUB_NUX,
+    @WamEnumConstant(295) GEN_AI_AGENT_QP_BANNER_TOOLS,
+    @WamEnumConstant(296) GEN_AI_AGENT_QP_BANNER_HOME,
+    @WamEnumConstant(297) GEN_AI_AI_HUB_ONLINE_STORE_LINKS
 }

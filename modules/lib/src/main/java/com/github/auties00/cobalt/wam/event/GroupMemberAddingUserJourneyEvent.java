@@ -1,9 +1,12 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.AddMembersEntrypointType;
 import com.github.auties00.cobalt.wam.type.BundleSendSource;
 import com.github.auties00.cobalt.wam.type.GroupCreateEntryPoint;
 import com.github.auties00.cobalt.wam.type.GroupMemberAddingActionType;
@@ -13,6 +16,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebGroupMemberAddingUserJourneyWamEvent")
 @WamEvent(id = 5336)
 public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)
@@ -26,6 +30,9 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 3, type = WamType.INTEGER)
     OptionalInt frequentlyContactedIndex();
+
+    @WamProperty(index = 28, type = WamType.ENUM)
+    Optional<AddMembersEntrypointType> groupAddMemberEntryPoint();
 
     @WamProperty(index = 16, type = WamType.ENUM)
     Optional<GroupCreateEntryPoint> groupCreateEntryPoint();
@@ -62,6 +69,9 @@ public interface GroupMemberAddingUserJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 13, type = WamType.BOOLEAN)
     Optional<Boolean> hasProfilePicture();
+
+    @WamProperty(index = 29, type = WamType.BOOLEAN)
+    Optional<Boolean> isAdmin();
 
     @WamProperty(index = 22, type = WamType.BOOLEAN)
     Optional<Boolean> isGroupHistoryToggledOn();

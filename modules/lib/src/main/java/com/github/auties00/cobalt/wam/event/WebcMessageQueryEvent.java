@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebcChatType;
 import com.github.auties00.cobalt.wam.type.WebcMessageQueryDirection;
@@ -12,6 +14,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcMessageQueryWamEvent")
 @WamEvent(id = 1876, releaseWeight = 5)
 public interface WebcMessageQueryEvent extends WamEventSpec {
     @WamProperty(index = 14, type = WamType.INTEGER)

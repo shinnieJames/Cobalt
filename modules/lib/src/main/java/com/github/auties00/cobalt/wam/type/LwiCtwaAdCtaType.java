@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumLwiCtwaAdCtaType")
 @WamEnum
 public enum LwiCtwaAdCtaType {
     @WamEnumConstant(1) PROMOTE_AGAIN,
@@ -13,5 +16,8 @@ public enum LwiCtwaAdCtaType {
     @WamEnumConstant(6) COMPLETE_PAYMENT,
     @WamEnumConstant(7) RECREATE_AD_WITH_RECOMMENDATION,
     @WamEnumConstant(8) EDIT_AD_WITH_RECOMMENDATION,
-    @WamEnumConstant(9) DELETE_AD
+    @WamEnumConstant(9) DELETE_AD,
+    @WamEnumConstant(10) SGC_INCREASE_BUDGET,
+    @WamEnumConstant(11) SGC_EXTEND_DURATION,
+    @WamEnumConstant(12) ADVANTAGE_PLUS_AUDIENCE_MFR
 }

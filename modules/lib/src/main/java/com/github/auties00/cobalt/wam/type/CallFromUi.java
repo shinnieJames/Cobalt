@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumCallFromUi")
 @WamEnum
 public enum CallFromUi {
     @WamEnumConstant(1) CALLS_TAB_MISSED,
@@ -81,5 +84,15 @@ public enum CallFromUi {
     @WamEnumConstant(74) CALLS_TAB_GENAI_SHEET,
     @WamEnumConstant(75) CALLS_TAB_QUICK_CONTACT_INFO,
     @WamEnumConstant(76) SYSTEM_DIALER,
-    @WamEnumConstant(77) PERIPHERAL_DEVICE
+    @WamEnumConstant(77) PERIPHERAL_DEVICE,
+    @WamEnumConstant(78) CALL_INFO_1X1,
+    @WamEnumConstant(79) CALL_INFO_AHGC,
+    @WamEnumConstant(80) CALL_INFO_AHGC_PARTICIPANT,
+    @WamEnumConstant(81) CALL_INFO_AHGC_MINI_CONTACT_SHEET,
+    @WamEnumConstant(82) CALL_INFO_LGC,
+    @WamEnumConstant(83) CALL_INFO_LGC_MINI_CONTACT_SHEET,
+    @WamEnumConstant(84) CALLS_TAB_GROUP_INFO,
+    @WamEnumConstant(85) CALL_INFO_CALL_LINK,
+    @WamEnumConstant(86) CALL_INFO_CALL_LINK_PARTICIPANT,
+    @WamEnumConstant(87) CALL_INFO_CALL_LINK_MINI_CONTACT_SHEET
 }

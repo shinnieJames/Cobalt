@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.LabelOperations;
 import com.github.auties00.cobalt.wam.type.LabelTargets;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.LastMessageDirection;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebLabelEventWamEvent")
 @WamEvent(id = 1422)
 public interface LabelEventEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.STRING)

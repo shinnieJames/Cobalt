@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BrowserEngineName;
 import com.github.auties00.cobalt.wam.type.PlatformName;
@@ -11,10 +13,23 @@ import com.github.auties00.cobalt.wam.type.WebcWindowNavigatorWebdriverType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcFingerprintWamEvent")
 @WamEvent(id = 1704)
 public interface WebcFingerprintEvent extends WamEventSpec {
+    @WamProperty(index = 50, type = WamType.STRING)
+    Optional<String> audioFingerprint();
+
+    @WamProperty(index = 51, type = WamType.STRING)
+    Optional<String> automationSignals();
+
+    @WamProperty(index = 49, type = WamType.INTEGER)
+    OptionalInt batteryLevel();
+
     @WamProperty(index = 26, type = WamType.ENUM)
     Optional<BrowserEngineName> browserEngine();
+
+    @WamProperty(index = 52, type = WamType.STRING)
+    Optional<String> chromeStructure();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
     OptionalInt connectionRtt();
@@ -30,6 +45,9 @@ public interface WebcFingerprintEvent extends WamEventSpec {
 
     @WamProperty(index = 36, type = WamType.STRING)
     Optional<String> externalSources();
+
+    @WamProperty(index = 54, type = WamType.STRING)
+    Optional<String> foreignDbList();
 
     @WamProperty(index = 40, type = WamType.STRING)
     Optional<String> gpuMake();
@@ -57,6 +75,9 @@ public interface WebcFingerprintEvent extends WamEventSpec {
 
     @WamProperty(index = 42, type = WamType.STRING)
     Optional<String> peripherals();
+
+    @WamProperty(index = 53, type = WamType.STRING)
+    Optional<String> permissionsConsistency();
 
     @WamProperty(index = 34, type = WamType.ENUM)
     Optional<PlatformName> platformEstimate();

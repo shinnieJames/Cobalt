@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.StickerMakerSourceType;
 import com.github.auties00.cobalt.wam.type.StickerSendMessageType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.StickerSendOriginType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebStickerSendWamEvent")
 @WamEvent(id = 1840)
 public interface StickerSendEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.BOOLEAN)

@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebcRuntimeEnvCode;
 import com.github.auties00.cobalt.wam.type.WebcScenarioType;
@@ -11,6 +13,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcMemoryStatWamEvent")
 @WamEvent(id = 1188, releaseWeight = 10)
 public interface WebcMemoryStatEvent extends WamEventSpec {
     @WamProperty(index = 26, type = WamType.STRING)

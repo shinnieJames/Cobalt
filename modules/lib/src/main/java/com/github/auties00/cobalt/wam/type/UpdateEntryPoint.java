@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumUpdateEntryPoint")
 @WamEnum
 public enum UpdateEntryPoint {
     @WamEnumConstant(1) CONTACT_INFO,
@@ -30,5 +33,6 @@ public enum UpdateEntryPoint {
     @WamEnumConstant(23) CREATE_CUSTOM_LIST,
     @WamEnumConstant(24) LIST_TOAST,
     @WamEnumConstant(25) EDIT_LIST_VIEW,
-    @WamEnumConstant(26) LIST_DETAIL_VIEW
+    @WamEnumConstant(26) LIST_DETAIL_VIEW,
+    @WamEnumConstant(27) AUTO_CREATED
 }

@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AiChatOriginsType;
 import com.github.auties00.cobalt.wam.type.BizCatalogType;
@@ -21,6 +23,7 @@ import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebChatMessageCountsWamEvent")
 @WamEvent(id = 1644)
 public interface ChatMessageCountsEvent extends WamEventSpec {
     @WamProperty(index = 224, type = WamType.ENUM)
@@ -694,6 +697,9 @@ public interface ChatMessageCountsEvent extends WamEventSpec {
 
     @WamProperty(index = 223, type = WamType.STRING)
     Optional<String> threadIdMonthly();
+
+    @WamProperty(index = 264, type = WamType.INTEGER)
+    OptionalInt tombstoneAiFutureproofedMessagesReceived();
 
     @WamProperty(index = 262, type = WamType.INTEGER)
     OptionalInt tombstoneEphemeralMessagesReceived();

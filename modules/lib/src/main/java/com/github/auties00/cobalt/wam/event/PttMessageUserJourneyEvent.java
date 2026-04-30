@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChatbarInitialState;
 import com.github.auties00.cobalt.wam.type.PttMessageUserJourneyAction;
@@ -16,6 +18,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebPttMessageUserJourneyWamEvent")
 @WamEvent(id = 5402)
 public interface PttMessageUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)

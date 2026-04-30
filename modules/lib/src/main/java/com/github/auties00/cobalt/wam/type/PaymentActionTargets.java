@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumPaymentActionTargets")
 @WamEnum
 public enum PaymentActionTargets {
     @WamEnumConstant(0) APP_EXIT,
@@ -281,5 +284,31 @@ public enum PaymentActionTargets {
     @WamEnumConstant(274) PAYMENT_WHATSAPP_BUTTON,
     @WamEnumConstant(275) DEEPLINK_BUTTON,
     @WamEnumConstant(276) ADD_MONEY_UPI_LITE_BUTTON,
-    @WamEnumConstant(277) ENABLE_UPI_LITE_BUTTON
+    @WamEnumConstant(277) ENABLE_UPI_LITE_BUTTON,
+    @WamEnumConstant(278) PAYMENT_FRICTION_BACK,
+    @WamEnumConstant(279) PAYMENT_FRICTION_DISMISS,
+    @WamEnumConstant(280) PAYMENT_FRICTION_CONTINUE,
+    @WamEnumConstant(281) PAY_REDUCED_AMOUNT_BUTTON,
+    @WamEnumConstant(282) ENTER_UPI_DETAILS_BUTTON,
+    @WamEnumConstant(283) CREATE_FROM_TEMPLATE,
+    @WamEnumConstant(284) ADD_CUSTOM_FIELD,
+    @WamEnumConstant(285) SAVE_FORM_FOR_NEXT_TIME,
+    @WamEnumConstant(286) CUSTOM_MESSAGE,
+    @WamEnumConstant(287) CREATE_WITH_META_AI,
+    @WamEnumConstant(288) FORM_CONTENT_BOX,
+    @WamEnumConstant(289) CREATE_FORM_BUTTON,
+    @WamEnumConstant(290) REJECT_DUE_TO_SAFETY_GUARDRAILS,
+    @WamEnumConstant(291) SUCCESS,
+    @WamEnumConstant(292) CHANGE_PHONE_NUMBER,
+    @WamEnumConstant(293) BACKGROUND_PICKER_TOOLTIP,
+    @WamEnumConstant(294) FAILURE,
+    @WamEnumConstant(295) SAVE_SUCCESS,
+    @WamEnumConstant(296) TITLE_EDIT_BUTTON,
+    @WamEnumConstant(297) CUSTOM_MESSAGE_EDIT_BUTTON,
+    @WamEnumConstant(298) SPLIT_EXPENSE_BUTTON,
+    @WamEnumConstant(299) MODIFY_TOTAL_AMOUNT,
+    @WamEnumConstant(300) MODIFY_INDIVIDUAL_AMOUNT,
+    @WamEnumConstant(301) SEND_REQUEST_BUTTON,
+    @WamEnumConstant(302) SPLIT_MESSAGE_BUBBLE_PAY_NOW_BUTTON,
+    @WamEnumConstant(303) SPLIT_MESSAGE_BUBBLE_VIEW_DETAILS_BUTTON
 }

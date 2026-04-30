@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.CrashApplicationState;
 import com.github.auties00.cobalt.wam.type.CrashType;
@@ -15,6 +17,7 @@ import com.github.auties00.cobalt.wam.type.UfadReportType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebCrashLogWamEvent")
 @WamEvent(id = 494)
 public interface CrashLogEvent extends WamEventSpec {
     @WamProperty(index = 20, type = WamType.STRING)
@@ -47,6 +50,9 @@ public interface CrashLogEvent extends WamEventSpec {
     @WamProperty(index = 28, type = WamType.ENUM)
     Optional<ProductArea> crashLogProductArea();
 
+    @WamProperty(index = 36, type = WamType.BOOLEAN)
+    Optional<Boolean> crashLogSasEnabled();
+
     @WamProperty(index = 27, type = WamType.STRING)
     Optional<String> crashLogTimeSpentViewName();
 
@@ -77,12 +83,12 @@ public interface CrashLogEvent extends WamEventSpec {
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> runningTasks();
 
+    @WamProperty(index = 35, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
+
     @WamProperty(index = 29, type = WamType.ENUM)
     Optional<UfadReportType> ufadReportType();
 
     @WamProperty(index = 25, type = WamType.STRING)
     Optional<String> unifiedSessionId();
-
-    @WamProperty(index = 35, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
 }

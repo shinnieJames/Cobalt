@@ -1,13 +1,16 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcLinkPreviewResponseHandleWamEvent")
 @WamEvent(id = 3860)
 public interface WebcLinkPreviewResponseHandleEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.BOOLEAN)

@@ -1,9 +1,11 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
-import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BusinessInteractionActionType;
 import com.github.auties00.cobalt.wam.type.BusinessInteractionEntryPointApp;
@@ -14,6 +16,7 @@ import com.github.auties00.cobalt.wam.type.BusinessInteractionTargetScreenType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebBusinessInteractionWamEvent")
 @WamEvent(id = 3450, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface BusinessInteractionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

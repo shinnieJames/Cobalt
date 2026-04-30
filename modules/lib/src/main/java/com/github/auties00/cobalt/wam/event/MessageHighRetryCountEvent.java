@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.E2eDeviceType;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
@@ -14,6 +16,7 @@ import com.github.auties00.cobalt.wam.type.SizeBucket;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMessageHighRetryCountWamEvent")
 @WamEvent(id = 3132, betaWeight = 20, releaseWeight = 20)
 public interface MessageHighRetryCountEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.ENUM)

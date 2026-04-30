@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.WebtpEventType;
 import com.github.auties00.cobalt.wam.type.WebtpSourceType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.WebtpSourceType;
 import java.util.Optional;
 import java.util.OptionalDouble;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcWebtpPdfViewerWamEvent")
 @WamEvent(id = 7506)
 public interface WebcWebtpPdfViewerEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)

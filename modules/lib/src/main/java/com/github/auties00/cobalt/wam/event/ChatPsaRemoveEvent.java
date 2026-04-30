@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.PsaBlockReason;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.wam.type.WaOfficialAccountName;
 import java.time.Instant;
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebChatPsaRemoveWamEvent")
 @WamEvent(id = 3582)
 public interface ChatPsaRemoveEvent extends WamEventSpec {
     @WamProperty(index = 2, type = WamType.ENUM)

@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
@@ -26,6 +28,7 @@ import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.OppositeVisibleIdentificationType;
 import com.github.auties00.cobalt.wam.type.PairedMediaType;
 import com.github.auties00.cobalt.wam.type.PrivateAiFeatureName;
+import com.github.auties00.cobalt.wam.type.ReachabilityStatus;
 import com.github.auties00.cobalt.wam.type.RevokeType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
 import com.github.auties00.cobalt.wam.type.StickerMakerSourceType;
@@ -36,8 +39,12 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMessageSendWamEvent")
 @WamEvent(id = 854)
 public interface MessageSendEvent extends WamEventSpec {
+    @WamProperty(index = 87, type = WamType.INTEGER)
+    OptionalInt afterReadDuration();
+
     @WamProperty(index = 49, type = WamType.ENUM)
     Optional<AgentEngagementEnumType> agentEngagementType();
 
@@ -107,6 +114,9 @@ public interface MessageSendEvent extends WamEventSpec {
     @WamProperty(index = 74, type = WamType.BOOLEAN)
     Optional<Boolean> hasUsernamePin();
 
+    @WamProperty(index = 90, type = WamType.ENUM)
+    Optional<ReachabilityStatus> initialSendAttemptReachabilityStatus();
+
     @WamProperty(index = 64, type = WamType.ENUM)
     Optional<InvisibleMessageCategoryType> invisibleMessageCategory();
 
@@ -115,6 +125,9 @@ public interface MessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 35, type = WamType.BOOLEAN)
     Optional<Boolean> isAReply();
+
+    @WamProperty(index = 88, type = WamType.BOOLEAN)
+    Optional<Boolean> isAfterRead();
 
     @WamProperty(index = 19, type = WamType.BOOLEAN)
     Optional<Boolean> isFromWamsys();
@@ -139,6 +152,9 @@ public interface MessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 70, type = WamType.ENUM)
     Optional<LogoutReasonType> logoutReason();
+
+    @WamProperty(index = 89, type = WamType.INTEGER)
+    OptionalInt logoutSessionId();
 
     @WamProperty(index = 8, type = WamType.BOOLEAN)
     Optional<Boolean> mediaCaptionPresent();
@@ -245,6 +261,12 @@ public interface MessageSendEvent extends WamEventSpec {
     @WamProperty(index = 56, type = WamType.INTEGER)
     OptionalInt serverErrorCode();
 
+    @WamProperty(index = 84, type = WamType.STRING)
+    Optional<String> sharedContactCardType();
+
+    @WamProperty(index = 85, type = WamType.STRING)
+    Optional<String> sharedContactMetadataTypes();
+
     @WamProperty(index = 77, type = WamType.INTEGER)
     OptionalInt sharedPhoneNumberContactSize();
 
@@ -266,11 +288,17 @@ public interface MessageSendEvent extends WamEventSpec {
     @WamProperty(index = 51, type = WamType.BOOLEAN)
     Optional<Boolean> stickerIsFromStickerMaker();
 
+    @WamProperty(index = 86, type = WamType.BOOLEAN)
+    Optional<Boolean> stickerIsPremium();
+
     @WamProperty(index = 52, type = WamType.ENUM)
     Optional<StickerMakerSourceType> stickerMakerSourceType();
 
     @WamProperty(index = 20, type = WamType.FLOAT)
     OptionalDouble thumbSize();
+
+    @WamProperty(index = 83, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
 
     @WamProperty(index = 36, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();
@@ -280,7 +308,4 @@ public interface MessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 65, type = WamType.STRING)
     Optional<String> userToDeviceSizeBucket();
-
-    @WamProperty(index = 83, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
 }

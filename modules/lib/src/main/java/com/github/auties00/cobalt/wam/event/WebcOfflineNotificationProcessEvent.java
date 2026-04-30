@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.OfflineProcessRunReasons;
 import com.github.auties00.cobalt.wam.type.OfflineProcessStages;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.OfflineProcessStages;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebWebcOfflineNotificationProcessWamEvent")
 @WamEvent(id = 4222)
 public interface WebcOfflineNotificationProcessEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.ENUM)

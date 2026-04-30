@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.CatalogBizAction;
 import com.github.auties00.cobalt.wam.type.CatalogEntryPoint;
@@ -12,6 +14,7 @@ import com.github.auties00.cobalt.wam.type.LastMessageDirection;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebCatalogBizWamEvent")
 @WamEvent(id = 1722)
 public interface CatalogBizEvent extends WamEventSpec {
     @WamProperty(index = 19, type = WamType.STRING)

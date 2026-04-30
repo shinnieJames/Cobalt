@@ -1,17 +1,21 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChatsFolderType;
 import com.github.auties00.cobalt.wam.type.ContactType;
 import com.github.auties00.cobalt.wam.type.QbmFlag;
+import com.github.auties00.cobalt.wam.type.SignupEntryPoint;
 import com.github.auties00.cobalt.wam.type.ThreadCreationTime;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebQbmIncomingMessageWamEvent")
 @WamEvent(id = 3790)
 public interface QbmIncomingMessageEvent extends WamEventSpec {
     @WamProperty(index = 21, type = WamType.INTEGER)
@@ -77,6 +81,12 @@ public interface QbmIncomingMessageEvent extends WamEventSpec {
     @WamProperty(index = 14, type = WamType.STRING)
     Optional<String> hsmTagStr();
 
+    @WamProperty(index = 60, type = WamType.ENUM)
+    Optional<SignupEntryPoint> iasEntryPoint();
+
+    @WamProperty(index = 61, type = WamType.STRING)
+    Optional<String> iasOptinDs();
+
     @WamProperty(index = 37, type = WamType.BOOLEAN)
     Optional<Boolean> isBizIntent();
 
@@ -91,6 +101,9 @@ public interface QbmIncomingMessageEvent extends WamEventSpec {
 
     @WamProperty(index = 16, type = WamType.BOOLEAN)
     Optional<Boolean> isFromCapi();
+
+    @WamProperty(index = 62, type = WamType.BOOLEAN)
+    Optional<Boolean> isIasSubscriber();
 
     @WamProperty(index = 39, type = WamType.BOOLEAN)
     Optional<Boolean> isInsubContact();

@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ListAction;
 import com.github.auties00.cobalt.wam.type.ListType;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.UpdateEntryPoint;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebListUpdateWamEvent")
 @WamEvent(id = 5830)
 public interface ListUpdateEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.INTEGER)

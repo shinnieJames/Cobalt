@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BootstrapAppStateDataStageCode;
 import com.github.auties00.cobalt.wam.type.MdBootstrapPayloadType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.MdBootstrapPayloadType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMdBootstrapAppStateCriticalDataProcessingWamEvent")
 @WamEvent(id = 3164)
 public interface MdBootstrapAppStateCriticalDataProcessingEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

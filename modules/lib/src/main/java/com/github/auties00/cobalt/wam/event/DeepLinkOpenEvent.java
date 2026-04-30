@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.DeepLinkOpenFrom;
 import com.github.auties00.cobalt.wam.type.DeepLinkType;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.OwnerType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebDeepLinkOpenWamEvent")
 @WamEvent(id = 2136)
 public interface DeepLinkOpenEvent extends WamEventSpec {
     @WamProperty(index = 8, type = WamType.STRING)

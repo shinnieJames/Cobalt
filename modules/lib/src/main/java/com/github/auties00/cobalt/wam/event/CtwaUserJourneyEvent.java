@@ -1,9 +1,11 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
-import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.CtwaAdVariantType;
 import com.github.auties00.cobalt.wam.type.CtwaChatCreationMode;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.wam.type.TrustBannerAction;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebCtwaUserJourneyWamEvent")
 @WamEvent(id = 3466, channel = WamChannel.PRIVATE, privateStatsId = 113760892)
 public interface CtwaUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)
@@ -51,6 +54,9 @@ public interface CtwaUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> threadCreationDate();
 
+    @WamProperty(index = 16, type = WamType.INTEGER)
+    OptionalInt threadEntryCount();
+
     @WamProperty(index = 11, type = WamType.STRING)
     Optional<String> threadIdHmac();
 
@@ -59,4 +65,7 @@ public interface CtwaUserJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 8, type = WamType.STRING)
     Optional<String> trustBannerType();
+
+    @WamProperty(index = 17, type = WamType.INTEGER)
+    OptionalInt usyncMode();
 }

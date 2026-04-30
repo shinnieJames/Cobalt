@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
 import com.github.auties00.cobalt.wam.type.BotType;
@@ -20,6 +22,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebAndroidMessageSendPerfWamEvent")
 @WamEvent(id = 1994, releaseWeight = 2000)
 public interface AndroidMessageSendPerfEvent extends WamEventSpec {
     @WamProperty(index = 47, type = WamType.ENUM)

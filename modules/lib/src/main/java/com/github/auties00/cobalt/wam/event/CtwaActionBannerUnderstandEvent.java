@@ -1,14 +1,17 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
-import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.PreferredLinkType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebCtwaActionBannerUnderstandWamEvent")
 @WamEvent(id = 3586, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface CtwaActionBannerUnderstandEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)
@@ -32,6 +35,9 @@ public interface CtwaActionBannerUnderstandEvent extends WamEventSpec {
     @WamProperty(index = 7, type = WamType.STRING)
     Optional<String> lwiFlowIdentifier();
 
+    @WamProperty(index = 11, type = WamType.STRING)
+    Optional<String> notificationLogId();
+
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<PreferredLinkType> preferredLink();
 
@@ -40,7 +46,4 @@ public interface CtwaActionBannerUnderstandEvent extends WamEventSpec {
 
     @WamProperty(index = 10, type = WamType.BOOLEAN)
     Optional<Boolean> validNotification();
-
-    @WamProperty(index = 11, type = WamType.STRING)
-    Optional<String> notificationLogId();
 }

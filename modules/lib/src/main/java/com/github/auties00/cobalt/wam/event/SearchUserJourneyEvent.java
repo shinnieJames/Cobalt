@@ -1,9 +1,12 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.SearchDsSendContentType;
 import com.github.auties00.cobalt.wam.type.SearchSelectedMessageSource;
 import com.github.auties00.cobalt.wam.type.SearchUjCriteriaType;
 import com.github.auties00.cobalt.wam.type.SearchUjDismissType;
@@ -17,8 +20,15 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebSearchUserJourneyWamEvent")
 @WamEvent(id = 6358)
 public interface SearchUserJourneyEvent extends WamEventSpec {
+    @WamProperty(index = 32, type = WamType.ENUM)
+    Optional<SearchDsSendContentType> searchDsSendContentType();
+
+    @WamProperty(index = 33, type = WamType.INTEGER)
+    OptionalInt searchDsTimeSpentMs();
+
     @WamProperty(index = 21, type = WamType.INTEGER)
     OptionalInt searchFtsAndSemanticMessagesCount();
 
@@ -75,6 +85,9 @@ public interface SearchUserJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 12, type = WamType.INTEGER)
     OptionalInt searchUjMessagesCount();
+
+    @WamProperty(index = 34, type = WamType.INTEGER)
+    OptionalInt searchUjPushnamesCount();
 
     @WamProperty(index = 29, type = WamType.INTEGER)
     OptionalInt searchUjRecentSearchesGroupCount();

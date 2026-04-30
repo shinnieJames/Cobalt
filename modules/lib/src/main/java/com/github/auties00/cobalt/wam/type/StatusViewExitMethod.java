@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumStatusViewExitMethod")
 @WamEnum
 public enum StatusViewExitMethod {
     @WamEnumConstant(0) UNKNOWN,
@@ -17,5 +20,9 @@ public enum StatusViewExitMethod {
     @WamEnumConstant(9) FORWARD_TAP,
     @WamEnumConstant(10) FORWARD_TAP_AUTO_CLOSE,
     @WamEnumConstant(11) STATUS_TIMEOUT_AUTO_CLOSE,
-    @WamEnumConstant(12) FORWARD_SWIPE_AUTO_CLOSE
+    @WamEnumConstant(12) FORWARD_SWIPE_AUTO_CLOSE,
+    @WamEnumConstant(13) BACKWARD_SWIPE_AUTO_CLOSE,
+    @WamEnumConstant(14) CHAINING_PILL_TAP,
+    @WamEnumConstant(15) CHAINING_PILL_AUTO_CLOSE,
+    @WamEnumConstant(16) ENGAGEMENT_CARD_CTA_TAP
 }

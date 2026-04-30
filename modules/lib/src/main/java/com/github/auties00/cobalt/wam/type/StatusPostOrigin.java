@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumStatusPostOrigin")
 @WamEnum
 public enum StatusPostOrigin {
     @WamEnumConstant(1) CAMERA_TAB,
@@ -52,5 +55,11 @@ public enum StatusPostOrigin {
     @WamEnumConstant(45) CHANNEL_STATUS_TAB_SELF_POG,
     @WamEnumConstant(46) MY_CHANNEL_STATUS_FAB_CAMERA,
     @WamEnumConstant(47) CHANNEL_THREAD_SCREEN,
-    @WamEnumConstant(48) CHANNEL_INFO_SCREEN
+    @WamEnumConstant(48) CHANNEL_INFO_SCREEN,
+    @WamEnumConstant(49) GROUP_STATUS_CHAT_HEADER,
+    @WamEnumConstant(50) CHATS_TAB_SELF_POG,
+    @WamEnumConstant(51) CHATS_TAB_NEW_CHAT,
+    @WamEnumConstant(52) GROUP_STATUS_CHAT_HEADER_PROFILE_RING,
+    @WamEnumConstant(53) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN,
+    @WamEnumConstant(54) CLOSE_SHARING_MIMICRY
 }

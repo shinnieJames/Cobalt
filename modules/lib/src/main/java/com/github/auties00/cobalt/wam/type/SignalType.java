@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSignalType")
 @WamEnum
 public enum SignalType {
     @WamEnumConstant(0) MM_CLICK,
@@ -31,5 +34,6 @@ public enum SignalType {
     @WamEnumConstant(23) USER_MUTE,
     @WamEnumConstant(24) USER_BLOCK_REASON_SCAM_OR_FRAUD,
     @WamEnumConstant(25) MESSAGE,
-    @WamEnumConstant(26) USER_ARCHIVE
+    @WamEnumConstant(26) USER_ARCHIVE,
+    @WamEnumConstant(27) USER_BLOCK_REASON_DONT_RECOGNIZE
 }

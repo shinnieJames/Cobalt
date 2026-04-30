@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ActionEntryPoint;
 import com.github.auties00.cobalt.wam.type.AuthType;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.ChatLockActionType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebChatLockActionWamEvent")
 @WamEvent(id = 4212)
 public interface ChatLockActionEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.ENUM)

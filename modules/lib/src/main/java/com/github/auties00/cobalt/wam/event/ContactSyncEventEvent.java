@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ContactSyncSource;
 
@@ -10,6 +12,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebContactSyncEventWamEvent")
 @WamEvent(id = 1006, betaWeight = 20, releaseWeight = 100)
 public interface ContactSyncEventEvent extends WamEventSpec {
     @WamProperty(index = 20, type = WamType.INTEGER)

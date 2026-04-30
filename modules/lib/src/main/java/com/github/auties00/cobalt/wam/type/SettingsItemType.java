@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSettingsItemType")
 @WamEnum
 public enum SettingsItemType {
     @WamEnumConstant(0) PROFILE,
@@ -50,5 +53,18 @@ public enum SettingsItemType {
     @WamEnumConstant(42) META_AI_BOOKMARK,
     @WamEnumConstant(43) META_HORIZON_BOOKMARK,
     @WamEnumConstant(44) VIBES_BOOKMARK,
-    @WamEnumConstant(45) CONTACTS
+    @WamEnumConstant(45) CONTACTS,
+    @WamEnumConstant(46) APPEARANCE,
+    @WamEnumConstant(47) USERNAME,
+    @WamEnumConstant(48) TOAST_VIEW_LATEST_STATUS,
+    @WamEnumConstant(49) PROFILE_VIEW_FIRST_UNREAD_STATUS,
+    @WamEnumConstant(50) PROFILE_VIEW_OLDEST_STATUS,
+    @WamEnumConstant(51) BADGE_ADD_STATUS,
+    @WamEnumConstant(52) PROFILE_ADD_STATUS,
+    @WamEnumConstant(53) PROFILE_OPEN_CONTEXT_MENU,
+    @WamEnumConstant(54) BADGE_OPEN_CONTEXT_MENU,
+    @WamEnumConstant(55) CONTEXT_MENU_ADD_PROFILE_PICTURE,
+    @WamEnumConstant(56) CONTEXT_MENU_VIEW_FIRST_UNREAD_STATUS,
+    @WamEnumConstant(57) CONTEXT_MENU_VIEW_OLDEST_STATUS,
+    @WamEnumConstant(58) CONTEXT_MENU_ADD_STATUS
 }

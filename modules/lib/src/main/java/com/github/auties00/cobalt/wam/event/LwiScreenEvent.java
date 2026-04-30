@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AdContentRecommendationType;
 import com.github.auties00.cobalt.wam.type.AudienceType;
@@ -28,6 +30,7 @@ import com.github.auties00.cobalt.wam.type.ValidationStatus;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebLwiScreenWamEvent")
 @WamEvent(id = 2772)
 public interface LwiScreenEvent extends WamEventSpec {
     @WamProperty(index = 41, type = WamType.ENUM)
@@ -194,6 +197,9 @@ public interface LwiScreenEvent extends WamEventSpec {
 
     @WamProperty(index = 7, type = WamType.BOOLEAN)
     Optional<Boolean> userHasLinkedFbPage();
+
+    @WamProperty(index = 67, type = WamType.BOOLEAN)
+    Optional<Boolean> userHasMediaCarousel();
 
     @WamProperty(index = 60, type = WamType.BOOLEAN)
     Optional<Boolean> userHasMultisourceMedia();

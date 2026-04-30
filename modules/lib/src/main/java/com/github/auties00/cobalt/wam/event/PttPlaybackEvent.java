@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AudioOutputRoute;
 import com.github.auties00.cobalt.wam.type.AudioStreamType;
@@ -16,6 +18,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebPttPlaybackWamEvent")
 @WamEvent(id = 2044)
 public interface PttPlaybackEvent extends WamEventSpec {
     @WamProperty(index = 19, type = WamType.ENUM)
@@ -95,4 +98,7 @@ public interface PttPlaybackEvent extends WamEventSpec {
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<PttStreamType> pttType();
+
+    @WamProperty(index = 27, type = WamType.INTEGER)
+    OptionalInt pttVolumeUpAfterMaxCount();
 }

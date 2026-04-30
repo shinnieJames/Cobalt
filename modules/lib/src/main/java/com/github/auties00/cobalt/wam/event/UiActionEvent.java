@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.AgentEngagementEnumType;
@@ -15,6 +17,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebUiActionWamEvent")
 @WamEvent(id = 472, betaWeight = 100, releaseWeight = 5000)
 public interface UiActionEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.ENUM)
@@ -74,6 +77,9 @@ public interface UiActionEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.ENUM)
     Optional<SizeBucket> sizeBucket();
 
+    @WamProperty(index = 28, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
+
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<UiActionChatType> uiActionChatType();
 
@@ -94,7 +100,4 @@ public interface UiActionEvent extends WamEventSpec {
 
     @WamProperty(index = 27, type = WamType.STRING)
     Optional<String> unifiedSessionId();
-
-    @WamProperty(index = 28, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
 }

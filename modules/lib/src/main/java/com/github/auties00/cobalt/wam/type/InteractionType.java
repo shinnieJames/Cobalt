@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumInteractionType")
 @WamEnum
 public enum InteractionType {
     @WamEnumConstant(0) USER_START,
@@ -84,5 +87,6 @@ public enum InteractionType {
     @WamEnumConstant(76) PIX_UNDERAGE_ERROR_SHOWN,
     @WamEnumConstant(77) PIX_CANNOT_CONNECT_TO_BANK_ERROR_SHOWN,
     @WamEnumConstant(78) PIX_INVALID_ERROR_SHOWN,
-    @WamEnumConstant(79) PIX_ERROR_COPY_CLICKED
+    @WamEnumConstant(79) PIX_ERROR_COPY_CLICKED,
+    @WamEnumConstant(80) PAY_WITH_PIX_COMPLETE_TRANSACTION_STATUS
 }

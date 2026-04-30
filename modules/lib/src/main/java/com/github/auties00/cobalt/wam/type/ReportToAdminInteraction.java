@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumReportToAdminInteraction")
 @WamEnum
 public enum ReportToAdminInteraction {
     @WamEnumConstant(0) CLICK_OPEN_ADMIN_DASHBOARD,

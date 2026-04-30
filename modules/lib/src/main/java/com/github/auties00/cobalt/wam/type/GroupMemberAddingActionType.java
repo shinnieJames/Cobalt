@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumGroupMemberAddingActionType")
 @WamEnum
 public enum GroupMemberAddingActionType {
     @WamEnumConstant(0) CONTACTS_PICKER_OPENED,
@@ -48,5 +51,14 @@ public enum GroupMemberAddingActionType {
     @WamEnumConstant(40) META_AI_NULL_STATE_GROUPS_MENU_BUTTON_CLICKED,
     @WamEnumConstant(41) META_AI_NULL_STATE_GROUPS_CAPABILITY_CLICKED,
     @WamEnumConstant(42) GROUP_AI_DEEPLINK_CLICKED,
-    @WamEnumConstant(43) GROUP_MENTION_PICKER_ADD_AI_CLICKED
+    @WamEnumConstant(43) GROUP_MENTION_PICKER_ADD_AI_CLICKED,
+    @WamEnumConstant(44) ACTIVE_CALL_TOAST_SHOWN,
+    @WamEnumConstant(45) BOT_SELECTION_BOTTOM_SHEET_SHOWN,
+    @WamEnumConstant(46) TEE_BOT_IN_SELECTION_BOTTOM_SHEET_CLICKED,
+    @WamEnumConstant(47) OPEN_BOT_IN_SELECTION_BOTTOM_SHEET_CLICKED,
+    @WamEnumConstant(48) DONE_BUTTON_IN_BOT_SELECTION_BOTTOM_SHEET_CLICKED,
+    @WamEnumConstant(49) CANCEL_BUTTON_IN_BOT_SELECTION_BOTTOM_SHEET_CLICKED,
+    @WamEnumConstant(50) CHAT_MENTION_PICKER_CREATE_AI_GROUP_CHAT_CLICKED,
+    @WamEnumConstant(51) GROUP_MENTION_PICKER_ADD_AI_RENDERED,
+    @WamEnumConstant(52) CHAT_MENTION_PICKER_CREATE_AI_GROUP_CHAT_RENDERED
 }

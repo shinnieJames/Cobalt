@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumGroupCreateEntryPoint")
 @WamEnum
 public enum GroupCreateEntryPoint {
     @WamEnumConstant(1) BANNER,
@@ -31,5 +34,9 @@ public enum GroupCreateEntryPoint {
     @WamEnumConstant(24) GROUP_AI_DEEPLINK,
     @WamEnumConstant(25) GROUP_FROM_GROUP_ROW,
     @WamEnumConstant(26) GROUP_FROM_GROUP_OVERFLOW_MENU,
-    @WamEnumConstant(27) GROUP_MENTION_PICKER
+    @WamEnumConstant(27) GROUP_MENTION_PICKER,
+    @WamEnumConstant(28) THREE_P_DEEPLINK,
+    @WamEnumConstant(29) CHAT_MENTION_PICKER,
+    @WamEnumConstant(30) POLLS,
+    @WamEnumConstant(31) LINKED_GROUP_CALL
 }

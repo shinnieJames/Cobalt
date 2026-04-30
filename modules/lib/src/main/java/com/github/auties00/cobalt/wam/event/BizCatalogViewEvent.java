@@ -1,9 +1,11 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
-import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BizPlatform;
 import com.github.auties00.cobalt.wam.type.CatalogEntryPoint;
@@ -14,6 +16,7 @@ import com.github.auties00.cobalt.wam.type.EntryPointConversationInitiated;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebBizCatalogViewWamEvent")
 @WamEvent(id = 3006, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface BizCatalogViewEvent extends WamEventSpec {
     @WamProperty(index = 26, type = WamType.STRING)

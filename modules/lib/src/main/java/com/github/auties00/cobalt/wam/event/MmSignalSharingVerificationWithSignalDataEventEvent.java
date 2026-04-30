@@ -1,10 +1,13 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
-import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.MmDirectionFrom;
 import com.github.auties00.cobalt.wam.type.OnePdSignalNotSharedReason;
 import com.github.auties00.cobalt.wam.type.SignalCanceledReason;
 import com.github.auties00.cobalt.wam.type.SignalMessageState;
@@ -16,7 +19,9 @@ import com.github.auties00.cobalt.wam.type.SignalType;
 import com.github.auties00.cobalt.wam.type.SpSignalNotSharedReason;
 
 import java.util.Optional;
+import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMmSignalSharingVerificationWithSignalDataEventWamEvent")
 @WamEvent(id = 6856, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface MmSignalSharingVerificationWithSignalDataEventEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)
@@ -24,6 +29,9 @@ public interface MmSignalSharingVerificationWithSignalDataEventEvent extends Wam
 
     @WamProperty(index = 2, type = WamType.BOOLEAN)
     Optional<Boolean> isCompanionDevice();
+
+    @WamProperty(index = 19, type = WamType.BOOLEAN)
+    Optional<Boolean> isLatestConversionToken();
 
     @WamProperty(index = 16, type = WamType.BOOLEAN)
     Optional<Boolean> isNetworkAvailable();
@@ -36,6 +44,15 @@ public interface MmSignalSharingVerificationWithSignalDataEventEvent extends Wam
 
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> isUserMatched();
+
+    @WamProperty(index = 20, type = WamType.INTEGER)
+    OptionalInt mmConversationDepth();
+
+    @WamProperty(index = 21, type = WamType.INTEGER)
+    OptionalInt mmConversationRepeat();
+
+    @WamProperty(index = 22, type = WamType.ENUM)
+    Optional<MmDirectionFrom> mmDirectionFrom();
 
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> mmSignalData();

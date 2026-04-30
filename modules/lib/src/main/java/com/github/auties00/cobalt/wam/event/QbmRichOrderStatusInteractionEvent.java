@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChatsFolderType;
 import com.github.auties00.cobalt.wam.type.ContactType;
@@ -12,6 +14,7 @@ import com.github.auties00.cobalt.wam.type.QbmFlag;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebQbmRichOrderStatusInteractionWamEvent")
 @WamEvent(id = 6940)
 public interface QbmRichOrderStatusInteractionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)

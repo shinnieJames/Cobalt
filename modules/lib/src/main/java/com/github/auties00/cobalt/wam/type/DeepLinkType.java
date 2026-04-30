@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumDeepLinkType")
 @WamEnum
 public enum DeepLinkType {
     @WamEnumConstant(1) DEEP_LINK_UNKNOWN,
@@ -242,5 +245,7 @@ public enum DeepLinkType {
     @WamEnumConstant(235) DEEP_LINK_UNBAN_OTP_AUTO_VERIFY,
     @WamEnumConstant(236) DEEP_LINK_SIDE_CHAT_IMAGINE,
     @WamEnumConstant(237) DEEP_LINK_BIZ_AGENT_MONETIZATION,
-    @WamEnumConstant(238) DEEP_LINK_CHANNEL_STATUS
+    @WamEnumConstant(238) DEEP_LINK_CHANNEL_STATUS,
+    @WamEnumConstant(239) DEEP_LINK_BIZTOOLS_ACCOUNTS_LINK_IG,
+    @WamEnumConstant(240) DEEP_LINK_WALOGIN_MBS_ONBOARDING
 }

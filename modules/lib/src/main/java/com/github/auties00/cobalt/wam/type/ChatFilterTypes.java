@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumChatFilterTypes")
 @WamEnum
 public enum ChatFilterTypes {
     @WamEnumConstant(0) NONE,
@@ -32,5 +35,6 @@ public enum ChatFilterTypes {
     @WamEnumConstant(24) COMMUNITY,
     @WamEnumConstant(25) BUSINESS_AI,
     @WamEnumConstant(26) DRAFTS,
-    @WamEnumConstant(27) CAMPAIGN_REPLIES
+    @WamEnumConstant(27) CAMPAIGN_REPLIES,
+    @WamEnumConstant(28) BUSINESS_FOLDER
 }

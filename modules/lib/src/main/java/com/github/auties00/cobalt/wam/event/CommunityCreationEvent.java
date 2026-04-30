@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.CommunityCreationActionTakenType;
 import com.github.auties00.cobalt.wam.type.CommunityCreationCurrentScreenType;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.CommunityCreationEntrypointType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebCommunityCreationWamEvent")
 @WamEvent(id = 3492)
 public interface CommunityCreationEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.INTEGER)

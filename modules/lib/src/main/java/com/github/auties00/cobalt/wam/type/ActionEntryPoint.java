@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumActionEntryPoint")
 @WamEnum
 public enum ActionEntryPoint {
     @WamEnumConstant(0) CHAT_INFO,
@@ -17,5 +20,6 @@ public enum ActionEntryPoint {
     @WamEnumConstant(9) DIRECT_MESSAGE,
     @WamEnumConstant(10) PRIVACY_SETTINGS,
     @WamEnumConstant(11) CHAT_LONG_PRESS_OPTIONS,
-    @WamEnumConstant(12) CHAT_MORE_OPTIONS
+    @WamEnumConstant(12) CHAT_MORE_OPTIONS,
+    @WamEnumConstant(13) SIDEBAR
 }

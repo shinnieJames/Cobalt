@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumLwiScreenAction")
 @WamEnum
 public enum LwiScreenAction {
     @WamEnumConstant(1) LWI_ACTION_VIEW,
@@ -490,5 +493,11 @@ public enum LwiScreenAction {
     @WamEnumConstant(490) LWI_ACTION_ADVANTAGE_PLUS_AUDIENCE_MFR_DISMISS,
     @WamEnumConstant(491) LWI_ACTION_ADVANTAGE_PLUS_AUDIENCE_MFR_ENABLE_SUCCESS,
     @WamEnumConstant(492) LWI_ACTION_ADVANTAGE_PLUS_AUDIENCE_MFR_ENABLE_ERROR,
-    @WamEnumConstant(493) LWI_ACTION_VIEW_WHATSAPP_AD_PREVIEW
+    @WamEnumConstant(493) LWI_ACTION_VIEW_WHATSAPP_AD_PREVIEW,
+    @WamEnumConstant(494) LWI_ACTION_PAC_SABR_V2_BOTTOMSHEET_IMPRESSION,
+    @WamEnumConstant(495) LWI_ACTION_PAC_SABR_V2_CTA_CLICK,
+    @WamEnumConstant(496) LWI_ACTION_PAC_SABR_V2_DISMISS,
+    @WamEnumConstant(497) LWI_ACTION_PAC_SABR_VSV_BOTTOMSHEET_IMPRESSION,
+    @WamEnumConstant(498) LWI_ACTION_PAC_SABR_VSV_CTA_CLICK,
+    @WamEnumConstant(499) LWI_ACTION_PAC_SABR_VSV_DISMISS
 }

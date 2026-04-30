@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumStatusRowSection")
 @WamEnum
 public enum StatusRowSection {
     @WamEnumConstant(1) RECENT_STORIES,
@@ -36,5 +39,6 @@ public enum StatusRowSection {
     @WamEnumConstant(29) CHANNEL_SUBSCRIBER_LIST,
     @WamEnumConstant(30) CHANNEL_RECOMMENDED_LIST,
     @WamEnumConstant(31) CHANNEL_DIRECTORY_LIST,
-    @WamEnumConstant(34) CHANNEL_STATUS_MY_LIST
+    @WamEnumConstant(34) CHANNEL_STATUS_MY_LIST,
+    @WamEnumConstant(35) CHATS_TAB_STATUS_TRAY
 }

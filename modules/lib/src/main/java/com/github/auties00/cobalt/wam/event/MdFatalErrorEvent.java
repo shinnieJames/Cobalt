@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.Collection;
 import com.github.auties00.cobalt.wam.type.IsPureSyncdSessionEnum;
@@ -15,6 +17,7 @@ import com.github.auties00.cobalt.wam.type.RecoveryStatusEnum;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMdFatalErrorWamEvent")
 @WamEvent(id = 2304)
 public interface MdFatalErrorEvent extends WamEventSpec {
     @WamProperty(index = 46, type = WamType.STRING)

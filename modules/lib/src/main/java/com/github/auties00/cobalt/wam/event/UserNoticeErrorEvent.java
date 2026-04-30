@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.NoticeType;
 import com.github.auties00.cobalt.wam.type.UserNoticeErrorEventType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.UserNoticeErrorEventType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebUserNoticeErrorWamEvent")
 @WamEvent(id = 2474)
 public interface UserNoticeErrorEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.ENUM)

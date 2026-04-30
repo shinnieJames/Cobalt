@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.IqResponseType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.MismatchOriginType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebAddressingModeMismatchWamEvent")
 @WamEvent(id = 4750)
 public interface AddressingModeMismatchEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

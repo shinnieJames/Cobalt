@@ -1,21 +1,26 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AdditionalCategoryType;
 import com.github.auties00.cobalt.wam.type.BotDiscoveryPathType;
 import com.github.auties00.cobalt.wam.type.BotEntryPointType;
+import com.github.auties00.cobalt.wam.type.BotPromptType;
 import com.github.auties00.cobalt.wam.type.ChatFilterActionTypes;
 import com.github.auties00.cobalt.wam.type.DiscoveryOriginType;
 import com.github.auties00.cobalt.wam.type.InlineTosStatus;
 import com.github.auties00.cobalt.wam.type.InputType;
+import com.github.auties00.cobalt.wam.type.PromptTriggerPoint;
 import com.github.auties00.cobalt.wam.type.TsSurface;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebBotJourneyWamEvent")
 @WamEvent(id = 4630)
 public interface BotJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)
@@ -60,6 +65,9 @@ public interface BotJourneyEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.STRING)
     Optional<String> botPersonaId();
 
+    @WamProperty(index = 49, type = WamType.ENUM)
+    Optional<BotPromptType> botPromptType();
+
     @WamProperty(index = 13, type = WamType.STRING)
     Optional<String> callRandomId();
 
@@ -74,6 +82,9 @@ public interface BotJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 46, type = WamType.STRING)
     Optional<String> conversationStarterLabel();
+
+    @WamProperty(index = 51, type = WamType.STRING)
+    Optional<String> conversationStarterName();
 
     @WamProperty(index = 28, type = WamType.STRING)
     Optional<String> conversationStarterPromptMode();
@@ -116,6 +127,12 @@ public interface BotJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 17, type = WamType.INTEGER)
     OptionalInt metricCount();
+
+    @WamProperty(index = 50, type = WamType.ENUM)
+    Optional<PromptTriggerPoint> promptTriggerPoint();
+
+    @WamProperty(index = 48, type = WamType.STRING)
+    Optional<String> rawBotEntryPoint();
 
     @WamProperty(index = 44, type = WamType.INTEGER)
     OptionalInt scrollDepth();

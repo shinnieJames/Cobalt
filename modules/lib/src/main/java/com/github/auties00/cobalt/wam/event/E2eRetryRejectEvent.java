@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.DeviceType;
 import com.github.auties00.cobalt.wam.type.E2eDeviceType;
@@ -15,6 +17,7 @@ import com.github.auties00.cobalt.wam.type.RetryRejectReason;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebE2eRetryRejectWamEvent")
 @WamEvent(id = 3578)
 public interface E2eRetryRejectEvent extends WamEventSpec {
     @WamProperty(index = 10, type = WamType.ENUM)
@@ -31,6 +34,9 @@ public interface E2eRetryRejectEvent extends WamEventSpec {
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<MediaType> mediaType();
+
+    @WamProperty(index = 11, type = WamType.STRING)
+    Optional<String> messageKeyHash();
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<MessageType> messageType();

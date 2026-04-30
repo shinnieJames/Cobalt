@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumFmxEvent")
 @WamEnum
 public enum FmxEventType {
     @WamEnumConstant(0) BLOCK,
@@ -18,5 +21,7 @@ public enum FmxEventType {
     @WamEnumConstant(10) FMX_CARD_TRUST_SIGNALS_FB_IG_VIEWED,
     @WamEnumConstant(11) STOP_MARKETING_MSG_OFFERS,
     @WamEnumConstant(12) MESSAGE_PREFERENCES,
-    @WamEnumConstant(13) FMX_CARD_FIRST_VIEW_IN_CHAT_OPEN
+    @WamEnumConstant(13) FMX_CARD_FIRST_VIEW_IN_CHAT_OPEN,
+    @WamEnumConstant(14) TRUST_QUESTION_TAP,
+    @WamEnumConstant(15) TRUST_BTN_TAPPED
 }

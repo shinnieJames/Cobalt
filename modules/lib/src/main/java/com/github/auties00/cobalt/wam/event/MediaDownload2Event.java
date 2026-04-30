@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AiFetchMediaType;
 import com.github.auties00.cobalt.wam.type.BackendStoreType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.ConnectionType;
 import com.github.auties00.cobalt.wam.type.DownloadOriginType;
 import com.github.auties00.cobalt.wam.type.DownloadQualityType;
 import com.github.auties00.cobalt.wam.type.ExpressPathDownloadState;
+import com.github.auties00.cobalt.wam.type.HashVerificationFailureType;
 import com.github.auties00.cobalt.wam.type.HttpProtocolVersionType;
 import com.github.auties00.cobalt.wam.type.MediaDownloadModeType;
 import com.github.auties00.cobalt.wam.type.MediaDownloadResultType;
@@ -22,6 +25,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMediaDownload2WamEvent")
 @WamEvent(id = 1590, releaseWeight = 50)
 public interface MediaDownload2Event extends WamEventSpec {
     @WamProperty(index = 55, type = WamType.INTEGER)
@@ -110,6 +114,9 @@ public interface MediaDownload2Event extends WamEventSpec {
 
     @WamProperty(index = 44, type = WamType.BOOLEAN)
     Optional<Boolean> hasLeveragedExpressPath();
+
+    @WamProperty(index = 69, type = WamType.ENUM)
+    Optional<HashVerificationFailureType> hashVerificationFailureType();
 
     @WamProperty(index = 45, type = WamType.ENUM)
     Optional<HttpProtocolVersionType> httpProtocolVersionType();

@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.KicActionNameType;
 import com.github.auties00.cobalt.wam.type.KicActorType;
@@ -12,6 +14,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebDisappearingMessageKeepInChatWamEvent")
 @WamEvent(id = 3482)
 public interface DisappearingMessageKeepInChatEvent extends WamEventSpec {
     @WamProperty(index = 16, type = WamType.BOOLEAN)

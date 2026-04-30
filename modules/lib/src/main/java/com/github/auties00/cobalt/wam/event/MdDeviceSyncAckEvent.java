@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AddressingMode;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
@@ -12,6 +14,7 @@ import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebMdDeviceSyncAckWamEvent")
 @WamEvent(id = 2180)
 public interface MdDeviceSyncAckEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

@@ -1,14 +1,17 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GuestUpsellActionType;
 import com.github.auties00.cobalt.wam.type.GuestUpsellEntryPointType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebGuestUpsellInteractionWamEvent")
 @WamEvent(id = 7146)
 public interface GuestUpsellInteractionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

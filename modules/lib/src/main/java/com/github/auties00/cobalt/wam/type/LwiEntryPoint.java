@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumLwiEntryPoint")
 @WamEnum
 public enum LwiEntryPoint {
     @WamEnumConstant(1) SMB_CATALG_LIST_LWI_ADVERTISE_BANNER,
@@ -89,5 +92,7 @@ public enum LwiEntryPoint {
     @WamEnumConstant(99) SMB_ADVERTISE_FROM_MANAGE_ADS_TOPBAR_CREATE_BUTTON,
     @WamEnumConstant(100) SMB_ADVERTISE_FROM_MANAGE_ADS_ADVANTAGE_PLUS_AUDIENCE_MFR_CTA,
     @WamEnumConstant(101) SMB_ADVERTISE_FROM_AD_DETAILS_RECREATE_OVERFLOW_MENU_ITEM,
-    @WamEnumConstant(102) SMB_ADVERTISE_FROM_PAC_CREATE_NEW_AD
+    @WamEnumConstant(102) SMB_ADVERTISE_FROM_PAC_CREATE_NEW_AD,
+    @WamEnumConstant(103) SMB_DRAFT_AD_CHATLIST_QP,
+    @WamEnumConstant(104) SMB_RECREATE_AD_CHATLIST_QP
 }

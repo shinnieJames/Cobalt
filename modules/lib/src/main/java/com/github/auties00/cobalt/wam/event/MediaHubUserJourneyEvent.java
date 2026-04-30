@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ActionCode;
 import com.github.auties00.cobalt.wam.type.EntryPointType;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.SurfaceCode;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebMediaHubUserJourneyWamEvent")
 @WamEvent(id = 7090)
 public interface MediaHubUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)

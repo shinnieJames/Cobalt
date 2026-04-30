@@ -1,18 +1,28 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.LwiEntryPoint;
 import com.github.auties00.cobalt.wam.type.LwiSubEntryPoint;
 import com.github.auties00.cobalt.wam.type.StatusTypeMedia;
+import com.github.auties00.cobalt.wam.type.WebFlowType;
 
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebLwiEntryTapWamEvent")
 @WamEvent(id = 2770)
 public interface LwiEntryTapEvent extends WamEventSpec {
+    @WamProperty(index = 14, type = WamType.INTEGER)
+    OptionalInt activeItemsCount();
+
+    @WamProperty(index = 15, type = WamType.INTEGER)
+    OptionalInt archivedItemsCount();
+
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> businessToolsSessionId();
 
@@ -25,14 +35,23 @@ public interface LwiEntryTapEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<LwiEntryPoint> lwiEntryPoint();
 
+    @WamProperty(index = 17, type = WamType.STRING)
+    Optional<String> lwiExtras();
+
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> lwiFlowId();
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<LwiSubEntryPoint> lwiSubEntryPoint();
 
+    @WamProperty(index = 16, type = WamType.STRING)
+    Optional<String> notificationLogId();
+
     @WamProperty(index = 13, type = WamType.STRING)
     Optional<String> previousLwiFlowId();
+
+    @WamProperty(index = 18, type = WamType.STRING)
+    Optional<String> statusId();
 
     @WamProperty(index = 6, type = WamType.INTEGER)
     OptionalInt statusSessionId();
@@ -45,4 +64,7 @@ public interface LwiEntryTapEvent extends WamEventSpec {
 
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> waCampaignId();
+
+    @WamProperty(index = 19, type = WamType.ENUM)
+    Optional<WebFlowType> webFlowType();
 }

@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumPreCallActionType")
 @WamEnum
 public enum PreCallActionType {
     @WamEnumConstant(1) CHAT_OPEN,
@@ -83,5 +86,8 @@ public enum PreCallActionType {
     @WamEnumConstant(76) CLICK_REMINDER_OPTION_30_MINS,
     @WamEnumConstant(77) CLICK_REMINDER_OPTION_1_HOUR,
     @WamEnumConstant(78) CLICK_REMINDER_OPTION_1_DAY,
-    @WamEnumConstant(79) CLICK_REMINDER_OPTION_NEVER
+    @WamEnumConstant(79) CLICK_REMINDER_OPTION_NEVER,
+    @WamEnumConstant(80) CLICK_PARTICIPANT_ROW,
+    @WamEnumConstant(81) CLICK_GROUP_INFO,
+    @WamEnumConstant(82) CLICK_MORE_BUTTON
 }

@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.DisappearingChatInitiatorType;
 import com.github.auties00.cobalt.wam.type.EphemeralityInitiatorType;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.wam.type.EsrSendResultType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebEphemeralSyncResponseReceiveWamEvent")
 @WamEvent(id = 4780)
 public interface EphemeralSyncResponseReceiveEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

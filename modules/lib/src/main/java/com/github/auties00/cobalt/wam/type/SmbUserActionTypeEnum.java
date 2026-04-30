@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSmbUserActionTypeEnum")
 @WamEnum
 public enum SmbUserActionTypeEnum {
     @WamEnumConstant(0) VIEW,
@@ -15,5 +18,8 @@ public enum SmbUserActionTypeEnum {
     @WamEnumConstant(7) DELETE,
     @WamEnumConstant(8) SEARCH,
     @WamEnumConstant(9) DISMISS,
-    @WamEnumConstant(10) VALIDATION
+    @WamEnumConstant(10) VALIDATION,
+    @WamEnumConstant(11) READ,
+    @WamEnumConstant(12) WRITE,
+    @WamEnumConstant(13) SUPPRESS
 }

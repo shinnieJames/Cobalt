@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumMdSyncdFatalErrorCode")
 @WamEnum
 public enum MdSyncdFatalErrorCode {
     @WamEnumConstant(1) TOO_MANY_INTERNAL_SERVER_ERRORS_IN_7D,

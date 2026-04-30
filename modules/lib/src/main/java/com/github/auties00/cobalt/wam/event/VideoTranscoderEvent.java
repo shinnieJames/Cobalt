@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.VideoTranscoderAlgorithmType;
 import com.github.auties00.cobalt.wam.type.VideoTranscoderResultType;
@@ -13,6 +15,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalDouble;
 
+@WhatsAppWebModule(moduleName = "WAWebVideoTranscoderWamEvent")
 @WamEvent(id = 1802)
 public interface VideoTranscoderEvent extends WamEventSpec {
     @WamProperty(index = 12, type = WamType.FLOAT)

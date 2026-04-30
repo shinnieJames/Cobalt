@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChannelEntryPoint;
 import com.github.auties00.cobalt.wam.type.ChannelEntryPointMetadata;
@@ -13,6 +15,7 @@ import com.github.auties00.cobalt.wam.type.TsSurface;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebChannelOpenWamEvent")
 @WamEvent(id = 4316)
 public interface ChannelOpenEvent extends WamEventSpec {
     @WamProperty(index = 8, type = WamType.INTEGER)
@@ -57,6 +60,9 @@ public interface ChannelOpenEvent extends WamEventSpec {
     @WamProperty(index = 11, type = WamType.INTEGER)
     OptionalInt similarChannelsSessionId();
 
+    @WamProperty(index = 21, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
+
     @WamProperty(index = 16, type = WamType.STRING)
     Optional<String> unifiedSessionId();
 
@@ -68,7 +74,4 @@ public interface ChannelOpenEvent extends WamEventSpec {
 
     @WamProperty(index = 17, type = WamType.INTEGER)
     OptionalInt updatesTabSessionId();
-
-    @WamProperty(index = 21, type = WamType.INTEGER)
-    OptionalInt traceIdInt();
 }

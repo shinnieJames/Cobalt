@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumBannerTypes")
 @WamEnum
 public enum BannerTypes {
     @WamEnumConstant(1) GROUP,
@@ -102,5 +105,8 @@ public enum BannerTypes {
     @WamEnumConstant(107) QP_BANNER_STICKER_TRAY,
     @WamEnumConstant(108) QP_BANNER_UPDATES_TAB_CHANNELS_HEADER,
     @WamEnumConstant(109) QP_NEW_USER_CHECKLIST_ME_TAB,
-    @WamEnumConstant(110) META_AI_APP_PROMO
+    @WamEnumConstant(110) META_AI_APP_PROMO,
+    @WamEnumConstant(111) SMB_BIZ_AI_GDRIVE_L1_RECONNECT,
+    @WamEnumConstant(112) SMB_BIZ_AI_GDRIVE_L1_SYNC_FAILED,
+    @WamEnumConstant(113) SMB_BIZ_AI_GDRIVE_L2_RECONNECT
 }

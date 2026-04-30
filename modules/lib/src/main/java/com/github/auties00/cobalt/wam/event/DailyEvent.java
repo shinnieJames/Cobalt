@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.AndroidKeystoreStateType;
 import com.github.auties00.cobalt.wam.type.BackupEncryptionMethod;
@@ -22,6 +24,7 @@ import com.github.auties00.cobalt.wam.type.UsernameState;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebDailyWamEvent")
 @WamEvent(id = 1158)
 public interface DailyEvent extends WamEventSpec {
     @WamProperty(index = 108, type = WamType.BOOLEAN)
@@ -353,6 +356,9 @@ public interface DailyEvent extends WamEventSpec {
 
     @WamProperty(index = 156, type = WamType.INTEGER)
     OptionalInt phoneCores();
+
+    @WamProperty(index = 251, type = WamType.INTEGER)
+    OptionalInt phoneNumberHintAvailableCount();
 
     @WamProperty(index = 162, type = WamType.STRING)
     Optional<String> phoneyid();

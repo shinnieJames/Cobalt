@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.BotBizActionType;
 import com.github.auties00.cobalt.wam.type.BotBizEntryPoint;
@@ -11,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.BotType;
 
 import java.util.Optional;
 
+@WhatsAppWebModule(moduleName = "WAWebBotBizJourneyWamEvent")
 @WamEvent(id = 4868)
 public interface BotBizJourneyEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.STRING)

@@ -1,13 +1,16 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.ChannelUserType;
 import com.github.auties00.cobalt.wam.type.GroupStatusSizeBucket;
 import com.github.auties00.cobalt.wam.type.InlineVideoType;
 import com.github.auties00.cobalt.wam.type.MediaType;
+import com.github.auties00.cobalt.wam.type.PairedMediaType;
 import com.github.auties00.cobalt.wam.type.StatusCategory;
 import com.github.auties00.cobalt.wam.type.StatusContentType;
 import com.github.auties00.cobalt.wam.type.StatusItemViewResult;
@@ -21,6 +24,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebStatusPostImpressionWamEvent")
 @WamEvent(id = 6364)
 public interface StatusPostImpressionEvent extends WamEventSpec {
     @WamProperty(index = 46, type = WamType.INTEGER)
@@ -56,6 +60,12 @@ public interface StatusPostImpressionEvent extends WamEventSpec {
     @WamProperty(index = 3, type = WamType.BOOLEAN)
     Optional<Boolean> isPosterBiz();
 
+    @WamProperty(index = 49, type = WamType.BOOLEAN)
+    Optional<Boolean> isResharable();
+
+    @WamProperty(index = 50, type = WamType.BOOLEAN)
+    Optional<Boolean> isReshare();
+
     @WamProperty(index = 24, type = WamType.BOOLEAN)
     Optional<Boolean> isSelfView();
 
@@ -73,6 +83,9 @@ public interface StatusPostImpressionEvent extends WamEventSpec {
 
     @WamProperty(index = 6, type = WamType.BOOLEAN)
     Optional<Boolean> musicBlocked();
+
+    @WamProperty(index = 51, type = WamType.ENUM)
+    Optional<PairedMediaType> pairedMediaType();
 
     @WamProperty(index = 37, type = WamType.INTEGER)
     OptionalInt pogViewSequenceIndex();
@@ -145,6 +158,9 @@ public interface StatusPostImpressionEvent extends WamEventSpec {
 
     @WamProperty(index = 20, type = WamType.INTEGER)
     OptionalInt statusViewerSessionId();
+
+    @WamProperty(index = 52, type = WamType.INTEGER)
+    OptionalInt traceIdInt();
 
     @WamProperty(index = 21, type = WamType.STRING)
     Optional<String> unifiedSessionId();

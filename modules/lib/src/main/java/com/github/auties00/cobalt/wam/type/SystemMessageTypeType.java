@@ -1,8 +1,11 @@
 package com.github.auties00.cobalt.wam.type;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEnum;
 import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 
+@WhatsAppWebModule(moduleName = "WAWebWamEnumSystemMessageTypeType")
 @WamEnum
 public enum SystemMessageTypeType {
     @WamEnumConstant(1) E2E_ENCRYPTED_MESSAGES_CALLS,

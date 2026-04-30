@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GroupRoleType;
 import com.github.auties00.cobalt.wam.type.GroupTypeClient;
@@ -12,6 +14,7 @@ import com.github.auties00.cobalt.wam.type.PinInChatInteractionType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebPinInChatInteractionWamEvent")
 @WamEvent(id = 4436)
 public interface PinInChatInteractionEvent extends WamEventSpec {
     @WamProperty(index = 1, type = WamType.ENUM)

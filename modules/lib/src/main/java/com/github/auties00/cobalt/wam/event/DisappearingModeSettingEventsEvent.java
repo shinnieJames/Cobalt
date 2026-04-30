@@ -1,8 +1,10 @@
 package com.github.auties00.cobalt.wam.event;
 
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+
 import com.github.auties00.cobalt.wam.annotation.WamEvent;
-import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamEventSpec;
+import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.DisappearingModeEntryPointType;
 import com.github.auties00.cobalt.wam.type.DisappearingModeSettingEventNameType;
@@ -10,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.DisappearingModeSettingEventNameType;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+@WhatsAppWebModule(moduleName = "WAWebDisappearingModeSettingEventsWamEvent")
 @WamEvent(id = 3446)
 public interface DisappearingModeSettingEventsEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.ENUM)
@@ -17,6 +20,9 @@ public interface DisappearingModeSettingEventsEvent extends WamEventSpec {
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<DisappearingModeSettingEventNameType> disappearingModeSettingEventName();
+
+    @WamProperty(index = 6, type = WamType.BOOLEAN)
+    Optional<Boolean> isAfterRead();
 
     @WamProperty(index = 2, type = WamType.INTEGER)
     OptionalInt lastToggleTimestamp();
@@ -26,7 +32,4 @@ public interface DisappearingModeSettingEventsEvent extends WamEventSpec {
 
     @WamProperty(index = 4, type = WamType.INTEGER)
     OptionalInt previousEphemeralityDuration();
-
-    @WamProperty(index = 6, type = WamType.BOOLEAN)
-    Optional<Boolean> isAfterRead();
 }
