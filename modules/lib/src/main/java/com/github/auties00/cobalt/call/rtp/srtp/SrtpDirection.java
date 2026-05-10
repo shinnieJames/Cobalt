@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.rtp.srtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -155,7 +157,7 @@ final class SrtpDirection {
                     new IvParameterSpec(iv));
             return cipher.doFinal(new byte[outLen]);
         } catch (GeneralSecurityException e) {
-            throw new SrtpException("SRTP KDF failed", e);
+            throw new WhatsAppCallException.Srtp("SRTP KDF failed", e);
         }
     }
 

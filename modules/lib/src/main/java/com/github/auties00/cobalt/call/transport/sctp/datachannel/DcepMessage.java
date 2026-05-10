@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.transport.sctp.datachannel;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -101,7 +103,7 @@ public sealed interface DcepMessage {
      *              SCTP DATA chunk arriving on PPID
      *              {@value #PPID_DCEP})
      * @return the parsed message
-     * @throws DataChannelException if the payload is empty, has an
+     * @throws WhatsAppCallException.DataChannel if the payload is empty, has an
      *                              unknown message type, or is
      *                              truncated relative to the declared
      *                              field lengths
@@ -110,12 +112,12 @@ public sealed interface DcepMessage {
     static DcepMessage decode(byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes cannot be null");
         if (bytes.length == 0) {
-            throw new DataChannelException("DCEP payload is empty");
+            throw new WhatsAppCallException.DataChannel("DCEP payload is empty");
         }
         return switch (bytes[0]) {
             case MSG_ACK -> Ack.INSTANCE;
             case MSG_OPEN -> Open.decodeOpen(bytes);
-            default -> throw new DataChannelException(
+            default -> throw new WhatsAppCallException.DataChannel(
                     "unknown DCEP message type: 0x" + Integer.toHexString(Byte.toUnsignedInt(bytes[0])));
         };
     }
@@ -285,7 +287,7 @@ public sealed interface DcepMessage {
          */
         private static Open decodeOpen(byte[] bytes) {
             if (bytes.length < 12) {
-                throw new DataChannelException(
+                throw new WhatsAppCallException.DataChannel(
                         "DATA_CHANNEL_OPEN truncated (need 12 header bytes, have " + bytes.length + ")");
             }
             ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
@@ -297,7 +299,7 @@ public sealed interface DcepMessage {
             int protocolLen = Short.toUnsignedInt(buf.getShort());
             int expected = 12 + labelLen + protocolLen;
             if (bytes.length < expected) {
-                throw new DataChannelException(
+                throw new WhatsAppCallException.DataChannel(
                         "DATA_CHANNEL_OPEN truncated: declared " + labelLen + "+" + protocolLen
                                 + " bytes of label/protocol but payload is " + bytes.length);
             }

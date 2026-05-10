@@ -813,7 +813,7 @@ final class PersistentMessageStore implements AutoCloseable {
                 var result = body.apply(txn);
                 txn.commit();
                 return result;
-            } catch (Env.MapFullException ignored) {
+            } catch (Env.MapFullException _) {
                 txn.abort();
             }
         }

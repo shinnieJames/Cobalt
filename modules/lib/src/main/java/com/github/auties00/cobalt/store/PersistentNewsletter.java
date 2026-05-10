@@ -73,7 +73,7 @@ final class PersistentNewsletter extends Newsletter {
                 messageCount.decrementAndGet();
             }
             return removed;
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return false;
         }
     }
@@ -101,7 +101,7 @@ final class PersistentNewsletter extends Newsletter {
         }
         try {
             return messageStore.getNewsletterMessageByServerId(jid(), Integer.parseInt(messageId));
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return Optional.empty();
         }
     }

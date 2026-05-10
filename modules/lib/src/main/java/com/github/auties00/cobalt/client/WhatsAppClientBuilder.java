@@ -3,6 +3,8 @@ package com.github.auties00.cobalt.client;
 import com.github.auties00.cobalt.proxy.WhatsAppProxy;
 import com.github.auties00.cobalt.registration.MobileClientRegistration;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
+import com.github.auties00.cobalt.model.contact.ContactTextStatus;
+import com.github.auties00.cobalt.model.contact.ContactTextStatusBuilder;
 import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.store.WhatsAppStore;
@@ -1131,14 +1133,30 @@ public sealed class WhatsAppClientBuilder {
             }
 
             /**
-             * Sets the about/status message attached to the account.
+             * Sets the text status (the "about" line) attached to the
+             * account.
              *
-             * @param about the about text, or {@code null} to clear it
+             * @param selfTextStatus the text status, or {@code null} to clear
+             *                       it
              * @return this builder, for chaining
              */
-            public Mobile about(String about) {
-                store.setAbout(about);
+            public Mobile selfTextStatus(ContactTextStatus selfTextStatus) {
+                store.setSelfTextStatus(selfTextStatus);
                 return this;
+            }
+
+            /**
+             * Convenience overload that sets the text status to a plain
+             * string with no emoji or ephemeral expiration.
+             *
+             * @param aboutText the about text, or {@code null} to clear it
+             * @return this builder, for chaining
+             */
+            public Mobile selfTextStatus(String aboutText) {
+                var status = aboutText == null ? null : new ContactTextStatusBuilder()
+                        .text(aboutText)
+                        .build();
+                return selfTextStatus(status);
             }
 
             /**

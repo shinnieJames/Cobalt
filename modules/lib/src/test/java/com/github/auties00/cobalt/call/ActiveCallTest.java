@@ -14,8 +14,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * Unit tests for {@link ActiveCall}'s state machine and lifecycle —
  * verifies transitions to {@link CallState#ENDED}, the
  * {@link CallEndReason} mapping, mute toggles, the four media-port
- * sentinels, and that {@link IncomingCall#accept(CallOptions)} can
- * be wired against a synthetic {@link IncomingCall.Handler}.
+ * sentinels, and the {@link IncomingCall#markResponded()} one-shot
+ * gate that {@code WhatsAppClient.acceptCall}/{@code rejectCall}
+ * rely on.
  *
  * <p>These tests don't depend on the call engine being wired to a
  * live {@code WhatsAppClient} — they exercise {@link ActiveCall}
@@ -152,25 +153,21 @@ public class ActiveCallTest {
     }
 
     /**
-     * {@link IncomingCall#accept} returns a live session built by
-     * the supplied {@link IncomingCall.Handler}, and the offer
-     * cannot be responded to twice.
+     * {@link IncomingCall#markResponded()} succeeds exactly once;
+     * every subsequent call throws. This is the gate
+     * {@code WhatsAppClient.acceptCall}/{@code rejectCall} use to
+     * enforce one-shot semantics.
      */
     @Test
-    public void incomingCallAcceptIsOneShot() {
-        var engine = new RecordingEngine();
+    public void incomingCallIsOneShot() {
         var offer = new IncomingCall(
                 "id-7", PEER, PEER,
                 Instant.EPOCH,
-                false, false, null, false,
-                engine);
-        var session = offer.accept(CallOptions.audio());
+                false, false, null, false);
 
-        assertNotNull(session);
-        assertEquals(CallState.CONNECTING, session.state());
+        offer.markResponded();
 
-        assertThrows(IllegalStateException.class, () -> offer.accept(CallOptions.audio()));
-        assertThrows(IllegalStateException.class, () -> offer.reject(CallEndReason.HANGUP));
+        assertThrows(IllegalStateException.class, offer::markResponded);
     }
 
     /**
@@ -190,15 +187,6 @@ public class ActiveCallTest {
         assertFalse(call.endReason().isEmpty());
     }
 
-    /**
-     * Synthetic {@link CallService}-shaped recipient that captures
-     * the calls {@link ActiveCall} would make. Avoids constructing
-     * a real {@link CallService} (which needs a {@code WhatsAppClient})
-     * and lets us assert what stanzas the lifecycle would emit.
-     *
-     * <p>Implements {@link IncomingCall.Handler} so the tests can
-     * also exercise the offer-accept path end-to-end.
-     */
     /**
      * The M4 video-upgrade flow — request, accept, reject all map
      * to engine stanza-send calls.
@@ -222,7 +210,13 @@ public class ActiveCallTest {
                 "reject: video-state off sent as denial");
     }
 
-    private static final class RecordingEngine extends CallService implements IncomingCall.Handler {
+    /**
+     * Synthetic {@link CallService}-shaped recipient that captures
+     * the calls {@link ActiveCall} would make. Avoids constructing
+     * a real {@link CallService} (which needs a {@code WhatsAppClient})
+     * and lets us assert what stanzas the lifecycle would emit.
+     */
+    private static final class RecordingEngine extends CallService {
         int terminateCount;
         int muteCount;
         int videoStateCount;
@@ -256,16 +250,6 @@ public class ActiveCallTest {
         @Override
         void notifyEnded(String callId, Jid fromJid, String reason) {
             notifyEndedCount++;
-        }
-
-        @Override
-        public ActiveCall accept(IncomingCall offer, CallOptions options) {
-            return new ActiveCall(this, offer.callId(), offer.peer(), offer.chatJid(),
-                    offer.peer(), false, options);
-        }
-
-        @Override
-        public void reject(IncomingCall offer, CallEndReason reason) {
         }
     }
 }

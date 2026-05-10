@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.call.transport.sctp.bindings.sctp_rcvinfo;
 import com.github.auties00.cobalt.call.transport.sctp.bindings.sctp_sndinfo;
 import com.github.auties00.cobalt.call.transport.sctp.bindings.sockaddr_conn;
 import com.github.auties00.cobalt.call.transport.sctp.bindings.usrsctp_socket$receive_cb;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -238,7 +239,7 @@ public final class SctpAssociation implements AutoCloseable {
      *                        decodes a DATA chunk from the inbound
      *                        SCTP packet
      * @throws NullPointerException if any argument is {@code null}
-     * @throws SctpException        if the socket cannot be created
+     * @throws WhatsAppCallException.Sctp        if the socket cannot be created
      *                              or configured
      */
     public SctpAssociation(Consumer<byte[]> outboundSink, InboundListener inboundListener) {
@@ -265,10 +266,10 @@ public final class SctpAssociation implements AutoCloseable {
                         0,
                         connId);
             } catch (Throwable t) {
-                throw new SctpException("usrsctp_socket failed", t);
+                throw new WhatsAppCallException.Sctp("usrsctp_socket failed", t);
             }
             if (socket.equals(MemorySegment.NULL)) {
-                throw new SctpException("usrsctp_socket returned NULL");
+                throw new WhatsAppCallException.Sctp("usrsctp_socket returned NULL");
             }
             applyWebRtcDefaults();
             applyNonBlocking();
@@ -288,7 +289,7 @@ public final class SctpAssociation implements AutoCloseable {
      *
      * @param localPort the local SCTP port (RFC 8831 specifies 5000
      *                  for WebRTC DataChannels)
-     * @throws SctpException if {@code usrsctp_bind} fails
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_bind} fails
      */
     public void bind(int localPort) {
         requireOpen();
@@ -299,10 +300,10 @@ public final class SctpAssociation implements AutoCloseable {
         try {
             rc = UsrSctp.usrsctp_bind(socket, localAddr, (int) sockaddr_conn.layout().byteSize());
         } catch (Throwable t) {
-            throw new SctpException("usrsctp_bind failed", t);
+            throw new WhatsAppCallException.Sctp("usrsctp_bind failed", t);
         }
         if (rc < 0) {
-            throw new SctpException("usrsctp_bind returned " + rc);
+            throw new WhatsAppCallException.Sctp("usrsctp_bind returned " + rc);
         }
     }
 
@@ -319,7 +320,7 @@ public final class SctpAssociation implements AutoCloseable {
      * sockets have entered {@code COOKIE_WAIT}.
      *
      * @param remotePort the peer's SCTP port (5000 in WebRTC)
-     * @throws SctpException if {@code usrsctp_connect} reports a
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_connect} reports a
      *                       hard failure or the calling thread is
      *                       interrupted while waiting
      */
@@ -342,7 +343,7 @@ public final class SctpAssociation implements AutoCloseable {
      * @param remotePort the peer's SCTP port (5000 in WebRTC)
      * @param timeout    the maximum time to wait
      * @param unit       the timeout unit
-     * @throws SctpException        if {@code usrsctp_connect}
+     * @throws WhatsAppCallException.Sctp        if {@code usrsctp_connect}
      *                              reports a hard failure, the
      *                              handshake completes with a
      *                              non-{@code COMM_UP} state, the
@@ -360,23 +361,23 @@ public final class SctpAssociation implements AutoCloseable {
         try {
             rc = UsrSctp.usrsctp_connect(socket, remoteAddr, (int) sockaddr_conn.layout().byteSize());
         } catch (Throwable t) {
-            throw new SctpException("usrsctp_connect failed", t);
+            throw new WhatsAppCallException.Sctp("usrsctp_connect failed", t);
         }
         if (rc != 0 && rc != -1) {
-            throw new SctpException("usrsctp_connect returned " + rc);
+            throw new WhatsAppCallException.Sctp("usrsctp_connect returned " + rc);
         }
         boolean signaled;
         try {
             signaled = connectLatch.await(timeout, unit);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new SctpException("interrupted while waiting for SCTP_COMM_UP", e);
+            throw new WhatsAppCallException.Sctp("interrupted while waiting for SCTP_COMM_UP", e);
         }
         if (!signaled) {
-            throw new SctpException("SCTP handshake timed out after " + timeout + " " + unit);
+            throw new WhatsAppCallException.Sctp("SCTP handshake timed out after " + timeout + " " + unit);
         }
         if (!connected.get()) {
-            throw new SctpException("SCTP handshake failed (COMM_LOST/SHUTDOWN/CANT_STR_ASSOC)");
+            throw new WhatsAppCallException.Sctp("SCTP handshake failed (COMM_LOST/SHUTDOWN/CANT_STR_ASSOC)");
         }
     }
 
@@ -401,7 +402,7 @@ public final class SctpAssociation implements AutoCloseable {
             try {
                 UsrSctp.usrsctp_conninput(connId, seg, packet.length, (byte) 0);
             } catch (Throwable t) {
-                throw new SctpException("usrsctp_conninput failed", t);
+                throw new WhatsAppCallException.Sctp("usrsctp_conninput failed", t);
             }
         }
     }
@@ -415,7 +416,7 @@ public final class SctpAssociation implements AutoCloseable {
      * @param payload  the message bytes
      * @param ordered  {@code true} for ordered delivery,
      *                 {@code false} for unordered
-     * @throws SctpException if {@code usrsctp_sendv} fails or sends
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_sendv} fails or sends
      *                       fewer bytes than requested
      */
     public void send(int streamId, int ppid, byte[] payload, boolean ordered) {
@@ -447,13 +448,13 @@ public final class SctpAssociation implements AutoCloseable {
                         UsrSctp.SCTP_SENDV_SNDINFO(),
                         0);
             } catch (Throwable t) {
-                throw new SctpException("usrsctp_sendv failed", t);
+                throw new WhatsAppCallException.Sctp("usrsctp_sendv failed", t);
             }
             if (sent < 0) {
-                throw new SctpException("usrsctp_sendv returned " + sent);
+                throw new WhatsAppCallException.Sctp("usrsctp_sendv returned " + sent);
             }
             if (sent != payload.length) {
-                throw new SctpException("usrsctp_sendv short write: " + sent + " of " + payload.length);
+                throw new WhatsAppCallException.Sctp("usrsctp_sendv short write: " + sent + " of " + payload.length);
             }
         }
     }
@@ -509,7 +510,7 @@ public final class SctpAssociation implements AutoCloseable {
             int streamId = Short.toUnsignedInt(sctp_rcvinfo.rcv_sid(rcvinfo));
             int ppid = ntohl(sctp_rcvinfo.rcv_ppid(rcvinfo));
             inboundListener.onMessage(new InboundMessage(streamId, ppid, payload, flags));
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         return 0;
     }
@@ -573,10 +574,10 @@ public final class SctpAssociation implements AutoCloseable {
                         initMsg,
                         (int) sctp_initmsg.layout().byteSize());
             } catch (Throwable t) {
-                throw new SctpException("usrsctp_setsockopt SCTP_INITMSG failed", t);
+                throw new WhatsAppCallException.Sctp("usrsctp_setsockopt SCTP_INITMSG failed", t);
             }
             if (rc < 0) {
-                throw new SctpException("usrsctp_setsockopt SCTP_INITMSG returned " + rc);
+                throw new WhatsAppCallException.Sctp("usrsctp_setsockopt SCTP_INITMSG returned " + rc);
             }
         }
     }
@@ -593,10 +594,10 @@ public final class SctpAssociation implements AutoCloseable {
         try {
             rc = UsrSctp.usrsctp_set_non_blocking(socket, 1);
         } catch (Throwable t) {
-            throw new SctpException("usrsctp_set_non_blocking failed", t);
+            throw new WhatsAppCallException.Sctp("usrsctp_set_non_blocking failed", t);
         }
         if (rc < 0) {
-            throw new SctpException("usrsctp_set_non_blocking returned " + rc);
+            throw new WhatsAppCallException.Sctp("usrsctp_set_non_blocking returned " + rc);
         }
     }
 
@@ -622,10 +623,10 @@ public final class SctpAssociation implements AutoCloseable {
                         ev,
                         (int) sctp_event.layout().byteSize());
             } catch (Throwable t) {
-                throw new SctpException("usrsctp_setsockopt SCTP_EVENT failed", t);
+                throw new WhatsAppCallException.Sctp("usrsctp_setsockopt SCTP_EVENT failed", t);
             }
             if (rc < 0) {
-                throw new SctpException("usrsctp_setsockopt SCTP_EVENT returned " + rc);
+                throw new WhatsAppCallException.Sctp("usrsctp_setsockopt SCTP_EVENT returned " + rc);
             }
         }
     }
@@ -649,10 +650,10 @@ public final class SctpAssociation implements AutoCloseable {
                         holder,
                         (int) ValueLayout.JAVA_INT.byteSize());
             } catch (Throwable t) {
-                throw new SctpException("usrsctp_setsockopt option=" + optionName + " failed", t);
+                throw new WhatsAppCallException.Sctp("usrsctp_setsockopt option=" + optionName + " failed", t);
             }
             if (rc < 0) {
-                throw new SctpException("usrsctp_setsockopt option=" + optionName + " returned " + rc);
+                throw new WhatsAppCallException.Sctp("usrsctp_setsockopt option=" + optionName + " returned " + rc);
             }
         }
     }
@@ -686,7 +687,7 @@ public final class SctpAssociation implements AutoCloseable {
         engine.unregister(connId);
         try {
             UsrSctp.usrsctp_close(socket);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         } finally {
             socket = MemorySegment.NULL;
             arena.close();

@@ -77,7 +77,7 @@ public final class GetPrivacyListsMexResponse implements MexOperation.Response.J
         JSONObject envelope;
         try {
             envelope = JSON.parseObject(payload);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return Optional.empty();
         }
         if (envelope == null) {

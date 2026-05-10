@@ -104,7 +104,7 @@ public final class CatalogPreviewResolver {
     private static List<BusinessCatalogEntry> safeQueryCatalog(WhatsAppClient client, Jid wid) {
         try {
             return client.queryBusinessCatalog(wid);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return List.of();
         }
     }
@@ -174,7 +174,7 @@ public final class CatalogPreviewResolver {
             if (refreshed != null && !refreshed.isEmpty()) {
                 return refreshed;
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
         }
         return wid.user();
     }

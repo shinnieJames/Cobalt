@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.call.audio.opus.OpusEncoder;
 import com.github.auties00.cobalt.call.audio.processing.AudioPreprocessor;
 import com.github.auties00.cobalt.call.audio.processing.EchoCanceller;
 import com.github.auties00.cobalt.call.io.AudioFrame;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -67,7 +68,7 @@ public final class AudioPipeline implements AutoCloseable {
      * {@code take()} and exits cleanly.
      */
     private static final OpusPacket SENTINEL =
-            new OpusPacket(new byte[0], Long.MIN_VALUE, false);
+            new OpusPacket(DataUtils.EMPTY_BYTE_ARRAY, Long.MIN_VALUE, false);
 
     /**
      * The call whose audio we're driving.
@@ -268,12 +269,12 @@ public final class AudioPipeline implements AutoCloseable {
             byte[] payload;
             try {
                 payload = encoder.encode(processed, options.frameSize());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
                 continue;
             }
             try {
                 outboundSink.accept(new OpusPacket(payload, ptsMs, voiceActive));
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
             }
             ptsMs += frameDurMs;
         }
@@ -299,7 +300,7 @@ public final class AudioPipeline implements AutoCloseable {
         }
         try {
             return aec.cancel(mic, farEnd);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return mic;
         }
     }
@@ -318,7 +319,7 @@ public final class AudioPipeline implements AutoCloseable {
         }
         try {
             return preprocessor.process(frame);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return true;
         }
     }
@@ -342,7 +343,7 @@ public final class AudioPipeline implements AutoCloseable {
             short[] pcm;
             try {
                 pcm = decoder.decode(packet.payload(), options.frameSize());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
                 continue;
             }
             if (pcm.length == 0) {
@@ -351,7 +352,7 @@ public final class AudioPipeline implements AutoCloseable {
             latestFarEnd.set(pcm);
             try {
                 call.deliverInboundAudio(new AudioFrame(pcm, packet.ptsMs()));
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
             }
         }
     }
@@ -408,22 +409,22 @@ public final class AudioPipeline implements AutoCloseable {
     private void closeNatives() {
         try {
             encoder.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         try {
             decoder.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         if (aec != null) {
             try {
                 aec.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
         if (preprocessor != null) {
             try {
                 preprocessor.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }

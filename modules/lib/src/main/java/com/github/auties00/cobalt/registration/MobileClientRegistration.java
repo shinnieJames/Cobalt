@@ -815,7 +815,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
         }
         try {
             return Base64.getDecoder().decode(base64);
-        } catch (IllegalArgumentException ignored) {
+        } catch (IllegalArgumentException _) {
             try {
                 return Base64.getUrlDecoder().decode(base64);
             } catch (IllegalArgumentException still) {
@@ -1180,7 +1180,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
                     "event_name", eventName
             );
             sendRequest("/pre_pn_client_log", body);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
             // Funnel telemetry is best-effort and never blocks registration
         }
     }
@@ -1228,7 +1228,7 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             );
             sendRequest("/client_log", body);
             previousFunnelScreen = currentScreen;
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
             // Funnel telemetry is best-effort and never blocks registration
         }
     }

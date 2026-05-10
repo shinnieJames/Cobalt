@@ -90,7 +90,7 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
         if (ts != null && !ts.isEmpty()) {
             try {
                 createdAt = Long.parseLong(ts);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 createdAt = null;
             }
         }
@@ -211,7 +211,7 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
         }
         try {
             return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return null;
         }
     }
@@ -229,7 +229,7 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
         }
         try {
             return Integer.parseInt(value);
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return null;
         }
     }

@@ -936,6 +936,35 @@ public final class WebHistorySyncService {
             }
         }
 
+        // The first time the bootstrap delivers a non-empty chat conversations
+        // list, mark chats as synced and fan out the full chat snapshot to the
+        // onChats listeners. INITIAL_BOOTSTRAP also seeds the contacts via the
+        // pushName/conversation participant lists, so flip syncedContacts here
+        // too. WAWebHandleHistorySyncChunk.handleHistorySyncChunk in WA Web
+        // surfaces the same dataset via WAWebChatCollection/WAWebContactCollection
+        // collection-add events; Cobalt funnels both through the listener API.
+        if (!historySync.chats().isEmpty() && !store.syncedChats()) {
+            store.setSyncedChats(true);
+            store.setSyncedContacts(true);
+            var chats = store.chats();
+            var contacts = store.contacts();
+            for (var listener : listeners) {
+                Thread.startVirtualThread(() -> listener.onChats(whatsapp, chats));
+                Thread.startVirtualThread(() -> listener.onContacts(whatsapp, contacts));
+            }
+        }
+
+        // The INITIAL_STATUS_V3 sync seeds the status tray with the most recent
+        // status updates. Mirror the same gate-and-fan-out pattern used for
+        // chats so that consumers always observe the status feed once.
+        if (!historySync.statusV3Messages().isEmpty() && !store.syncedStatus()) {
+            store.setSyncedStatus(true);
+            var status = store.status();
+            for (var listener : listeners) {
+                Thread.startVirtualThread(() -> listener.onStatus(whatsapp, status));
+            }
+        }
+
         // WAWebLid1X1ThreadAccountMigrations.setLidMigrationMappings: the
         // history-sync variant of the mapping ingest consumes the top-level
         // phoneNumberToLidMappings list and the per-chat LID fields.

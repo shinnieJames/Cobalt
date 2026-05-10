@@ -354,7 +354,7 @@ public final class SuccessStreamHandler implements SocketStream.Handler {
         var categories = List.of("ABOUT", "GROUPADD", "LAST", "PROFILE");
         for (var category : categories) {
             try {
-                whatsapp.queryPrivacyDisallowedListMex(meLid, "", category, "DENYLIST");
+                whatsapp.queryPrivacyDisallowedList(meLid, "", category, "DENYLIST");
             } catch (Throwable throwable) {
                 LOGGER_COMPLIANCE.log(System.Logger.Level.WARNING,
                         "Cannot reconcile privacy disallowed list {0}: {1}",

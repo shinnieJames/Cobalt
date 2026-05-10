@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.rtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
@@ -104,20 +106,20 @@ public record RtpPacket(
      *
      * @param bytes the captured / received bytes
      * @return the parsed packet
-     * @throws RtpException         if the bytes are too short or the
+     * @throws WhatsAppCallException.Rtp         if the bytes are too short or the
      *                              version field is not 2
      * @throws NullPointerException if {@code bytes} is {@code null}
      */
     public static RtpPacket decode(byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes cannot be null");
         if (bytes.length < FIXED_HEADER_LENGTH) {
-            throw new RtpException("packet too short for RTP header: " + bytes.length);
+            throw new WhatsAppCallException.Rtp("packet too short for RTP header: " + bytes.length);
         }
         var buf = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
         int b0 = buf.get() & 0xFF;
         int version = b0 >>> 6;
         if (version != VERSION) {
-            throw new RtpException("unexpected RTP version: " + version);
+            throw new WhatsAppCallException.Rtp("unexpected RTP version: " + version);
         }
         boolean padding = (b0 & 0x20) != 0;
         boolean extension = (b0 & 0x10) != 0;
@@ -132,20 +134,20 @@ public record RtpPacket(
 
         int csrcBytes = csrcCount * 4;
         if (buf.remaining() < csrcBytes) {
-            throw new RtpException("truncated CSRC list: need " + csrcBytes
+            throw new WhatsAppCallException.Rtp("truncated CSRC list: need " + csrcBytes
                     + ", have " + buf.remaining());
         }
         buf.position(buf.position() + csrcBytes);
 
         if (extension) {
             if (buf.remaining() < 4) {
-                throw new RtpException("truncated extension header");
+                throw new WhatsAppCallException.Rtp("truncated extension header");
             }
             buf.getShort(); // profile-specific id, ignored
             int extLengthWords = Short.toUnsignedInt(buf.getShort());
             int extLengthBytes = extLengthWords * 4;
             if (buf.remaining() < extLengthBytes) {
-                throw new RtpException("truncated extension data: need " + extLengthBytes
+                throw new WhatsAppCallException.Rtp("truncated extension data: need " + extLengthBytes
                         + ", have " + buf.remaining());
             }
             buf.position(buf.position() + extLengthBytes);
@@ -155,7 +157,7 @@ public record RtpPacket(
         if (padding && payloadLength > 0) {
             int padBytes = bytes[bytes.length - 1] & 0xFF;
             if (padBytes > payloadLength) {
-                throw new RtpException("padding count " + padBytes
+                throw new WhatsAppCallException.Rtp("padding count " + padBytes
                         + " exceeds payload length " + payloadLength);
             }
             payloadLength -= padBytes;

@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.call.rtp;
 
 import com.github.auties00.cobalt.call.rtp.srtp.SrtpEndpoint;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -165,13 +167,13 @@ public final class RtpReceiver {
         byte[] rtpBytes;
         try {
             rtpBytes = srtp.unprotectRtp(srtpBytes);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return;
         }
         RtpPacket packet;
         try {
             packet = RtpPacket.decode(rtpBytes);
-        } catch (RtpException ignored) {
+        } catch (WhatsAppCallException.Rtp _) {
             return;
         }
         if (packet.ssrc() != expectedSsrc || packet.payloadType() != expectedPayloadType) {
@@ -223,12 +225,12 @@ public final class RtpReceiver {
      */
     private void deliver(RtpPacket packet, boolean missing) {
         var inbound = missing
-                ? new InboundRtp(new byte[0], 0L, 0, false, true)
+                ? new InboundRtp(DataUtils.EMPTY_BYTE_ARRAY, 0L, 0, false, true)
                 : new InboundRtp(packet.payload(), packet.timestamp(), packet.sequenceNumber(),
                         packet.marker(), false);
         try {
             downstream.onInbound(inbound);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 }

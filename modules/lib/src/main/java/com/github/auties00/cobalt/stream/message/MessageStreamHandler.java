@@ -534,7 +534,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         int offlineCount;
         try {
             offlineCount = Integer.parseInt(rawOffline);
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return;
         }
         if (offlineCount < OFFLINE_COUNT_TOO_HIGH_THRESHOLD) {
@@ -766,7 +766,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         stanza.offline().ifPresent(raw -> {
             try {
                 builder.offlineCount(Integer.parseInt(raw));
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 // WA Web: Number.isNaN(p) || (s.offlineCount = p)
             }
         });
@@ -902,7 +902,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         stanza.offline().ifPresent(raw -> {
             try {
                 builder.offlineCount(Integer.parseInt(raw));
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 // Cobalt skips the property when the attribute is not numeric, matching WA Web
                 // behaviour for malformed attributes.
             }
@@ -1456,7 +1456,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
     private static int parseErrorCode(String value) {
         try {
             return Integer.parseInt(value);
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return 500;
         }
     }
@@ -1903,6 +1903,16 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         // dedicated virtual thread so the dispatch loop keeps draining.
         protocolMessage.historySyncNotification()
                 .ifPresent(webHistorySyncService::process);
+
+        // The primary phone forwards the user's "show security notifications"
+        // preference to the companion via this protocol message right after
+        // pairing (and whenever the user toggles the setting on the phone).
+        // WAWebUserPrefsNotifications.setGlobalSecurityNotifications writes
+        // the value into WAWebUserPrefsKeys.SECURITY_NOTIFICATIONS; the
+        // Cobalt equivalent is store.setShowSecurityNotifications.
+        protocolMessage.initialSecurityNotificationSettingSync()
+                .ifPresent(sync -> whatsapp.store()
+                        .setShowSecurityNotifications(sync.securityNotificationEnabled()));
     }
 
     /**

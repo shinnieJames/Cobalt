@@ -393,7 +393,7 @@ final class FcmRegistration {
         var trimmed = raw.endsWith("s") ? raw.substring(0, raw.length() - 1) : raw;
         try {
             return Long.parseLong(trimmed);
-        } catch (NumberFormatException ignored) {
+        } catch (NumberFormatException _) {
             return 0L;
         }
     }
@@ -447,7 +447,7 @@ final class FcmRegistration {
     private static byte[] decodeMaybeGzipped(byte[] data) {
         try (var gz = new GZIPInputStream(new ByteArrayInputStream(data))) {
             return gz.readAllBytes();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return data;
         }
     }

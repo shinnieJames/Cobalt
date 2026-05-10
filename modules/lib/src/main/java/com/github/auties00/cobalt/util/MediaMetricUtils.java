@@ -21,20 +21,6 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Static helpers that adapt {@code WAWebWamMediaMetricUtils} for the Cobalt
  * stack.
- *
- * <p>The WA Web module exposes nine helpers consumed by the media-upload
- * and media-download metrics pipelines, covering enum mappings (web
- * media-type string to {@link MediaType}, upload and download mode types,
- * backend-store classification from a direct-path prefix), error
- * classifiers ({@code Throwable} to {@link MediaUploadResultType} or
- * {@link MediaDownloadResultType}), an HTTP status-code accessor, a random
- * media-event identifier generator, and a one-shot
- * {@code WebcMediaErrorUnknownDetailsWamEvent} emitter.
- *
- * <p>Each export is replicated here so every caller (history-sync
- * downloads, app-state external-patch uploads, future media-message
- * uploads) routes through the same code path and produces identical
- * telemetry.
  */
 @WhatsAppWebModule(moduleName = "WAWebWamMediaMetricUtils")
 public final class MediaMetricUtils {

@@ -415,19 +415,23 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setProfilePicture(URI profilePicture);
 
     /**
-     * Returns the personal status message (about text) displayed on profile.
+     * Returns the authenticated user's own text status (the "about" line
+     * shown on their profile, optionally with an emoji and an ephemeral
+     * expiration). This is the self-account counterpart of
+     * {@link #findContactTextStatus(JidProvider)} for other contacts.
      *
-     * @return an {@code Optional} containing the about text, or empty if not set
+     * @return an {@code Optional} containing the self text status, or empty
+     *         if not set
      */
-    Optional<String> about();
+    Optional<ContactTextStatus> selfTextStatus();
 
     /**
-     * Sets the about text.
+     * Sets the authenticated user's own text status.
      *
-     * @param about the about text, may be {@code null}
+     * @param selfTextStatus the new text status, may be {@code null}
      * @return this store instance for method chaining
      */
-    WhatsAppStore setAbout(String about);
+    WhatsAppStore setSelfTextStatus(ContactTextStatus selfTextStatus);
 
     /**
      * Returns the WhatsApp JID that uniquely identifies this user. A user

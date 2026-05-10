@@ -367,7 +367,7 @@ public class VoiceCallSessionTest {
             var t = Thread.ofVirtual().start(() -> {
                 try {
                     holder.set(call.remoteVideoSource().next());
-                } catch (InterruptedException ignored) {
+                } catch (InterruptedException _) {
                 }
             });
             t.join(50);
@@ -413,7 +413,7 @@ public class VoiceCallSessionTest {
             var t = Thread.ofVirtual().start(() -> {
                 try {
                     holder.set(call.remoteAudioSource().next());
-                } catch (InterruptedException ignored) {
+                } catch (InterruptedException _) {
                 }
             });
             t.join(50);
@@ -489,11 +489,11 @@ public class VoiceCallSessionTest {
                     if (l != null) {
                         try {
                             l.onDatagram(packet);
-                        } catch (Throwable ignored) {
+                        } catch (Throwable _) {
                         }
                     }
                 }
-            } catch (InterruptedException ignored) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         }

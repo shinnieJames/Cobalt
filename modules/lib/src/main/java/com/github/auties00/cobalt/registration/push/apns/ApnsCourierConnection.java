@@ -431,7 +431,7 @@ final class ApnsCourierConnection {
         if (s != null) {
             try {
                 s.close();
-            } catch (IOException ignored) {
+            } catch (IOException _) {
             }
         }
         var pump = readPumpThread;

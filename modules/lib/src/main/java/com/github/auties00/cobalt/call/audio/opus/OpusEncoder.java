@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.audio.opus;
 
 import com.github.auties00.cobalt.call.audio.opus.bindings.Opus;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -91,7 +92,7 @@ public final class OpusEncoder implements AutoCloseable {
      * @param channels   1 for mono, 2 for stereo
      * @param app        the application mode (VOIP for calls)
      * @throws NullPointerException if {@code app} is {@code null}
-     * @throws OpusCodecException   if libopus rejects the
+     * @throws WhatsAppCallException.Opus   if libopus rejects the
      *                              configuration
      * @throws UnsatisfiedLinkError if libopus cannot be loaded
      */
@@ -106,11 +107,11 @@ public final class OpusEncoder implements AutoCloseable {
             try {
                 this.state = Opus.opus_encoder_create(sampleRate, channels, app.toNative(), errSeg);
             } catch (Throwable t) {
-                throw new OpusCodecException("opus_encoder_create failed", t);
+                throw new WhatsAppCallException.Opus("opus_encoder_create failed", t);
             }
             int err = errSeg.get(ValueLayout.JAVA_INT, 0);
             if (err != Opus.OPUS_OK() || state.equals(MemorySegment.NULL)) {
-                throw OpusCodecException.fromErr("opus_encoder_create", err);
+                throw WhatsAppCallException.Opus.fromErr("opus_encoder_create", err);
             }
             this.pcmBuf = arena.allocate(5760L * channels * 2);
             this.packetBuf = arena.allocate(MAX_PACKET_BYTES);
@@ -134,7 +135,7 @@ public final class OpusEncoder implements AutoCloseable {
      *                  legal Opus frame size.
      * @return a fresh byte array of length {@code packetLen}
      *         containing the encoded packet
-     * @throws OpusCodecException if encoding fails
+     * @throws WhatsAppCallException.Opus if encoding fails
      */
     public byte[] encode(short[] pcm, int frameSize) {
         Objects.requireNonNull(pcm, "pcm cannot be null");
@@ -144,10 +145,10 @@ public final class OpusEncoder implements AutoCloseable {
         try {
             written = Opus.opus_encode(state, pcmBuf, frameSize, packetBuf, MAX_PACKET_BYTES);
         } catch (Throwable t) {
-            throw new OpusCodecException("opus_encode failed", t);
+            throw new WhatsAppCallException.Opus("opus_encode failed", t);
         }
         if (written < 0) {
-            throw OpusCodecException.fromErr("opus_encode", written);
+            throw WhatsAppCallException.Opus.fromErr("opus_encode", written);
         }
         var out = new byte[written];
         MemorySegment.copy(packetBuf, ValueLayout.JAVA_BYTE, 0, out, 0, written);
@@ -261,10 +262,10 @@ public final class OpusEncoder implements AutoCloseable {
         try {
             rc = invoker.apply(state, request, value);
         } catch (Throwable t) {
-            throw new OpusCodecException("opus_encoder_ctl request=" + request + " failed", t);
+            throw new WhatsAppCallException.Opus("opus_encoder_ctl request=" + request + " failed", t);
         }
         if (rc != Opus.OPUS_OK()) {
-            throw OpusCodecException.fromErr("opus_encoder_ctl request=" + request, rc);
+            throw WhatsAppCallException.Opus.fromErr("opus_encoder_ctl request=" + request, rc);
         }
     }
 
@@ -292,10 +293,10 @@ public final class OpusEncoder implements AutoCloseable {
         try {
             rc = invoker.apply(state, request, intScratch);
         } catch (Throwable t) {
-            throw new OpusCodecException("opus_encoder_ctl request=" + request + " failed", t);
+            throw new WhatsAppCallException.Opus("opus_encoder_ctl request=" + request + " failed", t);
         }
         if (rc != Opus.OPUS_OK()) {
-            throw OpusCodecException.fromErr("opus_encoder_ctl request=" + request, rc);
+            throw WhatsAppCallException.Opus.fromErr("opus_encoder_ctl request=" + request, rc);
         }
         return intScratch.get(ValueLayout.JAVA_INT, 0);
     }
@@ -333,7 +334,7 @@ public final class OpusEncoder implements AutoCloseable {
         }
         try {
             Opus.opus_encoder_destroy(state);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         state = MemorySegment.NULL;
     }

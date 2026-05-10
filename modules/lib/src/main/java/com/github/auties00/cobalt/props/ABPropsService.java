@@ -694,7 +694,7 @@ public final class ABPropsService {
     public Optional<GroupAbPropsResult> getGroupAbPropsProtocol(Jid groupJid, String propsHash) {
         Objects.requireNonNull(groupJid, "groupJid cannot be null");
         try {
-            var bundle = client.fetchGroupExperimentConfig(groupJid, propsHash).orElse(null);
+            var bundle = client.queryGroupExperimentConfig(groupJid, propsHash).orElse(null);
             if (bundle == null) {
                 LOGGER.log(System.Logger.Level.WARNING,
                         "getGroupAbPropsProtocol failed: response did not parse as Success");

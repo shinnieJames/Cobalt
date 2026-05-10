@@ -2,11 +2,14 @@ package com.github.auties00.cobalt.call.video.h264;
 
 import com.github.auties00.cobalt.call.video.h264.bindings.ISVCEncoderVtbl;
 import com.github.auties00.cobalt.call.video.h264.bindings.OpenH264;
+import com.github.auties00.cobalt.call.video.h264.bindings.SBitrateInfo;
 import com.github.auties00.cobalt.call.video.h264.bindings.SFrameBSInfo;
 import com.github.auties00.cobalt.call.video.h264.bindings.SLayerBSInfo;
 import com.github.auties00.cobalt.call.video.h264.bindings.SSourcePicture;
 import com.github.auties00.cobalt.call.video.h264.bindings.Source_Picture_s;
+import com.github.auties00.cobalt.call.video.h264.bindings.TagBitrateInfo;
 import com.github.auties00.cobalt.call.video.h264.bindings.TagEncParamBase;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -65,6 +68,22 @@ public final class H264Encoder implements AutoCloseable {
     private static final int CAMERA_VIDEO_REAL_TIME = 0;
 
     /**
+     * openh264's {@code ENCODER_OPTION_BITRATE} selector for
+     * {@code SetOption} — its {@code SBitrateInfo*} payload carries
+     * the new target bitrate. The binding's typedef enum is anonymous
+     * so we hard-code the value here (mirrors the constant in
+     * {@code codec_app_def.h}'s {@code ENCODER_OPTION} enum).
+     */
+    private static final int ENCODER_OPTION_BITRATE = 5;
+
+    /**
+     * openh264's {@code SPATIAL_LAYER_ALL} sentinel — applied to the
+     * {@link TagBitrateInfo#iLayer} field to mean "all layers" when the
+     * encoder is configured single-layer (Cobalt's WebRTC config).
+     */
+    private static final int SPATIAL_LAYER_ALL = 4;
+
+    /**
      * Per-instance arena for the encoder pointer slot, the vtable
      * slice, and the two reusable param/output structs.
      */
@@ -100,6 +119,11 @@ public final class H264Encoder implements AutoCloseable {
      * Cached downcall handle for {@code ISVCEncoderVtbl.ForceIntraFrame}.
      */
     private final MethodHandle forceIntraHandle;
+
+    /**
+     * Cached downcall handle for {@code ISVCEncoderVtbl.SetOption}.
+     */
+    private final MethodHandle setOptionHandle;
 
     /**
      * Cached downcall handle for {@code ISVCEncoderVtbl.Uninitialize}.
@@ -148,7 +172,7 @@ public final class H264Encoder implements AutoCloseable {
      * @param targetBitrateBps target bitrate in bits per second
      * @param fps              capture frame rate
      * @throws IllegalArgumentException if any argument is invalid
-     * @throws H264Exception            if openh264 rejects the
+     * @throws WhatsAppCallException.H264            if openh264 rejects the
      *                                  config or initialisation fails
      * @throws UnsatisfiedLinkError     if libopenh264 cannot be loaded
      */
@@ -167,19 +191,19 @@ public final class H264Encoder implements AutoCloseable {
             try {
                 rc = OpenH264.WelsCreateSVCEncoder(slot);
             } catch (Throwable t) {
-                throw new H264Exception("WelsCreateSVCEncoder failed", t);
+                throw new WhatsAppCallException.H264("WelsCreateSVCEncoder failed", t);
             }
             if (rc != 0) {
-                throw new H264Exception("WelsCreateSVCEncoder returned " + rc);
+                throw new WhatsAppCallException.H264("WelsCreateSVCEncoder returned " + rc);
             }
             this.self = slot.get(ValueLayout.ADDRESS, 0);
             if (self.equals(MemorySegment.NULL)) {
-                throw new H264Exception("WelsCreateSVCEncoder produced NULL encoder");
+                throw new WhatsAppCallException.H264("WelsCreateSVCEncoder produced NULL encoder");
             }
             var vtableAddr = self.reinterpret(ValueLayout.ADDRESS.byteSize())
                     .get(ValueLayout.ADDRESS, 0);
             if (vtableAddr.equals(MemorySegment.NULL)) {
-                throw new H264Exception("encoder vtable pointer is NULL");
+                throw new WhatsAppCallException.H264("encoder vtable pointer is NULL");
             }
             var vtable = vtableAddr.reinterpret(ISVCEncoderVtbl.layout().byteSize());
             var initHandle = bindVtableFn(ISVCEncoderVtbl.Initialize(vtable),
@@ -188,6 +212,8 @@ public final class H264Encoder implements AutoCloseable {
                     FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
             this.forceIntraHandle = bindVtableFn(ISVCEncoderVtbl.ForceIntraFrame(vtable),
                     FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_BOOLEAN));
+            this.setOptionHandle = bindVtableFn(ISVCEncoderVtbl.SetOption(vtable),
+                    FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
             this.uninitHandle = bindVtableFn(ISVCEncoderVtbl.Uninitialize(vtable),
                     FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
             this.srcPicture = SSourcePicture.allocate(arena);
@@ -216,7 +242,7 @@ public final class H264Encoder implements AutoCloseable {
      * @throws IllegalStateException    if the encoder is closed
      * @throws IllegalArgumentException if {@code yuvI420.length} is
      *                                  not the expected I420 size
-     * @throws H264Exception            if openh264 returns non-zero
+     * @throws WhatsAppCallException.H264            if openh264 returns non-zero
      */
     public Packet encode(byte[] yuvI420, long ptsTicks, boolean forceKeyFrame) {
         Objects.requireNonNull(yuvI420, "yuvI420 cannot be null");
@@ -229,10 +255,10 @@ public final class H264Encoder implements AutoCloseable {
             try {
                 rc = (int) forceIntraHandle.invokeExact(self, true);
             } catch (Throwable t) {
-                throw new H264Exception("ISVCEncoder.ForceIntraFrame failed", t);
+                throw new WhatsAppCallException.H264("ISVCEncoder.ForceIntraFrame failed", t);
             }
             if (rc != 0) {
-                throw new H264Exception("ISVCEncoder.ForceIntraFrame returned " + rc);
+                throw new WhatsAppCallException.H264("ISVCEncoder.ForceIntraFrame returned " + rc);
             }
         }
         try (var scratch = Arena.ofConfined()) {
@@ -241,10 +267,10 @@ public final class H264Encoder implements AutoCloseable {
             try {
                 rc = (int) encodeFrameHandle.invokeExact(self, srcPicture, bsInfo);
             } catch (Throwable t) {
-                throw new H264Exception("ISVCEncoder.EncodeFrame failed", t);
+                throw new WhatsAppCallException.H264("ISVCEncoder.EncodeFrame failed", t);
             }
             if (rc != 0) {
-                throw new H264Exception("ISVCEncoder.EncodeFrame returned " + rc);
+                throw new WhatsAppCallException.H264("ISVCEncoder.EncodeFrame returned " + rc);
             }
             return drainPacket(ptsTicks);
         }
@@ -258,6 +284,38 @@ public final class H264Encoder implements AutoCloseable {
      */
     public int frameByteSize() {
         return yuvSize;
+    }
+
+    /**
+     * Updates the encoder's target bitrate at runtime by calling
+     * {@code ISVCEncoder.SetOption(ENCODER_OPTION_BITRATE, &SBitrateInfo)}.
+     * Used by the BWE feedback loop to track the current bandwidth
+     * estimate. Applies to all spatial layers
+     * ({@link #SPATIAL_LAYER_ALL}).
+     *
+     * @param targetBitrateBps the new target bitrate in bits per
+     *                         second; must be {@code >= 1}
+     * @throws IllegalArgumentException if {@code targetBitrateBps < 1}
+     * @throws IllegalStateException    if the encoder is closed
+     * @throws WhatsAppCallException.H264            if openh264 returns non-zero
+     */
+    public void setBitrate(int targetBitrateBps) {
+        if (targetBitrateBps < 1) throw new IllegalArgumentException("targetBitrateBps must be ≥ 1");
+        requireOpen();
+        try (var scratch = Arena.ofConfined()) {
+            var info = SBitrateInfo.allocate(scratch);
+            TagBitrateInfo.iLayer(info, SPATIAL_LAYER_ALL);
+            TagBitrateInfo.iBitrate(info, targetBitrateBps);
+            int rc;
+            try {
+                rc = (int) setOptionHandle.invokeExact(self, ENCODER_OPTION_BITRATE, info);
+            } catch (Throwable t) {
+                throw new WhatsAppCallException.H264("ISVCEncoder.SetOption(BITRATE) failed", t);
+            }
+            if (rc != 0) {
+                throw new WhatsAppCallException.H264("ISVCEncoder.SetOption(BITRATE) returned " + rc);
+            }
+        }
     }
 
     /**
@@ -281,10 +339,10 @@ public final class H264Encoder implements AutoCloseable {
             try {
                 rc = (int) initHandle.invokeExact(self, param);
             } catch (Throwable t) {
-                throw new H264Exception("ISVCEncoder.Initialize failed", t);
+                throw new WhatsAppCallException.H264("ISVCEncoder.Initialize failed", t);
             }
             if (rc != 0) {
-                throw new H264Exception("ISVCEncoder.Initialize returned " + rc);
+                throw new WhatsAppCallException.H264("ISVCEncoder.Initialize returned " + rc);
             }
         }
     }
@@ -379,7 +437,7 @@ public final class H264Encoder implements AutoCloseable {
      */
     private static MethodHandle bindVtableFn(MemorySegment fnPtr, FunctionDescriptor desc) {
         if (fnPtr.equals(MemorySegment.NULL)) {
-            throw new H264Exception("vtable function pointer is NULL");
+            throw new WhatsAppCallException.H264("vtable function pointer is NULL");
         }
         return Linker.nativeLinker().downcallHandle(fnPtr, desc);
     }
@@ -404,7 +462,7 @@ public final class H264Encoder implements AutoCloseable {
         }
         try {
             OpenH264.WelsDestroySVCEncoder(self);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         self = MemorySegment.NULL;
     }
@@ -421,7 +479,7 @@ public final class H264Encoder implements AutoCloseable {
         }
         try {
             uninitHandle.invokeExact(self);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         destroyEncoder();
         arena.close();

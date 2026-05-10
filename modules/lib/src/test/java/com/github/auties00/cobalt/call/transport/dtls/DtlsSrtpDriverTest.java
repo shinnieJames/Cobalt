@@ -144,7 +144,7 @@ public class DtlsSrtpDriverTest {
         Thread.ofVirtual().start(() -> {
             try {
                 Thread.sleep(200);
-            } catch (InterruptedException ignored) {
+            } catch (InterruptedException _) {
             }
             driver.close();
         });
@@ -267,11 +267,11 @@ public class DtlsSrtpDriverTest {
                     if (l != null) {
                         try {
                             l.onDatagram(packet);
-                        } catch (Throwable ignored) {
+                        } catch (Throwable _) {
                         }
                     }
                 }
-            } catch (InterruptedException ignored) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         }

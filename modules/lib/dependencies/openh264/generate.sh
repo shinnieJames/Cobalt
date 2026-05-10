@@ -50,6 +50,7 @@ rm -f "$OUT/${PKG//.//}/OpenH264.java" "$OUT/${PKG//.//}/OpenH264\$shared.java"
   --include-struct _tagVersion \
   --include-struct TagEncParamBase \
   --include-struct TagEncParamExt \
+  --include-struct TagBitrateInfo \
   --include-struct TagSVCDecodingParam \
   --include-struct Source_Picture_s \
   --include-struct TagBufferInfo \
@@ -58,6 +59,7 @@ rm -f "$OUT/${PKG//.//}/OpenH264.java" "$OUT/${PKG//.//}/OpenH264\$shared.java"
   --include-struct TagParserBsInfo \
   --include-typedef SEncParamBase \
   --include-typedef SEncParamExt \
+  --include-typedef SBitrateInfo \
   --include-typedef SSourcePicture \
   --include-typedef SFrameBSInfo \
   --include-typedef SLayerBSInfo \
@@ -88,6 +90,8 @@ rm -f "$OUT/${PKG//.//}/OpenH264.java" "$OUT/${PKG//.//}/OpenH264\$shared.java"
   --include-constant LOW_COMPLEXITY \
   --include-constant MEDIUM_COMPLEXITY \
   --include-constant HIGH_COMPLEXITY \
+  --include-constant ENCODER_OPTION_BITRATE \
+  --include-constant SPATIAL_LAYER_ALL \
   "$DIR/headers/codec_api.h"
 
 echo "wrote $OUT/${PKG//.//}/OpenH264.java"

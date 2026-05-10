@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.transport.ice;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import java.net.InetSocketAddress;
 
 /**
@@ -34,7 +36,7 @@ public interface DatagramTransport extends AutoCloseable {
      * appropriate TURN ChannelData / Send-indication framing.
      *
      * @param packet the payload
-     * @throws IceException        if the underlying socket has been
+     * @throws WhatsAppCallException.Ice        if the underlying socket has been
      *                              closed or the relay rejects the
      *                              send
      * @throws NullPointerException if {@code packet} is {@code null}

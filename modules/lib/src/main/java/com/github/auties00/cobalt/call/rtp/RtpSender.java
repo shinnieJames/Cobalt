@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.rtp;
 
 import com.github.auties00.cobalt.call.rtp.srtp.SrtpEndpoint;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 
 import java.security.SecureRandom;
 import java.util.Objects;
@@ -133,7 +134,7 @@ public final class RtpSender {
      * @throws NullPointerException     if {@code payload} is {@code null}
      * @throws IllegalArgumentException if {@code ptsMs} is negative or
      *                                  goes backwards
-     * @throws RtpException             if SRTP protection fails
+     * @throws WhatsAppCallException.Rtp             if SRTP protection fails
      */
     public void send(byte[] payload, long ptsMs, boolean marker) {
         Objects.requireNonNull(payload, "payload cannot be null");
@@ -154,7 +155,7 @@ public final class RtpSender {
         try {
             protectedSink.accept(protectedBytes);
         } catch (RuntimeException e) {
-            throw new RtpException("protected sink threw", e);
+            throw new WhatsAppCallException.Rtp("protected sink threw", e);
         }
         lastPtsMs = ptsMs;
     }

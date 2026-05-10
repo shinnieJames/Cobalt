@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.rtp.srtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
@@ -111,7 +113,7 @@ final class SrtpRtcpContext {
             this.hmac = Mac.getInstance("HmacSHA1");
             this.hmac.init(new SecretKeySpec(direction.srtcpAuthKey, "HmacSHA1"));
         } catch (GeneralSecurityException e) {
-            throw new SrtpException("failed to initialize SRTCP context", e);
+            throw new WhatsAppCallException.Srtp("failed to initialize SRTCP context", e);
         }
     }
 
@@ -126,19 +128,19 @@ final class SrtpRtcpContext {
      * @param rtcp the plaintext RTCP packet
      * @return the SRTCP packet, length
      *         {@code rtcp.length + 4 + 10}
-     * @throws SrtpException if the packet is malformed or encryption
+     * @throws WhatsAppCallException.Srtp if the packet is malformed or encryption
      *                       fails
      */
     synchronized byte[] protect(byte[] rtcp) {
         if (!sender) {
-            throw new SrtpException("protect called on a receiver context");
+            throw new WhatsAppCallException.Srtp("protect called on a receiver context");
         }
         if (rtcp.length < RTCP_HEADER_LEN) {
-            throw new SrtpException("RTCP packet shorter than 8-byte header");
+            throw new WhatsAppCallException.Srtp("RTCP packet shorter than 8-byte header");
         }
         senderIndex++;
         if ((senderIndex & ~INDEX_MASK) != 0L) {
-            throw new SrtpException("SRTCP index space exhausted");
+            throw new WhatsAppCallException.Srtp("SRTCP index space exhausted");
         }
 
         var totalLen = rtcp.length + INDEX_FIELD_LEN + AUTH_TAG_LEN;
@@ -150,7 +152,7 @@ final class SrtpRtcpContext {
                     new IvParameterSpec(SrtpDirection.computeIv(direction.srtcpSalt, ssrc, senderIndex)));
             aes.doFinal(rtcp, RTCP_HEADER_LEN, encryptedLen, out, RTCP_HEADER_LEN);
         } catch (GeneralSecurityException e) {
-            throw new SrtpException("SRTCP encryption failed", e);
+            throw new WhatsAppCallException.Srtp("SRTCP encryption failed", e);
         }
 
         var indexFieldOff = rtcp.length;
@@ -174,21 +176,21 @@ final class SrtpRtcpContext {
      *
      * @param srtcp the SRTCP packet
      * @return the plaintext RTCP packet
-     * @throws SrtpException if the packet is malformed, replays an
+     * @throws WhatsAppCallException.Srtp if the packet is malformed, replays an
      *                       earlier index, or fails authentication
      */
     synchronized byte[] unprotect(byte[] srtcp) {
         if (sender) {
-            throw new SrtpException("unprotect called on a sender context");
+            throw new WhatsAppCallException.Srtp("unprotect called on a sender context");
         }
         if (srtcp.length < RTCP_HEADER_LEN + INDEX_FIELD_LEN + AUTH_TAG_LEN) {
-            throw new SrtpException("SRTCP packet too short");
+            throw new WhatsAppCallException.Srtp("SRTCP packet too short");
         }
 
         var dataLen = srtcp.length - AUTH_TAG_LEN;
         var expected = computeAuthTag(srtcp, dataLen);
         if (!SrtpDirection.constantTimeEquals(expected, 0, srtcp, dataLen, AUTH_TAG_LEN)) {
-            throw new SrtpException("SRTCP auth failed");
+            throw new WhatsAppCallException.Srtp("SRTCP auth failed");
         }
 
         var indexFieldOff = dataLen - INDEX_FIELD_LEN;
@@ -200,7 +202,7 @@ final class SrtpRtcpContext {
         var index = indexField & INDEX_MASK;
 
         if (!replay.check(index)) {
-            throw new SrtpException("SRTCP replay detected at index " + index);
+            throw new WhatsAppCallException.Srtp("SRTCP replay detected at index " + index);
         }
 
         var rtcpLen = indexFieldOff;
@@ -213,7 +215,7 @@ final class SrtpRtcpContext {
                         new IvParameterSpec(SrtpDirection.computeIv(direction.srtcpSalt, ssrc, index)));
                 aes.doFinal(srtcp, RTCP_HEADER_LEN, encryptedLen, plain, RTCP_HEADER_LEN);
             } catch (GeneralSecurityException e) {
-                throw new SrtpException("SRTCP decryption failed", e);
+                throw new WhatsAppCallException.Srtp("SRTCP decryption failed", e);
             }
         } else {
             System.arraycopy(srtcp, RTCP_HEADER_LEN, plain, RTCP_HEADER_LEN, encryptedLen);

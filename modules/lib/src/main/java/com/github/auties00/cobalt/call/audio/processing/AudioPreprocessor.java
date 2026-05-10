@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.audio.processing;
 
 import com.github.auties00.cobalt.call.audio.processing.bindings.SpeexDsp;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -85,11 +86,11 @@ public final class AudioPreprocessor implements AutoCloseable {
             this.state = SpeexDsp.speex_preprocess_state_init(frameSize, sampleRate);
         } catch (Throwable t) {
             arena.close();
-            throw new SpeexDspException("speex_preprocess_state_init failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_preprocess_state_init failed", t);
         }
         if (state.equals(MemorySegment.NULL)) {
             arena.close();
-            throw new SpeexDspException("speex_preprocess_state_init returned NULL");
+            throw new WhatsAppCallException.SpeexDsp("speex_preprocess_state_init returned NULL");
         }
         this.frameBuf = arena.allocate((long) frameSize * 2);
         this.intScratch = arena.allocate(4);
@@ -118,7 +119,7 @@ public final class AudioPreprocessor implements AutoCloseable {
         try {
             rc = SpeexDsp.speex_preprocess_run(state, frameBuf);
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_preprocess_run failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_preprocess_run failed", t);
         }
         MemorySegment.copy(frameBuf, ValueLayout.JAVA_SHORT, 0, pcm, 0, frameSize);
         return rc != 0;
@@ -192,9 +193,9 @@ public final class AudioPreprocessor implements AutoCloseable {
         try {
             rc = SpeexDsp.speex_preprocess_ctl(state, SpeexDsp.SPEEX_PREPROCESS_SET_ECHO_STATE(), aec.state());
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_preprocess_ctl SET_ECHO_STATE failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_preprocess_ctl SET_ECHO_STATE failed", t);
         }
-        if (rc < 0) throw new SpeexDspException("speex_preprocess_ctl SET_ECHO_STATE returned " + rc);
+        if (rc < 0) throw new WhatsAppCallException.SpeexDsp("speex_preprocess_ctl SET_ECHO_STATE returned " + rc);
     }
 
     /**
@@ -220,9 +221,9 @@ public final class AudioPreprocessor implements AutoCloseable {
         try {
             rc = SpeexDsp.speex_preprocess_ctl(state, request, intScratch);
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_preprocess_ctl request=" + request + " failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_preprocess_ctl request=" + request + " failed", t);
         }
-        if (rc < 0) throw new SpeexDspException("speex_preprocess_ctl request=" + request + " returned " + rc);
+        if (rc < 0) throw new WhatsAppCallException.SpeexDsp("speex_preprocess_ctl request=" + request + " returned " + rc);
     }
 
     /**
@@ -245,7 +246,7 @@ public final class AudioPreprocessor implements AutoCloseable {
         try {
             SpeexDsp.speex_preprocess_state_destroy(state);
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_preprocess_state_destroy failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_preprocess_state_destroy failed", t);
         } finally {
             state = MemorySegment.NULL;
             arena.close();

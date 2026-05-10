@@ -248,7 +248,7 @@ final class FcmMcsConnection {
         if (s != null) {
             try {
                 s.close();
-            } catch (IOException ignored) {
+            } catch (IOException _) {
             }
         }
         var hb = heartbeatThread;
@@ -497,7 +497,7 @@ final class FcmMcsConnection {
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     return;
-                } catch (IOException ignored) {
+                } catch (IOException _) {
                     return;  // socket dead; outer loop will reconnect
                 }
             }

@@ -1098,7 +1098,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             if (maxAvailableAttr != null) {
                 try {
                     maxAvailable = Integer.parseInt(maxAvailableAttr);
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException _) {
                 }
             }
             var maxAvailableChild = productNode.getChild("max_available")
@@ -1106,7 +1106,7 @@ public sealed interface IqQueryProductListCatalogResponse extends IqOperation.Re
             if (maxAvailableChild != null) {
                 try {
                     maxAvailable = Integer.parseInt(maxAvailableChild);
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException _) {
                 }
             }
             String whatsappStatus = null;

@@ -570,7 +570,7 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
             var sessionCipher = new SignalSessionCipher(whatsapp.store());
             sessionCipher.process(remoteDevice.toSignalAddress(), builder.build());
             whatsapp.store().save();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 

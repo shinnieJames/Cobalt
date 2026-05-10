@@ -97,7 +97,7 @@ final class PaymentLinkResolver {
                 }
                 try {
                     out.put(Pattern.compile(entry.getKey()), psp);
-                } catch (PatternSyntaxException ignored) {
+                } catch (PatternSyntaxException _) {
                 }
             }
             return Map.copyOf(out);

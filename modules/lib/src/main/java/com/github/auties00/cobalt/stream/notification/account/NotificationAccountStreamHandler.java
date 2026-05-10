@@ -165,13 +165,16 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        var oldAbout = whatsapp.store().about().orElse(""); // NO_WA_BASIS - defensive comparison
+        var oldAbout = whatsapp.store().selfTextStatus().flatMap(ContactTextStatus::text).orElse(""); // NO_WA_BASIS - defensive comparison
         var newAbout = whatsapp.queryAbout(self).orElse("");
         if (Objects.equals(oldAbout, newAbout)) {
             return; // NO_WA_BASIS - Cobalt optimization to avoid redundant updates
         }
 
-        whatsapp.store().setAbout(newAbout);
+        var newStatus = new ContactTextStatusBuilder()
+                .text(newAbout)
+                .build();
+        whatsapp.store().setSelfTextStatus(newStatus);
         fireListeners(listener -> listener.onAboutChanged(whatsapp, oldAbout, newAbout)); // ADAPTED: Cobalt listener pattern
     }
 

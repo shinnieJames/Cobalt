@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.call.video.h264.bindings.OpenH264;
 import com.github.auties00.cobalt.call.video.h264.bindings.TagBufferInfo;
 import com.github.auties00.cobalt.call.video.h264.bindings.TagSVCDecodingParam;
 import com.github.auties00.cobalt.call.video.h264.bindings.TagSysMemBuffer;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -89,7 +90,7 @@ public final class H264Decoder implements AutoCloseable {
      * postprocessing, error concealment off, output color format
      * I420.
      *
-     * @throws H264Exception        if openh264 initialisation fails
+     * @throws WhatsAppCallException.H264        if openh264 initialisation fails
      * @throws UnsatisfiedLinkError if libopenh264 cannot be loaded
      */
     public H264Decoder() {
@@ -100,19 +101,19 @@ public final class H264Decoder implements AutoCloseable {
             try {
                 rc = OpenH264.WelsCreateDecoder(slot);
             } catch (Throwable t) {
-                throw new H264Exception("WelsCreateDecoder failed", t);
+                throw new WhatsAppCallException.H264("WelsCreateDecoder failed", t);
             }
             if (rc != 0) {
-                throw new H264Exception("WelsCreateDecoder returned " + rc);
+                throw new WhatsAppCallException.H264("WelsCreateDecoder returned " + rc);
             }
             this.self = slot.get(ValueLayout.ADDRESS, 0);
             if (self.equals(MemorySegment.NULL)) {
-                throw new H264Exception("WelsCreateDecoder produced NULL decoder");
+                throw new WhatsAppCallException.H264("WelsCreateDecoder produced NULL decoder");
             }
             var vtableAddr = self.reinterpret(ValueLayout.ADDRESS.byteSize())
                     .get(ValueLayout.ADDRESS, 0);
             if (vtableAddr.equals(MemorySegment.NULL)) {
-                throw new H264Exception("decoder vtable pointer is NULL");
+                throw new WhatsAppCallException.H264("decoder vtable pointer is NULL");
             }
             var vtable = vtableAddr.reinterpret(ISVCDecoderVtbl.layout().byteSize());
             var initHandle = bindVtableFn(ISVCDecoderVtbl.Initialize(vtable),
@@ -149,7 +150,7 @@ public final class H264Decoder implements AutoCloseable {
      * @param h264 the encoded H.264 bytes
      * @return the decoded frame, or {@code null} if none was produced
      * @throws IllegalStateException if the decoder is closed
-     * @throws H264Exception         if openh264 returns non-zero
+     * @throws WhatsAppCallException.H264         if openh264 returns non-zero
      */
     public Frame decode(byte[] h264) {
         Objects.requireNonNull(h264, "h264 cannot be null");
@@ -188,10 +189,10 @@ public final class H264Decoder implements AutoCloseable {
         try {
             rc = (int) decodeFrame2Handle.invokeExact(self, src, srcLen, planesArray, bufInfo);
         } catch (Throwable t) {
-            throw new H264Exception("ISVCDecoder.DecodeFrame2 failed", t);
+            throw new WhatsAppCallException.H264("ISVCDecoder.DecodeFrame2 failed", t);
         }
         if (rc != 0) {
-            throw new H264Exception("ISVCDecoder.DecodeFrame2 returned " + rc);
+            throw new WhatsAppCallException.H264("ISVCDecoder.DecodeFrame2 returned " + rc);
         }
         if (TagBufferInfo.iBufferStatus(bufInfo) != 1) {
             return null;
@@ -236,7 +237,7 @@ public final class H264Decoder implements AutoCloseable {
                            byte[] dst, int dstOffset) {
         var planePtr = planesArray.getAtIndex(ValueLayout.ADDRESS, planeIndex);
         if (planePtr.equals(MemorySegment.NULL)) {
-            throw new H264Exception("decoded plane " + planeIndex + " is NULL");
+            throw new WhatsAppCallException.H264("decoded plane " + planeIndex + " is NULL");
         }
         var plane = planePtr.reinterpret((long) stride * planeHeight);
         for (int row = 0; row < planeHeight; row++) {
@@ -263,10 +264,10 @@ public final class H264Decoder implements AutoCloseable {
             try {
                 rc = (long) initHandle.invokeExact(self, param);
             } catch (Throwable t) {
-                throw new H264Exception("ISVCDecoder.Initialize failed", t);
+                throw new WhatsAppCallException.H264("ISVCDecoder.Initialize failed", t);
             }
             if (rc != 0) {
-                throw new H264Exception("ISVCDecoder.Initialize returned " + rc);
+                throw new WhatsAppCallException.H264("ISVCDecoder.Initialize returned " + rc);
             }
         }
     }
@@ -280,7 +281,7 @@ public final class H264Decoder implements AutoCloseable {
      */
     private static MethodHandle bindVtableFn(MemorySegment fnPtr, FunctionDescriptor desc) {
         if (fnPtr.equals(MemorySegment.NULL)) {
-            throw new H264Exception("vtable function pointer is NULL");
+            throw new WhatsAppCallException.H264("vtable function pointer is NULL");
         }
         return Linker.nativeLinker().downcallHandle(fnPtr, desc);
     }
@@ -304,7 +305,7 @@ public final class H264Decoder implements AutoCloseable {
         }
         try {
             OpenH264.WelsDestroyDecoder(self);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         self = MemorySegment.NULL;
     }
@@ -321,7 +322,7 @@ public final class H264Decoder implements AutoCloseable {
         }
         try {
             uninitHandle.invokeExact(self);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         destroyDecoder();
         arena.close();

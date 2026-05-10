@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.call.transport.relay.WaRelayAttributeType;
 import com.github.auties00.cobalt.call.transport.relay.WaRelayMessageIntegrity;
 import com.github.auties00.cobalt.call.transport.relay.WaRelayMessageType;
 import com.github.auties00.cobalt.call.transport.relay.WaRelayPacket;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -378,7 +379,7 @@ public final class IceAgent {
         WaRelayPacket parsed;
         try {
             parsed = WaRelayPacket.decode(packet);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return;
         }
         var msgType = parsed.messageType();
@@ -494,7 +495,7 @@ public final class IceAgent {
         inFlight.put(hex(txId), pair);
         try {
             outboundSink.send(encoded, pair.remote().transportAddress());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             failPair(pair);
         }
     }
@@ -522,7 +523,7 @@ public final class IceAgent {
         if (l != null) {
             try {
                 l.onCheckSucceeded(pair);
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
         maybeNominate(pair);
@@ -565,7 +566,7 @@ public final class IceAgent {
         // address — the call layer's pump can stamp the source.
         try {
             outboundSink.send(encoded, null);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
         }
     }
 
@@ -591,7 +592,7 @@ public final class IceAgent {
     private static boolean verifyMessageIntegrity(WaRelayPacket packet, byte[] key) {
         try {
             return WaRelayMessageIntegrity.verify(packet.encode(), key);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return false;
         }
     }
@@ -612,7 +613,7 @@ public final class IceAgent {
         if (l != null) {
             try {
                 l.onCheckFailed(pair);
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }
@@ -639,7 +640,7 @@ public final class IceAgent {
             if (l != null) {
                 try {
                     l.onNominated(pair);
-                } catch (Throwable ignored) {
+                } catch (Throwable _) {
                 }
             }
         }
@@ -681,7 +682,7 @@ public final class IceAgent {
      *                  served on (the agent does not bind sockets;
      *                  the call layer does)
      * @return the host candidates
-     * @throws IceException if {@link NetworkInterface#getNetworkInterfaces}
+     * @throws WhatsAppCallException.Ice if {@link NetworkInterface#getNetworkInterfaces}
      *                      throws
      */
     public static List<IceCandidate> gatherLocalHostCandidates(IceComponent component, int port) {
@@ -706,7 +707,7 @@ public final class IceAgent {
             }
             return out;
         } catch (SocketException e) {
-            throw new IceException("failed to enumerate local network interfaces", e);
+            throw new WhatsAppCallException.Ice("failed to enumerate local network interfaces", e);
         }
     }
 }

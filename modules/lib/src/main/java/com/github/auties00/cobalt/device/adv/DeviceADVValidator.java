@@ -338,62 +338,155 @@ public final class DeviceADVValidator {
     }
 
     /**
-     * Validates and decodes a signed key index list from raw bytes.
+     * Decodes and verifies a signed key index list against the user's locally-stored
+     * primary identity.
+     *
+     * <p>Standard E2EE path used for normal accounts: the verification key comes from
+     * the local Signal store (device 0 of {@code userJid}), and any embedded
+     * {@code accountSignatureKey} field on the wire is ignored. The server commonly
+     * omits that field because peers are expected to verify against the identity they
+     * already trust from their Signal session with the primary device. The returned
+     * result therefore carries an empty {@code accountSignatureKey}.
+     *
+     * @param userJid             the user JID whose primary identity is the
+     *                            verification key
+     * @param signedKeyIndexBytes the raw signed key index list bytes
+     * @return the validated key index list data, or empty when no local primary
+     *         identity is known or validation fails
+     * @throws NullPointerException if any argument is {@code null}
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
+            exports = "decodeSignedKeyIndexBytes",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    public Optional<ValidatedKeyIndexListResult> decodeSignedKeyIndexBytes(Jid userJid, byte[] signedKeyIndexBytes) {
+        Objects.requireNonNull(userJid, "userJid cannot be null");
+        Objects.requireNonNull(signedKeyIndexBytes, "signedKeyIndexBytes cannot be null");
+
+        var localPrimaryIdentity = findStoredUserIdentityKey(userJid).orElse(null);
+        if (localPrimaryIdentity == null) {
+            return Optional.empty();
+        }
+
+        return decodeAndVerifySignedKeyIndexList(signedKeyIndexBytes, localPrimaryIdentity, null);
+    }
+
+    /**
+     * Decodes and verifies a signed key index list against the embedded account
+     * signature key.
+     *
+     * <p>Hosted-business coexistence path: the verification key must be present in the
+     * outer protobuf {@code accountSignatureKey} field; if it is missing or empty the
+     * result is empty. Used when peers may not yet have a Signal session with the
+     * primary phone (and therefore cannot resolve a stored identity) but still need to
+     * trust a freshly-received key index list. The returned result carries the
+     * embedded key so callers can persist it as the primary identity.
+     *
      * @param signedKeyIndexBytes the raw signed key index list bytes
      * @return the validated key index list data, or empty if validation fails
+     * @throws NullPointerException if {@code signedKeyIndexBytes} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "verifySKeyIndexWithAccSigKey",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public Optional<ValidatedKeyIndexListResult> validateAndDecodeSignedKeyIndexList(byte[] signedKeyIndexBytes) {
+    public Optional<ValidatedKeyIndexListResult> verifySKeyIndexWithAccSigKey(byte[] signedKeyIndexBytes) {
         Objects.requireNonNull(signedKeyIndexBytes, "signedKeyIndexBytes cannot be null");
 
         try {
             var signedKeyIndexList = ADVSignedKeyIndexListSpec.decode(signedKeyIndexBytes);
-            var details = signedKeyIndexList.details();
-            if (details.isEmpty()) {
+            var accountSignatureKey = signedKeyIndexList.accountSignatureKey()
+                    .filter(key -> key.length > 0)
+                    .orElse(null);
+            if (accountSignatureKey == null) {
                 return Optional.empty();
             }
+            return verifyAndBuildResult(signedKeyIndexList, accountSignatureKey, accountSignatureKey);
+        } catch (ProtobufDeserializationException e) {
+            return Optional.empty();
+        }
+    }
 
-            // The embedded accountSignatureKey is the only source: no fallback to stored.
-            var accountSignatureKey = signedKeyIndexList.accountSignatureKey();
-            if (accountSignatureKey.isEmpty() || accountSignatureKey.get().length == 0) {
-                return Optional.empty();
-            }
+    /**
+     * Decodes the outer {@code ADVSignedKeyIndexList} envelope and dispatches to
+     * {@link #verifyAndBuildResult} for signature verification and inner decoding.
+     *
+     * @param signedKeyIndexBytes       the raw signed key index list bytes
+     * @param verificationKey           the public key used to verify the signature
+     * @param resultAccountSignatureKey the key embedded in the returned result, or
+     *                                  {@code null} for the standard path that has
+     *                                  no embedded key to forward
+     * @return the validated key index list data, or empty if validation fails
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
+            exports = "decodeSignedKeyIndexBytes",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private Optional<ValidatedKeyIndexListResult> decodeAndVerifySignedKeyIndexList(
+            byte[] signedKeyIndexBytes,
+            byte[] verificationKey,
+            byte[] resultAccountSignatureKey
+    ) {
+        try {
+            var signedKeyIndexList = ADVSignedKeyIndexListSpec.decode(signedKeyIndexBytes);
+            return verifyAndBuildResult(signedKeyIndexList, verificationKey, resultAccountSignatureKey);
+        } catch (ProtobufDeserializationException e) {
+            return Optional.empty();
+        }
+    }
 
-            var accountSignature = signedKeyIndexList.accountSignature();
-            if (accountSignature.isEmpty() || accountSignature.get().length == 0) {
-                return Optional.empty();
-            }
+    /**
+     * Verifies the account signature on a parsed {@code ADVSignedKeyIndexList}, decodes
+     * the inner {@code ADVKeyIndexList}, and builds a {@link ValidatedKeyIndexListResult}.
+     *
+     * @param signedKeyIndexList        the parsed outer envelope
+     * @param verificationKey           the public key used to verify the signature
+     * @param resultAccountSignatureKey the key embedded in the returned result, or
+     *                                  {@code null} for the standard path
+     * @return the validated key index list data, or empty if any check fails
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
+            exports = "decodeSignedKeyIndexBytes",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private Optional<ValidatedKeyIndexListResult> verifyAndBuildResult(
+            ADVSignedKeyIndexList signedKeyIndexList,
+            byte[] verificationKey,
+            byte[] resultAccountSignatureKey
+    ) {
+        var details = signedKeyIndexList.details().orElse(null);
+        if (details == null) {
+            return Optional.empty();
+        }
 
-            var message = DataUtils.concatByteArrays(KEY_INDEX_LIST_SIGNATURE_HEADER, details.get());
-            if (!Curve25519.verifySignature(accountSignatureKey.get(), message, accountSignature.get())) {
-                return Optional.empty();
-            }
+        var accountSignature = signedKeyIndexList.accountSignature()
+                .filter(sig -> sig.length > 0)
+                .orElse(null);
+        if (accountSignature == null) {
+            return Optional.empty();
+        }
 
-            var keyIndexList = ADVKeyIndexListSpec.decode(details.get());
+        var message = DataUtils.concatByteArrays(KEY_INDEX_LIST_SIGNATURE_HEADER, details);
+        if (!Curve25519.verifySignature(verificationKey, message, accountSignature)) {
+            return Optional.empty();
+        }
 
+        try {
+            var keyIndexList = ADVKeyIndexListSpec.decode(details);
             var keyIndexListRawId = keyIndexList.rawId();
             var keyIndexListTimestamp = keyIndexList.timestamp();
             if (keyIndexListRawId.isEmpty() || keyIndexListTimestamp.isEmpty()) {
                 return Optional.empty();
             }
-            var keyIndexListValidIndexesSet = new LinkedHashSet<>(keyIndexList.validIndexes());
-            var keyIndexListCurrentIndex = keyIndexList.currentIndex()
-                    .orElse(0);
-            var keyIndexListAccountType = keyIndexList.accountType()
-                    .orElse(ADVEncryptionType.E2EE);
 
-            var result = new ValidatedKeyIndexListResult(
+            var keyIndexListValidIndexesSet = new LinkedHashSet<>(keyIndexList.validIndexes());
+            var keyIndexListCurrentIndex = keyIndexList.currentIndex().orElse(0);
+            var keyIndexListAccountType = keyIndexList.accountType().orElse(ADVEncryptionType.E2EE);
+
+            return Optional.of(new ValidatedKeyIndexListResult(
                     keyIndexListRawId.getAsInt(),
                     keyIndexListTimestamp.get(),
                     keyIndexListValidIndexesSet,
                     keyIndexListCurrentIndex,
                     keyIndexListAccountType,
-                    accountSignatureKey.get()
-            );
-
-            return Optional.of(result);
+                    resultAccountSignatureKey
+            ));
         } catch (ProtobufDeserializationException e) {
             return Optional.empty();
         }

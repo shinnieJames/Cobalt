@@ -77,7 +77,7 @@ public final class CatalogProductParser {
         if (urlString != null && !urlString.isEmpty()) {
             try {
                 url = URI.create(urlString);
-            } catch (IllegalArgumentException ignored) {
+            } catch (IllegalArgumentException _) {
                 // url stays null when the relay sends a malformed URI
             }
         }
@@ -88,7 +88,7 @@ public final class CatalogProductParser {
         if (priceString != null && !priceString.isEmpty()) {
             try {
                 price = Long.parseLong(priceString);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 // price stays 0L on parse failure
             }
         }
@@ -114,7 +114,7 @@ public final class CatalogProductParser {
                     if (originalUrl != null && !originalUrl.isEmpty()) {
                         try {
                             encryptedImage = URI.create(originalUrl);
-                        } catch (IllegalArgumentException ignored) {
+                        } catch (IllegalArgumentException _) {
                             // encryptedImage stays null on parse failure
                         }
                     }

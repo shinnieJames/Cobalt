@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call.rtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -134,7 +135,7 @@ public class RtpPacketTest {
      */
     @Test
     public void truncatedPacketRejected() {
-        assertThrows(RtpException.class, () -> RtpPacket.decode(new byte[8]));
+        assertThrows(WhatsAppCallException.Rtp.class, () -> RtpPacket.decode(new byte[8]));
     }
 
     /**
@@ -144,7 +145,7 @@ public class RtpPacketTest {
     public void wrongVersionRejected() {
         var bytes = new byte[12];
         bytes[0] = 0x40;  // V=1, not 2
-        assertThrows(RtpException.class, () -> RtpPacket.decode(bytes));
+        assertThrows(WhatsAppCallException.Rtp.class, () -> RtpPacket.decode(bytes));
     }
 
     /**

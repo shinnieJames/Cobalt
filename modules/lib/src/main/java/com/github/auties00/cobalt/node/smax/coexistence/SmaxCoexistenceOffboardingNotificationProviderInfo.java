@@ -112,7 +112,7 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
         if (idBytes != null) {
             try {
                 id = Integer.parseInt(idBytes);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 // ADAPTED: WASmaxParseUtils.contentInt: parseInt(e,10) NaN -> error;
                 // here a malformed id collapses the whole parse to Optional.empty().
                 return Optional.empty();

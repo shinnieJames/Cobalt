@@ -20,7 +20,7 @@ import java.util.Optional;
  * Builds a {@link LinkDetails}/{@link LinkThumbnail} pair for
  * {@code chat.whatsapp.com} group invite links by querying the server
  * for the target group's metadata via
- * {@link WhatsAppClient#queryGroupInfoByInviteCode(String)}.
+ * {@link WhatsAppClient#queryInviteGroupInfo(String)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebLinkPreviewGroupUtils")
 public final class GroupInvitePreviewResolver {
@@ -68,7 +68,10 @@ public final class GroupInvitePreviewResolver {
             return Optional.empty();
         }
         try {
-            var metadata = client.queryGroupInfoByInviteCode(code);
+            var metadata = client.queryInviteGroupInfo(code).orElse(null);
+            if (metadata == null) {
+                return Optional.empty();
+            }
             var details = new LinkDetails(
                     metadata.subject(),
                     inviteLinkDescription(client, metadata),
@@ -79,7 +82,7 @@ public final class GroupInvitePreviewResolver {
                     ? null
                     : new LinkThumbnail(thumbnailBytes, null, null, null, null, null, null, null);
             return Optional.of(new ResolvedPreview(details, thumbnail));
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return Optional.empty();
         }
     }
@@ -109,7 +112,7 @@ public final class GroupInvitePreviewResolver {
                 return null;
             }
             return PreviewThumbnailFetcher.download(httpClient, pictureUri, timeout);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return null;
         }
     }

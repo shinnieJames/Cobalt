@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.SequencedSet;
 
 /**
@@ -20,7 +21,8 @@ import java.util.SequencedSet;
  * companion device validity, account type (E2EE or HOSTED), and identity rotation
  * state without re-decoding the protobuf.
  *
- * @see DeviceADVValidator#validateAndDecodeSignedKeyIndexList(byte[])
+ * @see DeviceADVValidator#decodeSignedKeyIndexBytes(com.github.auties00.cobalt.model.jid.Jid, byte[])
+ * @see DeviceADVValidator#verifySKeyIndexWithAccSigKey(byte[])
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleAdvDeviceNotificationUtils")
 public final class ValidatedKeyIndexListResult {
@@ -50,7 +52,9 @@ public final class ValidatedKeyIndexListResult {
     private final ADVEncryptionType accountType;
 
     /**
-     * The 32-byte account signature key from the outer signed wrapper.
+     * The 32-byte account signature key from the outer signed wrapper, or {@code null}
+     * when the standard E2EE path verified against the locally-stored primary identity
+     * and therefore has no embedded key to forward.
      */
     private final byte[] accountSignatureKey;
 
@@ -62,9 +66,11 @@ public final class ValidatedKeyIndexListResult {
      * @param validIndexes        the set of valid key indexes
      * @param currentIndex        the current key index counter
      * @param accountType         the account encryption type
-     * @param accountSignatureKey the 32-byte account signature key
-     * @throws NullPointerException if any of {@code timestamp}, {@code validIndexes},
-     *                              {@code accountType} or {@code accountSignatureKey} is {@code null}
+     * @param accountSignatureKey the 32-byte account signature key, or {@code null}
+     *                            when the standard path verified against the locally-stored
+     *                            primary identity
+     * @throws NullPointerException if any of {@code timestamp}, {@code validIndexes}
+     *                              or {@code accountType} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "verifySKeyIndexWithAccSigKey",
@@ -82,7 +88,7 @@ public final class ValidatedKeyIndexListResult {
         this.validIndexes = Objects.requireNonNull(validIndexes, "validIndexes cannot be null");
         this.currentIndex = currentIndex;
         this.accountType = Objects.requireNonNull(accountType, "accountType cannot be null");
-        this.accountSignatureKey = Objects.requireNonNull(accountSignatureKey, "accountSignatureKey cannot be null");
+        this.accountSignatureKey = accountSignatureKey;
     }
 
     /**
@@ -148,12 +154,16 @@ public final class ValidatedKeyIndexListResult {
     /**
      * Returns the 32-byte account signature key from the outer signed wrapper.
      *
-     * @return the account signature key
+     * <p>Only populated by the hosted-business path that mirrors WA Web's
+     * {@code verifySKeyIndexWithAccSigKey}; the standard E2EE path verifies against the
+     * locally-stored primary identity and leaves this empty.
+     *
+     * @return the account signature key, or empty when not provided
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "verifySKeyIndexWithAccSigKey",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public byte[] accountSignatureKey() {
-        return accountSignatureKey;
+    public Optional<byte[]> accountSignatureKey() {
+        return Optional.ofNullable(accountSignatureKey);
     }
 }

@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.call.video.vpx;
 import com.github.auties00.cobalt.call.video.vpx.bindings.LibVpx;
 import com.github.auties00.cobalt.call.video.vpx.bindings.vpx_codec_ctx;
 import com.github.auties00.cobalt.call.video.vpx.bindings.vpx_image;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -76,7 +77,7 @@ public final class VP8Decoder implements AutoCloseable {
      * Constructs a new VP8 decoder. Threads, postprocessing, and
      * error concealment are left at libvpx's defaults.
      *
-     * @throws VpxException         if libvpx initialisation fails
+     * @throws WhatsAppCallException.Vpx         if libvpx initialisation fails
      * @throws UnsatisfiedLinkError if libvpx cannot be loaded
      */
     public VP8Decoder() {
@@ -100,7 +101,7 @@ public final class VP8Decoder implements AutoCloseable {
      * @param vp8 the encoded VP8 frame bytes
      * @return the decoded frame, or {@code null} if none was produced
      * @throws IllegalStateException if the decoder is closed
-     * @throws VpxException          if libvpx returns non-OK
+     * @throws WhatsAppCallException.Vpx          if libvpx returns non-OK
      */
     public Frame decode(byte[] vp8) {
         Objects.requireNonNull(vp8, "vp8 cannot be null");
@@ -115,10 +116,10 @@ public final class VP8Decoder implements AutoCloseable {
             try {
                 rc = LibVpx.vpx_codec_decode(ctx, data, vp8.length, MemorySegment.NULL, 0);
             } catch (Throwable t) {
-                throw new VpxException("vpx_codec_decode failed", t);
+                throw new WhatsAppCallException.Vpx("vpx_codec_decode failed", t);
             }
             if (rc != LibVpx.VPX_CODEC_OK()) {
-                throw VpxException.fromErr("vpx_codec_decode", rc);
+                throw WhatsAppCallException.Vpx.fromErr("vpx_codec_decode", rc);
             }
         }
         return drainFrame();
@@ -127,27 +128,27 @@ public final class VP8Decoder implements AutoCloseable {
     /**
      * Initialises the VP8 decoder via {@code vpx_codec_dec_init_ver}.
      *
-     * @throws VpxException if init returns non-OK
+     * @throws WhatsAppCallException.Vpx if init returns non-OK
      */
     private void initCodec() {
         MemorySegment iface;
         try {
             iface = LibVpx.vpx_codec_vp8_dx();
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_vp8_dx failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_vp8_dx failed", t);
         }
         if (iface.equals(MemorySegment.NULL)) {
-            throw new VpxException("vpx_codec_vp8_dx returned NULL");
+            throw new WhatsAppCallException.Vpx("vpx_codec_vp8_dx returned NULL");
         }
         int rc;
         try {
             rc = LibVpx.vpx_codec_dec_init_ver(ctx, iface, MemorySegment.NULL, 0,
                     LibVpx.VPX_DECODER_ABI_VERSION());
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_dec_init_ver failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_dec_init_ver failed", t);
         }
         if (rc != LibVpx.VPX_CODEC_OK()) {
-            throw VpxException.fromErr("vpx_codec_dec_init_ver", rc);
+            throw WhatsAppCallException.Vpx.fromErr("vpx_codec_dec_init_ver", rc);
         }
     }
 
@@ -164,7 +165,7 @@ public final class VP8Decoder implements AutoCloseable {
         try {
             img = LibVpx.vpx_codec_get_frame(ctx, iter);
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_get_frame failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_get_frame failed", t);
         }
         if (img.equals(MemorySegment.NULL)) {
             return null;
@@ -197,7 +198,7 @@ public final class VP8Decoder implements AutoCloseable {
         var planePtr = vpx_image.planes(img, planeIndex);
         int stride = vpx_image.stride(img, planeIndex);
         if (planePtr.equals(MemorySegment.NULL)) {
-            throw new VpxException("vpx_image plane " + planeIndex + " is NULL");
+            throw new WhatsAppCallException.Vpx("vpx_image plane " + planeIndex + " is NULL");
         }
         var plane = planePtr.reinterpret((long) stride * planeHeight);
         for (int row = 0; row < planeHeight; row++) {
@@ -227,7 +228,7 @@ public final class VP8Decoder implements AutoCloseable {
         }
         try {
             LibVpx.vpx_codec_destroy(ctx);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         } finally {
             ctx = MemorySegment.NULL;
             arena.close();

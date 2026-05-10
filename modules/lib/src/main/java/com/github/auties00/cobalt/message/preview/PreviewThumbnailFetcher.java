@@ -94,7 +94,7 @@ public final class PreviewThumbnailFetcher {
             }
             var resized = tryResize(body);
             return resized != null ? resized : body;
-        } catch (Exception ignored) {
+        } catch (Exception _) {
             return null;
         }
     }
@@ -166,7 +166,7 @@ public final class PreviewThumbnailFetcher {
                 writer.dispose();
             }
             return output.toByteArray();
-        } catch (NoClassDefFoundError | RuntimeException | IOException ignored) {
+        } catch (NoClassDefFoundError | RuntimeException | IOException _) {
             return null;
         }
     }

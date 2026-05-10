@@ -463,7 +463,7 @@ public final class MediaConnection {
         var delayMillis = MIN_BACKOFF_TIMEOUT_MILLIS << attemptCount;
         try {
             Thread.sleep(delayMillis);
-        } catch (InterruptedException ignored) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
         }
     }

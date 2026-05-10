@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.call.transport.dtls;
 
 import com.github.auties00.cobalt.call.rtp.srtp.SrtpEndpoint;
 import com.github.auties00.cobalt.call.rtp.srtp.SrtpRole;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import org.bouncycastle.tls.Certificate;
 import org.bouncycastle.tls.CertificateRequest;
 import org.bouncycastle.tls.CipherSuite;
@@ -207,7 +208,7 @@ public final class DtlsSrtpEndpoint {
      * @throws IOException        if the handshake fails (peer hung
      *                            up, transport error, fingerprint
      *                            mismatch, alert received)
-     * @throws DtlsHandshakeException if the negotiated SRTP profile
+     * @throws WhatsAppCallException.DtlsHandshake if the negotiated SRTP profile
      *                                does not match the requested one
      */
     public SrtpEndpoint handshake() throws IOException {
@@ -523,11 +524,11 @@ public final class DtlsSrtpEndpoint {
      */
     private static void validatePeerFingerprint(Certificate peer, byte[] expectedPeerFingerprint) throws IOException {
         if (peer == null || peer.isEmpty()) {
-            throw new DtlsHandshakeException("peer presented no certificate");
+            throw new WhatsAppCallException.DtlsHandshake("peer presented no certificate");
         }
         var derBytes = peer.getCertificateAt(0).getEncoded();
         if (!DtlsCertificate.fingerprintMatches(derBytes, expectedPeerFingerprint)) {
-            throw new DtlsHandshakeException("peer certificate fingerprint did not match expected");
+            throw new WhatsAppCallException.DtlsHandshake("peer certificate fingerprint did not match expected");
         }
     }
 

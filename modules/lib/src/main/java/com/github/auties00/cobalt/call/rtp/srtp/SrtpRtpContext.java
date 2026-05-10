@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.rtp.srtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
@@ -144,7 +146,7 @@ final class SrtpRtpContext {
             this.hmac = Mac.getInstance("HmacSHA1");
             this.hmac.init(new SecretKeySpec(direction.srtpAuthKey, "HmacSHA1"));
         } catch (GeneralSecurityException e) {
-            throw new SrtpException("failed to initialize SRTP context", e);
+            throw new WhatsAppCallException.Srtp("failed to initialize SRTP context", e);
         }
     }
 
@@ -157,12 +159,12 @@ final class SrtpRtpContext {
      *
      * @param rtp the plaintext RTP packet
      * @return the SRTP packet, length {@code rtp.length + 10}
-     * @throws SrtpException if the packet is malformed or encryption
+     * @throws WhatsAppCallException.Srtp if the packet is malformed or encryption
      *                       fails
      */
     synchronized byte[] protect(byte[] rtp) {
         if (!sender) {
-            throw new SrtpException("protect called on a receiver context");
+            throw new WhatsAppCallException.Srtp("protect called on a receiver context");
         }
         var headerLen = headerLength(rtp);
 
@@ -181,7 +183,7 @@ final class SrtpRtpContext {
                     new IvParameterSpec(SrtpDirection.computeIv(direction.srtpSalt, ssrc, packetIndex)));
             aes.doFinal(rtp, headerLen, payloadLen, out, headerLen);
         } catch (GeneralSecurityException e) {
-            throw new SrtpException("SRTP encryption failed", e);
+            throw new WhatsAppCallException.Srtp("SRTP encryption failed", e);
         }
 
         appendAuthTag(out, rtp.length, (int) senderRoc);
@@ -196,20 +198,20 @@ final class SrtpRtpContext {
      *
      * @param srtp the SRTP packet
      * @return the plaintext RTP packet
-     * @throws SrtpException if the packet is malformed, replays an
+     * @throws WhatsAppCallException.Srtp if the packet is malformed, replays an
      *                       earlier index, or fails authentication
      */
     synchronized byte[] unprotect(byte[] srtp) {
         if (sender) {
-            throw new SrtpException("unprotect called on a sender context");
+            throw new WhatsAppCallException.Srtp("unprotect called on a sender context");
         }
         if (srtp.length < RTP_FIXED_HEADER_LEN + AUTH_TAG_LEN) {
-            throw new SrtpException("SRTP packet too short");
+            throw new WhatsAppCallException.Srtp("SRTP packet too short");
         }
         var dataLen = srtp.length - AUTH_TAG_LEN;
         var headerLen = headerLength(srtp);
         if (headerLen > dataLen) {
-            throw new SrtpException("SRTP header longer than packet");
+            throw new WhatsAppCallException.Srtp("SRTP header longer than packet");
         }
 
         var seq = ((srtp[2] & 0xFF) << 8) | (srtp[3] & 0xFF);
@@ -217,12 +219,12 @@ final class SrtpRtpContext {
         var packetIndex = (rocCandidate << 16) | (long) seq;
 
         if (!replay.check(packetIndex)) {
-            throw new SrtpException("SRTP replay detected at index " + packetIndex);
+            throw new WhatsAppCallException.Srtp("SRTP replay detected at index " + packetIndex);
         }
 
         var expected = computeAuthTag(srtp, dataLen, (int) rocCandidate);
         if (!SrtpDirection.constantTimeEquals(expected, 0, srtp, dataLen, AUTH_TAG_LEN)) {
-            throw new SrtpException("SRTP auth failed");
+            throw new WhatsAppCallException.Srtp("SRTP auth failed");
         }
 
         var plain = new byte[dataLen];
@@ -233,7 +235,7 @@ final class SrtpRtpContext {
                     new IvParameterSpec(SrtpDirection.computeIv(direction.srtpSalt, ssrc, packetIndex)));
             aes.doFinal(srtp, headerLen, payloadLen, plain, headerLen);
         } catch (GeneralSecurityException e) {
-            throw new SrtpException("SRTP decryption failed", e);
+            throw new WhatsAppCallException.Srtp("SRTP decryption failed", e);
         }
 
         replay.update(packetIndex);
@@ -320,25 +322,25 @@ final class SrtpRtpContext {
      *
      * @param rtp the RTP packet
      * @return the header length in bytes
-     * @throws SrtpException if the packet is shorter than the header
+     * @throws WhatsAppCallException.Srtp if the packet is shorter than the header
      *                       it advertises
      */
     private static int headerLength(byte[] rtp) {
         if (rtp.length < RTP_FIXED_HEADER_LEN) {
-            throw new SrtpException("RTP packet shorter than fixed header");
+            throw new WhatsAppCallException.Srtp("RTP packet shorter than fixed header");
         }
         var cc = rtp[0] & CC_MASK;
         var hasExtension = (rtp[0] & EXTENSION_BIT) != 0;
         var len = RTP_FIXED_HEADER_LEN + cc * CSRC_LEN;
         if (hasExtension) {
             if (rtp.length < len + EXTENSION_HEADER_LEN) {
-                throw new SrtpException("RTP extension header truncated");
+                throw new WhatsAppCallException.Srtp("RTP extension header truncated");
             }
             var extLen = ((rtp[len + 2] & 0xFF) << 8) | (rtp[len + 3] & 0xFF);
             len += EXTENSION_HEADER_LEN + extLen * CSRC_LEN;
         }
         if (rtp.length < len) {
-            throw new SrtpException("RTP packet shorter than full header");
+            throw new WhatsAppCallException.Srtp("RTP packet shorter than full header");
         }
         return len;
     }

@@ -758,32 +758,28 @@ public final class CompanionPairingService {
                 .thenExpand(BUNDLE_ENCRYPTION_INFO.getBytes(StandardCharsets.US_ASCII), HKDF_OUTPUT_LENGTH);
         var bundleKey = kdf.deriveData(bundleKeyParams);
 
-        // The three update() calls feed plaintext concatenated as
-        // companionIdentityPub, primaryIdentityPub, advSecretMaterialSalt.
-        // AAD would require updateAAD() and is intentionally not used.
         var companionIdentityPublic = companionIdentityKeyPair.publicKey().toEncodedPoint();
         var aesGcmCipher = Cipher.getInstance("AES/GCM/NoPadding");
         aesGcmCipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(bundleKey, "AES"), new GCMParameterSpec(GCM_TAG_BITS, gcmIv));
-        aesGcmCipher.update(companionIdentityPublic);
-        aesGcmCipher.update(primaryIdentityPublic);
-        aesGcmCipher.update(advSecretMaterialSalt);
-        var keyBundleCiphertext = aesGcmCipher.doFinal();
+        var keyBundlePlaintextLength = companionIdentityPublic.length + primaryIdentityPublic.length + advSecretMaterialSalt.length;
+        var keyBundleCiphertext = new byte[aesGcmCipher.getOutputSize(keyBundlePlaintextLength)];
+        var keyBundleCiphertextOffset = 0;
+        keyBundleCiphertextOffset += aesGcmCipher.update(companionIdentityPublic, 0, companionIdentityPublic.length, keyBundleCiphertext, keyBundleCiphertextOffset);
+        keyBundleCiphertextOffset += aesGcmCipher.update(primaryIdentityPublic, 0, primaryIdentityPublic.length, keyBundleCiphertext, keyBundleCiphertextOffset);
+        keyBundleCiphertextOffset += aesGcmCipher.update(advSecretMaterialSalt, 0, advSecretMaterialSalt.length, keyBundleCiphertext, keyBundleCiphertextOffset);
+        aesGcmCipher.doFinal(keyBundleCiphertext, keyBundleCiphertextOffset);
 
-        var wrappedKeyBundle = ByteBuffer
-                .allocate(bundleHkdfSalt.length + gcmIv.length + keyBundleCiphertext.length)
-                .put(bundleHkdfSalt)
-                .put(gcmIv)
-                .put(keyBundleCiphertext)
-                .array();
+        var wrappedKeyBundle = new byte[bundleHkdfSalt.length + gcmIv.length + keyBundleCiphertext.length];
+        int wrappedKeyBundleOffset = 0;
+        System.arraycopy(bundleHkdfSalt, 0, wrappedKeyBundle, wrappedKeyBundleOffset, bundleHkdfSalt.length);
+        wrappedKeyBundleOffset += bundleHkdfSalt.length;
+        System.arraycopy(gcmIv, 0, wrappedKeyBundle, wrappedKeyBundleOffset, gcmIv.length);
+        wrappedKeyBundleOffset += gcmIv.length;
+        System.arraycopy(keyBundleCiphertext, 0, wrappedKeyBundle, wrappedKeyBundleOffset, keyBundleCiphertext.length);
 
         var identityShared = Curve25519.sharedKey(
                 companionIdentityKeyPair.privateKey().toEncodedPoint(), primaryIdentityPublic);
 
-        // The HKDF input is the concatenation of ephemeralShared,
-        // identityShared, and advSecretMaterialSalt. Multiple addIKM()
-        // calls concatenate in call order, matching concatBuffers. The
-        // omitted addSalt() yields the default 32-zero HMAC salt, which
-        // is what the source's salt=null argument produces.
         var advSecretParams = HKDFParameterSpec.ofExtract()
                 .addIKM(ephemeralShared)
                 .addIKM(identityShared)

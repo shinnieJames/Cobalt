@@ -319,11 +319,11 @@ public final class VoiceCallSession implements AutoCloseable {
         } catch (RuntimeException e) {
             try {
                 if (pipeline != null) pipeline.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             try {
                 codec.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             throw e;
         }
@@ -342,7 +342,7 @@ public final class VoiceCallSession implements AutoCloseable {
         }
         try {
             track.pipeline().close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 
@@ -423,7 +423,7 @@ public final class VoiceCallSession implements AutoCloseable {
         this.rtpReceiver = null;
         try {
             dtls.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         this.dtls = new DtlsSrtpDriver(newTransport, role, localCert, expectedPeerFingerprint);
         if (started) {
@@ -448,20 +448,20 @@ public final class VoiceCallSession implements AutoCloseable {
         for (var track : videoTracks.values()) {
             try {
                 track.pipeline().close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
         videoTracks.clear();
         if (audio != null) {
             try {
                 audio.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             audio = null;
         }
         try {
             dtls.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 
@@ -476,7 +476,7 @@ public final class VoiceCallSession implements AutoCloseable {
         if (srtp == null) {
             try {
                 srtp = dtls.awaitHandshake(30, TimeUnit.SECONDS);
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
                 handshakeFailed();
                 return;
             }
@@ -509,7 +509,7 @@ public final class VoiceCallSession implements AutoCloseable {
             } catch (RuntimeException e) {
                 try {
                     pipeline.close();
-                } catch (Throwable ignored) {
+                } catch (Throwable _) {
                 }
                 handshakeFailed();
                 return;
@@ -610,7 +610,7 @@ public final class VoiceCallSession implements AutoCloseable {
         }
         try {
             sender.send(packet.payload(), packet.ptsMs(), packet.keyFrame());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
         }
     }
 
@@ -629,7 +629,7 @@ public final class VoiceCallSession implements AutoCloseable {
         long pts = outboundPtsMs.getAndAdd(packetDurationMs());
         try {
             sender.send(packet.payload(), pts, packet.voiceActive());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
         }
     }
 
@@ -654,7 +654,7 @@ public final class VoiceCallSession implements AutoCloseable {
         } finally {
             try {
                 call.hangup();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }

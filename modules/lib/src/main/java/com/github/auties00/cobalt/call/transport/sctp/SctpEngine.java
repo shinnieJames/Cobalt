@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.transport.sctp;
 
 import com.github.auties00.cobalt.call.transport.sctp.bindings.UsrSctp;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -100,7 +101,7 @@ public final class SctpEngine {
         try {
             UsrSctp.usrsctp_init_nothreads((short) 0, connOutputStub, MemorySegment.NULL);
         } catch (Throwable t) {
-            throw new SctpException("usrsctp_init_nothreads failed", t);
+            throw new WhatsAppCallException.Sctp("usrsctp_init_nothreads failed", t);
         }
     }
 
@@ -121,7 +122,7 @@ public final class SctpEngine {
             UsrSctp.usrsctp_register_address(connId);
         } catch (Throwable t) {
             associations.remove(connId.address());
-            throw new SctpException("usrsctp_register_address failed", t);
+            throw new WhatsAppCallException.Sctp("usrsctp_register_address failed", t);
         }
     }
 
@@ -139,7 +140,7 @@ public final class SctpEngine {
         }
         try {
             UsrSctp.usrsctp_deregister_address(connId);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         associations.remove(connId.address());
     }
@@ -167,7 +168,7 @@ public final class SctpEngine {
                             int.class, MemorySegment.class, MemorySegment.class,
                             long.class, byte.class, byte.class));
         } catch (ReflectiveOperationException e) {
-            throw new SctpException("could not locate conn_output method", e);
+            throw new WhatsAppCallException.Sctp("could not locate conn_output method", e);
         }
         target = target.bindTo(this);
         return Linker.nativeLinker().upcallStub(target, descriptor, arena);

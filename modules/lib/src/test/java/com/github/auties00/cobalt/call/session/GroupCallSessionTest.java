@@ -207,11 +207,11 @@ public class GroupCallSessionTest {
                     if (l != null) {
                         try {
                             l.onDatagram(packet);
-                        } catch (Throwable ignored) {
+                        } catch (Throwable _) {
                         }
                     }
                 }
-            } catch (InterruptedException ignored) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         }

@@ -463,7 +463,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
             if (store.phoneNumber().isEmpty()) { // ADAPTED: WA Web does not set phone number from JID
                 try {
                     store.setPhoneNumber(Long.parseLong(jid.user()));
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException _) {
                 }
             }
         });
@@ -727,7 +727,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
 
             try {
                 return Optional.of(ClientPairingPropsSpec.decode(bytes));
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
 

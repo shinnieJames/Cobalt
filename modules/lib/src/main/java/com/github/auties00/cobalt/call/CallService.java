@@ -14,17 +14,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Central coordinator for one client's call activity. Owns the
- * registry of in-flight {@link ActiveCall}s, services as the
- * {@link IncomingCall.Handler} that CallReceiver hands to every
- * inbound offer, and exposes the public outbound entry points
- * ({@link #placeCall}). One instance per {@link WhatsAppClient}.
+ * registry of in-flight {@link ActiveCall}s and exposes the
+ * outbound entry points ({@link #placeCall}) plus the inbound-offer
+ * accept/reject paths that {@link WhatsAppClient#acceptCall} and
+ * {@link WhatsAppClient#rejectCall} delegate to. One instance per
+ * {@link WhatsAppClient}.
  *
  * <p>The engine sits between two layers:
  *
  * <ul>
- *   <li><b>Above:</b> the public API ({@code WhatsAppClient.startCall},
- *       {@code IncomingCall.accept}) and the listener event surface
- *       ({@code WhatsAppClientListener.onCall}).</li>
+ *   <li><b>Above:</b> the public API ({@link WhatsAppClient#startCall},
+ *       {@link WhatsAppClient#acceptCall}) and the listener event
+ *       surface ({@code WhatsAppClientListener.onCall}).</li>
  *   <li><b>Below:</b> the signaling layer
  *       ({@link CallReceiver} + {@link CallStanza}) for stanza I/O,
  *       and the transport/media layers (#76 ICE, #77 DTLS-SRTP, #78
@@ -40,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * by local {@link ActiveCall#hangup()} or peer
  * {@code <terminate>}.
  */
-public class CallService implements IncomingCall.Handler {
+public class CallService {
     /**
      * The owning client — used to send signaling stanzas, look up
      * the local self JID, and surface end-of-call notifications to
@@ -114,13 +115,14 @@ public class CallService implements IncomingCall.Handler {
      * session in the in-flight registry, and parks it in
      * {@link CallState#CONNECTING}.
      *
-     * <p>Implements the {@link IncomingCall.Handler} contract.
+     * <p>Invoked by
+     * {@link WhatsAppClient#acceptCall(IncomingCall, CallOptions)}
+     * after the one-shot guard on the offer has been claimed.
      *
      * @param offer   the offer being accepted
      * @param options the local side's preferred settings
      * @return the live session
      */
-    @Override
     public ActiveCall accept(IncomingCall offer, CallOptions options) {
         Objects.requireNonNull(offer, "offer cannot be null");
         Objects.requireNonNull(options, "options cannot be null");
@@ -144,12 +146,13 @@ public class CallService implements IncomingCall.Handler {
      * {@code <call><reject/></call>} stanza and fires
      * {@code onCallEnded} on every listener.
      *
-     * <p>Implements the {@link IncomingCall.Handler} contract.
+     * <p>Invoked by
+     * {@link WhatsAppClient#rejectCall(IncomingCall, CallEndReason)}
+     * after the one-shot guard on the offer has been claimed.
      *
      * @param offer  the offer being rejected
      * @param reason the reason to communicate to the peer
      */
-    @Override
     public void reject(IncomingCall offer, CallEndReason reason) {
         Objects.requireNonNull(offer, "offer cannot be null");
         Objects.requireNonNull(reason, "reason cannot be null");
@@ -256,7 +259,7 @@ public class CallService implements IncomingCall.Handler {
                     .callOfferElapsedT(accumulator.startedAt())
                     .build();
             wamService.commit(event);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
         }
     }
 

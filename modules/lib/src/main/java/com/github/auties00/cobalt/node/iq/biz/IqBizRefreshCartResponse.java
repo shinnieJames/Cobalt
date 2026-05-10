@@ -540,7 +540,7 @@ public sealed interface IqBizRefreshCartResponse extends IqOperation.Response
                 if (maxAvailableContent != null) {
                     try {
                         maxAvailable = Integer.parseInt(maxAvailableContent);
-                    } catch (NumberFormatException ignored) {
+                    } catch (NumberFormatException _) {
                     }
                 }
                 String thumbId = null;

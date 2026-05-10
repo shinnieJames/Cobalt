@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call.rtp.srtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import org.junit.jupiter.api.Test;
 
 import java.security.SecureRandom;
@@ -95,7 +96,7 @@ public class SrtpEndpointTest {
 
     /**
      * Tampering with a single byte of an SRTP packet must cause
-     * unprotect to fail with an {@link SrtpException}.
+     * unprotect to fail with an {@link WhatsAppCallException.Srtp}.
      */
     @Test
     public void tamperedPacketFailsAuthCheck() {
@@ -106,7 +107,7 @@ public class SrtpEndpointTest {
             var encrypted = client.protectRtp(rtp);
             // flip a payload byte
             encrypted[15] ^= 0x01;
-            assertThrows(SrtpException.class, () -> server.unprotectRtp(encrypted));
+            assertThrows(WhatsAppCallException.Srtp.class, () -> server.unprotectRtp(encrypted));
         }
     }
 
@@ -214,7 +215,7 @@ public class SrtpEndpointTest {
             var rtp = makeRtpPacket(SSRC, 42, 1000, "replay-me".getBytes());
             var encrypted = client.protectRtp(rtp);
             assertArrayEquals(rtp, server.unprotectRtp(encrypted.clone()));
-            assertThrows(SrtpException.class, () -> server.unprotectRtp(encrypted));
+            assertThrows(WhatsAppCallException.Srtp.class, () -> server.unprotectRtp(encrypted));
         }
     }
 
@@ -272,7 +273,7 @@ public class SrtpEndpointTest {
             var rtcp = makeRtcpPacket(SSRC);
             var encrypted = client.protectRtcp(rtcp, SSRC);
             assertArrayEquals(rtcp, server.unprotectRtcp(encrypted.clone(), SSRC));
-            assertThrows(SrtpException.class, () -> server.unprotectRtcp(encrypted, SSRC));
+            assertThrows(WhatsAppCallException.Srtp.class, () -> server.unprotectRtcp(encrypted, SSRC));
         }
     }
 

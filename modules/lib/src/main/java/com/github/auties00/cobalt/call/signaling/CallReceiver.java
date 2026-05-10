@@ -49,9 +49,7 @@ public final class CallReceiver implements SocketStream.Handler {
 
     /**
      * The call engine — used to dispatch peer-side accept/reject/
-     * terminate transitions to the right {@link ActiveCall} and as
-     * the {@link IncomingCall.Handler} every newly-built
-     * {@link IncomingCall} delegates accept/reject to.
+     * terminate transitions to the right {@link ActiveCall}.
      */
     private final CallService engine;
 
@@ -60,7 +58,7 @@ public final class CallReceiver implements SocketStream.Handler {
      *
      * @param whatsapp the WhatsApp client used for sending stanzas and store access
      * @param engine   the call engine the receiver routes peer-side
-     *                 events to and that handles inbound-offer accept/reject
+     *                 events to
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleVoipCall", exports = "handleCall",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -291,8 +289,7 @@ public final class CallReceiver implements SocketStream.Handler {
                 payload.hasChild("video"),
                 groupJid != null,
                 groupJid,
-                offline,
-                engine
+                offline
         );
     }
 

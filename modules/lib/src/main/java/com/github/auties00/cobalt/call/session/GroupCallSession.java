@@ -228,7 +228,7 @@ public final class GroupCallSession implements AutoCloseable {
         if (existing != null) {
             try {
                 existing.decoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
         subscribers.put(participant.audioSsrc(),
@@ -257,7 +257,7 @@ public final class GroupCallSession implements AutoCloseable {
         if (sub != null) {
             try {
                 sub.decoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }
@@ -274,20 +274,20 @@ public final class GroupCallSession implements AutoCloseable {
         for (var sub : Map.copyOf(subscribers).values()) {
             try {
                 sub.decoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
         subscribers.clear();
         if (audio != null) {
             try {
                 audio.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             audio = null;
         }
         try {
             dtls.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 
@@ -299,7 +299,7 @@ public final class GroupCallSession implements AutoCloseable {
         SrtpEndpoint srtp;
         try {
             srtp = dtls.awaitHandshake(30, TimeUnit.SECONDS);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
             close();
             try {
                 call.hangup();
@@ -320,7 +320,7 @@ public final class GroupCallSession implements AutoCloseable {
             } catch (RuntimeException e) {
                 try {
                     pipeline.close();
-                } catch (Throwable ignored) {
+                } catch (Throwable _) {
                 }
                 close();
                 return;
@@ -364,7 +364,7 @@ public final class GroupCallSession implements AutoCloseable {
             pcm = inbound.missing()
                     ? decoder.decodePacketLoss(options.audio().frameSize())
                     : decoder.decode(inbound.payload(), options.audio().frameSize());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return;
         }
         if (pcm.length == 0) {
@@ -374,7 +374,7 @@ public final class GroupCallSession implements AutoCloseable {
         var frame = new AudioFrame(pcm, ptsMs);
         try {
             participant.onAudio().accept(frame);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 
@@ -412,7 +412,7 @@ public final class GroupCallSession implements AutoCloseable {
         }
         try {
             s.send(packet.payload(), packet.ptsMs(), packet.voiceActive());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
         }
     }
 

@@ -589,7 +589,7 @@ public final class NativeLibLoader {
     private static void deleteQuietly(Path path) {
         try {
             Files.deleteIfExists(path);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
         }
     }
 

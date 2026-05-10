@@ -33,7 +33,7 @@ module com.github.auties00.cobalt {
     requires java.logging;
 
     // LMDB key-value store
-    requires static org.lmdbjava; // Not necessary if the user doesn't want a persistent store
+    requires static lmdbjava; // Not necessary if the user doesn't want a persistent store
 
     // Data model
     requires com.github.auties00.cobalt.model;

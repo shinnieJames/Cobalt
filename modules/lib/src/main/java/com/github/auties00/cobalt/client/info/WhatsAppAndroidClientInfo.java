@@ -242,7 +242,7 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
                         if (!isDensityConfigSplit(split.getKey())) {
                             try {
                                 split.getValue().close();
-                            } catch (IOException ignored) {
+                            } catch (IOException _) {
                             }
                             continue;
                         }
@@ -303,7 +303,7 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
                 certificates[i] = decoder.decode(certs.getString(i));
             }
             return new WhatsAppAndroidClientInfo(version, versionCode, md5Hash, secretKey, certificates, business);
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
             return null;
         }
     }
@@ -338,7 +338,7 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
             json.put("secretKey", encoder.encodeToString(info.secretKey.getEncoded()));
             json.put("certificates", certificates);
             Files.writeString(path, json.toJSONString());
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException _) {
         }
     }
 

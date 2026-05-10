@@ -257,7 +257,7 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
             int code;
             try {
                 code = Integer.parseInt(errorAttr);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 code = -1;
             }
             return Optional.of(new ClientError(code, errorAttr, linkToken));

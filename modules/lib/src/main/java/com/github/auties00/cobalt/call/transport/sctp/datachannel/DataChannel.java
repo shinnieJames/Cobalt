@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.transport.sctp.datachannel;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.OptionalInt;
@@ -338,7 +340,7 @@ public final class DataChannel implements AutoCloseable {
      * @throws NullPointerException  if {@code text} is {@code null}
      * @throws IllegalStateException if the channel is not
      *                               {@link DataChannelState#OPEN}
-     * @throws DataChannelException  if the underlying SCTP send fails
+     * @throws WhatsAppCallException.DataChannel  if the underlying SCTP send fails
      */
     public void send(String text) {
         Objects.requireNonNull(text, "text cannot be null");
@@ -361,7 +363,7 @@ public final class DataChannel implements AutoCloseable {
      * @throws NullPointerException  if {@code data} is {@code null}
      * @throws IllegalStateException if the channel is not
      *                               {@link DataChannelState#OPEN}
-     * @throws DataChannelException  if the underlying SCTP send fails
+     * @throws WhatsAppCallException.DataChannel  if the underlying SCTP send fails
      */
     public void send(byte[] data) {
         Objects.requireNonNull(data, "data cannot be null");
@@ -390,7 +392,7 @@ public final class DataChannel implements AutoCloseable {
         if (listener != null) {
             try {
                 listener.run();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }
@@ -420,7 +422,7 @@ public final class DataChannel implements AutoCloseable {
         if (listener != null) {
             try {
                 listener.run();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }
@@ -439,7 +441,7 @@ public final class DataChannel implements AutoCloseable {
         }
         try {
             listener.onMessage(message);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 
@@ -459,7 +461,7 @@ public final class DataChannel implements AutoCloseable {
         if (listener != null) {
             try {
                 listener.run();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }

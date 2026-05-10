@@ -551,7 +551,7 @@ public final class SyncKeyRotationService {
         if (rawId != null) {
             try {
                 rawIdInt = Integer.parseInt(rawId);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
             }
         }
 

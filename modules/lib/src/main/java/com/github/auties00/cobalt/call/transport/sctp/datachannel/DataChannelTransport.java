@@ -1,7 +1,8 @@
 package com.github.auties00.cobalt.call.transport.sctp.datachannel;
 
 import com.github.auties00.cobalt.call.transport.sctp.SctpAssociation;
-import com.github.auties00.cobalt.call.transport.sctp.SctpException;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
@@ -162,7 +163,7 @@ public final class DataChannelTransport implements AutoCloseable {
      *                     method
      * @throws NullPointerException if {@code outboundSink} is
      *                              {@code null}
-     * @throws SctpException        if the underlying
+     * @throws WhatsAppCallException.Sctp        if the underlying
      *                              {@link SctpAssociation} cannot be
      *                              constructed
      */
@@ -187,7 +188,7 @@ public final class DataChannelTransport implements AutoCloseable {
      * Binds the underlying SCTP association to the given local port.
      *
      * @param localPort the local SCTP port (5000 in WebRTC)
-     * @throws SctpException if {@code usrsctp_bind} fails
+     * @throws WhatsAppCallException.Sctp if {@code usrsctp_bind} fails
      */
     public void bind(int localPort) {
         association.bind(localPort);
@@ -203,7 +204,7 @@ public final class DataChannelTransport implements AutoCloseable {
      * thread.
      *
      * @param remotePort the peer's SCTP port (5000 in WebRTC)
-     * @throws SctpException if the handshake fails
+     * @throws WhatsAppCallException.Sctp if the handshake fails
      */
     public void connect(int remotePort) {
         association.connect(remotePort);
@@ -217,7 +218,7 @@ public final class DataChannelTransport implements AutoCloseable {
      * @param remotePort the peer's SCTP port (5000 in WebRTC)
      * @param timeout    the maximum time to wait
      * @param unit       the timeout unit
-     * @throws SctpException        if the handshake fails or times
+     * @throws WhatsAppCallException.Sctp        if the handshake fails or times
      *                              out
      * @throws NullPointerException if {@code unit} is {@code null}
      */
@@ -278,7 +279,7 @@ public final class DataChannelTransport implements AutoCloseable {
      * @return the freshly created channel
      * @throws NullPointerException     if either argument is
      *                                  {@code null}
-     * @throws DataChannelException     if a stream id collision is
+     * @throws WhatsAppCallException.DataChannel     if a stream id collision is
      *                                  detected, or if the requested
      *                                  parity is exhausted
      * @throws IllegalArgumentException if a negotiated channel
@@ -311,7 +312,7 @@ public final class DataChannelTransport implements AutoCloseable {
 
         var existing = channels.putIfAbsent(streamId, channel);
         if (existing != null) {
-            throw new DataChannelException(
+            throw new WhatsAppCallException.DataChannel(
                     "stream id " + streamId + " already in use by channel '" + existing.label() + "'");
         }
 
@@ -321,8 +322,8 @@ public final class DataChannelTransport implements AutoCloseable {
                 association.send(streamId, DcepMessage.PPID_DCEP, open.encode(), true);
             } catch (RuntimeException e) {
                 channels.remove(streamId);
-                throw e instanceof DataChannelException dce ? dce
-                        : new DataChannelException("failed to send DATA_CHANNEL_OPEN", e);
+                throw e instanceof WhatsAppCallException.DataChannel dce ? dce
+                        : new WhatsAppCallException.DataChannel("failed to send DATA_CHANNEL_OPEN", e);
             }
         }
         return channel;
@@ -337,7 +338,7 @@ public final class DataChannelTransport implements AutoCloseable {
         for (var ch : channels.values()) {
             try {
                 ch.notifyPeerClosed();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
         channels.clear();
@@ -353,13 +354,13 @@ public final class DataChannelTransport implements AutoCloseable {
      * @param ppid     the PPID (51, 53, 56, or 57)
      * @param payload  the message bytes
      * @param ordered  whether to preserve order
-     * @throws DataChannelException if the SCTP send fails
+     * @throws WhatsAppCallException.DataChannel if the SCTP send fails
      */
     void sendDataMessage(int streamId, int ppid, byte[] payload, boolean ordered) {
         try {
             association.send(streamId, ppid, payload, ordered);
-        } catch (SctpException e) {
-            throw new DataChannelException("SCTP send failed on stream " + streamId, e);
+        } catch (WhatsAppCallException.Sctp e) {
+            throw new WhatsAppCallException.DataChannel("SCTP send failed on stream " + streamId, e);
         }
     }
 
@@ -387,9 +388,8 @@ public final class DataChannelTransport implements AutoCloseable {
                     new String(msg.payload(), StandardCharsets.UTF_8));
             case PPID_BINARY -> deliverBinary(msg.streamId(), msg.payload());
             case PPID_STRING_EMPTY -> deliverText(msg.streamId(), "");
-            case PPID_BINARY_EMPTY -> deliverBinary(msg.streamId(), new byte[0]);
-            default -> {
-            }
+            case PPID_BINARY_EMPTY -> deliverBinary(msg.streamId(), DataUtils.EMPTY_BYTE_ARRAY);
+            default -> {}
         }
     }
 
@@ -403,7 +403,7 @@ public final class DataChannelTransport implements AutoCloseable {
         DcepMessage decoded;
         try {
             decoded = DcepMessage.decode(payload);
-        } catch (DataChannelException ignored) {
+        } catch (WhatsAppCallException.DataChannel _) {
             return;
         }
         switch (decoded) {
@@ -432,7 +432,7 @@ public final class DataChannelTransport implements AutoCloseable {
         }
         try {
             association.send(streamId, DcepMessage.PPID_DCEP, DcepMessage.Ack.INSTANCE.encode(), true);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             channels.remove(streamId, channel);
             return;
         }
@@ -440,7 +440,7 @@ public final class DataChannelTransport implements AutoCloseable {
         if (listener != null) {
             try {
                 listener.onPeerOpen(channel);
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }
@@ -491,7 +491,7 @@ public final class DataChannelTransport implements AutoCloseable {
      * local DTLS role, advancing {@link #nextStreamId} past it.
      *
      * @return the freshly allocated stream id
-     * @throws DataChannelException if the parity class is exhausted
+     * @throws WhatsAppCallException.DataChannel if the parity class is exhausted
      *                              (unlikely — 32768 ids per side)
      */
     private synchronized int allocateStreamId() {
@@ -502,7 +502,7 @@ public final class DataChannelTransport implements AutoCloseable {
                 return candidate;
             }
         }
-        throw new DataChannelException(
+        throw new WhatsAppCallException.DataChannel(
                 "stream id space exhausted for DTLS " + (dtlsClient ? "client (odd)" : "server (even)"));
     }
 

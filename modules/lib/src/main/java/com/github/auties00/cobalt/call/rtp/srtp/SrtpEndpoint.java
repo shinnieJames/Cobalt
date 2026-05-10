@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.call.rtp.srtp;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
+
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -152,7 +154,7 @@ public final class SrtpEndpoint implements AutoCloseable {
      *                                  {@code null}
      * @throws IllegalArgumentException if the packet is shorter than
      *                                  the 12-byte RTP header
-     * @throws SrtpException            if SRTP transformation fails
+     * @throws WhatsAppCallException.Srtp            if SRTP transformation fails
      */
     public byte[] protectRtp(byte[] rtpPacket) {
         Objects.requireNonNull(rtpPacket, "rtpPacket cannot be null");
@@ -178,7 +180,7 @@ public final class SrtpEndpoint implements AutoCloseable {
      * @throws IllegalArgumentException if the packet is shorter than
      *                                  the 12-byte RTP header + 10-byte
      *                                  auth tag
-     * @throws SrtpException            if authentication fails or a
+     * @throws WhatsAppCallException.Srtp            if authentication fails or a
      *                                  replay is detected
      */
     public byte[] unprotectRtp(byte[] srtpPacket) {
@@ -203,7 +205,7 @@ public final class SrtpEndpoint implements AutoCloseable {
      *                   per-SSRC SRTCP context
      * @return the SRTCP packet
      * @throws NullPointerException if {@code rtcpPacket} is {@code null}
-     * @throws SrtpException        if SRTCP transformation fails
+     * @throws WhatsAppCallException.Srtp        if SRTCP transformation fails
      */
     public byte[] protectRtcp(byte[] rtcpPacket, int ssrc) {
         Objects.requireNonNull(rtcpPacket, "rtcpPacket cannot be null");
@@ -221,7 +223,7 @@ public final class SrtpEndpoint implements AutoCloseable {
      *                    per-SSRC SRTCP context
      * @return the plaintext RTCP packet
      * @throws NullPointerException if {@code srtcpPacket} is {@code null}
-     * @throws SrtpException        if authentication fails or a
+     * @throws WhatsAppCallException.Srtp        if authentication fails or a
      *                              replay is detected
      */
     public byte[] unprotectRtcp(byte[] srtcpPacket, int ssrc) {

@@ -503,6 +503,14 @@ public final class DeviceService {
 
             checkPnToLidMapping(toFetch, "device_sync_request");
 
+            // WA Web's syncDeviceList runs getAndStoreIdentityKeys before handleADVDeviceSyncResult
+            // so that signed key index list verification can resolve a stored primary identity for
+            // every JID in the response. Without this prefetch, a first-contact USync would parse the
+            // device list, fail signature verification (no stored identity yet), and fall through to
+            // a primary-only fanout — which the server then rejects with error 479 because the
+            // recipient actually has companion devices.
+            preKeyHandler.fetchAndStoreIdentityKeys(toFetch);
+
             var includeUsernameProtocol = abPropsService.getBool(ABProp.USERNAME_USYNC);
 
             var batches = DeviceUSyncQueryBuilder.build(toFetch, context, hashInfos, includeUsernameProtocol);
@@ -772,24 +780,6 @@ public final class DeviceService {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Device sync completed for {0} users with validated key index info",
                         usersWithValidatedKeyIndex.size());
-
-                try {
-                    var usersToPrefetch = List.copyOf(usersWithValidatedKeyIndex);
-                    Thread.startVirtualThread(() -> {
-                        try {
-                            preKeyHandler.fetchAndStoreIdentityKeys(usersToPrefetch);
-                            LOGGER.log(System.Logger.Level.DEBUG,
-                                    "Identity key prefetch completed for {0} users",
-                                    usersToPrefetch.size());
-                        } catch (Exception e) {
-                            LOGGER.log(System.Logger.Level.WARNING,
-                                    "Identity key prefetch failed: {0}", e.getMessage());
-                        }
-                    });
-                } catch (Exception e) {
-                    LOGGER.log(System.Logger.Level.WARNING,
-                            "Failed to start identity key prefetch: {0}", e.getMessage());
-                }
             }
 
             if (ownDevicesRemoved) {
@@ -1722,7 +1712,7 @@ public final class DeviceService {
         // not under key-index-list.
         var keyIndexMap = buildKeyIndexMap(deviceListNode);
 
-        var validatedKeyIndexInfo = validateKeyIndexList(keyIndexListNode);
+        var validatedKeyIndexInfo = validateKeyIndexList(userJid, deviceListNode, keyIndexListNode);
 
         // Reject when the protobuf timestamp does not match the stanza timestamp.
         if (validatedKeyIndexInfo != null && validatedKeyIndexInfo.timestamp().getEpochSecond() != timestamp) {
@@ -2044,19 +2034,38 @@ public final class DeviceService {
     /**
      * Validates and decodes the signed key-index list carried by the given node.
      *
+     * <p>Mirrors WA Web's {@code handleKeyIndexResultSync} branching: when hosted-business
+     * gating is on and the device-list advertises at least one hosted device the embedded
+     * {@code accountSignatureKey} is used; otherwise the verification key is the user's
+     * locally-stored primary identity.
+     *
+     * @param userJid          the user JID whose primary identity is used for the
+     *                         standard verification path
+     * @param deviceListNode   the {@code device-list} node from the notification, used
+     *                         to detect hosted devices
      * @param keyIndexListNode the {@code key-index-list} node from the notification
      * @return the validated key-index list data, or {@code null} if validation fails
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "decodeSignedKeyIndexBytes",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private ValidatedKeyIndexListResult validateKeyIndexList(Node keyIndexListNode) {
+    private ValidatedKeyIndexListResult validateKeyIndexList(
+            Jid userJid,
+            Node deviceListNode,
+            Node keyIndexListNode
+    ) {
         var signedKeyIndexBytes = keyIndexListNode.toContentBytes();
         if (signedKeyIndexBytes.isEmpty()) {
             return null;
         }
 
-        var validated = advValidator.validateAndDecodeSignedKeyIndexList(signedKeyIndexBytes.get());
+        var useHostedPath = deviceListNode != null
+                && advValidator.isBizHostedDevicesEnabled()
+                && deviceListNode.streamChildren("device")
+                        .anyMatch(d -> d.hasAttribute("is_hosted", true));
+        var validated = useHostedPath
+                ? advValidator.verifySKeyIndexWithAccSigKey(signedKeyIndexBytes.get())
+                : advValidator.decodeSignedKeyIndexBytes(userJid, signedKeyIndexBytes.get());
         if (validated.isEmpty()) {
             LOGGER.log(System.Logger.Level.WARNING, "Key index list signature verification failed in notification");
             return null;

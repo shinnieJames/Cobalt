@@ -356,10 +356,10 @@ public class DataChannelTransportTest {
                         byte[] packet = source.take();
                         try {
                             dest.feedInboundPacket(packet);
-                        } catch (Throwable ignored) {
+                        } catch (Throwable _) {
                         }
                     }
-                } catch (InterruptedException ignored) {
+                } catch (InterruptedException _) {
                 }
             });
         }
@@ -414,11 +414,11 @@ public class DataChannelTransportTest {
             serverPump.interrupt();
             try {
                 client.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             try {
                 server.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }

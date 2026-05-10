@@ -23,9 +23,9 @@ import java.util.Objects;
  *       to a {@link VideoFrame}, or {@code null} when the codec
  *       produced no output for that input.</li>
  *   <li>{@link #setBitrate(int)} — runtime BWE-driven bitrate update.
- *       VP8 honours this; H.264 silently ignores it for now (openh264
- *       runtime bitrate adjustment requires {@code SetOption} which
- *       isn't yet wired through the bindings).</li>
+ *       VP8 retargets {@code rc_target_bitrate} via libvpx; H.264
+ *       calls {@code ISVCEncoder.SetOption(ENCODER_OPTION_BITRATE)}
+ *       on the openh264 vtable.</li>
  *   <li>{@link #frameByteSize()} — the I420 byte count the encoder
  *       expects per frame, used by the pipeline to validate inbound
  *       captures.</li>
@@ -62,8 +62,7 @@ public sealed interface VideoCodec extends AutoCloseable
     /**
      * Updates the encoder's target bitrate. Drives the BWE feedback
      * loop so the call's outbound video tracks the latest bandwidth
-     * estimate. Codecs that don't yet support runtime bitrate
-     * adjustment silently no-op.
+     * estimate.
      *
      * @param targetBitrateBps the new target bitrate in bits per
      *                         second; must be &gt;= 1
@@ -221,21 +220,19 @@ public sealed interface VideoCodec extends AutoCloseable
         public void close() {
             try {
                 encoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             try {
                 decoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }
 
     /**
      * H.264 codec adapter — wraps {@link H264Encoder} +
-     * {@link H264Decoder}. Runtime bitrate adjustment is not yet
-     * supported (the openh264 {@code SetOption} entry point isn't
-     * surfaced through the bindings); calls to {@link #setBitrate}
-     * are silently ignored.
+     * {@link H264Decoder}. Runtime bitrate adjustment is dispatched
+     * through {@code ISVCEncoder.SetOption(ENCODER_OPTION_BITRATE)}.
      */
     final class H264 implements VideoCodec {
         /**
@@ -295,10 +292,7 @@ public sealed interface VideoCodec extends AutoCloseable
 
         @Override
         public void setBitrate(int targetBitrateBps) {
-            // openh264 ISVCEncoder::SetOption(ENCODER_OPTION_BITRATE)
-            // is not yet wired through the FFM bindings; runtime
-            // bitrate adjustment for H.264 will land alongside the
-            // BWE wiring task.
+            encoder.setBitrate(targetBitrateBps);
         }
 
         @Override
@@ -325,11 +319,11 @@ public sealed interface VideoCodec extends AutoCloseable
         public void close() {
             try {
                 encoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             try {
                 decoder.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
         }
     }

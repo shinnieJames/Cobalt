@@ -290,17 +290,17 @@ public final class DtlsSrtpDriver implements AutoCloseable {
         closed = true;
         try {
             adapter.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         try {
             transport.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
         if (handshakeThread != null) {
             handshakeThread.interrupt();
             try {
                 handshakeThread.join(1_000);
-            } catch (InterruptedException ignored) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         }
@@ -330,7 +330,7 @@ public final class DtlsSrtpDriver implements AutoCloseable {
             if (h != null) {
                 try {
                     h.accept(packet);
-                } catch (Throwable ignored) {
+                } catch (Throwable _) {
                 }
             }
         } else if (b0 >= 20 && b0 <= 63) {
@@ -340,7 +340,7 @@ public final class DtlsSrtpDriver implements AutoCloseable {
             if (h != null) {
                 try {
                     h.accept(packet);
-                } catch (Throwable ignored) {
+                } catch (Throwable _) {
                 }
             }
         }

@@ -310,7 +310,7 @@ final class NotificationServerCryptoStreamHandler implements SocketStream.Handle
                 mediaProvider.setMediaUrl(null);
                 mediaProvider.setMediaDirectPath(directPath);
             });
-        } catch (Exception ignored) {
+        } catch (Exception _) {
         }
     }
 

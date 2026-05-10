@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call.transport.sctp.datachannel;
 
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -175,23 +176,23 @@ public class DcepMessageTest {
     }
 
     /**
-     * Decoding an empty buffer raises a {@link DataChannelException}
+     * Decoding an empty buffer raises a {@link WhatsAppCallException.DataChannel}
      * with a useful message.
      */
     @Test
     public void decodeEmptyPayloadThrows() {
-        var ex = assertThrows(DataChannelException.class,
+        var ex = assertThrows(WhatsAppCallException.DataChannel.class,
                 () -> DcepMessage.decode(new byte[0]));
         assertTrue(ex.getMessage().contains("empty"));
     }
 
     /**
      * Decoding a buffer with an unknown leading byte raises
-     * {@link DataChannelException} naming the byte.
+     * {@link WhatsAppCallException.DataChannel} naming the byte.
      */
     @Test
     public void decodeUnknownTypeThrows() {
-        var ex = assertThrows(DataChannelException.class,
+        var ex = assertThrows(WhatsAppCallException.DataChannel.class,
                 () -> DcepMessage.decode(new byte[]{(byte) 0xAB}));
         assertTrue(ex.getMessage().contains("ab"));
     }
@@ -209,7 +210,7 @@ public class DcepMessageTest {
                 0x00, 0x05,             // labelLen=5, but no bytes follow
                 0x00, 0x00              // protocolLen=0
         };
-        assertThrows(DataChannelException.class, () -> DcepMessage.decode(truncated));
+        assertThrows(WhatsAppCallException.DataChannel.class, () -> DcepMessage.decode(truncated));
     }
 
     /**
@@ -219,7 +220,7 @@ public class DcepMessageTest {
     @Test
     public void decodeShortOpenHeaderThrows() {
         var tooShort = new byte[]{0x03, 0x00, 0x00, 0x00};
-        assertThrows(DataChannelException.class, () -> DcepMessage.decode(tooShort));
+        assertThrows(WhatsAppCallException.DataChannel.class, () -> DcepMessage.decode(tooShort));
     }
 
     /**

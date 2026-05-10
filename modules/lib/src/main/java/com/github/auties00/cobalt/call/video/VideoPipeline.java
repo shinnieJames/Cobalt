@@ -234,7 +234,7 @@ public final class VideoPipeline implements AutoCloseable {
         if (!running) {
             try {
                 codec.close();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
             }
             return;
         }
@@ -251,7 +251,7 @@ public final class VideoPipeline implements AutoCloseable {
         }
         try {
             codec.close();
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         }
     }
 
@@ -280,10 +280,10 @@ public final class VideoPipeline implements AutoCloseable {
                 for (var packet : packets) {
                     try {
                         outboundSink.accept(packet);
-                    } catch (RuntimeException ignored) {
+                    } catch (RuntimeException _) {
                     }
                 }
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
                 // If a keyframe was requested, leave the flag set so
                 // the next encode retries.
                 if (forceKey) {
@@ -312,7 +312,7 @@ public final class VideoPipeline implements AutoCloseable {
             VideoFrame decoded;
             try {
                 decoded = codec.decode(packet.payload(), packet.ptsMs());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
                 continue;
             }
             if (decoded == null) {
@@ -320,7 +320,7 @@ public final class VideoPipeline implements AutoCloseable {
             }
             try {
                 call.deliverInboundVideo(decoded);
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
             }
         }
     }

@@ -51,7 +51,7 @@ public final class NewsletterPreviewResolver {
         Optional<NewsletterLinkPreview> response;
         try {
             response = client.queryNewsletterLinkPreview(url);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return Optional.empty();
         }
         if (response.isEmpty()) {

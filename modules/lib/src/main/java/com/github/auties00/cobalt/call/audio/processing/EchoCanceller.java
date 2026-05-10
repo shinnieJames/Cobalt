@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.call.audio.processing;
 
 import com.github.auties00.cobalt.call.audio.processing.bindings.SpeexDsp;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -92,11 +93,11 @@ public final class EchoCanceller implements AutoCloseable {
             this.state = SpeexDsp.speex_echo_state_init(frameSize, filterLength);
         } catch (Throwable t) {
             arena.close();
-            throw new SpeexDspException("speex_echo_state_init failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_echo_state_init failed", t);
         }
         if (state.equals(MemorySegment.NULL)) {
             arena.close();
-            throw new SpeexDspException("speex_echo_state_init returned NULL");
+            throw new WhatsAppCallException.SpeexDsp("speex_echo_state_init returned NULL");
         }
         var byteSize = (long) frameSize * 2;
         this.recBuf = arena.allocate(byteSize);
@@ -134,7 +135,7 @@ public final class EchoCanceller implements AutoCloseable {
         try {
             SpeexDsp.speex_echo_cancellation(state, recBuf, playBuf, outBuf);
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_echo_cancellation failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_echo_cancellation failed", t);
         }
         var out = new short[frameSize];
         MemorySegment.copy(outBuf, ValueLayout.JAVA_SHORT, 0, out, 0, frameSize);
@@ -151,7 +152,7 @@ public final class EchoCanceller implements AutoCloseable {
         try {
             SpeexDsp.speex_echo_state_reset(state);
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_echo_state_reset failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_echo_state_reset failed", t);
         }
     }
 
@@ -199,7 +200,7 @@ public final class EchoCanceller implements AutoCloseable {
         try {
             SpeexDsp.speex_echo_state_destroy(state);
         } catch (Throwable t) {
-            throw new SpeexDspException("speex_echo_state_destroy failed", t);
+            throw new WhatsAppCallException.SpeexDsp("speex_echo_state_destroy failed", t);
         } finally {
             state = MemorySegment.NULL;
             arena.close();

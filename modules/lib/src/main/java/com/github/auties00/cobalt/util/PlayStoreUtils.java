@@ -448,7 +448,7 @@ public final class PlayStoreUtils {
             client.send(builder.build(), HttpResponse.BodyHandlers.discarding());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // Best-effort: already-purchased apps return 4xx; downloads still work.
         }
     }
@@ -623,7 +623,7 @@ public final class PlayStoreUtils {
     private static void closeQuietly(InputStream stream) {
         try {
             stream.close();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
         }
     }
 

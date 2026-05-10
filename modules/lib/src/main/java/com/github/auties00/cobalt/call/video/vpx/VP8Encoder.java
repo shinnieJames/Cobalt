@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.call.video.vpx.bindings.vpx_codec_ctx;
 import com.github.auties00.cobalt.call.video.vpx.bindings.vpx_codec_enc_cfg;
 import com.github.auties00.cobalt.call.video.vpx.bindings.vpx_image;
 import com.github.auties00.cobalt.call.video.vpx.bindings.vpx_rational;
+import com.github.auties00.cobalt.exception.WhatsAppCallException;
 import com.github.auties00.cobalt.util.NativeLibLoader;
 
 import java.lang.foreign.Arena;
@@ -129,7 +130,7 @@ public final class VP8Encoder implements AutoCloseable {
      * @param fps               capture frame rate; drives the
      *                          encoder's timebase and keyframe interval
      * @throws IllegalArgumentException if any argument is &lt; 1
-     * @throws VpxException             if libvpx rejects the config
+     * @throws WhatsAppCallException.Vpx             if libvpx rejects the config
      *                                  or initialisation fails
      * @throws UnsatisfiedLinkError     if libvpx cannot be loaded
      */
@@ -174,7 +175,7 @@ public final class VP8Encoder implements AutoCloseable {
      * @throws IllegalArgumentException if {@code yuvI420.length} is
      *                                  not the expected I420 byte
      *                                  count
-     * @throws VpxException             if libvpx returns non-OK
+     * @throws WhatsAppCallException.Vpx             if libvpx returns non-OK
      */
     public List<Packet> encode(byte[] yuvI420, long pts, boolean forceKeyFrame) {
         Objects.requireNonNull(yuvI420, "yuvI420 cannot be null");
@@ -188,10 +189,10 @@ public final class VP8Encoder implements AutoCloseable {
         try {
             rc = LibVpx.vpx_codec_encode(ctx, image, pts, 1, flags, LibVpx.VPX_DL_REALTIME());
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_encode failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_encode failed", t);
         }
         if (rc != LibVpx.VPX_CODEC_OK()) {
-            throw VpxException.fromErr("vpx_codec_encode", rc);
+            throw WhatsAppCallException.Vpx.fromErr("vpx_codec_encode", rc);
         }
         return drainPackets();
     }
@@ -218,7 +219,7 @@ public final class VP8Encoder implements AutoCloseable {
      *                         &gt;= 1
      * @throws IllegalArgumentException if {@code targetBitrateBps} is
      *                                  &lt; 1
-     * @throws VpxException             if libvpx rejects the update
+     * @throws WhatsAppCallException.Vpx             if libvpx rejects the update
      */
     public void setBitrate(int targetBitrateBps) {
         if (targetBitrateBps < 1) {
@@ -230,10 +231,10 @@ public final class VP8Encoder implements AutoCloseable {
         try {
             rc = LibVpx.vpx_codec_enc_config_set(ctx, cfg);
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_enc_config_set failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_enc_config_set failed", t);
         }
         if (rc != LibVpx.VPX_CODEC_OK()) {
-            throw VpxException.fromErr("vpx_codec_enc_config_set", rc);
+            throw WhatsAppCallException.Vpx.fromErr("vpx_codec_enc_config_set", rc);
         }
     }
 
@@ -245,7 +246,7 @@ public final class VP8Encoder implements AutoCloseable {
      *
      * @param targetBitrateBps target bitrate in bps
      * @param fps              frame rate
-     * @throws VpxException if config or init returns non-OK
+     * @throws WhatsAppCallException.Vpx if config or init returns non-OK
      */
     private void initCodec(int targetBitrateBps, int fps) {
         var iface = vp8CxIface();
@@ -253,10 +254,10 @@ public final class VP8Encoder implements AutoCloseable {
         try {
             rc = LibVpx.vpx_codec_enc_config_default(iface, cfg, 0);
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_enc_config_default failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_enc_config_default failed", t);
         }
         if (rc != LibVpx.VPX_CODEC_OK()) {
-            throw VpxException.fromErr("vpx_codec_enc_config_default", rc);
+            throw WhatsAppCallException.Vpx.fromErr("vpx_codec_enc_config_default", rc);
         }
         vpx_codec_enc_cfg.g_w(cfg, width);
         vpx_codec_enc_cfg.g_h(cfg, height);
@@ -271,10 +272,10 @@ public final class VP8Encoder implements AutoCloseable {
         try {
             rc = LibVpx.vpx_codec_enc_init_ver(ctx, iface, cfg, 0, LibVpx.VPX_ENCODER_ABI_VERSION());
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_enc_init_ver failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_enc_init_ver failed", t);
         }
         if (rc != LibVpx.VPX_CODEC_OK()) {
-            throw VpxException.fromErr("vpx_codec_enc_init_ver", rc);
+            throw WhatsAppCallException.Vpx.fromErr("vpx_codec_enc_init_ver", rc);
         }
     }
 
@@ -290,7 +291,7 @@ public final class VP8Encoder implements AutoCloseable {
         MemorySegment.copy(yuvI420, 0, buf, ValueLayout.JAVA_BYTE, 0, yuvSize);
         var wrapped = LibVpx.vpx_img_wrap(image, LibVpx.VPX_IMG_FMT_I420(), width, height, 1, buf);
         if (wrapped.equals(MemorySegment.NULL)) {
-            throw new VpxException("vpx_img_wrap returned NULL");
+            throw new WhatsAppCallException.Vpx("vpx_img_wrap returned NULL");
         }
     }
 
@@ -309,7 +310,7 @@ public final class VP8Encoder implements AutoCloseable {
             try {
                 pkt = LibVpx.vpx_codec_get_cx_data(ctx, iter);
             } catch (Throwable t) {
-                throw new VpxException("vpx_codec_get_cx_data failed", t);
+                throw new WhatsAppCallException.Vpx("vpx_codec_get_cx_data failed", t);
             }
             if (pkt.equals(MemorySegment.NULL)) {
                 break;
@@ -344,11 +345,11 @@ public final class VP8Encoder implements AutoCloseable {
         try {
             var iface = LibVpx.vpx_codec_vp8_cx();
             if (iface.equals(MemorySegment.NULL)) {
-                throw new VpxException("vpx_codec_vp8_cx returned NULL");
+                throw new WhatsAppCallException.Vpx("vpx_codec_vp8_cx returned NULL");
             }
             return iface;
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_vp8_cx failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_vp8_cx failed", t);
         }
     }
 
@@ -383,10 +384,10 @@ public final class VP8Encoder implements AutoCloseable {
         try {
             rc = invoker.apply(ctx, controlId, value);
         } catch (Throwable t) {
-            throw new VpxException("vpx_codec_control_ id=" + controlId + " failed", t);
+            throw new WhatsAppCallException.Vpx("vpx_codec_control_ id=" + controlId + " failed", t);
         }
         if (rc != LibVpx.VPX_CODEC_OK()) {
-            throw VpxException.fromErr("vpx_codec_control_ id=" + controlId, rc);
+            throw WhatsAppCallException.Vpx.fromErr("vpx_codec_control_ id=" + controlId, rc);
         }
     }
 
@@ -411,7 +412,7 @@ public final class VP8Encoder implements AutoCloseable {
         }
         try {
             LibVpx.vpx_codec_destroy(ctx);
-        } catch (Throwable ignored) {
+        } catch (Throwable _) {
         } finally {
             ctx = MemorySegment.NULL;
             arena.close();

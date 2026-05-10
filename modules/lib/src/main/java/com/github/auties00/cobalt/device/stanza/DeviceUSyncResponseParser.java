@@ -237,7 +237,11 @@ public final class DeviceUSyncResponseParser {
      * Parses a full device list result with signed key index validation.
      *
      * <p>Validates the signed key index list, builds a key index map, parses device entries,
-     * and constructs a full device list result.
+     * and constructs a full device list result. The verification path mirrors WA Web's
+     * {@code handleKeyIndexResultSync}: when hosted-business gating is on and the
+     * device-list advertises at least one hosted device the embedded
+     * {@code accountSignatureKey} is used; otherwise the user's locally-stored primary
+     * identity is used and any embedded key is ignored.
      * @param userJid            the user JID
      * @param username           the username from username protocol, or {@code null}
      * @param deviceListNode     the device-list node
@@ -258,7 +262,11 @@ public final class DeviceUSyncResponseParser {
         var expectedTsSeconds = keyIndexListNode.getAttributeAsLong("expected_ts", 0);
         var expectedTs = expectedTsSeconds != 0  ? Instant.ofEpochSecond(expectedTsSeconds) : null;
 
-        var validatedInfo = advValidatorService.validateAndDecodeSignedKeyIndexList(signedKeyIndexBytes);
+        var useHostedPath = advValidatorService.isBizHostedDevicesEnabled()
+                && hasHostedDeviceAttribute(deviceListNode);
+        var validatedInfo = useHostedPath
+                ? advValidatorService.verifySKeyIndexWithAccSigKey(signedKeyIndexBytes)
+                : advValidatorService.decodeSignedKeyIndexBytes(userJid, signedKeyIndexBytes);
         if (validatedInfo.isEmpty()) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Key index list signature verification failed for {0}, skipping", userJid);
@@ -286,7 +294,20 @@ public final class DeviceUSyncResponseParser {
                 .validIndexes(info.validIndexes())
                 .build();
 
-        return Stream.of(new DeviceListResult.Full(deviceList, info.accountSignatureKey(), username));
+        return Stream.of(new DeviceListResult.Full(deviceList, info.accountSignatureKey().orElse(null), username));
+    }
+
+    /**
+     * Checks if the device-list contains a device with {@code is_hosted="true"}.
+     * @param deviceListNode the device-list node
+     * @return {@code true} if any device advertises the hosted attribute
+     */
+    @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
+            exports = "handleKeyIndexResultSync",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private boolean hasHostedDeviceAttribute(Node deviceListNode) {
+        return deviceListNode.streamChildren("device")
+                .anyMatch(device -> device.hasAttribute("is_hosted", true));
     }
 
     /**

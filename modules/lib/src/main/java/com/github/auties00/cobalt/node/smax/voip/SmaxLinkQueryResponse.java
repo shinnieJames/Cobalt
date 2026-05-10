@@ -527,7 +527,7 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
             int code;
             try {
                 code = Integer.parseInt(errorAttr);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException _) {
                 code = -1;
             }
             return Optional.of(new ClientError(code, errorAttr, token));

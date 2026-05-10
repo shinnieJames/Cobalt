@@ -56,7 +56,7 @@ public final class DomainPreviewableGate {
         // malformed response or error, so the gate closes if the round trip fails.
         try {
             return domain != null && client.isNewsletterDomainPreviewable(domain);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             return false;
         }
     }
