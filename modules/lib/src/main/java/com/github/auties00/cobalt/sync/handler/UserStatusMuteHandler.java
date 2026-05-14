@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadataEditBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
@@ -35,17 +36,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebUserStatusMuteSync")
 public final class UserStatusMuteHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of this handler.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final UserStatusMuteHandler INSTANCE = new UserStatusMuteHandler();
 
     /**
      * Private constructor preventing external instantiation.
      */
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private UserStatusMuteHandler() {
+    public UserStatusMuteHandler() {
 
     }
 
@@ -112,6 +108,11 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
         // checks the value first, so a mutation with both a bad index and a missing muted field ends up tagged
         // {@code MALFORMED_VALUE} in Cobalt vs {@code MALFORMED_INDEX} in WA Web. Reordered below to match WA Web.
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebUserStatusMuteSync.applyMutations: var n=e.indexParts, u=n[1]; if(!u||!isWid(u)) return malformedActionIndex().
+        // indexParts[1] is undefined when the slot is missing; mirror with explicit size check.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var widString = indexArray.getString(1);
         if (widString == null || widString.isEmpty()) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -137,13 +138,20 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
         // ADAPTED: WAWebUserStatusMuteSync.applyMutations — malformed-counter + first-three WARN log telemetry
         // is intentionally omitted (matches the project-wide policy of dropping WAM/WALogger paths).
         if (wid.hasServer(JidServer.groupOrCommunity())) {
-            var groupMetadata = client.store().findChatMetadata(wid).orElse(null);
-            if (!(groupMetadata instanceof GroupMetadata group)) {
-                return MutationApplicationResult.orphan(widString, "UserStatusMute");
-            }
-            group.setStatusMuted(action.muted());
+            // Build a GroupMetadataEdit carrying only the statusMuted override and let the store
+            // merge it into the existing GroupMetadata row. The autoboxed Boolean preserves
+            // "value applied" semantics: an absent muted field would yield Boolean.FALSE here
+            // (per the project-wide nullable-bool-coalesce convention), which is fine because
+            // any malformed-value detection already happened in the actionValue null-check above.
+            var edit = new GroupMetadataEditBuilder()
+                    .group(wid)
+                    .statusMuted(action.muted())
+                    .build();
+            var updated = client.store().applyGroupMetadataEdit(wid, edit);
             // ADAPTED: Cobalt does not have frontend event dispatching; the store update is sufficient
-            return MutationApplicationResult.success();
+            return updated.isPresent()
+                    ? MutationApplicationResult.success()
+                    : MutationApplicationResult.orphan(widString, "UserStatusMute");
         }
 
         var contact = client.store().findContactByJid(wid);

@@ -3,7 +3,10 @@ package com.github.auties00.cobalt.util;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
@@ -38,6 +41,126 @@ public final class DataUtils {
      * hexadecimal digits.
      */
     private static final char[] HEX_ALPHABET = new char[]{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+
+    /**
+     * {@link VarHandle} that reads and writes {@code short} values from a
+     * {@code byte[]} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle SHORT_ARRAY_BE = MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code short} values from a
+     * {@code byte[]} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle SHORT_ARRAY_LE = MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code int} values from a
+     * {@code byte[]} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle INT_ARRAY_BE = MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code int} values from a
+     * {@code byte[]} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle INT_ARRAY_LE = MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code long} values from a
+     * {@code byte[]} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle LONG_ARRAY_BE = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code long} values from a
+     * {@code byte[]} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle LONG_ARRAY_LE = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code float} values from a
+     * {@code byte[]} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle FLOAT_ARRAY_BE = MethodHandles.byteArrayViewVarHandle(float[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code float} values from a
+     * {@code byte[]} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle FLOAT_ARRAY_LE = MethodHandles.byteArrayViewVarHandle(float[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code double} values from a
+     * {@code byte[]} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle DOUBLE_ARRAY_BE = MethodHandles.byteArrayViewVarHandle(double[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code double} values from a
+     * {@code byte[]} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle DOUBLE_ARRAY_LE = MethodHandles.byteArrayViewVarHandle(double[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code short} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle SHORT_BUFFER_BE = MethodHandles.byteBufferViewVarHandle(short[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code short} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle SHORT_BUFFER_LE = MethodHandles.byteBufferViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code int} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle INT_BUFFER_BE = MethodHandles.byteBufferViewVarHandle(int[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code int} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle INT_BUFFER_LE = MethodHandles.byteBufferViewVarHandle(int[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code long} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle LONG_BUFFER_BE = MethodHandles.byteBufferViewVarHandle(long[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code long} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle LONG_BUFFER_LE = MethodHandles.byteBufferViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code float} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle FLOAT_BUFFER_BE = MethodHandles.byteBufferViewVarHandle(float[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code float} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle FLOAT_BUFFER_LE = MethodHandles.byteBufferViewVarHandle(float[].class, ByteOrder.LITTLE_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code double} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#BIG_ENDIAN} order.
+     */
+    private static final VarHandle DOUBLE_BUFFER_BE = MethodHandles.byteBufferViewVarHandle(double[].class, ByteOrder.BIG_ENDIAN);
+
+    /**
+     * {@link VarHandle} that reads and writes {@code double} values from a
+     * {@link ByteBuffer} in {@link ByteOrder#LITTLE_ENDIAN} order.
+     */
+    private static final VarHandle DOUBLE_BUFFER_LE = MethodHandles.byteBufferViewVarHandle(double[].class, ByteOrder.LITTLE_ENDIAN);
 
     static {
         try {
@@ -219,6 +342,386 @@ public final class DataUtils {
             result = 256 * result + Byte.toUnsignedInt(bytes[i]);
         }
         return result;
+    }
+
+    /**
+     * Reads a {@code short} from the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the source array
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the two bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 2 > bytes.length}
+     */
+    public static short getShort(byte[] bytes, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (short) SHORT_ARRAY_BE.get(bytes, offset);
+        }
+        return (short) SHORT_ARRAY_LE.get(bytes, offset);
+    }
+
+    /**
+     * Writes a {@code short} to the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the destination array
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the two bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 2 > bytes.length}
+     */
+    public static void putShort(byte[] bytes, int offset, short value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            SHORT_ARRAY_BE.set(bytes, offset, value);
+        } else {
+            SHORT_ARRAY_LE.set(bytes, offset, value);
+        }
+    }
+
+    /**
+     * Reads an {@code int} from the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the source array
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the four bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > bytes.length}
+     */
+    public static int getInt(byte[] bytes, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (int) INT_ARRAY_BE.get(bytes, offset);
+        }
+        return (int) INT_ARRAY_LE.get(bytes, offset);
+    }
+
+    /**
+     * Writes an {@code int} to the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the destination array
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the four bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > bytes.length}
+     */
+    public static void putInt(byte[] bytes, int offset, int value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            INT_ARRAY_BE.set(bytes, offset, value);
+        } else {
+            INT_ARRAY_LE.set(bytes, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code long} from the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the source array
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the eight bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > bytes.length}
+     */
+    public static long getLong(byte[] bytes, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (long) LONG_ARRAY_BE.get(bytes, offset);
+        }
+        return (long) LONG_ARRAY_LE.get(bytes, offset);
+    }
+
+    /**
+     * Writes a {@code long} to the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the destination array
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the eight bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > bytes.length}
+     */
+    public static void putLong(byte[] bytes, int offset, long value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            LONG_ARRAY_BE.set(bytes, offset, value);
+        } else {
+            LONG_ARRAY_LE.set(bytes, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code float} from the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the source array
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the four bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > bytes.length}
+     */
+    public static float getFloat(byte[] bytes, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (float) FLOAT_ARRAY_BE.get(bytes, offset);
+        }
+        return (float) FLOAT_ARRAY_LE.get(bytes, offset);
+    }
+
+    /**
+     * Writes a {@code float} to the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the destination array
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the four bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > bytes.length}
+     */
+    public static void putFloat(byte[] bytes, int offset, float value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            FLOAT_ARRAY_BE.set(bytes, offset, value);
+        } else {
+            FLOAT_ARRAY_LE.set(bytes, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code double} from the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the source array
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the eight bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > bytes.length}
+     */
+    public static double getDouble(byte[] bytes, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (double) DOUBLE_ARRAY_BE.get(bytes, offset);
+        }
+        return (double) DOUBLE_ARRAY_LE.get(bytes, offset);
+    }
+
+    /**
+     * Writes a {@code double} to the given byte array at the given offset
+     * using the given byte order.
+     *
+     * @param bytes  the destination array
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the eight bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > bytes.length}
+     */
+    public static void putDouble(byte[] bytes, int offset, double value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            DOUBLE_ARRAY_BE.set(bytes, offset, value);
+        } else {
+            DOUBLE_ARRAY_LE.set(bytes, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code short} from the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the source buffer
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the two bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 2 > buffer.limit()}
+     */
+    public static short getShort(ByteBuffer buffer, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (short) SHORT_BUFFER_BE.get(buffer, offset);
+        }
+        return (short) SHORT_BUFFER_LE.get(buffer, offset);
+    }
+
+    /**
+     * Writes a {@code short} to the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the destination buffer
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the two bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 2 > buffer.limit()}
+     */
+    public static void putShort(ByteBuffer buffer, int offset, short value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            SHORT_BUFFER_BE.set(buffer, offset, value);
+        } else {
+            SHORT_BUFFER_LE.set(buffer, offset, value);
+        }
+    }
+
+    /**
+     * Reads an {@code int} from the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the source buffer
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the four bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > buffer.limit()}
+     */
+    public static int getInt(ByteBuffer buffer, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (int) INT_BUFFER_BE.get(buffer, offset);
+        }
+        return (int) INT_BUFFER_LE.get(buffer, offset);
+    }
+
+    /**
+     * Writes an {@code int} to the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the destination buffer
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the four bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > buffer.limit()}
+     */
+    public static void putInt(ByteBuffer buffer, int offset, int value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            INT_BUFFER_BE.set(buffer, offset, value);
+        } else {
+            INT_BUFFER_LE.set(buffer, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code long} from the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the source buffer
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the eight bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > buffer.limit()}
+     */
+    public static long getLong(ByteBuffer buffer, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (long) LONG_BUFFER_BE.get(buffer, offset);
+        }
+        return (long) LONG_BUFFER_LE.get(buffer, offset);
+    }
+
+    /**
+     * Writes a {@code long} to the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the destination buffer
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the eight bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > buffer.limit()}
+     */
+    public static void putLong(ByteBuffer buffer, int offset, long value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            LONG_BUFFER_BE.set(buffer, offset, value);
+        } else {
+            LONG_BUFFER_LE.set(buffer, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code float} from the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the source buffer
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the four bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > buffer.limit()}
+     */
+    public static float getFloat(ByteBuffer buffer, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (float) FLOAT_BUFFER_BE.get(buffer, offset);
+        }
+        return (float) FLOAT_BUFFER_LE.get(buffer, offset);
+    }
+
+    /**
+     * Writes a {@code float} to the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the destination buffer
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the four bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 4 > buffer.limit()}
+     */
+    public static void putFloat(ByteBuffer buffer, int offset, float value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            FLOAT_BUFFER_BE.set(buffer, offset, value);
+        } else {
+            FLOAT_BUFFER_LE.set(buffer, offset, value);
+        }
+    }
+
+    /**
+     * Reads a {@code double} from the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the source buffer
+     * @param offset the byte offset at which to start reading
+     * @param order  the byte order to interpret the eight bytes with
+     * @return the decoded value
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > buffer.limit()}
+     */
+    public static double getDouble(ByteBuffer buffer, int offset, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            return (double) DOUBLE_BUFFER_BE.get(buffer, offset);
+        }
+        return (double) DOUBLE_BUFFER_LE.get(buffer, offset);
+    }
+
+    /**
+     * Writes a {@code double} to the given {@link ByteBuffer} at the given
+     * offset using the given byte order, without affecting the buffer's
+     * position.
+     *
+     * @param buffer the destination buffer
+     * @param offset the byte offset at which to start writing
+     * @param value  the value to encode
+     * @param order  the byte order to encode the eight bytes with
+     * @throws IndexOutOfBoundsException if {@code offset} is negative or
+     *                                   {@code offset + 8 > buffer.limit()}
+     */
+    public static void putDouble(ByteBuffer buffer, int offset, double value, ByteOrder order) {
+        if (order == ByteOrder.BIG_ENDIAN) {
+            DOUBLE_BUFFER_BE.set(buffer, offset, value);
+        } else {
+            DOUBLE_BUFFER_LE.set(buffer, offset, value);
+        }
     }
 
     /**

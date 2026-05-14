@@ -25,7 +25,7 @@ import java.util.Optional;
  *
  * <p>Cross-module note: the model-side {@link BusinessDataSharingConsent}
  * carries the same tri-state with full protobuf wiring and is the
- * surface used by {@code WhatsAppClient.changeBusinessPrivacySetting}
+ * surface used by {@code WhatsAppClient.editBusinessPrivacySetting}
  * callers; this enum exists separately to record the WA Web
  * {@code WASmaxInBizSettingsEnums.ENUM_FALSE_NOTSET_TRUE} provenance
  * lib-side (the {@code modules/model} submodule does not carry source

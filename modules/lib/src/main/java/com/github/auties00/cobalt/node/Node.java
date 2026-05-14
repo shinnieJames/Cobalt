@@ -5,8 +5,8 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.node.binary.NodeDecoder;
-import com.github.auties00.cobalt.node.binary.NodeEncoder;
+import com.github.auties00.cobalt.node.binary.NodeReader;
+import com.github.auties00.cobalt.node.binary.NodeWriter;
 import it.auties.protobuf.model.ProtobufString;
 
 import java.io.ByteArrayInputStream;
@@ -61,8 +61,8 @@ import java.util.stream.Stream;
  *
  * @see NodeBuilder
  * @see NodeAttribute
- * @see NodeEncoder
- * @see NodeDecoder
+ * @see NodeWriter
+ * @see NodeReader
  */
 @WhatsAppWebModule(moduleName = "WAWap")
 @WhatsAppWebModule(moduleName = "WAXmlNode")

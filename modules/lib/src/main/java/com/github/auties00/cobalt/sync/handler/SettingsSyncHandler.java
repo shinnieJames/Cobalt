@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,20 +42,15 @@ import java.util.List;
 @WhatsAppWebModule(moduleName = "WAWebSettingsSyncHelpers")
 public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
-     * Singleton instance of this handler.
-     *
-     * <p>WA Web instantiates the handler exactly once at module load time via
-     * {@code var C = new y; l.default = C;}. Cobalt mirrors that with a
-     * module-level constant.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final SettingsSyncHandler INSTANCE = new SettingsSyncHandler();
-
-    /**
      * The {@code app} scope literal used by WA Web for global (non-per-chat)
      * settings.
      */
     private static final String APP_SCOPE = "app";
+
+    /**
+     * The AB-props service consulted before applying any mutation.
+     */
+    private final ABPropsService abPropsService;
 
     /**
      * The number of components expected in the {@code indexParts} array of a
@@ -66,13 +62,12 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
     /**
      * Creates a new {@code SettingsSyncHandler}.
      *
-     * <p>The constructor is private because the only way to obtain an instance
-     * is through {@link #INSTANCE}, matching the WA Web module-level singleton
-     * pattern.
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private SettingsSyncHandler() {
-
+    public SettingsSyncHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -325,7 +320,7 @@ public final class SettingsSyncHandler implements WebAppStateActionHandler {
      */
     private boolean isSettingsSyncEnabled(WhatsAppClient client) {
         return client.store().primaryFeatures().contains("settings_sync_enabled")
-                && client.abPropsService().getBool(ABProp.SETTINGS_SYNC_ENABLED);
+                && abPropsService.getBool(ABProp.SETTINGS_SYNC_ENABLED);
     }
 
     /**

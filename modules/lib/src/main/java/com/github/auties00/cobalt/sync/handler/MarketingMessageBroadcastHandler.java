@@ -31,17 +31,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 @WhatsAppWebModule(moduleName = "WAWebPremiumMessageBroadcastSync")
 public final class MarketingMessageBroadcastHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code MarketingMessageBroadcastHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPremiumMessageBroadcastSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final MarketingMessageBroadcastHandler INSTANCE = new MarketingMessageBroadcastHandler();
 
     /**
      * Constructs the singleton handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageBroadcastSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private MarketingMessageBroadcastHandler() {
+    public MarketingMessageBroadcastHandler() {
 
     }
 
@@ -119,6 +114,11 @@ public final class MarketingMessageBroadcastHandler implements WebAppStateAction
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageBroadcastSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebPremiumMessageBroadcastSync.applyMutations: var i=r[1], l=r[2]; if(!i||!l) return t.malformedActionIndex().
+        // Slots 1 and 2 are read unconditionally; mirror the undefined-checks with an explicit size guard.
+        if (indexArray.size() <= 2) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var premiumMessageId = indexArray.getString(1);
         var messageId = indexArray.getString(2);
         if (premiumMessageId == null || premiumMessageId.isEmpty()

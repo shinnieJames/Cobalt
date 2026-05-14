@@ -1,21 +1,17 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles custom payment methods sync actions.
@@ -36,17 +32,19 @@ import java.util.List;
 @WhatsAppWebModule(moduleName = "WAWebCustomPaymentMethodsSync")
 public final class CustomPaymentMethodsHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of {@code CustomPaymentMethodsHandler}.
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final CustomPaymentMethodsHandler INSTANCE = new CustomPaymentMethodsHandler();
+    private final ABPropsService abPropsService;
 
     /**
      * Creates a new {@code CustomPaymentMethodsHandler}.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private CustomPaymentMethodsHandler() {
-
+    public CustomPaymentMethodsHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -108,7 +106,7 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
             return MutationApplicationResult.unsupported();
         }
 
-        if (!client.abPropsService().getBool(ABProp.PAYMENTS_BR_PIX_PHASE_1_SELLER_SYNC_ENABLED)) {
+        if (!abPropsService.getBool(ABProp.PAYMENTS_BR_PIX_PHASE_1_SELLER_SYNC_ENABLED)) {
             return MutationApplicationResult.unsupported();
         }
 
@@ -124,37 +122,4 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
         return MutationApplicationResult.success();
     }
 
-    /**
-     * Builds a pending SET mutation for custom payment methods.
-     *
-     * <p>Per WhatsApp Web {@code WAWebCustomPaymentMethodsSync.getCustomPaymentMethodSetMutation}:
-     * <ol>
-     *   <li>Captures the current time via {@code WATimeUtils.unixTimeMs()}</li>
-     *   <li>Wraps the action in a value object:
-     *       {@code {customPaymentMethodsAction: action}}</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation} with
-     *       collection={@code RegularLow}, indexArgs={@code []},
-     *       operation={@code SET}, version={@code 7},
-     *       action={@code "custom_payment_methods"}</li>
-     * </ol>
-     * @param action the custom payment methods action to build the mutation for
-     * @return the pending mutation ready for sync upload
-     */
-    @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "getCustomPaymentMethodSetMutation", adaptation = WhatsAppAdaptation.DIRECT)
-    public SyncPendingMutation getCustomPaymentMethodSetMutation(CustomPaymentMethodsAction action) {
-        var timestamp = Instant.now();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .customPaymentMethodsAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

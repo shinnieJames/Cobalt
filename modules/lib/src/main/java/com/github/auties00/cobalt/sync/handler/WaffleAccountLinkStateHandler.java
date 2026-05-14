@@ -16,6 +16,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.event.NonMessagePeerDataRequestEventBuilder;
 import com.github.auties00.cobalt.wam.type.PeerDataRequestType;
@@ -46,6 +47,12 @@ import java.util.List;
 @WhatsAppWebModule(moduleName = "WAWebWaffleAccountLinkStateSync")
 public final class WaffleAccountLinkStateHandler implements WebAppStateActionHandler {
     /**
+     * The AB-props service consulted on every mutation to enforce the
+     * {@code web_waffle} gate.
+     */
+    private final ABPropsService abPropsService;
+
+    /**
      * The WAM telemetry service used to commit the non-message peer data
      * request event when triggering a WAFFLE linking nonce fetch.
      */
@@ -53,10 +60,15 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
 
     /**
      * Constructs a {@code WaffleAccountLinkStateHandler}.
-     * @param wamService the WAM telemetry service used by this handler
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
+     * @param wamService     the WAM telemetry service used by this
+     *                       handler
      */
     @WhatsAppWebExport(moduleName = "WAWebWaffleAccountLinkStateSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public WaffleAccountLinkStateHandler(WamService wamService) {
+    public WaffleAccountLinkStateHandler(ABPropsService abPropsService, WamService wamService) {
+        this.abPropsService = abPropsService;
         this.wamService = wamService;
     }
 
@@ -118,7 +130,7 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
     @Override
     @WhatsAppWebExport(moduleName = "WAWebWaffleAccountLinkStateSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public List<MutationApplicationResult> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
-        var accountLinkingEnabled = client.abPropsService().getBool(ABProp.WEB_WAFFLE);
+        var accountLinkingEnabled = abPropsService.getBool(ABProp.WEB_WAFFLE);
         DecryptedMutation.Trusted latest = null;
         var results = new ArrayList<MutationApplicationResult>(mutations.size());
         for (var mutation : mutations) {
@@ -172,7 +184,7 @@ public final class WaffleAccountLinkStateHandler implements WebAppStateActionHan
     @Override
     @WhatsAppWebExport(moduleName = "WAWebWaffleAccountLinkStateSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!client.abPropsService().getBool(ABProp.WEB_WAFFLE)) {
+        if (!abPropsService.getBool(ABProp.WEB_WAFFLE)) {
             return MutationApplicationResult.unsupported();
         }
 

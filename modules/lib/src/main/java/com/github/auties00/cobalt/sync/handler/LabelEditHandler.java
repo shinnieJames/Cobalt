@@ -8,15 +8,10 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditAction;
-import com.github.auties00.cobalt.model.sync.action.contact.LabelEditActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles the {@code label_edit} sync action by creating, editing, or deleting
@@ -51,17 +46,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelSync")
 public final class LabelEditHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code LabelEditHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final LabelEditHandler INSTANCE = new LabelEditHandler();
 
     /**
      * Constructs the singleton handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private LabelEditHandler() {
+    public LabelEditHandler() {
 
     }
 
@@ -132,6 +122,11 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         }
 
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebLabelSync.applyMutations: var n=t.indexParts[1]; if(!n) return malformedActionIndex().
+        // n[1] is `undefined` when the slot is missing; mirror that via an explicit size check.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var labelId = indexArray.getString(1);
         if (labelId == null || labelId.isEmpty()) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -235,57 +230,4 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         return MutationApplicationResult.success();
     }
 
-    /**
-     * Builds a pending SET mutation for creating or editing a chat label.
-     *
-     * <p>Per WhatsApp Web {@code WAWebLabelSync.default.getLabelMutation},
-     * assembles a {@link LabelEditAction} with the supplied fields (null
-     * values are preserved so that deleted flags, missing colour, missing
-     * type and so on round-trip correctly) and wraps it in a
-     * {@link SyncPendingMutation} with the canonical index
-     * {@code ["label_edit", labelId]}. WAM telemetry
-     * ({@code WAWebWamLabelSyncTrackingReporter}) is intentionally omitted.
-     * @param labelId      the label identifier (index arg, stringified by the caller)
-     * @param name         the display name, may be {@code null}
-     * @param color        the palette colour index, or {@code null} when unchanged
-     * @param deleted      whether the label is being deleted
-     * @param predefinedId the predefined list identifier, or {@code null}
-     * @param isActive     the active flag, or {@code null} when unchanged
-     * @param type         the list type, or {@code null} when unchanged
-     * @param timestamp    the mutation timestamp
-     * @return the pending mutation for the label edit
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "getLabelMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getLabelMutation(
-            String labelId,
-            String name,
-            Integer color,
-            boolean deleted,
-            Integer predefinedId,
-            Boolean isActive,
-            LabelEditAction.ListType type,
-            Instant timestamp
-    ) {
-        var action = new LabelEditActionBuilder()
-                .name(name)
-                .deleted(deleted)
-                .color(color)
-                .predefinedId(predefinedId)
-                .isActive(isActive)
-                .type(type)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .labelEditAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), labelId));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw pending mutation; Cobalt wraps it in SyncPendingMutation for the outgoing queue
-    }
 }

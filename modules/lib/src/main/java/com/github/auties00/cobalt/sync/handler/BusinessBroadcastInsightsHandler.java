@@ -36,16 +36,10 @@ public final class BusinessBroadcastInsightsHandler implements WebAppStateAction
     private static final Logger LOGGER = Logger.getLogger(BusinessBroadcastInsightsHandler.class.getName());
 
     /**
-     * The singleton instance of {@code BusinessBroadcastInsightsHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final BusinessBroadcastInsightsHandler INSTANCE = new BusinessBroadcastInsightsHandler();
-
-    /**
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private BusinessBroadcastInsightsHandler() {
+    public BusinessBroadcastInsightsHandler() {
 
     }
 
@@ -102,6 +96,11 @@ public final class BusinessBroadcastInsightsHandler implements WebAppStateAction
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
             var indexArray = JSON.parseArray(mutation.index()); // ADAPTED: WAWebBusinessBroadcastInsightsSync uses e.indexParts (pre-parsed); Cobalt parses from JSON string
+            // WAWebBusinessBroadcastInsightsSync.applyMutations: var t=e.indexParts, n=t[1]; if(!n) return r.malformedActionIndex().
+            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            if (indexArray.size() <= 1) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var campaignId = indexArray.getString(1);
             if (campaignId == null || campaignId.isEmpty()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());

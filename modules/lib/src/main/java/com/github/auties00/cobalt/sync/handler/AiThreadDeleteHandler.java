@@ -9,13 +9,9 @@ import com.github.auties00.cobalt.model.device.DeviceCapabilities;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -60,16 +56,10 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
     public static final SyncPatchType COLLECTION_NAME = SyncPatchType.REGULAR_HIGH;
 
     /**
-     * Singleton instance of this handler.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final AiThreadDeleteHandler INSTANCE = new AiThreadDeleteHandler();
-
-    /**
      * Constructs the singleton AI thread delete handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private AiThreadDeleteHandler() {
+    public AiThreadDeleteHandler() {
 
     }
 
@@ -184,33 +174,4 @@ public final class AiThreadDeleteHandler implements WebAppStateActionHandler {
         }
     }
 
-    /**
-     * Builds a pending outgoing mutation that deletes an AI thread across
-     * linked devices.
-     *
-     * <p>Per WhatsApp Web {@code WAWebAiThreadDeleteSync}: emits a SET
-     * mutation at {@code ["ai_thread_delete", botJid, threadId]} in the
-     * REGULAR_HIGH collection with {@code version = 7}. The action has no
-     * dedicated sub-message payload the index alone identifies the thread.
-     * @param chatJid  the bot JID owning the thread
-     * @param threadId the AI thread identifier
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
-     */
-    @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getAiThreadDeleteMutation(Jid chatJid, String threadId) {
-        var timestamp = Instant.now();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .build();
-        var index = JSON.toJSONString(List.of(ACTION_NAME, chatJid.toString(), threadId)); // ["ai_thread_delete", chatJid, threadId]
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                ACTION_VERSION
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

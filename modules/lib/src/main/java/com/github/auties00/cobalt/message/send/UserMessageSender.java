@@ -76,11 +76,6 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
     private final DeviceService deviceService;
 
     /**
-     * Holds the AB-props service used for feature-flag lookups.
-     */
-    private final ABPropsService abPropsService;
-
-    /**
      * Holds the bot-specific stanza builder.
      */
     private final BotStanza botStanza;
@@ -140,10 +135,9 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
             TcTokenStanza tcTokenStanza,
             WamService wamService
     ) {
-        super(client, wamService);
+        super(client, abPropsService, wamService);
         this.encryption = Objects.requireNonNull(encryption, "encryption");
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService");
-        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService");
         this.botStanza = Objects.requireNonNull(botStanza, "botStanza");
         this.bizStanza = Objects.requireNonNull(bizStanza, "bizStanza");
         this.metaStanza = Objects.requireNonNull(metaStanza, "metaStanza");
@@ -167,18 +161,53 @@ final class UserMessageSender extends MessageSender<ChatMessageInfo> {
     AckResult send(Jid chatJid, ChatMessageInfo messageInfo) {
         waitForOfflineDelivery();
 
-        var fanoutDevices = deviceService.getUserFanout(chatJid, null);
+        var routedChatJid = maybeReplaceWidWithAccountLid(chatJid);
+
+        var fanoutDevices = deviceService.getUserFanout(routedChatJid, null);
 
         store.createOrMergeReceiptRecords(messageInfo.key().id().orElseThrow(), fanoutDevices);
 
-        var ack = encryptBuildAndSend(chatJid, messageInfo, fanoutDevices, false);
+        var ack = encryptBuildAndSend(routedChatJid, messageInfo, fanoutDevices, false);
 
-        maybeRefreshLid(chatJid, ack);
+        maybeRefreshLid(routedChatJid, ack);
 
         ack.phash().ifPresent(serverPhash ->
-                handlePhashMismatch(chatJid, messageInfo, fanoutDevices, serverPhash));
+                handlePhashMismatch(routedChatJid, messageInfo, fanoutDevices, serverPhash));
 
         return ack;
+    }
+
+    /**
+     * Rewrites a bare regular-user PN to its associated LID for the wire
+     * stanza when the Lid-1:1 migration is enabled and a mapping is known.
+     *
+     * <p>For self-send, the LID is resolved from the local store
+     * ({@code store.lid()}); for other regular users the LID is taken from
+     * the chat record's {@code accountLid} field, populated during chat
+     * resolution. When no LID is known the original PN is returned and the
+     * downstream pipeline routes the stanza by PN.
+     *
+     * @param chatJid the chat JID supplied by the caller
+     * @return the rewritten LID, or the original PN when no rewrite applies
+     */
+    @WhatsAppWebExport(moduleName = "WAWebPnlessStanzaMigration",
+            exports = "maybeReplaceWidWithAccountLid",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private Jid maybeReplaceWidWithAccountLid(Jid chatJid) {
+        if (chatJid == null
+                || !chatJid.hasUserServer()
+                || chatJid.device() != 0) {
+            return chatJid;
+        }
+
+        var selfPn = store.jid().map(Jid::toUserJid).orElse(null);
+        if (selfPn != null && chatJid.toUserJid().equals(selfPn)) {
+            return store.lid().map(Jid::toUserJid).orElse(chatJid);
+        }
+
+        return store.findChatByJid(chatJid)
+                .flatMap(Chat::accountLid)
+                .orElse(chatJid);
     }
 
     /**

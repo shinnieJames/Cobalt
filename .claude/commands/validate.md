@@ -18,7 +18,7 @@ Before doing anything else, verify the whatsapp MCP server is reachable:
 1. Call any lightweight MCP tool such as `mcp__whatsapp__get_active_snapshot`.
 2. If the server is NOT running, start it:
    ```bash
-   cd tooling/web-mcp-server-new && node dist/index.js &
+   cd tools/web/mcp-server && node dist/index.js &
    ```
    Wait a few seconds, then re-check. The server runs on port 8787 by default.
 3. If the server cannot be started (missing build, missing data), stop and tell the user.
@@ -50,11 +50,11 @@ Two Cobalt catalogs are derived from the live WA Web bundle and checked in as pl
 
 1. **WAM events and enums** → `com.github.auties00.cobalt.wam` (`wam/event/`, `wam/type/`):
    ```bash
-   cd tooling/web-wam-codegen && npm start
+   cd tools/web/wam-codegen && npm start
    ```
 2. **AB props** → `com.github.auties00.cobalt.props`:
    ```bash
-   cd tooling/web-ab-props-codegen && npm start
+   cd tools/web/ab-props-codegen && npm start
    ```
 
 Both tools are Playwright-based and may take a few minutes each. Run sequentially. If either fails, stop and surface the error to the user — do NOT continue against a stale catalog.
@@ -255,7 +255,7 @@ Mark SKIPPED if any of these apply:
 3. **Vendored third-party** — name starts with `WAWeb-` (hyphen), or matches
    Lottie / easel.js / similar bundled libraries.
 4. **Generated artifact** — `.graphql` files, `*_facebookRelayOperation` stubs,
-   `WAProto*.pb` (Cobalt regenerates these from `tooling/proto/`).
+   `WAProto*.pb` (Cobalt regenerates these from `tools/web/proto-extractor/`).
 5. **Lazy-load entry** — name ends with `Loadable`; module body is a thin
    `requireDeferred` wrapper.
 6. **Locale data** — `WAWebLocalesEmojiSuggestion*`, `WAWebCountriesLocale*`,

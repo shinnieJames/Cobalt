@@ -8,15 +8,10 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.bot.BotWelcomeRequestStateBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestAction;
-import com.github.auties00.cobalt.model.sync.action.bot.BotWelcomeRequestActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles bot welcome request sync actions.
@@ -34,20 +29,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebBotWelcomeRequestSync")
 public final class BotWelcomeRequestHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of the bot welcome request handler.
-     *
-     * <p>Per WhatsApp Web, {@code WAWebBotWelcomeRequestSync} exports a single
-     * instance ({@code var d = new c(); l.default = d}).
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBotWelcomeRequestSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final BotWelcomeRequestHandler INSTANCE = new BotWelcomeRequestHandler();
 
     /**
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebBotWelcomeRequestSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private BotWelcomeRequestHandler() {
+    public BotWelcomeRequestHandler() {
 
     }
 
@@ -149,39 +136,4 @@ public final class BotWelcomeRequestHandler implements WebAppStateActionHandler 
         }
     }
 
-    /**
-     * Builds a pending mutation for setting the bot welcome request state on a chat.
-     *
-     * <p>Per WhatsApp Web {@code WAWebBotWelcomeRequestSync.getBotWelcomeRequestSetMutation}:
-     * <ol>
-     *   <li>Constructs the value with {@code {botWelcomeRequestAction: {isSent: t}}}</li>
-     *   <li>Resolves the chat JID for mutation index via
-     *       {@code WAWebSyncdGetChat.getChatJidMutationIndexForChat(e, Actions.BotWelcomeRequest)}</li>
-     *   <li>Builds the pending mutation via {@code WAWebSyncdActionUtils.buildPendingMutation}
-     *       with collection, index, value, version, operation SET, and current unix time</li>
-     * </ol>
-     * @param chatJid the JID of the bot chat
-     * @param isSent  whether the welcome message has been sent
-     * @return the pending mutation for the bot welcome request action
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBotWelcomeRequestSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getBotWelcomeRequestSetMutation(Jid chatJid, boolean isSent) {
-        var action = new BotWelcomeRequestActionBuilder()
-                .isSent(isSent)
-                .build();
-        var timestamp = Instant.now();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .botWelcomeRequestAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), chatJid.toString()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

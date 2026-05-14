@@ -62,14 +62,11 @@ import com.github.auties00.cobalt.wam.type.PsIdAction;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
 
 import java.io.IOException;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Logger;
 
 /**
@@ -103,11 +100,8 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebWamMsgUtils")
 @WhatsAppWebModule(moduleName = "WAWebProcessRawMediaLogging")
 @WhatsAppWebExport(moduleName = "WAWebWam", exports = "Wam", adaptation = WhatsAppAdaptation.ADAPTED)
-public final class WamService {
+public abstract class WamService {
     private static final Logger LOGGER = Logger.getLogger(WamService.class.getName());
-
-    private static final VarHandle SHORT_HANDLE =
-            MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
 
     /**
      * Size of the WAM buffer header in bytes. Layout is
@@ -290,13 +284,6 @@ public final class WamService {
     private volatile boolean initialized;
 
     /**
-     * Scheduler driving the periodic serialize and flush passes.
-     * Replaced on every {@link #initialize()} and shut down by
-     * {@link #close()}.
-     */
-    private ScheduledExecutorService scheduler;
-
-    /**
      * Platform identifier written as global {@code 11}. Resolved from
      * {@link WhatsAppClientType} at
      * initialization.
@@ -411,7 +398,7 @@ public final class WamService {
      * @param abPropsService the AB props service for reading the AB key
      *                       and feature flags, must not be {@code null}
      */
-    public WamService(WhatsAppClient client, ABPropsService abPropsService) {
+    protected WamService(WhatsAppClient client, ABPropsService abPropsService, WamBeaconing beaconing) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
         this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
         this.pending = new ConcurrentHashMap<>();
@@ -419,12 +406,171 @@ public final class WamService {
         for (var channel : WamChannel.values()) {
             sequenceNumbers.put(channel, new AtomicInteger(1));
         }
-        this.beaconing = new WamBeaconing();
+        this.beaconing = Objects.requireNonNull(beaconing, "beaconing cannot be null");
         this.privateStatsId = new WamPrivateStatsId();
         this.privateStatsUploader = new WamPrivateStatsUploader(new WamPrivateStatsTokenIssuer(client));
         this.samplingOverride = new WamSamplingOverride();
         this.prevSessionGlobals = new EnumMap<>(WamChannel.class);
         this.initQueue = new ConcurrentLinkedQueue<>();
+    }
+
+    /**
+     * Returns the current instant, used for the WAM commit-time
+     * global ({@code 47}), the {@code t} attribute of the upload IQ
+     * stanza, and the connectivity-wait deadline.
+     *
+     * <p>{@link DefaultWamService} returns {@link Instant#now()}; tests
+     * return a controlled clock value.
+     *
+     * @return the current instant on the underlying clock
+     */
+    protected abstract Instant now();
+
+    /**
+     * Suspends the current thread for at least the given number of
+     * milliseconds, used by the retry-backoff and connectivity-wait
+     * loops.
+     *
+     * <p>{@link DefaultWamService} delegates to {@link Thread#sleep};
+     * tests return immediately (or record the requested delay).
+     *
+     * @param millis the duration to sleep, in milliseconds
+     * @throws InterruptedException if the thread is interrupted while
+     *                              sleeping
+     */
+    protected abstract void sleep(long millis) throws InterruptedException;
+
+    /**
+     * Schedules a recurring task to run after {@code initialDelaySeconds}
+     * and then every {@code periodSeconds} until
+     * {@link #cancelAllScheduled()} is called.
+     *
+     * <p>Used by {@link #initialize()} to arm the five-second serialize
+     * check and the 120-second flush cycle. {@link DefaultWamService}
+     * backs this with a virtual-thread scheduled executor; tests record
+     * the schedule and drive ticks deterministically.
+     *
+     * @param task                the task to run on every tick
+     * @param initialDelaySeconds the delay before the first tick, in
+     *                            seconds
+     * @param periodSeconds       the delay between successive ticks,
+     *                            in seconds
+     */
+    protected abstract void scheduleRecurring(Runnable task, long initialDelaySeconds, long periodSeconds);
+
+    /**
+     * Cancels every recurring task previously scheduled through
+     * {@link #scheduleRecurring}. Called from {@link #close()}.
+     */
+    protected abstract void cancelAllScheduled();
+
+    /**
+     * Returns the number of events currently queued in the pending
+     * list for the given channel.
+     *
+     * <p>Package-private hook used by behavioural tests to observe
+     * commit dispatch without invoking the full flush pipeline. The
+     * production code never reads this state externally.
+     *
+     * @param channel the channel to query
+     * @return the number of queued events for {@code channel}
+     */
+    int pendingCount(WamChannel channel) {
+        var list = pending.get(channel);
+        return list == null ? 0 : list.size();
+    }
+
+    /**
+     * Returns the number of deferred actions currently sitting in
+     * {@link #initQueue}, waiting for the next call to
+     * {@link #initialize()} to drain them.
+     *
+     * <p>Package-private hook used by behavioural tests covering
+     * the pre-init {@code commit} / {@code commitAndWaitForFlush}
+     * deferral path.
+     *
+     * @return the queue size
+     */
+    int initQueueSize() {
+        return initQueue.size();
+    }
+
+    /**
+     * Returns the current value of the per-channel sequence number
+     * counter (the value the next call to
+     * {@link #nextSequenceNumber} would observe before incrementing).
+     *
+     * <p>Package-private hook used by behavioural tests covering
+     * the per-channel counter wrap and independence semantics.
+     *
+     * @param channel the channel to query
+     * @return the next sequence number to be emitted on a flush
+     */
+    int sequenceNumberFor(WamChannel channel) {
+        return sequenceNumbers.get(channel).get();
+    }
+
+    /**
+     * Pre-sets the per-channel sequence counter so behavioural tests
+     * can probe the wraparound from {@link #MAX_SEQUENCE_NUMBER} back
+     * to {@code 1} without committing 65 535 events.
+     *
+     * @param channel the channel to update
+     * @param value   the new counter value
+     */
+    void setSequenceNumberForTesting(WamChannel channel, int value) {
+        sequenceNumbers.get(channel).set(value);
+    }
+
+    /**
+     * Drains every deferred action currently sitting in
+     * {@link #initQueue}, re-running each one against the now-ready
+     * service.
+     *
+     * <p>Mirrors {@code WAWebWamInitQueue.processQueuedJobs} in the
+     * live JS bundle. Invoked once from {@link #initialize()} as the
+     * last setup step before recurring schedulers arm; package-private
+     * so behavioural tests bypassing the full {@code initialize()}
+     * sequence can still trigger the drain.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebWamInitQueue", exports = "processQueuedJobs", adaptation = WhatsAppAdaptation.ADAPTED)
+    void drainInitQueue() {
+        Runnable action;
+        while ((action = initQueue.poll()) != null) {
+            action.run();
+        }
+    }
+
+    /**
+     * Forces the {@code initialized} flag to {@code true} without
+     * running the full {@link #initialize()} sequence.
+     *
+     * <p>Package-private hook used by behavioural tests that want to
+     * drive a deterministic {@link #flushChannel} or {@link #flush}
+     * cycle without paying for the store-priming, AB-props snapshot,
+     * and scheduler-arming steps that {@code initialize()} runs in
+     * production. Tests are responsible for any volatile globals they
+     * rely on being non-default — most leave them at their compile-time
+     * defaults (null / 0), which {@link #buildFullCurrentGlobals}
+     * already handles by emitting only the present entries.
+     */
+    void markInitializedForTesting() {
+        this.initialized = true;
+    }
+
+    /**
+     * Overwrites the {@link #deviceName} global without going through
+     * {@link #initialize()}.
+     *
+     * <p>Package-private hook for in-process tests that need to mutate
+     * a single global between flushes to assert the
+     * {@code prevSessionGlobals} dirty-write behaviour.
+     *
+     * @param deviceName the new device name, or {@code null} to clear
+     *                   it
+     */
+    void setDeviceName(String deviceName) {
+        this.deviceName = deviceName;
     }
 
     /**
@@ -471,14 +617,10 @@ public final class WamService {
 
         this.initialized = true;
 
-        Runnable action;
-        while ((action = initQueue.poll()) != null) {
-            action.run();
-        }
+        drainInitQueue();
 
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
-        scheduler.scheduleWithFixedDelay(this::checkMidCycleUpload, SERIALIZE_INTERVAL_SECONDS, SERIALIZE_INTERVAL_SECONDS, TimeUnit.SECONDS);
-        scheduler.scheduleWithFixedDelay(this::flush, FLUSH_INTERVAL_SECONDS, FLUSH_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        scheduleRecurring(this::checkMidCycleUpload, SERIALIZE_INTERVAL_SECONDS, SERIALIZE_INTERVAL_SECONDS);
+        scheduleRecurring(this::flush, FLUSH_INTERVAL_SECONDS, FLUSH_INTERVAL_SECONDS);
 
         // Cobalt does not persist PS IDs across sessions, so every
         // rotation group is treated as freshly created on each
@@ -533,11 +675,29 @@ public final class WamService {
      *
      * <p>For {@link WamChannel#REALTIME} events, an immediate flush is
      * scheduled.
+     *
+     * <p>If the service has not yet been initialised, the commit is
+     * deferred into {@link #initQueue} and replayed on the next call
+     * to {@link #initialize()}, matching WhatsApp Web's
+     * {@code WAWebWamInitQueue.queueEvent} fallback path used when
+     * {@code WAWebWamRuntimeProvider.getWamRuntime()} returns
+     * {@code null}. Validation and sampling run at drain time, against
+     * the live state.
      * @param event the event to commit, must not be {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebWamCodegenWamEvent", exports = "WamEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebWamInitQueue", exports = "queueEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     public void commit(WamEventSpec event) {
         Objects.requireNonNull(event, "event cannot be null");
+
+        // WAWebWamCodegenWamEvent.commit: getWamRuntime() ?? queueEvent.
+        // When the runtime isn't initialised yet, defer the entire
+        // commit (validation, sampling, dispatch) to drain time.
+        if (!initialized) {
+            initQueue.offer(() -> commit(event));
+            return;
+        }
+
         if (!event.markCommitted()) {
             LOGGER.warning("WAM redundant commit: " + event.getClass().getSimpleName());
             return;
@@ -556,7 +716,7 @@ public final class WamService {
             }
         }
 
-        var pe = new WamPendingEvent(event, Instant.now().getEpochSecond());
+        var pe = new WamPendingEvent(event, now().getEpochSecond());
         pending.compute(event.channel(), (_, list) -> {
             if (list == null) {
                 list = new ArrayList<>();
@@ -576,14 +736,36 @@ public final class WamService {
      *
      * <p>This matches WhatsApp Web's {@code commitAndWaitForFlush()}
      * which returns a Promise resolved on buffer flush.
+     *
+     * <p>If the service has not yet been initialised, the commit is
+     * deferred into {@link #initQueue} alongside a bridge that
+     * completes the returned future once the drained commit's own
+     * future completes, matching WhatsApp Web's
+     * {@code WAWebWamInitQueue.queueEvent(event, waitForFlush=true)}
+     * fallback path.
      * @param event the event to commit, must not be {@code null}
      * @return a future that completes when the event's buffer is flushed,
      *         or completes immediately if the event was sampled out or
      *         failed validation
      */
     @WhatsAppWebExport(moduleName = "WAWebWamCodegenWamEvent", exports = "WamEvent", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebWamInitQueue", exports = "queueEvent", adaptation = WhatsAppAdaptation.ADAPTED)
     public CompletableFuture<Void> commitAndWaitForFlush(WamEventSpec event) {
         Objects.requireNonNull(event, "event cannot be null");
+        if (!initialized) {
+            var deferred = new CompletableFuture<Void>();
+            initQueue.offer(() -> {
+                var inner = commitAndWaitForFlush(event);
+                inner.whenComplete((value, error) -> {
+                    if (error != null) {
+                        deferred.completeExceptionally(error);
+                    } else {
+                        deferred.complete(value);
+                    }
+                });
+            });
+            return deferred;
+        }
         if (!event.markCommitted()) {
             LOGGER.warning("WAM redundant commit: " + event.getClass().getSimpleName());
             return CompletableFuture.completedFuture(null);
@@ -602,7 +784,7 @@ public final class WamService {
         }
 
         var future = new CompletableFuture<Void>();
-        var pe = new WamPendingEvent(event, Instant.now().getEpochSecond(), future);
+        var pe = new WamPendingEvent(event, now().getEpochSecond(), future);
         pending.compute(event.channel(), (_, list) -> {
             if (list == null) {
                 list = new ArrayList<>();
@@ -681,8 +863,11 @@ public final class WamService {
      * Web's two-tier timing system, where a five-second serialization
      * timer checks for oversized buffers between the 120-second
      * rotation cycles.
+     *
+     * <p>Package-private so tests can drive a serialize check
+     * deterministically instead of waiting on the scheduler.
      */
-    private void checkMidCycleUpload() {
+    void checkMidCycleUpload() {
         if (!initialized) {
             return;
         }
@@ -723,9 +908,13 @@ public final class WamService {
      * <p>For the {@link WamChannel#PRIVATE} channel, PS IDs are rotated
      * before flushing.
      *
+     * <p>Package-private so behavioural tests can drive a specific
+     * channel's flush deterministically without going through the
+     * full {@link #flush()} sweep.
+     *
      * @param channel the channel to flush
      */
-    private void flushChannel(WamChannel channel) {
+    void flushChannel(WamChannel channel) {
         var events = swapPending(channel);
         if (events.isEmpty()) {
             return;
@@ -780,7 +969,7 @@ public final class WamService {
      * @param bufferKey the beaconing buffer key
      */
     private void flushEventList(WamChannel channel, List<WamPendingEvent> events, String bufferKey) {
-        var beacons = new OptionalInt[events.size()];
+        var beacons = new OptionalLong[events.size()];
         var weights = new int[events.size()];
         for (var i = 0; i < events.size(); i++) {
             beacons[i] = beaconing.nextSequenceNumber(bufferKey);
@@ -825,7 +1014,7 @@ public final class WamService {
      * @param to          the exclusive end index in the event list
      * @param size        the pre-computed total buffer size
      */
-    private void buildAndSend(WamChannel channel, List<WamPendingEvent> events, int[] weights, OptionalInt[] beacons, byte[] globalsBytes, int from, int to, int size) {
+    private void buildAndSend(WamChannel channel, List<WamPendingEvent> events, int[] weights, OptionalLong[] beacons, byte[] globalsBytes, int from, int to, int size) {
         if (size > MAX_UPLOAD_SIZE) {
             LOGGER.warning("Dropping WAM buffer of " + size + " bytes (exceeds upload limit)");
             commit(new WamClientErrorsEventBuilder()
@@ -1016,10 +1205,10 @@ public final class WamService {
      * @param beacon  the pre-computed beacon sequence number
      * @return the per-event globals size in bytes
      */
-    private int computePerEventGlobalsSize(WamPendingEvent pe, WamChannel channel, OptionalInt beacon) {
+    private int computePerEventGlobalsSize(WamPendingEvent pe, WamChannel channel, OptionalLong beacon) {
         var size = WamGlobalEncoder.commitTimeSize(pe.commitTimeSeconds());
         if (beacon.isPresent()) {
-            size += WamGlobalEncoder.beaconSessionIdSize(beacon.getAsInt());
+            size += WamGlobalEncoder.beaconSessionIdSize(beacon.getAsLong());
         }
         if (channel == WamChannel.PRIVATE) {
             var psId = privateStatsId.getValueForHash(pe.event().privateStatsId());
@@ -1037,10 +1226,10 @@ public final class WamService {
      * @param beacon  the pre-computed beacon sequence number
      * @param encoder the destination encoder
      */
-    private void writePerEventGlobals(WamPendingEvent pe, WamChannel channel, OptionalInt beacon, WamEventEncoder encoder) {
+    private void writePerEventGlobals(WamPendingEvent pe, WamChannel channel, OptionalLong beacon, WamEventEncoder encoder) {
         WamGlobalEncoder.writeCommitTime(pe.commitTimeSeconds(), encoder);
         if (beacon.isPresent()) {
-            WamGlobalEncoder.writeBeaconSessionId(beacon.getAsInt(), encoder);
+            WamGlobalEncoder.writeBeaconSessionId(beacon.getAsLong(), encoder);
         }
         if (channel == WamChannel.PRIVATE) {
             var psId = privateStatsId.getValueForHash(pe.event().privateStatsId());
@@ -1093,7 +1282,7 @@ public final class WamService {
         System.arraycopy(WAM_MAGIC, 0, headerBytes, 0, WAM_MAGIC.length);
         headerBytes[3] = (byte) PROTOCOL_VERSION;
         headerBytes[4] = (byte) STREAM_ID;
-        SHORT_HANDLE.set(headerBytes, 5, (short) nextSequenceNumber(channel));
+        DataUtils.putShort(headerBytes, 5, (short) nextSequenceNumber(channel), ByteOrder.LITTLE_ENDIAN);
         headerBytes[7] = (byte) channel.id();
         encoder.writeRaw(headerBytes, 0, HEADER_SIZE);
     }
@@ -1259,10 +1448,10 @@ public final class WamService {
             return;
         }
 
-        var deadline = System.currentTimeMillis() + CONNECTIVITY_WAIT_TIMEOUT_MS;
+        var deadline = now().toEpochMilli() + CONNECTIVITY_WAIT_TIMEOUT_MS;
         try {
-            while (!client.isConnected() && System.currentTimeMillis() < deadline) {
-                Thread.sleep(1_000);
+            while (!client.isConnected() && now().toEpochMilli() < deadline) {
+                sleep(1_000);
             }
         } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
@@ -1299,7 +1488,7 @@ public final class WamService {
                 if (errorCode >= 500 && attempt < MAX_RETRIES) {
                     var delay = computeBackoffDelay(attempt);
                     LOGGER.fine("WAM upload got " + errorCode + ", retrying in " + delay + "ms (attempt " + (attempt + 1) + ")");
-                    Thread.sleep(delay);
+                    sleep(delay);
                     continue;
                 }
 
@@ -1316,7 +1505,7 @@ public final class WamService {
                     try {
                         var delay = computeBackoffDelay(attempt);
                         LOGGER.fine("WAM upload failed (" + e.getMessage() + "), retrying in " + delay + "ms");
-                        Thread.sleep(delay);
+                        sleep(delay);
                     } catch (InterruptedException _) {
                         Thread.currentThread().interrupt();
                         return;
@@ -1373,7 +1562,7 @@ public final class WamService {
                             LOGGER.fine("Private WAM upload got " + result.result()
                                     + " (HTTP " + result.httpResponseCode() + "), retrying in "
                                     + delay + "ms (attempt " + (attempt + 1) + ")");
-                            Thread.sleep(delay);
+                            sleep(delay);
                         } catch (InterruptedException _) {
                             Thread.currentThread().interrupt();
                             return;
@@ -1410,7 +1599,7 @@ public final class WamService {
     private Node sendViaIq(byte[] buffer) {
         var add = new NodeBuilder()
                 .description("add")
-                .attribute("t", String.valueOf(Instant.now().getEpochSecond()))
+                .attribute("t", String.valueOf(now().getEpochSecond()))
                 .content(buffer)
                 .build();
         var iq = new NodeBuilder()
@@ -1446,10 +1635,17 @@ public final class WamService {
      * exponential backoff with 10% jitter. Matches the JS implementation
      * bug where Math.pow(2, attempt) does not multiply by base delay.
      *
+     * <p>Package-private for testing — the formula's behaviour at the
+     * lower clamp ({@code attempt} small enough that {@code 2^attempt
+     * < RETRY_BASE_DELAY_MS}), the unclamped middle, and the upper
+     * clamp ({@code 2^attempt > RETRY_MAX_DELAY_MS}) is verified by
+     * {@code WamServiceTest.RetryBackoff}.
+     *
      * @param attempt the zero-based retry attempt number
-     * @return the delay in milliseconds
+     * @return the delay in milliseconds, in
+     *         {@code [RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS * 1.1]}
      */
-    private static long computeBackoffDelay(int attempt) {
+    static long computeBackoffDelay(int attempt) {
         var delay = attempt == 0 ? RETRY_BASE_DELAY_MS : (long) Math.pow(2, attempt);
         if (delay > RETRY_MAX_DELAY_MS) delay = RETRY_MAX_DELAY_MS;
         if (delay < RETRY_BASE_DELAY_MS) delay = RETRY_BASE_DELAY_MS;
@@ -1479,10 +1675,7 @@ public final class WamService {
      * before further use.
      */
     public void close() {
-        if (scheduler != null) {
-            scheduler.shutdownNow();
-            scheduler = null;
-        }
+        cancelAllScheduled();
         flush();
         initialized = false;
     }

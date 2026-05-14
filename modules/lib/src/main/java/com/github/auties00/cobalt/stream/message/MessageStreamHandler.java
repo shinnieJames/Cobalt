@@ -33,6 +33,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdSnapshotRecovery;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
@@ -197,6 +198,8 @@ public final class MessageStreamHandler implements SocketStream.Handler {
      * @param webAppStateService      the web app state service (provides
      *                                the sync key rotation service)
      * @param lidMigrationService     the LID migration service
+     * @param abPropsService          the AB-props service threaded into the
+     *                                history-sync media download
      * @param wamService              the WAM telemetry service for committing inbound message events
      */
     public MessageStreamHandler(
@@ -205,6 +208,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
             SnapshotRecoveryService snapshotRecoveryService,
             WebAppStateService webAppStateService,
             LidMigrationService lidMigrationService,
+            ABPropsService abPropsService,
             WamService wamService
     ) {
         this.whatsapp = whatsapp;
@@ -214,7 +218,7 @@ public final class MessageStreamHandler implements SocketStream.Handler {
         this.syncKeyRotationService = Objects.requireNonNull(webAppStateService, "webAppStateService cannot be null").syncKeyRotationService();
         this.lidMigrationService = Objects.requireNonNull(lidMigrationService, "lidMigrationService cannot be null");
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
-        this.webHistorySyncService = new WebHistorySyncService(whatsapp, lidMigrationService, wamService);
+        this.webHistorySyncService = new WebHistorySyncService(whatsapp, lidMigrationService, abPropsService, wamService);
     }
 
     /**

@@ -9,19 +9,15 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.OrphanMutationEntry;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactAction;
-import com.github.auties00.cobalt.model.sync.action.contact.ContactActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
@@ -38,15 +34,20 @@ import java.util.regex.Pattern;
 @WhatsAppWebModule(moduleName = "WAWebContactSync")
 public final class ContactActionHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of this handler.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ContactActionHandler INSTANCE = new ContactActionHandler();
-
-    /**
      * Logger for diagnostic messages emitted during contact sync processing.
      */
     private static final Logger LOGGER = Logger.getLogger(ContactActionHandler.class.getName());
+
+    /**
+     * The AB-props service consulted before applying any mutation.
+     */
+    private final ABPropsService abPropsService;
+
+    /**
+     * The user-status-mute handler delegated to when an orphan contact
+     * mutation must be retried as a user-status-mute mutation.
+     */
+    private final UserStatusMuteHandler userStatusMuteHandler;
 
     /**
      * Compiled pattern matching any Unicode whitespace character.
@@ -58,11 +59,18 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s");
 
     /**
-     * Private constructor preventing external instantiation.
+     * Constructs a contact action handler bound to the given AB-props
+     * service and its companion user-status-mute handler.
+     *
+     * @param abPropsService        the AB-props service consulted on
+     *                              every mutation
+     * @param userStatusMuteHandler the user-status-mute handler used to
+     *                              re-process orphan mutations
      */
     @WhatsAppWebExport(moduleName = "WAWebContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ContactActionHandler() {
-
+    public ContactActionHandler(ABPropsService abPropsService, UserStatusMuteHandler userStatusMuteHandler) {
+        this.abPropsService = abPropsService;
+        this.userStatusMuteHandler = userStatusMuteHandler;
     }
 
     /**
@@ -120,13 +128,18 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     @WhatsAppWebExport(moduleName = "WAWebContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebContactSync.applyMutations: var n=t.indexParts, a=n[1]; if(isStringNullOrEmpty(a)) return l.malformedActionIndex()
+        // n[1] is undefined when the slot is missing; mirror that via an explicit size check.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var contactJidString = indexArray.getString(1);
         if (contactJidString == null || contactJidString.isEmpty()) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
 
         var contactJid = Jid.of(contactJidString);
-        var usernameEnabled = client.abPropsService()
+        var usernameEnabled = abPropsService
                 .getBool(ABProp.USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE);
 
         switch (mutation.operation()) {
@@ -205,64 +218,6 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Builds a pending mutation for syncing a contact to the server.
-     *
-     * <p>For {@code SET} operations (when {@code isDelete} is {@code false}), the mutation
-     * includes the contact's full name, first name, LID JID, address book sync preference,
-     * and username. For {@code REMOVE} operations (when {@code isDelete} is {@code true}),
-     * only the operation type is set.
-     *
-     * <p>The contact JID is serialized in legacy format for the index, matching
-     * WhatsApp Web's use of {@code e.toString({legacy: true})}.
-     * @param contactJid          the JID of the contact being synced
-     * @param firstName           the contact's first name, or {@code null}
-     * @param fullName            the contact's full name, or {@code null}
-     * @param isDelete            whether this is a delete (REMOVE) operation
-     * @param lid                 the contact's LID JID, or {@code null}
-     * @param syncToAddressbook   whether to sync to primary address book, or {@code null}
-     * @param username            the contact's username, or {@code null}
-     * @return the pending mutation ready for submission to the sync pipeline
-     */
-    @WhatsAppWebExport(moduleName = "WAWebContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getContactSyncMutation(
-            Jid contactJid,
-            String firstName,
-            String fullName,
-            boolean isDelete,
-            Jid lid,
-            Boolean syncToAddressbook,
-            String username
-    ) {
-        var timestamp = Instant.now();
-        var action = new ContactActionBuilder()
-                .fullName(fullName)
-                .firstName(firstName)
-                .lidJid(lid)
-                .saveOnPrimaryAddressbook(syncToAddressbook)
-                .username(username)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .contactAction(action)
-                .build();
-        var operation = isDelete
-                ? SyncdOperation.REMOVE
-                : SyncdOperation.SET;
-        // where indexArgs = [e.toString({legacy: true})] in WA Web.
-        // ADAPTED: Cobalt uses Jid.toString() canonical form; WA Web's legacy form is not mirrored
-        // because Cobalt normalizes JIDs to a single canonical representation.
-        var index = JSON.toJSONString(List.of(actionName(), contactJid.toString()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                operation,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
-
-    /**
      * Retries orphan status mute mutations that may have been blocked by the
      * absence of the specified contact.
      *
@@ -290,7 +245,7 @@ public final class ContactActionHandler implements WebAppStateActionHandler {
                         entry.timestamp(),
                         entry.actionVersion()
                 );
-                var result = UserStatusMuteHandler.INSTANCE.applyMutation(client, orphanMutation);
+                var result = userStatusMuteHandler.applyMutation(client, orphanMutation);
                 if (result.actionState() == SyncActionState.SUCCESS) {
                     applied.add(entry);
                 }

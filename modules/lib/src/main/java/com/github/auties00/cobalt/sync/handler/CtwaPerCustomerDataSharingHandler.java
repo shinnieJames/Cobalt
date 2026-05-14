@@ -6,17 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreferenceBuilder;
-import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.business.CtwaPerCustomerDataSharingAction;
-import com.github.auties00.cobalt.model.sync.action.business.CtwaPerCustomerDataSharingActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles CTWA per-customer data sharing sync actions.
@@ -39,17 +33,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebCtwaPerCustomerDataSharingSync")
 public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code CtwaPerCustomerDataSharingHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final CtwaPerCustomerDataSharingHandler INSTANCE = new CtwaPerCustomerDataSharingHandler();
 
     /**
      * Creates the singleton handler instance.
      */
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private CtwaPerCustomerDataSharingHandler() {
+    public CtwaPerCustomerDataSharingHandler() {
     }
 
     /**
@@ -111,7 +100,10 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
-        var accountLid = indexArray.getString(1);
+        // WAWebCtwaPerCustomerDataSharingSync.applyMutations reads `var u=n[1]` once, then dispatches.
+        // n[1] is `undefined` (i.e. null in Java) when the slot is absent — REMOVE happily treats undefined
+        // as a no-op on IDB, SET returns malformed. Mirror by extracting with a size guard.
+        var accountLid = indexArray.size() > 1 ? indexArray.getString(1) : null;
 
         switch (mutation.operation()) {
             case SET -> {
@@ -158,37 +150,4 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
         }
     }
 
-    /**
-     * Builds a pending mutation for setting or clearing the CTWA per-customer
-     * data sharing preference for an account.
-     *
-     * <p>Per WhatsApp Web {@code WAWebCtwaPerCustomerDataSharingSync.getCtwaPerCustomerDataSharingMutation}:
-     * constructs a {@code SyncActionValue} with a {@code ctwaPerCustomerDataSharingAction}
-     * containing the enabled flag, then delegates to
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} with the handler's collection,
-     * index args, version, and a SET operation.
-     * @param accountLid the account LID identifying the customer
-     * @param isEnabled  whether per-customer data sharing is enabled
-     * @return the pending mutation ready to be queued for sync
-     */
-    @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "getCtwaPerCustomerDataSharingMutation", adaptation = WhatsAppAdaptation.DIRECT)
-    public SyncPendingMutation getCtwaPerCustomerDataSharingMutation(Jid accountLid, boolean isEnabled) {
-        var timestamp = Instant.now();
-        var action = new CtwaPerCustomerDataSharingActionBuilder()
-                .isCtwaPerCustomerDataSharingEnabled(isEnabled)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .ctwaPerCustomerDataSharingAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), accountLid.toString()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

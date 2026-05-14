@@ -1,0 +1,181 @@
+package com.github.auties00.cobalt.sync.handler;
+
+import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.device.DeviceFixtures;
+import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.media.FavoritesActionBuilder;
+import com.github.auties00.cobalt.model.sync.action.setting.DetectedOutcomesStatusAction;
+import com.github.auties00.cobalt.model.sync.action.setting.DetectedOutcomesStatusActionBuilder;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Tests for {@link DetectedOutcomesStatusHandler} â€” Cobalt's adapter for
+ * {@code WAWebDetectedOutcomesStatusSync}.
+ */
+@DisplayName("DetectedOutcomesStatusHandler")
+class DetectedOutcomesStatusHandlerTest {
+    private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
+    private static final Jid SELF_LID = Jid.of("83116928594000@lid");
+
+    private WhatsAppClient client;
+
+    @BeforeEach
+    void setUp() {
+        var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
+        client = TestWhatsAppClient.create().withStore(store);
+    }
+
+    private static DecryptedMutation.Trusted detectedMutation(Boolean enabled, SyncdOperation op, Instant ts) {
+        var action = new DetectedOutcomesStatusActionBuilder().isEnabled(enabled).build();
+        var value = new SyncActionValueBuilder().timestamp(ts).detectedOutcomesStatusAction(action).build();
+        return new DecryptedMutation.Trusted("[\"detected_outcomes_status_action\"]", value, op, ts, 1);
+    }
+
+    @Nested
+    @DisplayName("metadata")
+    class Metadata {
+        @Test
+        @DisplayName("actionName() returns 'detected_outcomes_status_action'")
+        void actionName() {
+            assertEquals(DetectedOutcomesStatusAction.ACTION_NAME, new DetectedOutcomesStatusHandler().actionName());
+            assertEquals("detected_outcomes_status_action", new DetectedOutcomesStatusHandler().actionName());
+        }
+
+        @Test
+        @DisplayName("collectionName() is SyncPatchType.REGULAR")
+        void collectionName() {
+            assertEquals(SyncPatchType.REGULAR, new DetectedOutcomesStatusHandler().collectionName());
+        }
+
+        @Test
+        @DisplayName("version() returns the declared action version (1)")
+        void version() {
+            assertEquals(DetectedOutcomesStatusAction.ACTION_VERSION, new DetectedOutcomesStatusHandler().version());
+            assertEquals(1, new DetectedOutcomesStatusHandler().version());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation: SET persists into the store")
+    class SetHappy {
+        @Test
+        @DisplayName("isEnabled=true sets the store flag to true")
+        void enable() {
+            assertFalse(client.store().detectedOutcomesEnabled(), "default false");
+
+            var result = new DetectedOutcomesStatusHandler().applyMutation(
+                    client, detectedMutation(Boolean.TRUE, SyncdOperation.SET, Instant.now()));
+
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+            assertTrue(client.store().detectedOutcomesEnabled());
+        }
+
+        @Test
+        @DisplayName("isEnabled=false flips the store flag to false")
+        void disable() {
+            client.store().setDetectedOutcomesEnabled(true);
+
+            var result = new DetectedOutcomesStatusHandler().applyMutation(
+                    client, detectedMutation(Boolean.FALSE, SyncdOperation.SET, Instant.now()));
+
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+            assertFalse(client.store().detectedOutcomesEnabled());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation: malformed value")
+    class Malformed {
+        @Test
+        @DisplayName("non-detected-outcomes action yields MALFORMED")
+        void wrongActionType() {
+            var wrongValue = new SyncActionValueBuilder()
+                    .timestamp(Instant.now())
+                    .favoritesAction(new FavoritesActionBuilder().favorites(List.of()).build())
+                    .build();
+            var mutation = new DecryptedMutation.Trusted(
+                    "[\"detected_outcomes_status_action\"]", wrongValue, SyncdOperation.SET, Instant.now(), 1);
+
+            var result = new DetectedOutcomesStatusHandler().applyMutation(client, mutation);
+
+            assertEquals(SyncActionState.MALFORMED, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation: malformed index â€” n/a (singleton index)")
+    class MalformedIndexNa {
+        @Test
+        @DisplayName("the handler does not inspect indexParts[1]")
+        void singletonIndex() {
+            var result = new DetectedOutcomesStatusHandler().applyMutation(
+                    client, detectedMutation(Boolean.TRUE, SyncdOperation.SET, Instant.now()));
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation: REMOVE is UNSUPPORTED")
+    class RemoveBranch {
+        @Test
+        @DisplayName("REMOVE returns UNSUPPORTED before any store write")
+        void removeIsUnsupported() {
+            var result = new DetectedOutcomesStatusHandler().applyMutation(
+                    client, detectedMutation(Boolean.TRUE, SyncdOperation.REMOVE, Instant.now()));
+
+            assertEquals(SyncActionState.UNSUPPORTED, result.actionState());
+            assertFalse(client.store().detectedOutcomesEnabled());
+        }
+    }
+
+    @Nested
+    @DisplayName("resolveConflicts â€” default timestamp-based")
+    class ResolveConflicts {
+        @Test
+        @DisplayName("remote with the later timestamp wins")
+        void remoteWins() {
+            var local  = detectedMutation(Boolean.FALSE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L));
+            var remote = detectedMutation(Boolean.TRUE,  SyncdOperation.SET, Instant.ofEpochSecond(1700000010L));
+
+            var resolution = new DetectedOutcomesStatusHandler().resolveConflicts(local, remote);
+
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutationBatch â€” n/a, default implementation")
+    class BatchNa {
+        @Test
+        @DisplayName("default applyMutationBatch delegates per mutation")
+        void perItem() {
+            var batch = List.of(
+                    detectedMutation(Boolean.TRUE, SyncdOperation.SET, Instant.now()),
+                    detectedMutation(Boolean.TRUE, SyncdOperation.REMOVE, Instant.now()));
+
+            var results = new DetectedOutcomesStatusHandler().applyMutationBatch(client, batch);
+
+            assertEquals(2, results.size());
+            assertEquals(SyncActionState.SUCCESS,     results.get(0).actionState());
+            assertEquals(SyncActionState.UNSUPPORTED, results.get(1).actionState());
+        }
+    }
+
+}

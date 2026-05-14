@@ -10,6 +10,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentInfoAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles payment info sync actions.
@@ -30,17 +31,19 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 @WhatsAppWebModule(moduleName = "WAWebPaymentInfoSync")
 public final class PaymentInfoHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of {@code PaymentInfoHandler}.
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebPaymentInfoSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final PaymentInfoHandler INSTANCE = new PaymentInfoHandler();
+    private final ABPropsService abPropsService;
 
     /**
      * Creates a new {@code PaymentInfoHandler}.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebPaymentInfoSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private PaymentInfoHandler() {
-
+    public PaymentInfoHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -122,7 +125,7 @@ public final class PaymentInfoHandler implements WebAppStateActionHandler {
             return MutationApplicationResult.unsupported();
         }
 
-        if (!client.abPropsService().getBool(ABProp.ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED)) {
+        if (!abPropsService.getBool(ABProp.ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED)) {
             return MutationApplicationResult.unsupported();
         }
 

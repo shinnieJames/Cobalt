@@ -6,15 +6,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
-import com.github.auties00.cobalt.model.sync.action.media.StickerActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles favorite sticker actions.
@@ -62,16 +57,10 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
     private static final String FAVORITE_STICKER_FEATURE = "favorite_sticker";
 
     /**
-     * The singleton instance of {@code FavoriteStickerHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStickersFavoriteSyncAction", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final FavoriteStickerHandler INSTANCE = new FavoriteStickerHandler();
-
-    /**
      * Constructs the singleton instance.
      */
     @WhatsAppWebExport(moduleName = "WAWebStickersFavoriteSyncAction", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private FavoriteStickerHandler() {
+    public FavoriteStickerHandler() {
 
     }
 
@@ -147,6 +136,11 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
 
         try {
             var indexArray = JSON.parseArray(mutation.index());
+            // WAWebStickersFavoriteSyncAction.applyMutations: var u=t[1]; if(!u) return r.malformedActionIndex().
+            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            if (indexArray.size() <= 1) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var stickerHash = indexArray.getString(1);
             if (stickerHash == null || stickerHash.isEmpty()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -179,45 +173,4 @@ public final class FavoriteStickerHandler implements WebAppStateActionHandler {
         }
     }
 
-    /**
-     * Builds a pending outgoing mutation for favouriting or unfavouriting a
-     * sticker identified by its file hash.
-     *
-     * <p>Per WhatsApp Web {@code WAWebFavoriteStickerSyncActionUtils.getFavoriteStickerMutation}:
-     * constructs the {@code stickerAction} sub-message with at minimum the
-     * {@code isFavorite} flag and dispatches it at
-     * {@code ["favoriteSticker", stickerFileHash]} in the REGULAR_LOW
-     * collection with {@code version = 7}.
-     *
-     * <p>Outgoing favourite mutations only need to carry the
-     * {@code isFavorite} flag; the full media descriptor is propagated from
-     * the original sticker record on the primary device when the mutation
-     * round-trips through app-state sync, so this helper intentionally leaves
-     * the media fields unset.
-     * @param stickerHash the sticker file hash used as the mutation index
-     * @param favorite    {@code true} to mark the sticker as favourite,
-     *                    {@code false} to unfavourite it
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStickersFavoriteSyncAction", exports = "generateFavoriteSyncMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getFavoriteStickerMutation(String stickerHash, boolean favorite) {
-        var action = new StickerActionBuilder()
-                .isFavorite(favorite)
-                .build();
-        var timestamp = Instant.now();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .stickerAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(StickerAction.ACTION_NAME, stickerHash));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                StickerAction.ACTION_VERSION
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

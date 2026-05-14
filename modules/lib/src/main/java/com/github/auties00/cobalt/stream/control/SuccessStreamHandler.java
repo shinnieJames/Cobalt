@@ -1,12 +1,14 @@
 package com.github.auties00.cobalt.stream.control;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClientType;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.migration.InactiveGroupLidMigrationService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
+import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABProp;
@@ -251,11 +253,174 @@ public final class SuccessStreamHandler implements SocketStream.Handler {
             Thread.startVirtualThread(() -> listener.onLoggedIn(whatsapp));
         }
 
+        // Replay the cached collection listeners for any dataset that has
+        // already been synced in a previous session: a fresh listener attached
+        // for this run still observes the chats/contacts/newsletters/status
+        // datasets immediately on login. Datasets that haven't been synced yet
+        // are populated by the proactive bootstrap calls below (newsletters,
+        // business certificate) or by the history-sync pipeline.
+        replayCachedCollectionListeners();
+
+        // WAWebSyncBootstrap.default also schedules
+        // bootstrapNewsletterBackend() once the history sync hands off; that
+        // helper itself gates on getNewsletterWasBootstrapped() to avoid
+        // re-running on every reconnect. Cobalt mirrors both the gate and the
+        // bootstrap call here so a web client configured with the newsletter
+        // history option fetches the metadata exactly once per device install.
+        bootstrapNewsletterBackend();
+
+        // The verified_name and profile notifications flip
+        // syncedBusinessCertificate(true) once the primary device republishes
+        // the cert; until that fires the cert is missing from the store. Drive
+        // a one-shot queryBusinessProfile against self at bootstrap so the
+        // cert is fetched directly when the companion re-attaches without
+        // waiting for the next push.
+        bootstrapBusinessCertificate();
+
         // Persisting the store is best-effort; the bootstrap must not fail if the underlying serializer is unhappy.
         try {
             store.save();
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Replays the cached chats/contacts/newsletters/status snapshots to the
+     * registered listeners when the corresponding {@code syncedXxx()} gate is
+     * already true.
+     *
+     * <p>The semantics match the {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onChats}/{@code onContacts}/{@code onNewsletters}/{@code onStatus}
+     * contract: every login surfaces the dataset once, regardless of whether
+     * it was just freshly synced or is being read back from a persisted store
+     * on reconnect.
+     */
+    private void replayCachedCollectionListeners() {
+        var store = whatsapp.store();
+        var listeners = store.listeners();
+        if (listeners.isEmpty()) {
+            return;
+        }
+        if (store.syncedChats()) {
+            var chats = store.chats();
+            if (!chats.isEmpty()) {
+                for (var listener : listeners) {
+                    Thread.startVirtualThread(() -> listener.onChats(whatsapp, chats));
+                }
+            }
+        }
+        if (store.syncedContacts()) {
+            var contacts = store.contacts();
+            if (!contacts.isEmpty()) {
+                for (var listener : listeners) {
+                    Thread.startVirtualThread(() -> listener.onContacts(whatsapp, contacts));
+                }
+            }
+        }
+        if (store.syncedNewsletters()) {
+            var newsletters = store.newsletters();
+            if (!newsletters.isEmpty()) {
+                for (var listener : listeners) {
+                    Thread.startVirtualThread(() -> listener.onNewsletters(whatsapp, newsletters));
+                }
+            }
+        }
+        if (store.syncedStatus()) {
+            var status = store.status();
+            if (!status.isEmpty()) {
+                for (var listener : listeners) {
+                    Thread.startVirtualThread(() -> listener.onStatus(whatsapp, status));
+                }
+            }
+        }
+    }
+
+    /**
+     * Drives the one-shot newsletter metadata fetch that mirrors WA Web's
+     * {@code WAWebBootstrapNewsletter.bootstrapNewsletterBackend}.
+     *
+     * <p>The call is gated on three conditions: this is a web client
+     * (companion-newsletter is a web-only feature), the configured
+     * {@link com.github.auties00.cobalt.client.WhatsAppWebClientHistory}
+     * policy includes newsletters (the equivalent of WA Web's
+     * {@code isNewsletterEnabledOnPrimary} primary-features check), and the
+     * {@code syncedNewsletters()} gate is still false. The actual
+     * {@code queryNewsletters} call sets the gate and fans out the
+     * {@code onNewsletters} listener internally.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBootstrapNewsletter", exports = "bootstrapNewsletterBackend",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private void bootstrapNewsletterBackend() {
+        var store = whatsapp.store();
+        if (store.clientType() != WhatsAppClientType.WEB || store.syncedNewsletters()) {
+            return;
+        }
+        var policy = store.webHistoryPolicy().orElse(null);
+        if (policy == null || !policy.hasNewsletters()) {
+            return;
+        }
+        Thread.startVirtualThread(() -> {
+            try {
+                whatsapp.queryNewsletters();
+            } catch (Exception exception) {
+                LOGGER_COMPLIANCE.log(System.Logger.Level.WARNING,
+                        "Initial newsletter metadata fetch failed: {0}",
+                        exception.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Drives the one-shot business-profile fetch that backfills the verified
+     * name and business profile fields when {@code syncedBusinessCertificate()}
+     * is still false on bootstrap.
+     *
+     * <p>The notification handler at
+     * {@link com.github.auties00.cobalt.stream.notification.business.NotificationBusinessStreamHandler}
+     * already flips the gate when the primary device pushes a verified_name
+     * or profile notification; this proactive call covers the case where the
+     * companion has just paired (or has been re-paired after invalidation)
+     * and the primary has not yet emitted the notification. The flag is set
+     * after the call regardless of result so non-business accounts do not
+     * re-query on every reconnect.
+     */
+    private void bootstrapBusinessCertificate() {
+        var store = whatsapp.store();
+        if (store.syncedBusinessCertificate()) {
+            return;
+        }
+        var self = store.jid().orElse(null);
+        if (self == null) {
+            return;
+        }
+        Thread.startVirtualThread(() -> {
+            try {
+                whatsapp.queryBusinessProfile(self.withoutData())
+                        .ifPresent(this::applyOwnBusinessProfile);
+            } catch (Exception exception) {
+                LOGGER_COMPLIANCE.log(System.Logger.Level.WARNING,
+                        "Initial business certificate fetch failed: {0}",
+                        exception.getMessage());
+            } finally {
+                store.setSyncedBusinessCertificate(true);
+            }
+        });
+    }
+
+    /**
+     * Applies the fields lifted from a freshly-fetched {@link BusinessProfile}
+     * onto the store, so the bootstrap fetch produces the same resulting
+     * state as the notification path in
+     * {@link com.github.auties00.cobalt.stream.notification.business.NotificationBusinessStreamHandler}.
+     *
+     * @param profile the freshly-fetched business profile
+     */
+    private void applyOwnBusinessProfile(BusinessProfile profile) {
+        whatsapp.store()
+                .setBusinessDescription(profile.description().orElse(null))
+                .setBusinessAddress(profile.address().orElse(null))
+                .setBusinessEmail(profile.email().orElse(null))
+                .setBusinessWebsites(profile.websites())
+                .setBusinessCategories(profile.categories());
     }
 
     /**

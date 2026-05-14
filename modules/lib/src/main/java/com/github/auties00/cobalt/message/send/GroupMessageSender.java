@@ -87,11 +87,6 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     private final DeviceService deviceService;
 
     /**
-     * Holds the AB-props service used for feature-flag lookups.
-     */
-    private final ABPropsService abPropsService;
-
-    /**
      * Holds the sender-key distribution service used to encrypt the
      * per-device sender-key distribution payloads.
      */
@@ -152,10 +147,9 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
             ReportingStanza reportingStanza,
             WamService wamService
     ) {
-        super(client, wamService);
+        super(client, abPropsService, wamService);
         this.encryption = Objects.requireNonNull(encryption, "encryption");
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService");
-        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService");
         this.senderKeyDistribution = Objects.requireNonNull(senderKeyDistribution, "senderKeyDistribution");
         this.botStanza = Objects.requireNonNull(botStanza, "botStanza");
         this.bizStanza = Objects.requireNonNull(bizStanza, "bizStanza");
@@ -364,21 +358,17 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
                 if (!ack.isSuccess()) {
                     var errorCode = ack.error().orElse(-1);
-                    switch (errorCode) {
-                        case NackReason.STALE_GROUP_ADDRESSING_MODE -> {
-                            LOGGER.log(System.Logger.Level.WARNING,
-                                    "encryptAndSendSenderKeyMsg: ack with error code 421 for {0}, refreshing metadata",
-                                    groupJid);
-                            migrateAddressingMode(groupJid, !isLidAddressingMode);
-                            throw new WhatsAppMessageException.Send.Unknown(
-                                    "Stale group addressing mode for " + groupJid, null);
-                        }
-                        default -> {
-                            throw new WhatsAppMessageException.Send.Unknown(
-                                    "Invalid ack from server for group " + groupJid
-                                    + ", error: " + errorCode, null);
-                        }
+                    if (errorCode == NackReason.STALE_GROUP_ADDRESSING_MODE.code()) {
+                        LOGGER.log(System.Logger.Level.WARNING,
+                                "encryptAndSendSenderKeyMsg: ack with error code 421 for {0}, refreshing metadata",
+                                groupJid);
+                        migrateAddressingMode(groupJid, !isLidAddressingMode);
+                        throw new WhatsAppMessageException.Send.Unknown(
+                                "Stale group addressing mode for " + groupJid, null);
                     }
+                    throw new WhatsAppMessageException.Send.Unknown(
+                            "Invalid ack from server for group " + groupJid
+                            + ", error: " + errorCode, null);
                 }
 
                 for (var device : skDistribDevices) {

@@ -4,20 +4,12 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.call.CallLog;
-import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.call.CallLogAction;
-import com.github.auties00.cobalt.model.sync.action.call.CallLogActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.alibaba.fastjson2.JSON;
-
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles call log sync actions.
@@ -37,20 +29,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebCallLogSync")
 public final class CallLogHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code CallLogHandler}.
-     *
-     * <p>Per WhatsApp Web, {@code WAWebCallLogSync} exports a single instance
-     * ({@code var f = new _(); l.default = f}).
-     */
-    @WhatsAppWebExport(moduleName = "WAWebCallLogSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final CallLogHandler INSTANCE = new CallLogHandler();
 
     /**
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebCallLogSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private CallLogHandler() {
+    public CallLogHandler() {
 
     }
 
@@ -173,55 +157,4 @@ public final class CallLogHandler implements WebAppStateActionHandler {
         }
     }
 
-    /**
-     * Builds a pending mutation for syncing an outgoing call log record.
-     *
-     * <p>Per WhatsApp Web {@code WAWebCallLogSync.getCallLogMutation}:
-     * <ol>
-     *   <li>Determines the caller JID: uses {@code callCreatorJid} from the
-     *       record if present, otherwise falls back to the current user's
-     *       device PN JID (when {@code fromMe} is {@code true}) or the
-     *       {@code peerJid}</li>
-     *   <li>Builds the mutation index as
-     *       {@code [action, callerJid, callId, fromMe ? "1" : "0"]}</li>
-     *   <li>Wraps the record in a {@code callLogAction} value</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}</li>
-     * </ol>
-     *
-     * <p>In Cobalt, the caller must supply the pre-computed caller JID and the
-     * {@code CallLog} record directly.
-     * @param timestamp the mutation timestamp
-     * @param callerJid the JID to use as the first index key (the resolved
-     *                  caller or peer JID)
-     * @param callId    the unique call identifier
-     * @param fromMe    whether the call was initiated by the current user
-     * @param log       the call log record to sync
-     * @return the pending mutation for the call log action
-     */
-    @WhatsAppWebExport(moduleName = "WAWebCallLogSync", exports = "getCallLogMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getCallLogMutation(
-            Instant timestamp,
-            Jid callerJid,
-            String callId,
-            boolean fromMe,
-            CallLog log
-    ) {
-        var action = new CallLogActionBuilder()
-                .log(log)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .callLogAction(action)
-                .build();
-        var fromMeStr = fromMe ? "1" : "0";
-        var index = JSON.toJSONString(List.of(actionName(), callerJid.toString(), callId, fromMeStr));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

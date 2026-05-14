@@ -1,0 +1,331 @@
+package com.github.auties00.cobalt.sync.handler;
+
+import com.alibaba.fastjson2.JSON;
+import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.device.DeviceFixtures;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
+import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.MessageContainer;
+import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction;
+import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeActionBuilder;
+import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.sync.SyncFixtures;
+import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.sync.factory.DeleteMessageForMeMutationFactory;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Tests for {@link DeleteMessageForMeHandler}.
+ */
+@DisplayName("DeleteMessageForMeHandler")
+class DeleteMessageForMeHandlerTest {
+    private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
+    private static final Jid SELF_LID = Jid.of("83116928594000@lid");
+    private static final Jid PEER = Jid.of("1234567890@s.whatsapp.net");
+    private static final String MESSAGE_ID = "msg-1";
+
+    private TestWhatsAppClient client;
+
+    @BeforeEach
+    void setUp() {
+        var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
+        client = TestWhatsAppClient.create().withStore(store);
+    }
+
+    private static DecryptedMutation.Trusted dmfmMutation(Jid chatJid, String messageId, String fromMe, String participant, Instant ts) {
+        var value = new SyncActionValueBuilder()
+                .timestamp(ts)
+                .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(false).messageTimestamp(ts).build())
+                .build();
+        var index = JSON.toJSONString(List.of("deleteMessageForMe", chatJid.toString(), messageId, fromMe, participant));
+        return new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, 3);
+    }
+
+    private void seedMessage(boolean fromMe) {
+        var chat = client.store().addNewChat(PEER);
+        var key = new MessageKeyBuilder()
+                .id(MESSAGE_ID).fromMe(fromMe).parentJid(PEER)
+                .build();
+        chat.addMessage(new ChatMessageInfoBuilder()
+                .key(key)
+                .message(MessageContainer.of("hello"))
+                .timestamp(Instant.now())
+                .build());
+    }
+
+    @Nested
+    @DisplayName("metadata")
+    class Metadata {
+        @Test
+        @DisplayName("actionName returns \"deleteMessageForMe\"")
+        void actionName() {
+            assertEquals("deleteMessageForMe", new DeleteMessageForMeHandler().actionName());
+            assertEquals(DeleteMessageForMeAction.ACTION_NAME, new DeleteMessageForMeHandler().actionName());
+        }
+
+        @Test
+        @DisplayName("collectionName resolves to REGULAR_HIGH")
+        void collectionName() {
+            assertEquals(SyncPatchType.REGULAR_HIGH, new DeleteMessageForMeHandler().collectionName());
+        }
+
+        @Test
+        @DisplayName("version returns the declared action version 3")
+        void version() {
+            assertEquals(3, new DeleteMessageForMeHandler().version());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation SET â€” happy path")
+    class HappySet {
+        @Test
+        @DisplayName("SET on an inbound (fromMe=false) message removes it from the chat")
+        void removesInboundMessage() {
+            seedMessage(false);
+            assertEquals(1, client.store().findChatByJid(PEER).orElseThrow().messageCount());
+
+            var result = new DeleteMessageForMeHandler().applyMutation(client,
+                    dmfmMutation(PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(1L)));
+
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+            assertEquals(0, client.store().findChatByJid(PEER).orElseThrow().messageCount());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” orphan")
+    class Orphan {
+        @Test
+        @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Msg")
+        void orphanReturnsMsgModel() {
+            var result = new DeleteMessageForMeHandler().applyMutation(client,
+                    dmfmMutation(PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(1L)));
+
+            assertEquals(SyncActionState.ORPHAN, result.actionState());
+            assertEquals("Msg", result.modelType());
+            assertNotNull(result.modelId());
+        }
+
+        @Test
+        @DisplayName("SET against a known chat but missing message returns ORPHAN with modelType=Msg")
+        void missingMessageIsOrphan() {
+            client.store().addNewChat(PEER);
+
+            var result = new DeleteMessageForMeHandler().applyMutation(client,
+                    dmfmMutation(PEER, "absent-id", "0", "0", Instant.ofEpochSecond(1L)));
+
+            assertEquals(SyncActionState.ORPHAN, result.actionState());
+            assertEquals("Msg", result.modelType());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” malformed value (n/a)")
+    class MalformedValue {
+        // The handler does not call malformedActionValue on the value type; it only checks the index
+        // and then filters by fromMe/participant. A SyncActionValue carrying a different action is
+        // not rejected â€” instead the chat-message lookup decides the outcome. The handler reads
+        // deleteMedia in resolveConflicts() but not in applyMutation(), so a different action just
+        // ends up as an Orphan or Success based on whether the message exists.
+        @Test
+        @DisplayName("a value carrying a pinAction still consults the index â€” outcome flows through the orphan path")
+        void wrongActionTypeFallsThroughToOrphan() {
+            // Index is valid, value has no deleteMessageForMeAction.
+            // The handler doesn't reject â€” it just runs index-based lookups.
+            var wrong = new SyncActionValueBuilder()
+                    .timestamp(Instant.ofEpochSecond(1L))
+                    .pinAction(new PinActionBuilder().pinned(true).build())
+                    .build();
+            var mutation = new DecryptedMutation.Trusted(
+                    JSON.toJSONString(List.of("deleteMessageForMe", PEER.toString(), MESSAGE_ID, "0", "0")),
+                    wrong, SyncdOperation.SET, Instant.ofEpochSecond(1L), 3);
+
+            // Without a matching chat in the store, we get ORPHAN.
+            var result = new DeleteMessageForMeHandler().applyMutation(client, mutation);
+            assertEquals(SyncActionState.ORPHAN, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” malformed index")
+    class MalformedIndex {
+        @Test
+        @DisplayName("a 4-element index missing the participant slot is MALFORMED")
+        void shortIndexIsMalformed() {
+            client.store().addNewChat(PEER);
+            var value = new SyncActionValueBuilder()
+                    .timestamp(Instant.ofEpochSecond(1L))
+                    .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(false).build())
+                    .build();
+            var mutation = new DecryptedMutation.Trusted(
+                    "[\"deleteMessageForMe\",\"" + PEER + "\",\"" + MESSAGE_ID + "\",\"0\"]",
+                    value, SyncdOperation.SET, Instant.ofEpochSecond(1L), 3);
+
+            var result = new DeleteMessageForMeHandler().applyMutation(client, mutation);
+            assertEquals(SyncActionState.MALFORMED, result.actionState());
+        }
+
+        @Test
+        @DisplayName("an empty messageId at slot 2 is MALFORMED")
+        void emptyMessageIdIsMalformed() {
+            client.store().addNewChat(PEER);
+            var value = new SyncActionValueBuilder()
+                    .timestamp(Instant.ofEpochSecond(1L))
+                    .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(false).build())
+                    .build();
+            var mutation = new DecryptedMutation.Trusted(
+                    "[\"deleteMessageForMe\",\"" + PEER + "\",\"\",\"0\",\"0\"]",
+                    value, SyncdOperation.SET, Instant.ofEpochSecond(1L), 3);
+
+            var result = new DeleteMessageForMeHandler().applyMutation(client, mutation);
+            assertEquals(SyncActionState.MALFORMED, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” REMOVE")
+    class RemoveOperation {
+        @Test
+        @DisplayName("REMOVE returns UNSUPPORTED")
+        void removeReturnsUnsupported() {
+            seedMessage(false);
+            var mutation = new DecryptedMutation.Trusted(
+                    JSON.toJSONString(List.of("deleteMessageForMe", PEER.toString(), MESSAGE_ID, "0", "0")),
+                    new SyncActionValueBuilder()
+                            .timestamp(Instant.ofEpochSecond(1L))
+                            .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(false).build())
+                            .build(),
+                    SyncdOperation.REMOVE, Instant.ofEpochSecond(1L), 3);
+
+            var result = new DeleteMessageForMeHandler().applyMutation(client, mutation);
+            assertEquals(SyncActionState.UNSUPPORTED, result.actionState());
+            assertEquals(1, client.store().findChatByJid(PEER).orElseThrow().messageCount(),
+                    "REMOVE must not remove the message");
+        }
+    }
+
+    @Nested
+    @DisplayName("resolveConflicts â€” deleteMedia-based (NOT timestamp-based)")
+    class ResolveConflicts {
+        @Test
+        @DisplayName("remote deleteMedia=false vs local deleteMedia=true â†’ SKIP_REMOTE (local wins, it is more aggressive)")
+        void localDeleteMediaWinsOverRemote() {
+            var local = mutationWithDeleteMedia(true, Instant.ofEpochSecond(100L));
+            var remote = mutationWithDeleteMedia(false, Instant.ofEpochSecond(200L));
+
+            var resolution = new DeleteMessageForMeHandler().resolveConflicts(local, remote);
+            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
+        }
+
+        @Test
+        @DisplayName("any other combination â†’ SKIP_REMOTE_DROP_LOCAL")
+        void anyOtherCombinationDropsBoth() {
+            // both true
+            var a = new DeleteMessageForMeHandler().resolveConflicts(
+                    mutationWithDeleteMedia(true, Instant.ofEpochSecond(100L)),
+                    mutationWithDeleteMedia(true, Instant.ofEpochSecond(200L)));
+            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, a.state());
+
+            // both false
+            var b = new DeleteMessageForMeHandler().resolveConflicts(
+                    mutationWithDeleteMedia(false, Instant.ofEpochSecond(100L)),
+                    mutationWithDeleteMedia(false, Instant.ofEpochSecond(200L)));
+            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, b.state());
+
+            // remote true, local false
+            var c = new DeleteMessageForMeHandler().resolveConflicts(
+                    mutationWithDeleteMedia(false, Instant.ofEpochSecond(100L)),
+                    mutationWithDeleteMedia(true, Instant.ofEpochSecond(200L)));
+            assertEquals(ConflictResolutionState.SKIP_REMOTE_DROP_LOCAL, c.state());
+        }
+
+        private static DecryptedMutation.Trusted mutationWithDeleteMedia(boolean deleteMedia, Instant ts) {
+            var value = new SyncActionValueBuilder()
+                    .timestamp(ts)
+                    .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(deleteMedia).build())
+                    .build();
+            return new DecryptedMutation.Trusted(
+                    JSON.toJSONString(List.of("deleteMessageForMe", PEER.toString(), MESSAGE_ID, "0", "0")),
+                    value, SyncdOperation.SET, ts, 3);
+        }
+    }
+
+    @Nested
+    @DisplayName("buildDeleteForMeMutation â€” builder helper")
+    class BuilderHelpers {
+        @Test
+        @DisplayName("buildDeleteForMeMutation produces the 5-element index with the correct fromMe/participant encoding")
+        void indexShape() {
+            var now = Instant.ofEpochSecond(1_700_000_000L);
+            var msgTs = Instant.ofEpochSecond(1_699_000_000L);
+
+            // outgoing 1:1 message: fromMe=true, participant must serialise to "0"
+            var pending = new DeleteMessageForMeMutationFactory().buildDeleteForMeMutation(
+                    now, false, msgTs, PEER, "id-1", true, null);
+            var trusted = pending.mutation();
+
+            assertEquals(SyncdOperation.SET, trusted.operation());
+            assertEquals(3, trusted.actionVersion());
+            assertEquals(
+                    JSON.toJSONString(List.of("deleteMessageForMe", PEER.toString(), "id-1", "1", "0")),
+                    trusted.index());
+            var action = trusted.value().action().filter(a -> a instanceof DeleteMessageForMeAction).map(a -> (DeleteMessageForMeAction) a).orElseThrow();
+            assertEquals(msgTs, action.messageTimestamp().orElseThrow());
+        }
+
+        @Test
+        @DisplayName("incoming group message: fromMe=false + participant â†’ participant string at slot 4")
+        void participantSlotForIncomingGroup() {
+            var now = Instant.ofEpochSecond(1_700_000_000L);
+            var msgTs = Instant.ofEpochSecond(1_699_000_000L);
+            var sender = Jid.of("9999999999@s.whatsapp.net");
+
+            var pending = new DeleteMessageForMeMutationFactory().buildDeleteForMeMutation(
+                    now, false, msgTs, PEER, "id-2", false, sender);
+            var trusted = pending.mutation();
+
+            assertEquals(
+                    JSON.toJSONString(List.of("deleteMessageForMe", PEER.toString(), "id-2", "0", sender.toString())),
+                    trusted.index());
+        }
+    }
+
+    @Nested
+    @DisplayName("WA Web oracle parity (gated)")
+    class OracleParity {
+        @Test
+        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
+        void byteParityWithOracle() {
+            if (!SyncFixtures.isOracleAvailable("handler/delete-message-for-me/encode")) return;
+            var oracle = SyncFixtures.loadOracle("handler/delete-message-for-me/encode");
+            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
+            var deleteMedia = oracle.getBoolean("deleteMedia");
+
+            var value = new SyncActionValueBuilder()
+                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
+                    .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(deleteMedia).build())
+                    .build();
+            assertNotNull(expected);
+            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
+        }
+    }
+}

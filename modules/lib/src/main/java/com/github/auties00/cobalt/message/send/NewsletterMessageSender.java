@@ -27,6 +27,7 @@ import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 
 import java.util.Optional;
@@ -60,13 +61,14 @@ final class NewsletterMessageSender extends MessageSender<NewsletterMessageInfo>
     /**
      * Constructs a newsletter sender bound to the given client.
      *
-     * @param client     the WhatsApp client used to dispatch stanzas
-     * @param wamService the WAM telemetry service shared with the base sender
+     * @param client         the WhatsApp client used to dispatch stanzas
+     * @param abPropsService the AB-props service consulted by the base sender
+     * @param wamService     the WAM telemetry service shared with the base sender
      */
     @WhatsAppWebExport(moduleName = "WAWebNewsletterSendMessageQueryJob", exports = "querySendNewsletterMessage",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    NewsletterMessageSender(WhatsAppClient client, WamService wamService) {
-        super(client, wamService);
+    NewsletterMessageSender(WhatsAppClient client, ABPropsService abPropsService, WamService wamService) {
+        super(client, abPropsService, wamService);
     }
 
     /**

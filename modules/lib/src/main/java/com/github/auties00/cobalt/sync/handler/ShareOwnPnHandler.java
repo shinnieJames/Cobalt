@@ -10,6 +10,7 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles the {@code shareOwnPn} app state sync action.
@@ -55,24 +56,20 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 @WhatsAppWebModule(moduleName = "WAWebShareOwnPnSync")
 public final class ShareOwnPnHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of this handler.
-     *
-     * <p>Per WhatsApp Web {@code WAWebShareOwnPnSync}, the default export is
-     * a single {@code new c()} instance assigned to {@code l.default = d};
-     * Cobalt mirrors this by exposing only {@link #INSTANCE} and disallowing
-     * external construction.
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebShareOwnPnSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ShareOwnPnHandler INSTANCE = new ShareOwnPnHandler();
+    private final ABPropsService abPropsService;
 
     /**
-     * Constructs the singleton handler instance.
+     * Constructs the handler instance bound to the given AB-props
+     * service.
      *
-     * <p>Kept {@code private} so that all callers go through {@link #INSTANCE}.
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebShareOwnPnSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ShareOwnPnHandler() {
-
+    public ShareOwnPnHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -146,7 +143,7 @@ public final class ShareOwnPnHandler implements WebAppStateActionHandler {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebShareOwnPnSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!client.abPropsService().getBool(ABProp.SHARE_OWN_PN_SYNC)) {
+        if (!abPropsService.getBool(ABProp.SHARE_OWN_PN_SYNC)) {
             return MutationApplicationResult.unsupported();
         }
 

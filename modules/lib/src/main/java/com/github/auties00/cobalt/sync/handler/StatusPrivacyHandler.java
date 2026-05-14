@@ -12,14 +12,10 @@ import com.github.auties00.cobalt.model.privacy.PrivacySettingEntryBuilder;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingValue;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.media.StatusPrivacyAction;
-import com.github.auties00.cobalt.model.sync.action.media.StatusPrivacyActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -63,17 +59,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebStatusPrivacySettingSync")
 public final class StatusPrivacyHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code StatusPrivacyHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final StatusPrivacyHandler INSTANCE = new StatusPrivacyHandler();
 
     /**
      * Constructs the singleton instance.
      */
     @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private StatusPrivacyHandler() {
+    public StatusPrivacyHandler() {
 
     }
 
@@ -307,57 +298,4 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
                 || type == JidServer.Type.HOSTED_LID;
     }
 
-    /**
-     * Builds a pending SET mutation for the status privacy setting.
-     *
-     * <p>Per WhatsApp Web {@code WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation}:
-     * <ol>
-     *   <li>Maps the {@code StatusPrivacySettingType} input to the matching
-     *       {@code StatusDistributionMode} enum value
-     *       ({@code Contact -> CONTACTS}, {@code AllowList -> ALLOW_LIST},
-     *       {@code DenyList -> DENY_LIST}).</li>
-     *   <li>Wraps the result in a {@code statusPrivacy} sub-message containing
-     *       {@code mode}, {@code userJid}, optionally {@code shareToFB} /
-     *       {@code shareToIG} (only when
-     *       {@code crosspostSettingsSyncSenderEnabled} is true), and an empty
-     *       {@code customLists} list.</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}
-     *       with collection {@code RegularHigh}, empty index args, operation
-     *       {@code SET}, version {@code 7}, and action
-     *       {@code "status_privacy"}.</li>
-     * </ol>
-     *
-     * <p>The {@code shareToFB} / {@code shareToIG} fields are gated by
-     * {@code crosspostSettingsSyncSenderEnabled} in WA Web; Cobalt has no
-     * equivalent AB-prop gating and no FB/IG persistence layer, so they are
-     * left unset. The {@code customLists} field is always passed as an empty
-     * list to mirror WA Web's unconditional {@code customLists: []} override.
-     * @param timestamp the mutation timestamp
-     * @param mode      the target distribution mode
-     * @param userJids  the JIDs to associate with the mode (whitelist for
-     *                  {@code ALLOW_LIST}, blacklist for {@code DENY_LIST}, may
-     *                  be empty for {@code CONTACTS} or {@code CLOSE_FRIENDS})
-     * @return the pending mutation ready for sync upload
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "getStatusPrivacySettingMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getMutation(Instant timestamp, StatusPrivacyAction.StatusDistributionMode mode, List<Jid> userJids) {
-        var statusPrivacy = new StatusPrivacyActionBuilder()
-                .mode(mode)
-                .userJid(userJids == null ? List.of() : userJids)
-                .customLists(List.of())
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .statusPrivacy(statusPrivacy)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName()));
-        var trusted = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(trusted, 0);
-    }
 }

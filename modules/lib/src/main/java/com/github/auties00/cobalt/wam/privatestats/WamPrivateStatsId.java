@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 /**
  * Manages rotating pseudonymous identifiers for WAM private
@@ -54,12 +55,36 @@ public final class WamPrivateStatsId {
     private final Map<Integer, Entry> entries;
 
     /**
+     * Wall-clock supplier returning Unix epoch seconds. Bound to the
+     * system clock in the public constructor; a controlled supplier
+     * is injected by behavioural tests through the package-private
+     * constructor.
+     */
+    private final LongSupplier nowEpochSec;
+
+    /**
      * Constructs a new {@code WamPrivateStatsId} instance and
      * initialises all eight rotation groups with fresh random
      * identifiers.
      */
     @WhatsAppWebExport(moduleName = "WAWebWamGlobals", exports = "PrivateStatsAllIds", adaptation = WhatsAppAdaptation.DIRECT)
     public WamPrivateStatsId() {
+        this(() -> Instant.now().getEpochSecond());
+    }
+
+    /**
+     * Constructs a {@code WamPrivateStatsId} with the given
+     * wall-clock supplier.
+     *
+     * <p>Package-private hook used by behavioural tests to drive
+     * rotation deterministically. The default public constructor
+     * binds {@code nowEpochSec} to {@code Instant.now().getEpochSecond()}.
+     *
+     * @param nowEpochSec a supplier returning the current Unix
+     *                    epoch in seconds
+     */
+    WamPrivateStatsId(LongSupplier nowEpochSec) {
+        this.nowEpochSec = nowEpochSec;
         this.entries = new LinkedHashMap<>();
         addEntry("DefaultPsId", 113760892, -1);
         addEntry("GroupExitExperienceId", 152546501, 30);
@@ -120,7 +145,7 @@ public final class WamPrivateStatsId {
      *         regenerated in this call
      */
     private List<RotationInfo> rotate() {
-        var now = Instant.now().getEpochSecond();
+        var now = nowEpochSec.getAsLong();
         var rotated = new ArrayList<RotationInfo>();
         for (var mapEntry : entries.entrySet()) {
             var entry = mapEntry.getValue();
@@ -183,7 +208,7 @@ public final class WamPrivateStatsId {
     private void addEntry(String key, int keyHashInt, int rotationDays) {
         // WAWebWamPrivateStats: m[e].value=o("WARandomHex").randomHex(16) (32 uppercase hex chars)
         var value = DataUtils.randomHex(16);
-        var epoch = Instant.now().getEpochSecond();
+        var epoch = nowEpochSec.getAsLong();
         var entry = new Entry(key, keyHashInt, rotationDays, value, epoch);
         entries.put(keyHashInt, entry);
     }

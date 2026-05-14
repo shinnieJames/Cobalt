@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.props.ABPropsService;
 
 import java.util.regex.Pattern;
 
@@ -153,14 +154,16 @@ public final class DeepLinkParser {
      * the {@code SMB_PAYMENT_LINKS_URL_REGEX_LIST} AB-prop instead of
      * being hard-coded.
      *
-     * @param client the WhatsApp client used to read the payment-link
-     *               AB-prop and resolve the SMB flag
-     * @param url    the URL to inspect
+     * @param client         the WhatsApp client used to resolve the SMB
+     *                       flag from the local device platform
+     * @param abPropsService the AB-props service used to read the
+     *                       payment-link regex list AB-prop
+     * @param url            the URL to inspect
      * @return the parsed deep-link, or {@code NotApplicable}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiParse", exports = "parseAPICmd",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static DeepLink parse(WhatsAppClient client, String url) {
+    public static DeepLink parse(WhatsAppClient client, ABPropsService abPropsService, String url) {
         if (url == null) {
             return DeepLink.NotApplicable.INSTANCE;
         }
@@ -193,7 +196,7 @@ public final class DeepLinkParser {
                 return new DeepLink.Product(matcher.group(1), matcher.group(2) + "@s.whatsapp.net");
             }
         }
-        var payment = PaymentLinkResolver.resolve(client, url).orElse(null);
+        var payment = PaymentLinkResolver.resolve(client, abPropsService, url).orElse(null);
         if (payment != null) {
             return new DeepLink.PaymentLink(payment.psp(), payment.shouldDetectInComposer());
         }

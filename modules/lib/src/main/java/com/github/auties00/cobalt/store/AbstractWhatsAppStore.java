@@ -26,6 +26,8 @@ import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMetadata;
 import com.github.auties00.cobalt.model.chat.ChatMute;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadataEdit;
 import com.github.auties00.cobalt.model.chat.InteractiveMessageState;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactBuilder;
@@ -64,7 +66,7 @@ import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
-import com.github.auties00.cobalt.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
@@ -224,13 +226,13 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     protected String businessDescription;
 
     @ProtobufProperty(index = 21, type = ProtobufType.STRING)
-    protected String businessWebsite;
+    protected List<URI> businessWebsites;
 
     @ProtobufProperty(index = 22, type = ProtobufType.STRING)
     protected String businessEmail;
 
     @ProtobufProperty(index = 23, type = ProtobufType.MESSAGE)
-    protected BusinessCategory businessCategory;
+    protected List<BusinessCategory> businessCategories;
 
     @ProtobufProperty(index = 24, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentHashMap<Jid, Contact> contacts;
@@ -273,9 +275,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     @ProtobufProperty(index = 38, type = ProtobufType.BOOL)
     protected boolean syncedStatus;
-
-    @ProtobufProperty(index = 39, type = ProtobufType.BOOL)
-    protected boolean syncedWebAppState;
 
     @ProtobufProperty(index = 40, type = ProtobufType.BOOL)
     protected boolean syncedBusinessCertificate;
@@ -588,7 +587,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     protected final System.Logger logger;
 
-    public AbstractWhatsAppStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, WhatsAppDevice device, ClientPayload.ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, String businessWebsite, String businessEmail, BusinessCategory businessCategory, ConcurrentHashMap<Jid, Contact> contacts, ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedWebAppState, boolean syncedBusinessCertificate, Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeys, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys, LinkedHashMap<String, AppStateSyncKey> appStateKeys, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions, ConcurrentMap<SyncPatchType, SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickers, ConcurrentMap<String, Sticker> favouriteStickers, ConcurrentMap<String, QuickReply> quickReplies, ConcurrentMap<String, Label> labels, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, ConcurrentMap<Jid, BusinessVerifiedName> verifiedBusinessNames, Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, ChatLockSettings chatLockSettings, List<Jid> favoriteChats, List<String> primaryFeatures, ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations, ConcurrentMap<SyncPatchType, AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, ConcurrentHashMap<Jid, OutContact> outContacts, long clockSkewSeconds, Instant groupAbPropsEmergencyPushTimestamp, String abPropsAbKey, String abPropsHash, long abPropsRefresh, Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, ConcurrentMap<String, byte[]> baseKeys, ConcurrentMap<Integer, Integer> wamSequenceNumbers) {
+    public AbstractWhatsAppStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, WhatsAppDevice device, ClientPayload.ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, ConcurrentHashMap<Jid, Contact> contacts, ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedBusinessCertificate, Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeys, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys, LinkedHashMap<String, AppStateSyncKey> appStateKeys, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions, ConcurrentMap<SyncPatchType, SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickers, ConcurrentMap<String, Sticker> favouriteStickers, ConcurrentMap<String, QuickReply> quickReplies, ConcurrentMap<String, Label> labels, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, ConcurrentMap<Jid, BusinessVerifiedName> verifiedBusinessNames, Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, ChatLockSettings chatLockSettings, List<Jid> favoriteChats, List<String> primaryFeatures, ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations, ConcurrentMap<SyncPatchType, AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, ConcurrentHashMap<Jid, OutContact> outContacts, long clockSkewSeconds, Instant groupAbPropsEmergencyPushTimestamp, String abPropsAbKey, String abPropsHash, long abPropsRefresh, Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, ConcurrentMap<String, byte[]> baseKeys, ConcurrentMap<Integer, Integer> wamSequenceNumbers) {
         this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
         this.phoneNumber = phoneNumber;
         this.clientType = Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -600,9 +599,9 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.businessLongitude = businessLongitude;
         this.businessLatitude = businessLatitude;
         this.businessDescription = businessDescription;
-        this.businessWebsite = businessWebsite;
+        this.businessWebsites = requireNonNullElseGet(businessWebsites, ArrayList::new);
         this.businessEmail = businessEmail;
-        this.businessCategory = businessCategory;
+        this.businessCategories = requireNonNullElseGet(businessCategories, ArrayList::new);
         this.profilePicture = profilePicture;
         this.selfTextStatus = selfTextStatus;
         this.jid = jid;
@@ -636,7 +635,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.syncedContacts = syncedContacts;
         this.syncedNewsletters = syncedNewsletters;
         this.syncedStatus = syncedStatus;
-        this.syncedWebAppState = syncedWebAppState;
         this.syncedBusinessCertificate = syncedBusinessCertificate;
         this.favouriteStickers = favouriteStickers;
         this.quickReplies = quickReplies;
@@ -1229,7 +1227,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
 
     @Override
     public Optional<Jid> findPhoneByLid(Jid lidJid) {
-        return lidJid == null ? Optional.empty() : Optional.ofNullable(lidToPhoneMappings.get(lidJid.withoutData()));
+        if (lidJid == null) {
+            return Optional.empty();
+        }
+        var localLid = lid;
+        if (localLid != null && Objects.equals(lidJid.user(), localLid.user())) {
+            return Optional.ofNullable(jid)
+                    .map(pn -> pn.withDevice(lidJid.device()));
+        }
+        return Optional.ofNullable(lidToPhoneMappings.get(lidJid.withoutData()));
     }
 
     @Override
@@ -1456,13 +1462,13 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public Optional<String> businessWebsite() {
-        return Optional.ofNullable(businessWebsite);
+    public List<URI> businessWebsites() {
+        return businessWebsites == null ? List.of() : Collections.unmodifiableList(businessWebsites);
     }
 
     @Override
-    public WhatsAppStore setBusinessWebsite(String businessWebsite) {
-        this.businessWebsite = businessWebsite;
+    public WhatsAppStore setBusinessWebsites(List<URI> businessWebsites) {
+        this.businessWebsites = businessWebsites;
         return this;
     }
 
@@ -1478,13 +1484,13 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public Optional<BusinessCategory> businessCategory() {
-        return Optional.ofNullable(businessCategory);
+    public List<BusinessCategory> businessCategories() {
+        return businessCategories == null ? List.of() : Collections.unmodifiableList(businessCategories);
     }
 
     @Override
-    public WhatsAppStore setBusinessCategory(BusinessCategory businessCategory) {
-        this.businessCategory = businessCategory;
+    public WhatsAppStore setBusinessCategories(List<BusinessCategory> businessCategories) {
+        this.businessCategories = businessCategories;
         return this;
     }
     
@@ -1632,17 +1638,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     @Override
     public WhatsAppStore setSyncedStatus(boolean syncedStatus) {
         this.syncedStatus = syncedStatus;
-        return this;
-    }
-
-    @Override
-    public boolean syncedWebAppState() {
-        return syncedWebAppState;
-    }
-
-    @Override
-    public WhatsAppStore setSyncedWebAppState(boolean syncedWebAppState) {
-        this.syncedWebAppState = syncedWebAppState;
         return this;
     }
 
@@ -2665,6 +2660,20 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     public void removeChatMetadata(Jid groupJid) {
         Objects.requireNonNull(groupJid, "groupJid cannot be null");
         chatMetadata.remove(groupJid);
+    }
+
+    @Override
+    public Optional<GroupMetadata> applyGroupMetadataEdit(Jid groupJid, GroupMetadataEdit edit) {
+        Objects.requireNonNull(groupJid, "groupJid cannot be null");
+        Objects.requireNonNull(edit, "edit cannot be null");
+        var existing = chatMetadata.get(groupJid);
+        if (!(existing instanceof GroupMetadata group)) {
+            return Optional.empty();
+        }
+        // Only the local-only sync fields are merged here; subject / description / picture /
+        // settings toggles are server-authoritative and round-trip through a notification.
+        edit.statusMuted().ifPresent(group::setStatusMuted);
+        return Optional.of(group);
     }
 
     @Override
@@ -4007,7 +4016,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && syncedContacts == that.syncedContacts
                             && syncedNewsletters == that.syncedNewsletters
                             && syncedStatus == that.syncedStatus
-                            && syncedWebAppState == that.syncedWebAppState
                             && syncedBusinessCertificate == that.syncedBusinessCertificate
                             && registered == that.registered
                             && showSecurityNotifications == that.showSecurityNotifications
@@ -4027,9 +4035,9 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && Objects.equals(businessLongitude, that.businessLongitude)
                             && Objects.equals(businessLatitude, that.businessLatitude)
                             && Objects.equals(businessDescription, that.businessDescription)
-                            && Objects.equals(businessWebsite, that.businessWebsite)
+                            && Objects.equals(businessWebsites, that.businessWebsites)
                             && Objects.equals(businessEmail, that.businessEmail)
-                            && Objects.equals(businessCategory, that.businessCategory)
+                            && Objects.equals(businessCategories, that.businessCategories)
                             && Objects.equals(contacts, that.contacts)
                             && Objects.equals(calls, that.calls)
                             && Objects.equals(privacySettings, that.privacySettings)
@@ -4100,11 +4108,11 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return Objects.hash(uuid, phoneNumber, clientType, initializationTimeStamp,
                 device, releaseChannel, online, locale, name, verifiedName,
                 profilePicture, selfTextStatus, jid, lid, businessAddress, businessLongitude,
-                businessLatitude, businessDescription, businessWebsite, businessEmail,
-                businessCategory, contacts, calls, privacySettings,
+                businessLatitude, businessDescription, businessWebsites, businessEmail,
+                businessCategories, contacts, calls, privacySettings,
                 unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer, webHistoryPolicy,
                 automaticPresenceUpdates, automaticMessageReceipts, checkPatchMacs, syncedChats,
-                syncedContacts, syncedNewsletters, syncedStatus, syncedWebAppState, syncedBusinessCertificate,
+                syncedContacts, syncedNewsletters, syncedStatus, syncedBusinessCertificate,
                 registrationId, noiseKeyPair, identityKeyPair, signedDeviceIdentity, signedKeyPair, preKeys,
                 fdid, Arrays.hashCode(deviceId), advertisingId, Arrays.hashCode(identityId), Arrays.hashCode(backupToken),
                 senderKeys, appStateKeys, sessions, hashStates, registered, showSecurityNotifications, recentStickers,

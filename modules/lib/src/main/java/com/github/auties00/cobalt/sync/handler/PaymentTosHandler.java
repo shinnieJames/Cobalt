@@ -1,21 +1,17 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles payment terms of service sync actions.
@@ -35,17 +31,19 @@ import java.util.List;
 @WhatsAppWebModule(moduleName = "WAWebPaymentTosSync")
 public final class PaymentTosHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of {@code PaymentTosHandler}.
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebPaymentTosSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final PaymentTosHandler INSTANCE = new PaymentTosHandler();
+    private final ABPropsService abPropsService;
 
     /**
      * Creates a new {@code PaymentTosHandler}.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebPaymentTosSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private PaymentTosHandler() {
-
+    public PaymentTosHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -118,7 +116,7 @@ public final class PaymentTosHandler implements WebAppStateActionHandler {
             return MutationApplicationResult.unsupported();
         }
 
-        if (!client.abPropsService().getBool(ABProp.PAYMENTS_BR_PIX_ON_WEB)) {
+        if (!abPropsService.getBool(ABProp.PAYMENTS_BR_PIX_ON_WEB)) {
             return MutationApplicationResult.unsupported();
         }
 
@@ -134,41 +132,4 @@ public final class PaymentTosHandler implements WebAppStateActionHandler {
         return MutationApplicationResult.success();
     }
 
-    /**
-     * Builds a pending SET mutation for payment terms of service.
-     *
-     * <p>Per WhatsApp Web {@code WAWebPaymentTosSync.getPaymentTosSetMutation}:
-     * <ol>
-     *   <li>Captures the current time via {@code WATimeUtils.unixTimeMs()}</li>
-     *   <li>Wraps the action in a value object:
-     *       {@code {paymentTosAction: action}}</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation} with
-     *       collection={@code RegularLow}, indexArgs={@code []},
-     *       operation={@code SET}, version={@code 7},
-     *       action={@code "payment_tos"}</li>
-     * </ol>
-     *
-     * <p>This builder is invoked by {@code WAWebPaymentsTosJob} when the user
-     * accepts the payment terms of service and the app needs to sync the new
-     * state to the server.
-     * @param action the payment terms of service action to build the mutation for
-     * @return the pending mutation ready for sync upload
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPaymentTosSync", exports = "getPaymentTosSetMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getPaymentTosSetMutation(PaymentTosAction action) {
-        var timestamp = Instant.now();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .paymentTosAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

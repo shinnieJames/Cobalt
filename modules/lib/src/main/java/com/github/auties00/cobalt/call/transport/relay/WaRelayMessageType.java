@@ -14,8 +14,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
  * WhatsApp-specific extensions identified by inspecting captured
  * traffic.
  *
- * <p>Captured live (snapshot 1038740778, fixture
- * {@code tooling/voip-shadow/captures/stun-bytes-raw.json}):
+ * <p>Captured live (snapshot 1038740778):
  *
  * <ul>
  *   <li>{@link #ALLOCATE_REQUEST} (0x0003) — TURN-style allocation

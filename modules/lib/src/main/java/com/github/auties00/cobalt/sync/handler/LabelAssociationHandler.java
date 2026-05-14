@@ -9,15 +9,10 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.Label;
 import com.github.auties00.cobalt.model.preference.LabelBuilder;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationAction;
-import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles label JID association sync actions.
@@ -39,11 +34,6 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelJidSync")
 public final class LabelAssociationHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code LabelAssociationHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final LabelAssociationHandler INSTANCE = new LabelAssociationHandler();
 
     /**
      * Index of the chat JID within the mutation {@code indexParts} array.
@@ -60,7 +50,7 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
      * Creates a new {@code LabelAssociationHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private LabelAssociationHandler() {
+    public LabelAssociationHandler() {
 
     }
 
@@ -144,6 +134,12 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
             }
 
             var indexArray = JSON.parseArray(mutation.index());
+            // WAWebLabelJidSync.applyMutations reads indexParts[1] (label id) and indexParts[CHAT_JID_INDEX] (target jid);
+            // a missing slot is undefined in JS which fails the falsy check. Mirror with explicit size guard so the
+            // outer try/catch returns MALFORMED instead of FAILED.
+            if (indexArray.size() <= CHAT_JID_INDEX) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var labelId = indexArray.getString(1);
             var targetJidString = indexArray.getString(CHAT_JID_INDEX);
             if (labelId == null || labelId.isEmpty() || targetJidString == null || targetJidString.isEmpty()) {
@@ -208,48 +204,4 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
         }
     }
 
-    /**
-     * Builds a pending SET mutation for associating (or disassociating) a
-     * label with a chat/contact JID.
-     *
-     * <p>Per WhatsApp Web {@code WAWebLabelJidSync.createLabelAssociationMutations}
-     * the association is emitted as a {@link LabelAssociationAction} whose
-     * {@code labeled} flag maps {@code true} to "add" and {@code false} to
-     * "remove". The mutation index is
-     * {@code ["label_jid", labelId, targetJid]} where {@code targetJid} is
-     * the canonical chat/contact index JID (callers should pre-resolve LID
-     * 1x1 migration when applicable).
-     *
-     * <p>WAM telemetry ({@code WAWebWamLabelSyncTrackingReporter}) is
-     * intentionally omitted in Cobalt.
-     * @param labelId   the label identifier
-     * @param targetJid the chat or contact JID the label is being applied to
-     * @param labeled   {@code true} to add the association, {@code false} to remove
-     * @param timestamp the mutation timestamp
-     * @return the pending mutation for the label association
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "createLabelAssociationMutations", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation createLabelAssociationMutation(
-            String labelId,
-            Jid targetJid,
-            boolean labeled,
-            Instant timestamp
-    ) {
-        var action = new LabelAssociationActionBuilder()
-                .labeled(labeled)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .labelAssociationAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), labelId, targetJid.toString()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw pending mutation; Cobalt wraps it in SyncPendingMutation
-    }
 }

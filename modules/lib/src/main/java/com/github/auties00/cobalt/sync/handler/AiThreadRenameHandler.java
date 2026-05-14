@@ -9,15 +9,10 @@ import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
 import com.github.auties00.cobalt.model.device.DeviceCapabilities;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
-import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -44,19 +39,10 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
     private static final Logger LOGGER = Logger.getLogger(AiThreadRenameHandler.class.getName());
 
     /**
-     * Singleton instance of this handler.
-     *
-     * <p>Per WhatsApp Web {@code WAWebAiThreadRenameSync}, the module creates a single
-     * instance ({@code new c()}) and exports it as the default export.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final AiThreadRenameHandler INSTANCE = new AiThreadRenameHandler();
-
-    /**
      * Constructs the singleton AI thread rename handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private AiThreadRenameHandler() {
+    public AiThreadRenameHandler() {
 
     }
 
@@ -180,38 +166,4 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
         }
     }
 
-    /**
-     * Builds a pending outgoing mutation that renames an AI thread across
-     * linked devices.
-     *
-     * <p>Per WhatsApp Web {@code WAWebAiThreadRenameSync}: emits a SET
-     * mutation at {@code ["ai_thread_rename", botJid, threadId]} in the
-     * REGULAR_LOW collection with {@code version = 7} and an
-     * {@code aiThreadRenameAction} sub-message carrying the new title.
-     * @param chatJid  the bot JID owning the thread
-     * @param threadId the AI thread identifier
-     * @param newTitle the new thread title
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
-     */
-    @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getAiThreadRenameMutation(Jid chatJid, String threadId, String newTitle) {
-        var timestamp = Instant.now();
-        var action = new AiThreadRenameActionBuilder()
-                .newTitle(newTitle)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .aiThreadRenameAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(AiThreadRenameAction.ACTION_NAME, chatJid.toString(), threadId)); // ["ai_thread_rename", chatJid, threadId]
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                AiThreadRenameAction.ACTION_VERSION
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

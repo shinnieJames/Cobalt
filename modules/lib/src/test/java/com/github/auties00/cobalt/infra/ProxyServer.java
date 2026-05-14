@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.infra;
 
-import com.github.auties00.cobalt.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
@@ -9,6 +9,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -17,7 +18,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -31,10 +31,9 @@ import java.util.concurrent.Executors;
 /**
  * A minimal local proxy server for integration testing.
  *
- * <p>Implementations support HTTP CONNECT, HTTPS CONNECT, SOCKS4, and
- * SOCKS5.  Each proxy runs on a random ephemeral port and can be
- * converted to the corresponding {@link WhatsAppProxy} via
- * {@link #toProxy()}.
+ * <p>Implementations support HTTP {@code CONNECT} (plaintext or TLS).
+ * Each proxy runs on a random ephemeral port and can be converted to
+ * the corresponding {@link WhatsAppProxy} via {@link #toProxy()}.
  *
  * <p>Call {@link #close()} to shut down the server and release the port.
  */
@@ -161,6 +160,26 @@ public sealed abstract class ProxyServer implements Closeable {
     }
 
     /**
+     * Creates a SOCKS4 proxy server.
+     *
+     * @return a new proxy server
+     * @throws IOException if the server socket cannot be bound
+     */
+    public static ProxyServer socks4() throws IOException {
+        return new Socks4Proxy(new ServerSocket(0));
+    }
+
+    /**
+     * Creates a SOCKS5 proxy server.
+     *
+     * @return a new proxy server
+     * @throws IOException if the server socket cannot be bound
+     */
+    public static ProxyServer socks5() throws IOException {
+        return new Socks5Proxy(new ServerSocket(0));
+    }
+
+    /**
      * Creates an HTTPS CONNECT proxy with a self-signed certificate.
      *
      * @return a new proxy server
@@ -193,26 +212,6 @@ public sealed abstract class ProxyServer implements Closeable {
 
         var serverSocket = sslContext.getServerSocketFactory().createServerSocket(0);
         return new HttpsProxy(serverSocket);
-    }
-
-    /**
-     * Creates a SOCKS4 proxy.
-     *
-     * @return a new proxy server
-     * @throws IOException if the server socket cannot be bound
-     */
-    public static ProxyServer socks4() throws IOException {
-        return new Socks4Proxy(new ServerSocket(0));
-    }
-
-    /**
-     * Creates a SOCKS5 proxy.
-     *
-     * @return a new proxy server
-     * @throws IOException if the server socket cannot be bound
-     */
-    public static ProxyServer socks5() throws IOException {
-        return new Socks5Proxy(new ServerSocket(0));
     }
 
     private static final class HttpProxy extends ProxyServer {
@@ -318,163 +317,6 @@ public sealed abstract class ProxyServer implements Closeable {
         }
     }
 
-    private static final class Socks4Proxy extends ProxyServer {
-        private Socks4Proxy(ServerSocket serverSocket) {
-            super(serverSocket);
-        }
-
-        @Override
-        public WhatsAppProxy toProxy() {
-            return WhatsAppProxy.ofSocks4("127.0.0.1", port());
-        }
-
-        @Override
-        protected void handleClient(Socket client) throws IOException {
-            var in = client.getInputStream();
-            var version = in.read();
-            if (version != 4) {
-                return;
-            }
-
-            var command = in.read();
-            if (command != 1) {
-                sendSocks4Reply(client.getOutputStream(), 0x5B);
-                return;
-            }
-
-            var portHi = in.read();
-            var portLo = in.read();
-            var port = (portHi << 8) | portLo;
-
-            var ip = new byte[4];
-            if (in.read(ip) != 4) {
-                return;
-            }
-
-            // Read user ID (null-terminated)
-            skipNullTerminated(in);
-
-            // Check for SOCKS4a (IP = 0.0.0.x where x != 0)
-            String host;
-            if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] != 0) {
-                host = readNullTerminated(in);
-            } else {
-                host = InetAddress.getByAddress(ip).getHostAddress();
-            }
-
-            try {
-                var remote = new Socket(host, port);
-                sendSocks4Reply(client.getOutputStream(), 0x5A);
-                relay(client, remote);
-                remote.close();
-            } catch (IOException e) {
-                sendSocks4Reply(client.getOutputStream(), 0x5B);
-            }
-        }
-
-        private static void sendSocks4Reply(OutputStream out, int status) throws IOException {
-            var reply = new byte[8];
-            reply[0] = 0x00;
-            reply[1] = (byte) status;
-            out.write(reply);
-            out.flush();
-        }
-    }
-
-    // ---- SOCKS5 ----
-    private static final class Socks5Proxy extends ProxyServer {
-        private Socks5Proxy(ServerSocket serverSocket) {
-            super(serverSocket);
-        }
-
-        @Override
-        public WhatsAppProxy toProxy() {
-            return WhatsAppProxy.ofSocks5("127.0.0.1", port());
-        }
-
-        @Override
-        protected void handleClient(Socket client) throws IOException {
-            var in = client.getInputStream();
-            var out = client.getOutputStream();
-
-            // Greeting
-            var version = in.read();
-            if (version != 5) {
-                return;
-            }
-
-            var nMethods = in.read();
-            var methods = in.readNBytes(nMethods);
-
-            // Accept NO_AUTH
-            out.write(new byte[]{0x05, 0x00});
-            out.flush();
-
-            // Connect request
-            if (in.read() != 5) {
-                return;
-            }
-            var command = in.read();
-            in.read(); // reserved
-
-            var addrType = in.read();
-            String host;
-            switch (addrType) {
-                case 0x01 -> { // IPv4
-                    var addr = in.readNBytes(4);
-                    host = InetAddress.getByAddress(addr).getHostAddress();
-                }
-                case 0x03 -> { // Domain
-                    var len = in.read();
-                    var domain = in.readNBytes(len);
-                    host = new String(domain, StandardCharsets.US_ASCII);
-                }
-                case 0x04 -> { // IPv6
-                    var addr = in.readNBytes(16);
-                    host = InetAddress.getByAddress(addr).getHostAddress();
-                }
-                default -> {
-                    sendSocks5Reply(out, 0x08, addrType);
-                    return;
-                }
-            }
-
-            var portHi = in.read();
-            var portLo = in.read();
-            var port = (portHi << 8) | portLo;
-
-            if (command != 1) {
-                sendSocks5Reply(out, 0x07, addrType);
-                return;
-            }
-
-            try {
-                var remote = new Socket(host, port);
-                var bound = remote.getLocalAddress().getAddress();
-                var boundPort = remote.getLocalPort();
-                var reply = ByteBuffer.allocate(4 + bound.length + 2);
-                reply.put((byte) 0x05);
-                reply.put((byte) 0x00); // success
-                reply.put((byte) 0x00); // reserved
-                reply.put((byte) (bound.length == 4 ? 0x01 : 0x04));
-                reply.put(bound);
-                reply.putShort((short) boundPort);
-                out.write(reply.array());
-                out.flush();
-                relay(client, remote);
-                remote.close();
-            } catch (IOException e) {
-                sendSocks5Reply(out, 0x05, addrType);
-            }
-        }
-
-        private static void sendSocks5Reply(OutputStream out, int replyCode, int addrType) throws IOException {
-            var reply = new byte[]{0x05, (byte) replyCode, 0x00, (byte) addrType, 0, 0, 0, 0, 0, 0};
-            out.write(reply);
-            out.flush();
-        }
-    }
-
     /**
      * Reads an ASCII line terminated by CRLF or LF.
      */
@@ -513,25 +355,155 @@ public sealed abstract class ProxyServer implements Closeable {
     }
 
     /**
-     * Reads bytes until a null terminator, discarding them.
+     * Minimal SOCKS4 / SOCKS4a server: handles the no-auth CONNECT
+     * request (RFC 1928 predecessor) and relays once the upstream
+     * connection is established.
      */
-    private static void skipNullTerminated(InputStream in) throws IOException {
-        int b;
-        while ((b = in.read()) != -1 && b != 0) {
-            // skip
+    private static final class Socks4Proxy extends ProxyServer {
+        private Socks4Proxy(ServerSocket serverSocket) {
+            super(serverSocket);
+        }
+
+        @Override
+        public WhatsAppProxy toProxy() {
+            return WhatsAppProxy.ofSocks4a("127.0.0.1", port());
+        }
+
+        @Override
+        protected void handleClient(Socket client) throws IOException {
+            var in = new DataInputStream(client.getInputStream());
+            var out = client.getOutputStream();
+
+            var version = in.readUnsignedByte();
+            if (version != 0x04) {
+                writeSocks4Reply(out, (byte) 0x5B);
+                return;
+            }
+            var command = in.readUnsignedByte();
+            if (command != 0x01) {
+                writeSocks4Reply(out, (byte) 0x5B);
+                return;
+            }
+            var port = in.readUnsignedShort();
+            var ipv4 = new byte[4];
+            in.readFully(ipv4);
+            // Read the user-id, null-terminated.
+            //noinspection StatementWithEmptyBody
+            while (in.readUnsignedByte() != 0) {
+                // skip
+            }
+            String host;
+            if (ipv4[0] == 0 && ipv4[1] == 0 && ipv4[2] == 0 && ipv4[3] != 0) {
+                // SOCKS4a: hostname follows the user-id null.
+                var hostBytes = new java.io.ByteArrayOutputStream();
+                int b;
+                while ((b = in.readUnsignedByte()) != 0) {
+                    hostBytes.write(b);
+                }
+                host = hostBytes.toString(StandardCharsets.US_ASCII);
+            } else {
+                host = InetAddress.getByAddress(ipv4).getHostAddress();
+            }
+            try {
+                var remote = new Socket(host, port);
+                writeSocks4Reply(out, (byte) 0x5A);
+                relay(client, remote);
+                remote.close();
+            } catch (IOException _) {
+                writeSocks4Reply(out, (byte) 0x5B);
+            }
+        }
+
+        private static void writeSocks4Reply(OutputStream out, byte status) throws IOException {
+            out.write(new byte[]{0x00, status, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+            out.flush();
         }
     }
 
     /**
-     * Reads a null-terminated ASCII string.
+     * Minimal SOCKS5 / SOCKS5h server: handles the no-auth CONNECT
+     * request (RFC 1928) and relays once the upstream connection is
+     * established.
      */
-    private static String readNullTerminated(InputStream in) throws IOException {
-        var sb = new StringBuilder();
-        int b;
-        while ((b = in.read()) != -1 && b != 0) {
-            sb.append((char) b);
+    private static final class Socks5Proxy extends ProxyServer {
+        private Socks5Proxy(ServerSocket serverSocket) {
+            super(serverSocket);
         }
-        return sb.toString();
-    }
 
+        @Override
+        public WhatsAppProxy toProxy() {
+            return WhatsAppProxy.ofSocks5h("127.0.0.1", port());
+        }
+
+        @Override
+        protected void handleClient(Socket client) throws IOException {
+            var in = new DataInputStream(client.getInputStream());
+            var out = client.getOutputStream();
+
+            var version = in.readUnsignedByte();
+            if (version != 0x05) {
+                return;
+            }
+            var nMethods = in.readUnsignedByte();
+            var methods = new byte[nMethods];
+            in.readFully(methods);
+            // Reply with no-auth selected.
+            out.write(new byte[]{0x05, 0x00});
+            out.flush();
+
+            // CONNECT request.
+            version = in.readUnsignedByte();
+            if (version != 0x05) {
+                writeSocks5Reply(out, (byte) 0x01);
+                return;
+            }
+            var command = in.readUnsignedByte();
+            in.readUnsignedByte(); // reserved
+            var addressType = in.readUnsignedByte();
+            String host;
+            switch (addressType) {
+                case 0x01 -> {
+                    var ipv4 = new byte[4];
+                    in.readFully(ipv4);
+                    host = InetAddress.getByAddress(ipv4).getHostAddress();
+                }
+                case 0x03 -> {
+                    var len = in.readUnsignedByte();
+                    var hostBytes = new byte[len];
+                    in.readFully(hostBytes);
+                    host = new String(hostBytes, StandardCharsets.US_ASCII);
+                }
+                case 0x04 -> {
+                    var ipv6 = new byte[16];
+                    in.readFully(ipv6);
+                    host = InetAddress.getByAddress(ipv6).getHostAddress();
+                }
+                default -> {
+                    writeSocks5Reply(out, (byte) 0x08);
+                    return;
+                }
+            }
+            var port = in.readUnsignedShort();
+
+            if (command != 0x01) {
+                writeSocks5Reply(out, (byte) 0x07);
+                return;
+            }
+
+            try {
+                var remote = new Socket(host, port);
+                writeSocks5Reply(out, (byte) 0x00);
+                relay(client, remote);
+                remote.close();
+            } catch (IOException _) {
+                writeSocks5Reply(out, (byte) 0x05);
+            }
+        }
+
+        private static void writeSocks5Reply(OutputStream out, byte status) throws IOException {
+            // VER, REP, RSV, ATYP=IPv4, BND.ADDR=0.0.0.0, BND.PORT=0
+            out.write(new byte[]{0x05, status, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+            out.flush();
+        }
+    }
 }

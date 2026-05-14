@@ -31,19 +31,10 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
     private static final Logger LOGGER = Logger.getLogger(NctSaltSyncHandler.class.getName());
 
     /**
-     * The singleton instance of {@code NctSaltSyncHandler}.
-     *
-     * <p>Per WhatsApp Web {@code WAWebNctSaltSync}, the module creates a single
-     * instance ({@code var _ = new p()}) and exports it as {@code l.default}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final NctSaltSyncHandler INSTANCE = new NctSaltSyncHandler();
-
-    /**
      * Constructs the singleton NCT salt sync handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private NctSaltSyncHandler() {
+    public NctSaltSyncHandler() {
 
     }
 

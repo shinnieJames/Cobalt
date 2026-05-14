@@ -51,17 +51,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebBroadcastListSync")
 public final class BusinessBroadcastAssociationHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code BusinessBroadcastAssociationHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final BusinessBroadcastAssociationHandler INSTANCE = new BusinessBroadcastAssociationHandler();
 
     /**
      * Private constructor to enforce the singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private BusinessBroadcastAssociationHandler() {
+    public BusinessBroadcastAssociationHandler() {
 
     }
 

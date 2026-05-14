@@ -14,6 +14,8 @@ import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.call.CallLog;
 import com.github.auties00.cobalt.call.IncomingCall;
 import com.github.auties00.cobalt.model.chat.*;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadataEdit;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
 import com.github.auties00.cobalt.model.contact.OutContact;
@@ -52,7 +54,7 @@ import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartn
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
-import com.github.auties00.cobalt.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.libsignal.SignalProtocolAddress;
@@ -539,20 +541,24 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setBusinessDescription(String businessDescription);
 
     /**
-     * Returns the business website URL.
+     * Returns the business website URLs.
      *
-     * @return an {@code Optional} containing the website URL, or empty for
-     *         non-business accounts
+     * <p>A business profile supports multiple website URLs; the field is
+     * empty for non-business accounts and for accounts that never published
+     * a website on their profile.
+     *
+     * @return an unmodifiable list of website URLs, or an empty list
      */
-    Optional<String> businessWebsite();
+    List<URI> businessWebsites();
 
     /**
-     * Sets the business website.
+     * Sets the business websites.
      *
-     * @param businessWebsite the website URL, may be {@code null}
+     * @param businessWebsites the list of website URLs, may be {@code null}
+     *                         which is treated as an empty list
      * @return this store instance for method chaining
      */
-    WhatsAppStore setBusinessWebsite(String businessWebsite);
+    WhatsAppStore setBusinessWebsites(List<URI> businessWebsites);
 
     /**
      * Returns the business email address.
@@ -571,20 +577,23 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setBusinessEmail(String businessEmail);
 
     /**
-     * Returns the business category classification.
+     * Returns the business category classifications.
      *
-     * @return an {@code Optional} containing the category, or empty for
-     *         non-business accounts
+     * <p>A business profile supports multiple categories; the field is
+     * empty for non-business accounts.
+     *
+     * @return an unmodifiable list of categories, or an empty list
      */
-    Optional<BusinessCategory> businessCategory();
+    List<BusinessCategory> businessCategories();
 
     /**
-     * Sets the business category.
+     * Sets the business categories.
      *
-     * @param businessCategory the category, may be {@code null}
+     * @param businessCategories the list of categories, may be {@code null}
+     *                           which is treated as an empty list
      * @return this store instance for method chaining
      */
-    WhatsAppStore setBusinessCategory(BusinessCategory businessCategory);
+    WhatsAppStore setBusinessCategories(List<BusinessCategory> businessCategories);
 
     /**
      * Returns whether the "Keep chats archived" toggle is off — that is,
@@ -800,21 +809,6 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * @return this store instance for method chaining
      */
     WhatsAppStore setSyncedStatus(boolean synced);
-
-    /**
-     * Returns whether web app state has been synchronized.
-     *
-     * @return {@code true} if synchronized
-     */
-    boolean syncedWebAppState();
-
-    /**
-     * Sets whether web app state has been synchronized.
-     *
-     * @param synced {@code true} if synchronized
-     * @return this store instance for method chaining
-     */
-    WhatsAppStore setSyncedWebAppState(boolean synced);
 
     /**
      * Returns whether the business certificate has been synchronized.
@@ -2903,6 +2897,36 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void removeChatMetadata(Jid groupJid);
 
     /**
+     * Applies the local-only fields of a {@link GroupMetadataEdit} to
+     * the in-memory {@link GroupMetadata} row for {@code groupJid},
+     * returning the mutated row when present.
+     *
+     * <p>Only fields that have a defined local merge are honoured —
+     * today that is exclusively
+     * {@link GroupMetadataEdit#statusMuted() statusMuted}, which the
+     * {@code WAWebUserStatusMuteSync.applyMutations} sync action drives
+     * directly into the store without a network round-trip. Other
+     * fields on the edit (subject, description, picture, settings
+     * flags) are not merged here because they are server-authoritative
+     * and only become visible to the local store via a subsequent
+     * {@code group_metadata} notification.
+     *
+     * <p>When the target group has no metadata row in the store, this
+     * method returns {@link Optional#empty()} without applying any
+     * mutation.
+     *
+     * @param groupJid the group or community JID; must not be
+     *                 {@code null}
+     * @param edit     the edit packet whose local-only fields are
+     *                 merged into the stored row; must not be
+     *                 {@code null}
+     * @return an {@link Optional} carrying the mutated
+     *         {@link GroupMetadata} row, or empty when the group is
+     *         not known to the store
+     */
+    Optional<GroupMetadata> applyGroupMetadataEdit(Jid groupJid, GroupMetadataEdit edit);
+
+    /**
      * Adds an event listener to this session.
      *
      * @param listener the listener to add
@@ -2959,12 +2983,29 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the current offline resume state.
      *
+     * <p>The state is driven by the offline-resume info bulletins
+     * dispatched in {@code InfoBulletinStreamHandler}: the
+     * {@code offline_preview} IB advances {@link WhatsAppClientOfflineResumeState#INIT}
+     * to {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART} (cold
+     * start) or any past-restart state to
+     * {@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB} (live
+     * disconnect), and the {@code offline} IB closes the resume out by
+     * transitioning to {@link WhatsAppClientOfflineResumeState#COMPLETE}.
+     *
      * @return the current state, never {@code null}
      */
     WhatsAppClientOfflineResumeState offlineResumeState();
 
     /**
-     * Sets the offline resume state.
+     * Sets the offline resume state, transitioning the latch that gates
+     * {@link #waitForOfflineDeliveryEnd()}.
+     *
+     * <p>This setter is the only authoritative writer of the resume
+     * state. Setting {@link WhatsAppClientOfflineResumeState#COMPLETE}
+     * counts the latch down so that any thread blocked in
+     * {@link #waitForOfflineDeliveryEnd()} unblocks; setting
+     * {@link WhatsAppClientOfflineResumeState#INIT} re-creates the latch
+     * so a subsequent reconnect can re-block waiters.
      *
      * @param state the new state, must not be {@code null}
      * @return this store instance for method chaining
@@ -2974,12 +3015,29 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Checks if the offline resume from restart is complete.
      *
+     * <p>Mirrors WA Web's {@code isResumeFromRestartComplete} on both the
+     * blocking and non-blocking offline resume managers: returns
+     * {@code true} as long as the state is neither
+     * {@link WhatsAppClientOfflineResumeState#INIT} nor
+     * {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}, i.e.
+     * the cold-start backlog has finished delivering. Live-tab
+     * reconnects ({@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB})
+     * therefore still report {@code true} so that subsystems already
+     * past the cold-start replay continue running real-time logic.
+     *
      * @return {@code true} if offline resume is complete
      */
     boolean isResumeFromRestartComplete();
 
     /**
      * Blocks until offline delivery is complete, or the timeout expires.
+     *
+     * <p>Returns immediately when the state is already
+     * {@link WhatsAppClientOfflineResumeState#COMPLETE}; otherwise waits
+     * up to five minutes for {@link #setOfflineResumeState(WhatsAppClientOfflineResumeState)}
+     * to be called with {@code COMPLETE}. The latch is one-shot per
+     * connection and is recycled when the state is reset to
+     * {@link WhatsAppClientOfflineResumeState#INIT} on reconnect.
      */
     void waitForOfflineDeliveryEnd();
 

@@ -46,6 +46,7 @@ import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.E2eMessageSendEventBuilder;
@@ -90,6 +91,12 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     final WhatsAppStore store;
 
     /**
+     * Holds the AB-props service consulted on the resend timeout path and by
+     * subclasses for feature-gating decisions.
+     */
+    final ABPropsService abPropsService;
+
+    /**
      * Holds the WAM telemetry service used to commit per-send events.
      */
     final WamService wamService;
@@ -97,12 +104,14 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     /**
      * Constructs a sender bound to the given client and WAM service.
      *
-     * @param client     the WhatsApp client used to dispatch stanzas
-     * @param wamService the WAM telemetry service for send-path events
+     * @param client         the WhatsApp client used to dispatch stanzas
+     * @param abPropsService the AB-props service used for feature gating
+     * @param wamService     the WAM telemetry service for send-path events
      */
-    MessageSender(WhatsAppClient client, WamService wamService) {
+    MessageSender(WhatsAppClient client, ABPropsService abPropsService, WamService wamService) {
         this.client = Objects.requireNonNull(client, "client");
         this.store = client.store();
+        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService");
         this.wamService = Objects.requireNonNull(wamService, "wamService");
     }
 
@@ -134,7 +143,7 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "getResendTimeoutInSeconds",
             adaptation = WhatsAppAdaptation.DIRECT)
     long getResendTimeoutInSeconds() {
-        var minutes = client.abPropsService().getInt(ABProp.WEB_E2E_BACKFILL_EXPIRE_TIME);
+        var minutes = abPropsService.getInt(ABProp.WEB_E2E_BACKFILL_EXPIRE_TIME);
         if (minutes <= 0) {
             minutes = 5;
         }
@@ -207,7 +216,8 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
             IcdcResult senderIcdc,
             IcdcResult recipientIcdc
     ) {
-        var selfJid = store.jid().orElse(null);
+        var selfPn = store.jid().map(Jid::toUserJid).orElse(null);
+        var selfLid = store.lid().map(Jid::toUserJid).orElse(null);
         var results = new ArrayList<MessageEncryptedPayload>(devices.size());
 
         var companionContainer = IcdcEnricher.enrich(container, senderIcdc, null);
@@ -216,7 +226,10 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
         for (var device : devices) {
             try {
                 byte[] devicePlaintext;
-                if (selfJid != null && device.toUserJid().equals(selfJid.toUserJid())) {
+                var deviceUserJid = device.toUserJid();
+                var isSelfDevice = (selfPn != null && deviceUserJid.equals(selfPn))
+                        || (selfLid != null && deviceUserJid.equals(selfLid));
+                if (isSelfDevice) {
                     var innerContextInfo = companionContainer.messageContextInfo().orElse(null);
                     var innerContainer = innerContextInfo != null
                             ? companionContainer.withMessageContextInfo(null)

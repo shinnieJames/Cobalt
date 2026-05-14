@@ -97,6 +97,12 @@ public final class MessageSendingService {
     private final WamService wamService;
 
     /**
+     * Holds the link-preview pipeline used to enrich outgoing extended-text
+     * messages with rich previews.
+     */
+    private final LinkPreviewService linkPreviewService;
+
+    /**
      * Constructs a sending service and wires up all sub-senders.
      *
      * @param client         the WhatsApp client used to dispatch stanzas
@@ -122,6 +128,7 @@ public final class MessageSendingService {
 
         this.client = client;
         this.wamService = wamService;
+        this.linkPreviewService = new LinkPreviewService(client, abPropsService);
         var store = client.store();
         this.preparer = new MessagePreparer(store);
         this.messageDedup = new MessageDedup();
@@ -137,9 +144,9 @@ public final class MessageSendingService {
         this.userSender = new UserMessageSender(client, encryption, deviceService, abPropsService,
                 botStanza, bizStanza, metaStanza, reportingStanza, ctwaStanza, tcTokenStanza, wamService);
         this.groupSender = new GroupMessageSender(client, encryption, deviceService, abPropsService, skDistribution, botStanza, bizStanza, metaStanza, reportingStanza, wamService);
-        this.statusSender = new StatusMessageSender(client, encryption, deviceService, skDistribution, metaStanza, reportingStanza, wamService);
-        this.newsletterSender = new NewsletterMessageSender(client, wamService);
-        this.peerSender = new PeerMessageSender(client, encryption, deviceService, wamService);
+        this.statusSender = new StatusMessageSender(client, encryption, deviceService, abPropsService, skDistribution, metaStanza, reportingStanza, wamService);
+        this.newsletterSender = new NewsletterMessageSender(client, abPropsService, wamService);
+        this.peerSender = new PeerMessageSender(client, encryption, deviceService, abPropsService, wamService);
     }
 
     /**
@@ -163,7 +170,7 @@ public final class MessageSendingService {
         Objects.requireNonNull(container, "container");
 
         if (container.content() instanceof ExtendedTextMessage extended) {
-            LinkPreviewService.forClient(client).decorate(chatJid, extended);
+            linkPreviewService.decorate(chatJid, extended);
         }
 
         MessageInfo prepared;

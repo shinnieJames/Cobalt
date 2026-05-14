@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,18 +48,21 @@ final class PaymentLinkResolver {
      * Returns the payment-link metadata associated with {@code url}, or
      * empty when none of the configured regexes matches.
      *
-     * @param client the WhatsApp client used to read the AB-prop value
-     *               and determine SMB status
-     * @param url    the URL to inspect
+     * @param client         the WhatsApp client used to determine SMB
+     *                       status from the local device platform
+     * @param abPropsService the AB-props service used to read the
+     *                       {@code SMB_PAYMENT_LINKS_URL_REGEX_LIST}
+     *                       prop
+     * @param url            the URL to inspect
      * @return the matched metadata, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebPaymentLinkUrlMetaData", exports = "getPaymentLinkUrlMetaData",
             adaptation = WhatsAppAdaptation.DIRECT)
-    static Optional<Match> resolve(WhatsAppClient client, String url) {
-        if (client == null || url == null) {
+    static Optional<Match> resolve(WhatsAppClient client, ABPropsService abPropsService, String url) {
+        if (client == null || abPropsService == null || url == null) {
             return Optional.empty();
         }
-        var raw = client.abPropsService().getString(ABProp.SMB_PAYMENT_LINKS_URL_REGEX_LIST);
+        var raw = abPropsService.getString(ABProp.SMB_PAYMENT_LINKS_URL_REGEX_LIST);
         if (raw == null || raw.isEmpty()) {
             return Optional.empty();
         }

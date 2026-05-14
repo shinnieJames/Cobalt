@@ -18,11 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Parity test for {@link com.github.auties00.cobalt.call.transport.relay.WaRelayCallInfo}
  * against the captured WA-CALL-INFO attribute payload.
  *
- * <p>Asserts the observed shape pinned in
- * {@code tooling/voip-shadow/captures/v2-full-coverage-call-attempt.md}:
- * a 95-byte protobuf payload that decodes to nine entries enumerating
- * every (IP version, relay) pair from the matching
- * {@code RelayListUpdate} (3 relays × 3 IP versions including "any").
+ * <p>Asserts the observed shape: a 95-byte protobuf payload that
+ * decodes to nine entries enumerating every (IP version, relay) pair
+ * from the matching {@code RelayListUpdate} (3 relays × 3 IP versions
+ * including "any").
  *
  * <p>Pins both the protobuf wire format (round-trip byte-equality) and
  * the engine-emitted axis grid.

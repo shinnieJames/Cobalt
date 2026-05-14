@@ -167,7 +167,6 @@ public final class NotificationSyncStreamHandler implements SocketStream.Handler
         }
 
         if (!collectionsToSync.isEmpty()) {
-            whatsapp.store().setSyncedWebAppState(false);
             whatsapp.pullWebAppState(collectionsToSync.toArray(SyncPatchType[]::new));
         }
     }

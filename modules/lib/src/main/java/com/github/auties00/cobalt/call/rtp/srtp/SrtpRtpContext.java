@@ -1,11 +1,13 @@
 package com.github.auties00.cobalt.call.rtp.srtp;
 
 import com.github.auties00.cobalt.exception.WhatsAppCallException;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.ByteOrder;
 import java.security.GeneralSecurityException;
 
 /**
@@ -168,7 +170,7 @@ final class SrtpRtpContext {
         }
         var headerLen = headerLength(rtp);
 
-        var seq = ((rtp[2] & 0xFF) << 8) | (rtp[3] & 0xFF);
+        var seq = DataUtils.getShort(rtp, 2, ByteOrder.BIG_ENDIAN) & 0xFFFF;
         if (lastSenderSeq != -1 && seq < lastSenderSeq && (lastSenderSeq - seq) > 32768) {
             senderRoc = (senderRoc + 1) & 0xFFFFFFFFL;
         }
@@ -214,7 +216,7 @@ final class SrtpRtpContext {
             throw new WhatsAppCallException.Srtp("SRTP header longer than packet");
         }
 
-        var seq = ((srtp[2] & 0xFF) << 8) | (srtp[3] & 0xFF);
+        var seq = DataUtils.getShort(srtp, 2, ByteOrder.BIG_ENDIAN) & 0xFFFF;
         var rocCandidate = guessRoc(seq);
         var packetIndex = (rocCandidate << 16) | (long) seq;
 
@@ -336,7 +338,7 @@ final class SrtpRtpContext {
             if (rtp.length < len + EXTENSION_HEADER_LEN) {
                 throw new WhatsAppCallException.Srtp("RTP extension header truncated");
             }
-            var extLen = ((rtp[len + 2] & 0xFF) << 8) | (rtp[len + 3] & 0xFF);
+            var extLen = DataUtils.getShort(rtp, len + 2, ByteOrder.BIG_ENDIAN) & 0xFFFF;
             len += EXTENSION_HEADER_LEN + extLen * CSRC_LEN;
         }
         if (rtp.length < len) {

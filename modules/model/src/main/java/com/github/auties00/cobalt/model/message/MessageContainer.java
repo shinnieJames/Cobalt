@@ -1551,7 +1551,7 @@ public final class MessageContainer {
      * @return a new container with the updated value
      */
     public MessageContainer withMessageContextInfo(ChatMessageContextInfo value) {
-        return wrapAs(b -> b.messageContextInfo(value));
+        return replaceSideChannel(value, senderKeyDistributionMessage, fastRatchetKeySenderKeyDistributionMessage);
     }
 
     /**
@@ -1564,7 +1564,7 @@ public final class MessageContainer {
      * @return a new container with the updated value
      */
     public MessageContainer withSenderKeyDistributionMessage(SenderKeyDistributionMessage value) {
-        return wrapAs(b -> b.senderKeyDistributionMessage(value));
+        return replaceSideChannel(messageContextInfo, value, fastRatchetKeySenderKeyDistributionMessage);
     }
 
     /**
@@ -1577,7 +1577,7 @@ public final class MessageContainer {
      * @return a new container with the updated value
      */
     public MessageContainer withFastRatchetKeySenderKeyDistributionMessage(SenderKeyDistributionMessage value) {
-        return wrapAs(b -> b.fastRatchetKeySenderKeyDistributionMessage(value));
+        return replaceSideChannel(messageContextInfo, senderKeyDistributionMessage, value);
     }
 
     /**
@@ -1590,7 +1590,7 @@ public final class MessageContainer {
      */
     public MessageContainer toViewOnce() {
         if (viewOnceMessage != null || viewOnceMessageV2 != null || viewOnceMessageV2Extension != null) return this;
-        return wrapAs(b -> b.viewOnceMessageV2Extension(wrapInner()));
+        return replacePayload(b -> b.viewOnceMessageV2Extension(wrapInner()));
     }
 
     /**
@@ -1601,7 +1601,7 @@ public final class MessageContainer {
      */
     public MessageContainer toEphemeral() {
         if (ephemeralMessage != null) return this;
-        return wrapAs(b -> b.ephemeralMessage(wrapInner()));
+        return replacePayload(b -> b.ephemeralMessage(wrapInner()));
     }
 
     /**
@@ -1612,7 +1612,7 @@ public final class MessageContainer {
      */
     public MessageContainer toDocumentWithCaption() {
         if (documentWithCaptionMessage != null) return this;
-        return wrapAs(b -> b.documentWithCaptionMessage(wrapInner()));
+        return replacePayload(b -> b.documentWithCaptionMessage(wrapInner()));
     }
 
     /**
@@ -1623,7 +1623,7 @@ public final class MessageContainer {
      */
     public MessageContainer toEdited() {
         if (editedMessage != null) return this;
-        return wrapAs(b -> b.editedMessage(wrapInner()));
+        return replacePayload(b -> b.editedMessage(wrapInner()));
     }
 
     /**
@@ -1634,7 +1634,7 @@ public final class MessageContainer {
      */
     public MessageContainer toGroupMentioned() {
         if (groupMentionedMessage != null) return this;
-        return wrapAs(b -> b.groupMentionedMessage(wrapInner()));
+        return replacePayload(b -> b.groupMentionedMessage(wrapInner()));
     }
 
     /**
@@ -1645,7 +1645,7 @@ public final class MessageContainer {
      */
     public MessageContainer toBotInvoke() {
         if (botInvokeMessage != null) return this;
-        return wrapAs(b -> b.botInvokeMessage(wrapInner()));
+        return replacePayload(b -> b.botInvokeMessage(wrapInner()));
     }
 
     /**
@@ -1656,7 +1656,7 @@ public final class MessageContainer {
      */
     public MessageContainer toLottieSticker() {
         if (lottieStickerMessage != null) return this;
-        return wrapAs(b -> b.lottieStickerMessage(wrapInner()));
+        return replacePayload(b -> b.lottieStickerMessage(wrapInner()));
     }
 
     /**
@@ -1667,7 +1667,7 @@ public final class MessageContainer {
      */
     public MessageContainer toEventCoverImage() {
         if (eventCoverImage != null) return this;
-        return wrapAs(b -> b.eventCoverImage(wrapInner()));
+        return replacePayload(b -> b.eventCoverImage(wrapInner()));
     }
 
     /**
@@ -1678,7 +1678,7 @@ public final class MessageContainer {
      */
     public MessageContainer toStatusMention() {
         if (statusMentionMessage != null) return this;
-        return wrapAs(b -> b.statusMentionMessage(wrapInner()));
+        return replacePayload(b -> b.statusMentionMessage(wrapInner()));
     }
 
     /**
@@ -1689,7 +1689,7 @@ public final class MessageContainer {
      */
     public MessageContainer toPollCreationOptionImage() {
         if (pollCreationOptionImageMessage != null) return this;
-        return wrapAs(b -> b.pollCreationOptionImageMessage(wrapInner()));
+        return replacePayload(b -> b.pollCreationOptionImageMessage(wrapInner()));
     }
 
     /**
@@ -1700,7 +1700,7 @@ public final class MessageContainer {
      */
     public MessageContainer toAssociatedChild() {
         if (associatedChildMessage != null) return this;
-        return wrapAs(b -> b.associatedChildMessage(wrapInner()));
+        return replacePayload(b -> b.associatedChildMessage(wrapInner()));
     }
 
     /**
@@ -1711,7 +1711,7 @@ public final class MessageContainer {
      */
     public MessageContainer toGroupStatusMention() {
         if (groupStatusMentionMessage != null) return this;
-        return wrapAs(b -> b.groupStatusMentionMessage(wrapInner()));
+        return replacePayload(b -> b.groupStatusMentionMessage(wrapInner()));
     }
 
     /**
@@ -1722,7 +1722,7 @@ public final class MessageContainer {
      */
     public MessageContainer toStatusAddYours() {
         if (statusAddYours != null) return this;
-        return wrapAs(b -> b.statusAddYours(wrapInner()));
+        return replacePayload(b -> b.statusAddYours(wrapInner()));
     }
 
     /**
@@ -1735,7 +1735,7 @@ public final class MessageContainer {
      */
     public MessageContainer toGroupStatus() {
         if (groupStatusMessage != null || groupStatusMessageV2 != null) return this;
-        return wrapAs(b -> b.groupStatusMessageV2(wrapInner()));
+        return replacePayload(b -> b.groupStatusMessageV2(wrapInner()));
     }
 
     /**
@@ -1746,7 +1746,7 @@ public final class MessageContainer {
      */
     public MessageContainer toLimitSharing() {
         if (limitSharingMessage != null) return this;
-        return wrapAs(b -> b.limitSharingMessage(wrapInner()));
+        return replacePayload(b -> b.limitSharingMessage(wrapInner()));
     }
 
     /**
@@ -1757,7 +1757,7 @@ public final class MessageContainer {
      */
     public MessageContainer toBotTask() {
         if (botTaskMessage != null) return this;
-        return wrapAs(b -> b.botTaskMessage(wrapInner()));
+        return replacePayload(b -> b.botTaskMessage(wrapInner()));
     }
 
     /**
@@ -1768,7 +1768,7 @@ public final class MessageContainer {
      */
     public MessageContainer toQuestion() {
         if (questionMessage != null) return this;
-        return wrapAs(b -> b.questionMessage(wrapInner()));
+        return replacePayload(b -> b.questionMessage(wrapInner()));
     }
 
     /**
@@ -1779,7 +1779,7 @@ public final class MessageContainer {
      */
     public MessageContainer toBotForwarded() {
         if (botForwardedMessage != null) return this;
-        return wrapAs(b -> b.botForwardedMessage(wrapInner()));
+        return replacePayload(b -> b.botForwardedMessage(wrapInner()));
     }
 
     /**
@@ -1790,7 +1790,7 @@ public final class MessageContainer {
      */
     public MessageContainer toQuestionReply() {
         if (questionReplyMessage != null) return this;
-        return wrapAs(b -> b.questionReplyMessage(wrapInner()));
+        return replacePayload(b -> b.questionReplyMessage(wrapInner()));
     }
 
     /**
@@ -1804,7 +1804,7 @@ public final class MessageContainer {
      */
     public MessageContainer toNewsletterAdminProfile() {
         if (newsletterAdminProfileMessage != null || newsletterAdminProfileMessageV2 != null) return this;
-        return wrapAs(b -> b.newsletterAdminProfileMessageV2(wrapInner()));
+        return replacePayload(b -> b.newsletterAdminProfileMessageV2(wrapInner()));
     }
 
     /**
@@ -1820,22 +1820,147 @@ public final class MessageContainer {
     }
 
     /**
-     * Builds a new container by applying the given wrapper
-     * configuration to a fresh builder and copying this container's
-     * three side-channel fields onto the result.
+     * Returns a new container whose payload is set by {@code payloadSetter}
+     * and whose three side-channel fields are copied from this container.
      *
-     * @param wrapperSetter the callback that populates the payload
-     *                      field on the new builder
-     * @return a new container holding the configured payload and this
-     *         container's side-channel metadata
+     * @param payloadSetter the callback that populates the new payload
+     *                      field on the builder
+     * @return the new container with the replaced payload
      */
-    private MessageContainer wrapAs(Consumer<MessageContainerBuilder> wrapperSetter) {
+    private MessageContainer replacePayload(Consumer<MessageContainerBuilder> payloadSetter) {
         var builder = new MessageContainerBuilder();
-        wrapperSetter.accept(builder);
+        payloadSetter.accept(builder);
         return builder
                 .messageContextInfo(messageContextInfo)
                 .senderKeyDistributionMessage(senderKeyDistributionMessage)
                 .fastRatchetKeySenderKeyDistributionMessage(fastRatchetKeySenderKeyDistributionMessage)
                 .build();
+    }
+
+    /**
+     * Returns a copy of this container with the payload preserved and the
+     * three side-channel fields replaced by the supplied values.
+     *
+     * @param contextInfo    the new {@code messageContextInfo}
+     * @param senderKey      the new {@code senderKeyDistributionMessage}
+     * @param fastRatchetKey the new {@code fastRatchetKeySenderKeyDistributionMessage}
+     * @return the copy with replaced side-channel fields
+     */
+    private MessageContainer replaceSideChannel(
+            ChatMessageContextInfo contextInfo,
+            SenderKeyDistributionMessage senderKey,
+            SenderKeyDistributionMessage fastRatchetKey
+    ) {
+        var builder = new MessageContainerBuilder();
+        copyPayloadInto(builder);
+        return builder
+                .messageContextInfo(contextInfo)
+                .senderKeyDistributionMessage(senderKey)
+                .fastRatchetKeySenderKeyDistributionMessage(fastRatchetKey)
+                .build();
+    }
+
+    /**
+     * Copies every payload field of this container onto the supplied
+     * builder, leaving the three side-channel fields untouched.
+     *
+     * @param builder the target builder
+     */
+    @SuppressWarnings("unused")
+    private void copyPayloadInto(MessageContainerBuilder builder) {
+        if (conversation != null) builder.conversation(conversation);
+        if (imageMessage != null) builder.imageMessage(imageMessage);
+        if (contactMessage != null) builder.contactMessage(contactMessage);
+        if (locationMessage != null) builder.locationMessage(locationMessage);
+        if (extendedTextMessage != null) builder.extendedTextMessage(extendedTextMessage);
+        if (documentMessage != null) builder.documentMessage(documentMessage);
+        if (audioMessage != null) builder.audioMessage(audioMessage);
+        if (videoMessage != null) builder.videoMessage(videoMessage);
+        if (call != null) builder.call(call);
+        if (chat != null) builder.chat(chat);
+        if (protocolMessage != null) builder.protocolMessage(protocolMessage);
+        if (contactsArrayMessage != null) builder.contactsArrayMessage(contactsArrayMessage);
+        if (highlyStructuredMessage != null) builder.highlyStructuredMessage(highlyStructuredMessage);
+        if (sendPaymentMessage != null) builder.sendPaymentMessage(sendPaymentMessage);
+        if (liveLocationMessage != null) builder.liveLocationMessage(liveLocationMessage);
+        if (requestPaymentMessage != null) builder.requestPaymentMessage(requestPaymentMessage);
+        if (declinePaymentRequestMessage != null) builder.declinePaymentRequestMessage(declinePaymentRequestMessage);
+        if (cancelPaymentRequestMessage != null) builder.cancelPaymentRequestMessage(cancelPaymentRequestMessage);
+        if (templateMessage != null) builder.templateMessage(templateMessage);
+        if (stickerMessage != null) builder.stickerMessage(stickerMessage);
+        if (groupInviteMessage != null) builder.groupInviteMessage(groupInviteMessage);
+        if (templateButtonReplyMessage != null) builder.templateButtonReplyMessage(templateButtonReplyMessage);
+        if (productMessage != null) builder.productMessage(productMessage);
+        if (deviceSentMessage != null) builder.deviceSentMessage(deviceSentMessage);
+        if (listMessage != null) builder.listMessage(listMessage);
+        if (viewOnceMessage != null) builder.viewOnceMessage(viewOnceMessage);
+        if (orderMessage != null) builder.orderMessage(orderMessage);
+        if (listResponseMessage != null) builder.listResponseMessage(listResponseMessage);
+        if (ephemeralMessage != null) builder.ephemeralMessage(ephemeralMessage);
+        if (invoiceMessage != null) builder.invoiceMessage(invoiceMessage);
+        if (buttonsMessage != null) builder.buttonsMessage(buttonsMessage);
+        if (buttonsResponseMessage != null) builder.buttonsResponseMessage(buttonsResponseMessage);
+        if (paymentInviteMessage != null) builder.paymentInviteMessage(paymentInviteMessage);
+        if (interactiveMessage != null) builder.interactiveMessage(interactiveMessage);
+        if (reactionMessage != null) builder.reactionMessage(reactionMessage);
+        if (stickerSyncRmrMessage != null) builder.stickerSyncRmrMessage(stickerSyncRmrMessage);
+        if (interactiveResponseMessage != null) builder.interactiveResponseMessage(interactiveResponseMessage);
+        if (pollCreationMessage != null) builder.pollCreationMessage(pollCreationMessage);
+        if (pollUpdateMessage != null) builder.pollUpdateMessage(pollUpdateMessage);
+        if (keepInChatMessage != null) builder.keepInChatMessage(keepInChatMessage);
+        if (documentWithCaptionMessage != null) builder.documentWithCaptionMessage(documentWithCaptionMessage);
+        if (requestPhoneNumberMessage != null) builder.requestPhoneNumberMessage(requestPhoneNumberMessage);
+        if (viewOnceMessageV2 != null) builder.viewOnceMessageV2(viewOnceMessageV2);
+        if (encReactionMessage != null) builder.encReactionMessage(encReactionMessage);
+        if (editedMessage != null) builder.editedMessage(editedMessage);
+        if (viewOnceMessageV2Extension != null) builder.viewOnceMessageV2Extension(viewOnceMessageV2Extension);
+        if (pollCreationMessageV2 != null) builder.pollCreationMessageV2(pollCreationMessageV2);
+        if (scheduledCallCreationMessage != null) builder.scheduledCallCreationMessage(scheduledCallCreationMessage);
+        if (groupMentionedMessage != null) builder.groupMentionedMessage(groupMentionedMessage);
+        if (pinInChatMessage != null) builder.pinInChatMessage(pinInChatMessage);
+        if (pollCreationMessageV3 != null) builder.pollCreationMessageV3(pollCreationMessageV3);
+        if (scheduledCallEditMessage != null) builder.scheduledCallEditMessage(scheduledCallEditMessage);
+        if (ptvMessage != null) builder.ptvMessage(ptvMessage);
+        if (botInvokeMessage != null) builder.botInvokeMessage(botInvokeMessage);
+        if (callLogMesssage != null) builder.callLogMesssage(callLogMesssage);
+        if (messageHistoryBundle != null) builder.messageHistoryBundle(messageHistoryBundle);
+        if (encCommentMessage != null) builder.encCommentMessage(encCommentMessage);
+        if (bcallMessage != null) builder.bcallMessage(bcallMessage);
+        if (lottieStickerMessage != null) builder.lottieStickerMessage(lottieStickerMessage);
+        if (eventMessage != null) builder.eventMessage(eventMessage);
+        if (encEventResponseMessage != null) builder.encEventResponseMessage(encEventResponseMessage);
+        if (commentMessage != null) builder.commentMessage(commentMessage);
+        if (newsletterAdminInviteMessage != null) builder.newsletterAdminInviteMessage(newsletterAdminInviteMessage);
+        if (placeholderMessage != null) builder.placeholderMessage(placeholderMessage);
+        if (secretEncryptedMessage != null) builder.secretEncryptedMessage(secretEncryptedMessage);
+        if (albumMessage != null) builder.albumMessage(albumMessage);
+        if (eventCoverImage != null) builder.eventCoverImage(eventCoverImage);
+        if (stickerPackMessage != null) builder.stickerPackMessage(stickerPackMessage);
+        if (statusMentionMessage != null) builder.statusMentionMessage(statusMentionMessage);
+        if (pollResultSnapshotMessage != null) builder.pollResultSnapshotMessage(pollResultSnapshotMessage);
+        if (pollCreationOptionImageMessage != null) builder.pollCreationOptionImageMessage(pollCreationOptionImageMessage);
+        if (associatedChildMessage != null) builder.associatedChildMessage(associatedChildMessage);
+        if (groupStatusMentionMessage != null) builder.groupStatusMentionMessage(groupStatusMentionMessage);
+        if (pollCreationMessageV4 != null) builder.pollCreationMessageV4(pollCreationMessageV4);
+        if (statusAddYours != null) builder.statusAddYours(statusAddYours);
+        if (groupStatusMessage != null) builder.groupStatusMessage(groupStatusMessage);
+        if (richResponseMessage != null) builder.richResponseMessage(richResponseMessage);
+        if (statusNotificationMessage != null) builder.statusNotificationMessage(statusNotificationMessage);
+        if (limitSharingMessage != null) builder.limitSharingMessage(limitSharingMessage);
+        if (botTaskMessage != null) builder.botTaskMessage(botTaskMessage);
+        if (questionMessage != null) builder.questionMessage(questionMessage);
+        if (messageHistoryNotice != null) builder.messageHistoryNotice(messageHistoryNotice);
+        if (groupStatusMessageV2 != null) builder.groupStatusMessageV2(groupStatusMessageV2);
+        if (botForwardedMessage != null) builder.botForwardedMessage(botForwardedMessage);
+        if (statusQuestionAnswerMessage != null) builder.statusQuestionAnswerMessage(statusQuestionAnswerMessage);
+        if (questionReplyMessage != null) builder.questionReplyMessage(questionReplyMessage);
+        if (questionResponseMessage != null) builder.questionResponseMessage(questionResponseMessage);
+        if (statusQuotedMessage != null) builder.statusQuotedMessage(statusQuotedMessage);
+        if (statusStickerInteractionMessage != null) builder.statusStickerInteractionMessage(statusStickerInteractionMessage);
+        if (pollCreationMessageV5 != null) builder.pollCreationMessageV5(pollCreationMessageV5);
+        if (newsletterFollowerInviteMessageV2 != null) builder.newsletterFollowerInviteMessageV2(newsletterFollowerInviteMessageV2);
+        if (pollResultSnapshotMessageV3 != null) builder.pollResultSnapshotMessageV3(pollResultSnapshotMessageV3);
+        if (newsletterAdminProfileMessage != null) builder.newsletterAdminProfileMessage(newsletterAdminProfileMessage);
+        if (newsletterAdminProfileMessageV2 != null) builder.newsletterAdminProfileMessageV2(newsletterAdminProfileMessageV2);
     }
 }

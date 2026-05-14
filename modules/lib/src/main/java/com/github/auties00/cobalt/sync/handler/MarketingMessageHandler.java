@@ -39,17 +39,12 @@ import java.time.Instant;
  */
 @WhatsAppWebModule(moduleName = "WAWebPremiumMessageSync")
 public final class MarketingMessageHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code MarketingMessageHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPremiumMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final MarketingMessageHandler INSTANCE = new MarketingMessageHandler();
 
     /**
      * Constructs the singleton handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private MarketingMessageHandler() {
+    public MarketingMessageHandler() {
 
     }
 
@@ -141,6 +136,11 @@ public final class MarketingMessageHandler implements WebAppStateActionHandler {
     @WhatsAppWebExport(moduleName = "WAWebPremiumMessageSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebPremiumMessageSync.applyMutations: var l=e.indexParts, s=l[1]; if(!s) return t.malformedActionIndex().
+        // l[1] is undefined when missing; mirror with explicit size check.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var messageId = indexArray.getString(1);
         if (messageId == null || messageId.isEmpty()) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());

@@ -252,7 +252,7 @@ public final class DeviceADVChecker implements AutoCloseable {
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "runAdvDeviceInfoCheck",
             adaptation = WhatsAppAdaptation.DIRECT)
-    private AnalysisResult analyzeDeviceLists(
+    AnalysisResult analyzeDeviceLists(
             Iterable<DeviceList> deviceLists,
             Instant now,
             Duration expiryThreshold,
@@ -410,7 +410,7 @@ public final class DeviceADVChecker implements AutoCloseable {
      * @param expiredLists   the list of expired device lists
      * @param jidsNeedingSync the JIDs needing proactive device sync (expired + close-to-expiration)
      */
-    private record AnalysisResult(
+    record AnalysisResult(
             boolean selfExpired,
             List<DeviceList> expiredLists,
             List<Jid> jidsNeedingSync

@@ -66,9 +66,11 @@ public sealed interface SmaxGroupsGetGroupInfoResponse extends SmaxOperation.Res
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupInfoMixin")
     final class Success implements SmaxGroupsGetGroupInfoResponse {
         /**
-         * The group's participant count (range {@code [0, 19999]}).
+         * The group's participant count (range {@code [0, 19999]});
+         * {@code null} when the relay omitted the {@code size}
+         * attribute.
          */
-        private final int groupSize;
+        private final Integer groupSize;
 
         /**
          * The {@code <group/>} child carrying the
@@ -79,7 +81,9 @@ public sealed interface SmaxGroupsGetGroupInfoResponse extends SmaxOperation.Res
         /**
          * Constructs a new successful reply.
          *
-         * @param groupSize the group's participant count
+         * @param groupSize the group's participant count; may be
+         *                  {@code null} when the relay omitted the
+         *                  {@code size} attribute
          * @param group     the {@code <group/>} sub-node; never
          *                  {@code null}
          * @throws NullPointerException     if {@code group} is
@@ -87,8 +91,8 @@ public sealed interface SmaxGroupsGetGroupInfoResponse extends SmaxOperation.Res
          * @throws IllegalArgumentException if {@code groupSize} is
          *                                  negative
          */
-        public Success(int groupSize, Node group) {
-            if (groupSize < 0) {
+        public Success(Integer groupSize, Node group) {
+            if (groupSize != null && groupSize < 0) {
                 throw new IllegalArgumentException("groupSize must be non-negative");
             }
             this.groupSize = groupSize;
@@ -98,10 +102,12 @@ public sealed interface SmaxGroupsGetGroupInfoResponse extends SmaxOperation.Res
         /**
          * Returns the group's participant count.
          *
-         * @return the group size
+         * @return an {@link Optional} carrying the group size, or
+         *         empty when the relay omitted the {@code size}
+         *         attribute
          */
-        public int groupSize() {
-            return groupSize;
+        public Optional<Integer> groupSize() {
+            return Optional.ofNullable(groupSize);
         }
 
         /**
@@ -135,7 +141,8 @@ public sealed interface SmaxGroupsGetGroupInfoResponse extends SmaxOperation.Res
             if (group == null) {
                 return Optional.empty();
             }
-            var size = group.getAttributeAsInt("size").orElse(0);
+            var sizeOpt = group.getAttributeAsInt("size");
+            Integer size = sizeOpt.isPresent() ? sizeOpt.getAsInt() : null;
             var success = new Success(size, group);
             return Optional.of(success);
         }
@@ -149,7 +156,7 @@ public sealed interface SmaxGroupsGetGroupInfoResponse extends SmaxOperation.Res
                 return false;
             }
             var that = (Success) obj;
-            return this.groupSize == that.groupSize && Objects.equals(this.group, that.group);
+            return Objects.equals(this.groupSize, that.groupSize) && Objects.equals(this.group, that.group);
         }
 
         @Override

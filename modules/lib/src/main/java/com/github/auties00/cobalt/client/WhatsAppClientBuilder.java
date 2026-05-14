@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.client;
 
-import com.github.auties00.cobalt.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
 import com.github.auties00.cobalt.registration.MobileClientRegistration;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
@@ -11,6 +11,8 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -688,7 +690,7 @@ public sealed class WhatsAppClientBuilder {
             public WhatsAppClient unregistered(WhatsAppClientVerificationHandler.Web.QrCode qrHandler) {
                 Objects.requireNonNull(qrHandler, "qrHandler must not be null");
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                return new WhatsAppClient(store, qrHandler, errorHandler);
+                return new LinkedWhatsAppClient(store, qrHandler, errorHandler);
             }
 
             /**
@@ -706,7 +708,7 @@ public sealed class WhatsAppClientBuilder {
                 Objects.requireNonNull(pairingCodeHandler, "pairingCodeHandler must not be null");
                 store.setPhoneNumber(phoneNumber);
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                return new WhatsAppClient(store, pairingCodeHandler, errorHandler);
+                return new LinkedWhatsAppClient(store, pairingCodeHandler, errorHandler);
             }
 
             /**
@@ -722,7 +724,7 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                var result = new WhatsAppClient(store, null, errorHandler);
+                var result = new LinkedWhatsAppClient(store, null, errorHandler);
                 return Optional.of(result);
             }
         }
@@ -1212,14 +1214,14 @@ public sealed class WhatsAppClientBuilder {
             }
 
             /**
-             * Sets the business website URL.
+             * Sets the business website URLs.
              *
-             * @param businessWebsite the website URL, or {@code null} to
-             *                        clear it
+             * @param businessWebsites the website URLs, or an empty list
+             *                         to clear them
              * @return this builder, for chaining
              */
-            public Mobile businessWebsite(String businessWebsite) {
-                store.setBusinessWebsite(businessWebsite);
+            public Mobile businessWebsites(List<URI> businessWebsites) {
+                store.setBusinessWebsites(businessWebsites);
                 return this;
             }
 
@@ -1236,15 +1238,15 @@ public sealed class WhatsAppClientBuilder {
             }
 
             /**
-             * Sets the business category advertised on the business
+             * Sets the business categories advertised on the business
              * profile.
              *
-             * @param businessCategory the category, or {@code null} to
-             *                         clear it
+             * @param businessCategories the categories, or an empty list
+             *                           to clear them
              * @return this builder, for chaining
              */
-            public Mobile businessCategory(BusinessCategory businessCategory) {
-                store.setBusinessCategory(businessCategory);
+            public Mobile businessCategories(List<BusinessCategory> businessCategories) {
+                store.setBusinessCategories(businessCategories);
                 return this;
             }
 
@@ -1268,7 +1270,7 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                var result = new WhatsAppClient(store, null, errorHandler);
+                var result = new LinkedWhatsAppClient(store, null, errorHandler);
                 return Optional.of(result);
             }
 
@@ -1317,7 +1319,7 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                return new WhatsAppClient(store, null, errorHandler);
+                return new LinkedWhatsAppClient(store, null, errorHandler);
             }
         }
     }
@@ -1410,7 +1412,7 @@ public sealed class WhatsAppClientBuilder {
                 case MOBILE -> null;
             };
             var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-            return new WhatsAppClient(store, webVerificationHandler, errorHandler);
+            return new LinkedWhatsAppClient(store, webVerificationHandler, errorHandler);
         }
     }
 }

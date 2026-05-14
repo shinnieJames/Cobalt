@@ -24,8 +24,8 @@ import java.util.Map;
  * {@link #indexOf(String)} for encoding and {@link #get(int)} for decoding.
  *
  * @see Node
- * @see NodeEncoder
- * @see NodeDecoder
+ * @see NodeWriter
+ * @see NodeReader
  */
 @WhatsAppWebModule(moduleName = "WAWapDict")
 public final class NodeTokens {

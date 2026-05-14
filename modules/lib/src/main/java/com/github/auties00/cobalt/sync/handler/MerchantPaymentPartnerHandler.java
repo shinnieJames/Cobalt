@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles merchant payment partner sync actions.
@@ -26,15 +27,18 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 public final class MerchantPaymentPartnerHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of {@code MerchantPaymentPartnerHandler}.
+     * The AB-props service consulted before applying any mutation.
      */
-    public static final MerchantPaymentPartnerHandler INSTANCE = new MerchantPaymentPartnerHandler();
+    private final ABPropsService abPropsService;
 
     /**
      * Creates a new {@code MerchantPaymentPartnerHandler}.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
-    private MerchantPaymentPartnerHandler() {
-
+    public MerchantPaymentPartnerHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -101,7 +105,7 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
             return MutationApplicationResult.unsupported();
         }
 
-        if (!client.abPropsService().getBool(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC)) {
+        if (!abPropsService.getBool(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC)) {
             return MutationApplicationResult.unsupported();
         }
 

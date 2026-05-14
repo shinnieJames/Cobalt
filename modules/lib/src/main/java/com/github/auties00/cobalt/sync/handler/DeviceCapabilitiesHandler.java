@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.device.DeviceCapabilities;
 import com.github.auties00.cobalt.model.device.DeviceCapabilitiesEntry;
 import com.github.auties00.cobalt.model.device.DeviceCapabilitiesEntryBuilder;
@@ -74,6 +75,14 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
     private static final int JID_INDEX = 1;
 
     /**
+     * The LID migration service consulted when a primary
+     * {@code chatDbMigrationTimestamp} arrives so the local migration
+     * state machine progresses and the LID-migrated flag can be read
+     * back for the lifecycle WAM event.
+     */
+    private final LidMigrationService lidMigrationService;
+
+    /**
      * The WAM telemetry service used to commit LID 1:1 migration lifecycle
      * events.
      */
@@ -87,10 +96,16 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
      * {@code this.collectionName = WASyncdConst.CollectionName.RegularLow}.
      * The {@code collectionName} assignment is surfaced in Cobalt via
      * {@link #collectionName()} rather than as an instance field.
-     * @param wamService the WAM telemetry service used by this handler
+     *
+     * @param lidMigrationService the LID migration service consulted on
+     *                            primary {@code chatDbMigrationTimestamp}
+     *                            arrival
+     * @param wamService          the WAM telemetry service used by this
+     *                            handler
      */
     @WhatsAppWebExport(moduleName = "WAWebDeviceCapabilitiesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public DeviceCapabilitiesHandler(WamService wamService) {
+    public DeviceCapabilitiesHandler(LidMigrationService lidMigrationService, WamService wamService) {
+        this.lidMigrationService = lidMigrationService;
         this.wamService = wamService;
     }
 
@@ -200,7 +215,7 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
             capabilities.lidMigration()
                     .flatMap(DeviceCapabilities.LIDMigration::chatDbMigrationTimestamp)
                     .ifPresent(timestamp -> {
-                        client.lidMigrationService().observeChatDbMigrationTimestamp(timestamp);
+                        lidMigrationService.observeChatDbMigrationTimestamp(timestamp);
                         //   chatDbMigrationTimestamp != null && !Lid1X1MigrationUtils.isLidMigrated()
                         //     && new Lid11MigrationLifecycleWamEvent({
                         //          migrationStage: COMPANION_RECEIVED_DEVICE_CAPABILITY,
@@ -208,10 +223,10 @@ public final class DeviceCapabilitiesHandler implements WebAppStateActionHandler
                         //        }).commit()
                         // WA Web always passes the post-check value which is false at this point;
                         // Cobalt keeps the same read so the wire payload stays byte-identical.
-                        if (!client.lidMigrationService().isLidMigrated()) {
+                        if (!lidMigrationService.isLidMigrated()) {
                             this.wamService.commit(new Lid11MigrationLifecycleEventBuilder()
                                     .migrationStage(MigrationStageEnum.COMPANION_RECEIVED_DEVICE_CAPABILITY)
-                                    .isLocally1x1MigratedFromDb(client.lidMigrationService().isLidMigrated())
+                                    .isLocally1x1MigratedFromDb(lidMigrationService.isLidMigrated())
                                     .build());
                         }
                     });

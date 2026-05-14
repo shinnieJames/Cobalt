@@ -68,9 +68,10 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
 
         /**
          * The linked group's participant count (range
-         * {@code [1, 19999]}).
+         * {@code [1, 19999]}); {@code null} when the relay omitted
+         * the {@code size} attribute.
          */
-        private final int groupSize;
+        private final Integer groupSize;
 
         /**
          * The {@code <group/>} child carrying the
@@ -84,7 +85,9 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
          * @param linkedGroupJid the linked group's JID; never
          *                       {@code null}
          * @param groupSize      the linked group's participant
-         *                       count
+         *                       count; may be {@code null} when the
+         *                       relay omitted the {@code size}
+         *                       attribute
          * @param group          the {@code <group/>} sub-node;
          *                       never {@code null}
          * @throws NullPointerException     if {@code linkedGroupJid}
@@ -93,9 +96,9 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
          * @throws IllegalArgumentException if {@code groupSize} is
          *                                  negative
          */
-        public Success(Jid linkedGroupJid, int groupSize, Node group) {
+        public Success(Jid linkedGroupJid, Integer groupSize, Node group) {
             this.linkedGroupJid = Objects.requireNonNull(linkedGroupJid, "linkedGroupJid cannot be null");
-            if (groupSize < 0) {
+            if (groupSize != null && groupSize < 0) {
                 throw new IllegalArgumentException("groupSize must be non-negative");
             }
             this.groupSize = groupSize;
@@ -114,10 +117,11 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
         /**
          * Returns the linked group's participant count.
          *
-         * @return the size
+         * @return an {@link Optional} carrying the size, or empty
+         *         when the relay omitted the {@code size} attribute
          */
-        public int groupSize() {
-            return groupSize;
+        public Optional<Integer> groupSize() {
+            return Optional.ofNullable(groupSize);
         }
 
         /**
@@ -156,7 +160,8 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
             if (group == null) {
                 return Optional.empty();
             }
-            var size = group.getAttributeAsInt("size").orElse(0);
+            var sizeOpt = group.getAttributeAsInt("size");
+            Integer size = sizeOpt.isPresent() ? sizeOpt.getAsInt() : null;
             return Optional.of(new Success(linkedGroupJid, size, group));
         }
 
@@ -169,7 +174,7 @@ public sealed interface SmaxGroupsGetLinkedGroupResponse extends SmaxOperation.R
                 return false;
             }
             var that = (Success) obj;
-            return this.groupSize == that.groupSize
+            return Objects.equals(this.groupSize, that.groupSize)
                     && Objects.equals(this.linkedGroupJid, that.linkedGroupJid)
                     && Objects.equals(this.group, that.group);
         }

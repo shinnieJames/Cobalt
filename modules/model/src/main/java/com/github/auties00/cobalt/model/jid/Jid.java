@@ -83,6 +83,11 @@ public record Jid(String user, JidServer server, int device, int agent) implemen
     private static final Jid BROADCAST_SERVER = new Jid(null, JidServer.broadcast());
 
     /**
+     * The singleton JID for the Status broadcast account ({@code status@broadcast}).
+     */
+    private static final Jid STATUS_BROADCAST_ACCOUNT = new Jid("status", JidServer.broadcast());
+
+    /**
      * The singleton server-only JID for the call domain ({@code call}).
      */
     private static final Jid CALL_SERVER = new Jid(null, JidServer.call());
@@ -325,13 +330,10 @@ public record Jid(String user, JidServer server, int device, int agent) implemen
     /**
      * Returns the JID for the Status broadcast account ({@code status@broadcast}).
      *
-     * <p>This is the same as {@link #broadcastServer()} because the Status broadcast
-     * JID is represented as a server-only broadcast JID in the protocol.
-     *
      * @return the Status broadcast account JID
      */
     public static Jid statusBroadcastAccount() {
-        return Jid.BROADCAST_SERVER;
+        return Jid.STATUS_BROADCAST_ACCOUNT;
     }
 
     /**

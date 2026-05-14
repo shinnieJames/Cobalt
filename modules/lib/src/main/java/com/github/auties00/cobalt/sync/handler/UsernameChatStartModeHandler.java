@@ -48,17 +48,6 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * wire-compatible.
  */
 public final class UsernameChatStartModeHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of this handler.
-     *
-     * <p>Mirrors the WA Web pattern of exposing each sync handler as a
-     * module-level singleton ({@code var _ = new p; l.default = _}). Even
-     * though WA Web has no concrete module for this action, sibling handlers
-     * such as {@code WAWebLocaleSettingSync} and {@code WAWebPushNameSync} all
-     * follow this convention, and Cobalt's dispatcher expects a single shared
-     * instance per handler class.
-     */
-    public static final UsernameChatStartModeHandler INSTANCE = new UsernameChatStartModeHandler();
 
     /**
      * Creates a new {@code UsernameChatStartModeHandler}.
@@ -67,7 +56,7 @@ public final class UsernameChatStartModeHandler implements WebAppStateActionHand
      * {@link #INSTANCE}, matching the WA Web module-level singleton pattern
      * used by other sync handlers.
      */
-    private UsernameChatStartModeHandler() {
+    public UsernameChatStartModeHandler() {
 
     }
 

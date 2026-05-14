@@ -26,17 +26,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebPrimaryFeatureSync")
 public final class PrimaryFeatureHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code PrimaryFeatureHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPrimaryFeatureSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final PrimaryFeatureHandler INSTANCE = new PrimaryFeatureHandler();
 
     /**
      * Constructs the singleton instance.
      */
     @WhatsAppWebExport(moduleName = "WAWebPrimaryFeatureSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private PrimaryFeatureHandler() {
+    public PrimaryFeatureHandler() {
 
     }
 

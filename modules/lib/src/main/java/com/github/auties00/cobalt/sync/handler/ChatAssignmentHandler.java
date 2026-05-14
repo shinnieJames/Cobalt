@@ -8,15 +8,10 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatAssignmentBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentAction;
-import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles chat assignment sync actions.
@@ -32,17 +27,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebChatAssignmentSync")
 public final class ChatAssignmentHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code ChatAssignmentHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebChatAssignmentSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ChatAssignmentHandler INSTANCE = new ChatAssignmentHandler();
 
     /**
      * Creates a new {@code ChatAssignmentHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatAssignmentSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ChatAssignmentHandler() {
+    public ChatAssignmentHandler() {
 
     }
 
@@ -100,6 +90,11 @@ public final class ChatAssignmentHandler implements WebAppStateActionHandler {
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
             var indexArray = JSON.parseArray(mutation.index());
+            // WAWebChatAssignmentSync.applyMutations: var t=e.indexParts, n=t[1]; if(!n) return a.malformedActionIndex().
+            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            if (indexArray.size() <= 1) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var chatJidString = indexArray.getString(1);
             if (chatJidString == null || chatJidString.isEmpty()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -142,42 +137,4 @@ public final class ChatAssignmentHandler implements WebAppStateActionHandler {
         }
     }
 
-    /**
-     * Builds a pending SET mutation that assigns the given chat to the given
-     * agent.
-     *
-     * <p>Per WhatsApp Web
-     * {@code WAWebChatAssignmentSync.default.createChatAssignmentMutations},
-     * the mutation carries a {@link ChatAssignmentAction} whose
-     * {@code deviceAgentID} is the target agent id (an empty string
-     * unassigns the chat). The mutation index is
-     * {@code ["agentChatAssignment", chatJid]}.
-     * @param chatJid   the JID of the chat being assigned
-     * @param agentId   the target agent id, or {@code ""} to unassign
-     * @param timestamp the mutation timestamp
-     * @return the pending mutation for the chat assignment
-     */
-    @WhatsAppWebExport(moduleName = "WAWebChatAssignmentSync", exports = "createChatAssignmentMutations", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation createChatAssignmentMutation(
-            Jid chatJid,
-            String agentId,
-            Instant timestamp
-    ) {
-        var action = new ChatAssignmentActionBuilder()
-                .deviceAgentID(agentId)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .chatAssignment(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), chatJid.toString()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

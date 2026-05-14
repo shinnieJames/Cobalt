@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.exception.WhatsAppMediaException;
 import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
 import com.github.auties00.cobalt.message.send.id.MessageIdGenerator;
 import com.github.auties00.cobalt.message.send.id.MessageIdVersion;
+import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -193,17 +194,21 @@ public final class WebAppStateService {
      *
      * @param whatsapp                the WhatsApp client instance for store access and node sending
      * @param abPropsService          the A/B props service for configuration values
+     * @param lidMigrationService     the LID migration service injected
+     *                                into the handler registry so the
+     *                                device-capabilities handler can
+     *                                observe LID 1:1 migration progress
      * @param snapshotRecoveryService the snapshot recovery service for peer recovery
      * @param wamService              the WAM telemetry service for committing sync events
      */
-    public WebAppStateService(WhatsAppClient whatsapp, ABPropsService abPropsService, SnapshotRecoveryService snapshotRecoveryService, WamService wamService) {
+    public WebAppStateService(WhatsAppClient whatsapp, ABPropsService abPropsService, LidMigrationService lidMigrationService, SnapshotRecoveryService snapshotRecoveryService, WamService wamService) {
         this.whatsapp = whatsapp;
         this.store = whatsapp.store();
         this.abPropsService = abPropsService;
         this.wamService = wamService;
         this.requestBuilder = new MutationRequestBuilder(whatsapp, abPropsService, wamService);
         this.responseParser = new MutationResponseParser();
-        this.handlerRegistry = new WebAppStateHandlerRegistry(wamService);
+        this.handlerRegistry = new WebAppStateHandlerRegistry(abPropsService, lidMigrationService, wamService);
         this.integrityVerifier = new MutationIntegrityVerifier(store);
         this.retryScheduler = new WebAppStateBackoffScheduler();
         this.missingSyncKeyRequestService = new MissingSyncKeyRequestService(whatsapp, wamService);
@@ -1805,7 +1810,7 @@ public final class WebAppStateService {
         try {
             var downloadedData = whatsapp.store()
                     .awaitMediaConnection()
-                    .download(snapshotRef, whatsapp.abPropsService()); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "snapshot", collectionName)
+                    .download(snapshotRef, abPropsService); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "snapshot", collectionName)
             try (var protobufStream = ProtobufInputStream.fromStream(downloadedData)) {
                 var decoded = SyncdSnapshotSpec.decode(protobufStream); // WAWebSyncdDecode.decodeSyncdSnapshot
                 commitMediaDownload2Success(downloadStart); // WAWebCreateMediaDownloadMetrics.handleDownloadAndDecryptSuccess
@@ -2003,7 +2008,7 @@ public final class WebAppStateService {
         try {
             var downloaded = whatsapp.store()
                     .awaitMediaConnection()
-                    .download(externalRef, whatsapp.abPropsService()); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "patch", collectionName)
+                    .download(externalRef, abPropsService); // WAWebSyncdNetCallbacksApi.downloadSyncBlob(blobRef, "patch", collectionName)
             commitMediaDownload2Success(downloadStart); // WAWebCreateMediaDownloadMetrics.handleDownloadAndDecryptSuccess
             return downloaded;
         } catch (Throwable throwable) {

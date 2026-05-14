@@ -38,20 +38,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * once WhatsApp Web ships a real handler.
  */
 public final class UGCBotHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of the UGC bot handler.
-     *
-     * <p>Mirrors the singleton-export pattern used by every other
-     * {@link WebAppStateActionHandler} implementation in the package, even
-     * though WhatsApp Web does not actually ship a {@code WAWebUGCBotSync}
-     * module.
-     */
-    public static final UGCBotHandler INSTANCE = new UGCBotHandler();
 
     /**
      * Private constructor to enforce singleton pattern.
      */
-    private UGCBotHandler() {
+    public UGCBotHandler() {
 
     }
 

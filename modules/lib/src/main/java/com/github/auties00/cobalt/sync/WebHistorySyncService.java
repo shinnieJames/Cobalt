@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
 import com.github.auties00.cobalt.model.sync.history.HistorySync;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.*;
 import com.github.auties00.cobalt.wam.type.*;
@@ -64,6 +65,12 @@ public final class WebHistorySyncService {
     private final LidMigrationService lidMigrationService;
 
     /**
+     * The AB-props service threaded into the media download so the CDN
+     * fetch can apply server-driven configuration.
+     */
+    private final ABPropsService abPropsService;
+
+    /**
      * The WAM telemetry service used to commit history-sync events.
      */
     private final WamService wamService;
@@ -74,12 +81,15 @@ public final class WebHistorySyncService {
      * @param whatsapp            the WhatsApp client
      * @param lidMigrationService the LID migration service that receives the
      *                            decoded chunks
+     * @param abPropsService      the AB-props service threaded into the CDN
+     *                            download
      * @param wamService          the WAM telemetry service for committing history-sync events
      * @throws NullPointerException if any argument is {@code null}
      */
-    public WebHistorySyncService(WhatsAppClient whatsapp, LidMigrationService lidMigrationService, WamService wamService) {
+    public WebHistorySyncService(WhatsAppClient whatsapp, LidMigrationService lidMigrationService, ABPropsService abPropsService, WamService wamService) {
         this.whatsapp = Objects.requireNonNull(whatsapp, "whatsapp cannot be null");
         this.lidMigrationService = Objects.requireNonNull(lidMigrationService, "lidMigrationService cannot be null");
+        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
     }
 
@@ -749,7 +759,7 @@ public final class WebHistorySyncService {
             throw new WhatsAppHistorySyncException("Interrupted while waiting for media connection", exception);
         }
         var downloadStart = Instant.now();
-        try (var stream = mediaConnection.download(notification, whatsapp.abPropsService())) {
+        try (var stream = mediaConnection.download(notification, abPropsService)) {
             var decoded = decodeHistorySync(stream);
             commitMediaDownload2Success(downloadStart);
             return decoded;

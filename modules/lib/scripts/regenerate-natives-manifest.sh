@@ -7,13 +7,6 @@
 # `commitSha` field; the loader pins runtime downloads to that SHA
 # so the URL is immutable across tag deletions / retargeting.
 #
-# Release flow:
-#   1) commit any new/updated binaries                            (commit A)
-#   2) modules/lib/scripts/regenerate-natives-manifest.sh         -- records commitSha=A
-#   3) git add modules/lib/src/main/resources/META-INF/native-checksums.json
-#      && git commit                                              (commit B)
-#   4) git tag vX.Y.Z B && git push --follow-tags
-#
 # Output:
 #   modules/lib/src/main/resources/META-INF/native-checksums.json
 

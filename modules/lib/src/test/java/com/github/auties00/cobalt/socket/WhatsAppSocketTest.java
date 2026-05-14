@@ -3,16 +3,17 @@ package com.github.auties00.cobalt.socket;
 import com.github.auties00.cobalt.client.WhatsAppClientType;
 import com.github.auties00.cobalt.client.WhatsAppDeviceBuilder;
 import com.github.auties00.cobalt.exception.WhatsAppException;
+import com.github.auties00.cobalt.infra.ProxyServer;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.store.WhatsAppStoreFactory;
-import com.github.auties00.cobalt.infra.ProxyServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
@@ -79,25 +80,7 @@ class WhatsAppSocketTest {
         proxyServer = ProxyServer.https();
         var store = createWebStore();
         store.setProxy(proxyServer.toProxy());
-        client = WhatsAppSocketClient.newCipheredSocketClient(store, trustAllSslEngineFactory());
-        assertHandshakeSucceeds();
-    }
-
-    @Test
-    void testWebSocks4Proxy() throws Exception {
-        proxyServer = ProxyServer.socks4();
-        var store = createWebStore();
-        store.setProxy(proxyServer.toProxy());
-        client = WhatsAppSocketClient.newCipheredSocketClient(store);
-        assertHandshakeSucceeds();
-    }
-
-    @Test
-    void testWebSocks5Proxy() throws Exception {
-        proxyServer = ProxyServer.socks5();
-        var store = createWebStore();
-        store.setProxy(proxyServer.toProxy());
-        client = WhatsAppSocketClient.newCipheredSocketClient(store);
+        client = WhatsAppSocketClient.newCipheredSocketClient(store, trustAllSslContextFactory());
         assertHandshakeSucceeds();
     }
 
@@ -123,7 +106,25 @@ class WhatsAppSocketTest {
         proxyServer = ProxyServer.https();
         var store = createMobileStore();
         store.setProxy(proxyServer.toProxy());
-        client = WhatsAppSocketClient.newCipheredSocketClient(store, trustAllSslEngineFactory());
+        client = WhatsAppSocketClient.newCipheredSocketClient(store, trustAllSslContextFactory());
+        assertHandshakeSucceeds();
+    }
+
+    @Test
+    void testWebSocks4Proxy() throws Exception {
+        proxyServer = ProxyServer.socks4();
+        var store = createWebStore();
+        store.setProxy(proxyServer.toProxy());
+        client = WhatsAppSocketClient.newCipheredSocketClient(store);
+        assertHandshakeSucceeds();
+    }
+
+    @Test
+    void testWebSocks5Proxy() throws Exception {
+        proxyServer = ProxyServer.socks5();
+        var store = createWebStore();
+        store.setProxy(proxyServer.toProxy());
+        client = WhatsAppSocketClient.newCipheredSocketClient(store);
         assertHandshakeSucceeds();
     }
 
@@ -162,31 +163,36 @@ class WhatsAppSocketTest {
         assertThrows(NullPointerException.class, () -> client.connect(null));
     }
 
-    private static WhatsAppSslEngineFactory trustAllSslEngineFactory() {
-        return address -> {
-            try {
-                var sslContext = SSLContext.getInstance("TLS");
-                sslContext.init(null, new TrustManager[]{
-                        new X509TrustManager() {
-                            public void checkClientTrusted(X509Certificate[] chain, String authType) {
-                            }
+    private static WhatsAppSslContextFactory trustAllSslContextFactory() {
+        return new WhatsAppSslContextFactory() {
+            @Override
+            public SSLContext sslContext() {
+                try {
+                    var ctx = SSLContext.getInstance("TLS");
+                    ctx.init(null, new TrustManager[]{
+                            new X509TrustManager() {
+                                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                                }
 
-                            public void checkServerTrusted(X509Certificate[] chain, String authType) {
-                            }
+                                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                                }
 
-                            public X509Certificate[] getAcceptedIssuers() {
-                                return new X509Certificate[0];
+                                public X509Certificate[] getAcceptedIssuers() {
+                                    return new X509Certificate[0];
+                                }
                             }
-                        }
-                }, null);
-                var engine = sslContext.createSSLEngine(address.getHostString(), address.getPort());
-                engine.setUseClientMode(true);
-                var params = engine.getSSLParameters();
+                    }, null);
+                    return ctx;
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public SSLParameters sslParameters() {
+                var params = new SSLParameters();
                 params.setApplicationProtocols(new String[]{"http/1.1"});
-                engine.setSSLParameters(params);
-                return engine;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+                return params;
             }
         };
     }
@@ -195,8 +201,8 @@ class WhatsAppSocketTest {
         var listener = new CapturingListener();
         client.connect(listener);
         assertTrue(client.isConnected(), "Should be connected after handshake");
-        assertNotNull(getField(client, "writeKey"), "Write key should be derived");
-        assertNotNull(getField(client, "readKey"), "Read key should be derived");
+        assertNotNull(client.writeKey(), "Write key should be derived");
+        assertNotNull(client.readKey(), "Read key should be derived");
     }
 
     private static WhatsAppStore createMobileStore() {
@@ -222,21 +228,6 @@ class WhatsAppSocketTest {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T getField(Object target, String name) throws Exception {
-        var current = target.getClass();
-        while (current != null) {
-            try {
-                var field = current.getDeclaredField(name);
-                field.setAccessible(true);
-                return (T) field.get(target);
-            } catch (NoSuchFieldException _) {
-                current = current.getSuperclass();
-            }
-        }
-        throw new NoSuchFieldException("Field not found: " + name);
     }
 
     private static class CapturingListener implements WhatsAppSocketListener {

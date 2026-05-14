@@ -203,11 +203,4 @@ public class DtlsSrtpEndpointTest {
         for (var x : b) sb.append(String.format("%02x", x & 0xFF));
         return sb.toString();
     }
-
-    /**
-     * Suppresses an unused-import warning on SecureRandom by
-     * referencing it (used implicitly via test futures).
-     */
-    @SuppressWarnings("unused")
-    private static final SecureRandom RNG = new SecureRandom();
 }

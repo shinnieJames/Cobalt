@@ -158,14 +158,11 @@ public final class InactiveGroupLidMigrationService {
     @WhatsAppWebExport(moduleName = "WAWebInactiveGroupLidMigrationJob",
             exports = "migrateInactiveGroupsToLid",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private void run() {
+    void run() {
         try {
-            if (!abPropsService.getBool(ABProp.ENABLE_INACTIVE_GROUP_LID_MIGRATION)) {
-                LOGGER.log(System.Logger.Level.DEBUG,
-                        "[lid-inactive-group-migration] ABProp disabled, skip");
-                return;
-            }
-
+            // WA Web's migrateInactiveGroupsToLid runs unconditionally now
+            // (the enable_inactive_group_lid_migration prop was retired);
+            // only the completion-state guard remains.
             if (isInactiveGroupLidMigrationComplete()) {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "[lid-inactive-group-migration] already done, skip");
@@ -228,7 +225,7 @@ public final class InactiveGroupLidMigrationService {
     @WhatsAppWebExport(moduleName = "WAWebInactiveGroupLidMigrationJob",
             exports = "migrateInactiveGroupsToLid",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private List<Jid> findPnGroups() {
+    List<Jid> findPnGroups() {
         var store = client.store();
         return store.chats()
                 .stream()

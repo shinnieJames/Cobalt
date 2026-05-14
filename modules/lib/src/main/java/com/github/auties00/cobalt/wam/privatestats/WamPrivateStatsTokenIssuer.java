@@ -92,8 +92,24 @@ public final class WamPrivateStatsTokenIssuer {
      * @throws NullPointerException if {@code client} is {@code null}
      */
     public WamPrivateStatsTokenIssuer(WhatsAppClient client) {
+        this(client, new SecureRandom());
+    }
+
+    /**
+     * Constructs an issuer with an explicit {@link SecureRandom}.
+     *
+     * <p>Package-private hook used by behavioural tests to feed
+     * deterministic random bytes into the issuance flow so the
+     * resulting blinded credential and unblinded token can be
+     * pinned against the live JS bundle's vectors.
+     *
+     * @param client the client used to dispatch the IQ
+     * @param random the random source for the token and blinding
+     *               factor
+     */
+    WamPrivateStatsTokenIssuer(WhatsAppClient client, SecureRandom random) {
         this.client = Objects.requireNonNull(client, "client must not be null");
-        this.random = new SecureRandom();
+        this.random = Objects.requireNonNull(random, "random must not be null");
     }
 
     /**

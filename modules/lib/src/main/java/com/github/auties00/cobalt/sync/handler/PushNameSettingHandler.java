@@ -1,25 +1,18 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSetting;
-import com.github.auties00.cobalt.model.sync.action.setting.PushNameSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEventBuilder;
 import com.github.auties00.cobalt.wam.type.BootstrapAppStateDataStageCode;
 import com.github.auties00.cobalt.wam.WamService;
-
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Applies {@code setting_pushName} mutations decoded from app state sync.
@@ -247,54 +240,6 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
         // WebAppStateService/MutationRequestBuilder, not by individual
         // setting handlers. There is no global syncdCritical flag to flip here.
         return MutationApplicationResult.success();
-    }
-
-    /**
-     * Builds a pending mutation that broadcasts a new pushname to other linked
-     * devices.
-     *
-     * <p>This is a pure factory method that does not require any handler
-     * instance state, so it is exposed as a {@code static} helper for
-     * convenience and to avoid forcing callers (like
-     * {@link WhatsAppClient#changeName(String)})
-     * to obtain a {@code PushNameSettingHandler} instance just to call it.
-     *
-     * <p>Per WhatsApp Web {@code WAWebPushNameSync.getPushnameMutation}: wraps
-     * the supplied name into a {@code SyncActionValue.pushNameSetting} payload
-     * and forwards it to {@code WAWebSyncdActionUtils.buildPendingMutation}
-     * with empty {@code indexArgs}, the handler's collection
-     * ({@code CriticalBlock}), version ({@code 1}), action
-     * ({@code "setting_pushName"}) and {@code SyncdMutation$SyncdOperation.SET}.
-     *
-     * <p>The resulting mutation is queued via
-     * {@code WAWebSyncdDb.appendPendingMutationsRows} by the WA Web caller and
-     * picked up on the next sync cycle. In Cobalt the returned
-     * {@link SyncPendingMutation} is appended to the per-collection pending
-     * queue by the same upper-layer call sites that handle the other
-     * {@code get*Mutation} builders (see {@link ArchiveChatHandler#getArchiveChatMutation}).
-     * @param timestamp the mutation timestamp ({@code SyncActionValue.timestamp})
-     * @param name      the new pushname to broadcast; may be {@code null} or
-     *                  empty to clear the pushname
-     * @return a pending mutation carrying the {@code setting_pushName} action
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "getPushnameMutation", adaptation = WhatsAppAdaptation.DIRECT)
-    public static SyncPendingMutation getPushnameMutation(Instant timestamp, String name) {
-        var setting = new PushNameSettingBuilder()
-                .name(name)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .pushNameSetting(setting)
-                .build();
-        var index = JSON.toJSONString(List.of(PushNameSetting.ACTION_NAME));
-        var pending = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                PushNameSetting.ACTION_VERSION
-        );
-        return new SyncPendingMutation(pending, 0);
     }
 
     /**

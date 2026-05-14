@@ -21,17 +21,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 @WhatsAppWebModule(moduleName = "WAWebCustomerDataSync")
 public final class CustomerDataHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code CustomerDataHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebCustomerDataSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final CustomerDataHandler INSTANCE = new CustomerDataHandler();
 
     /**
      * Creates a new {@code CustomerDataHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebCustomerDataSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private CustomerDataHandler() {
+    public CustomerDataHandler() {
     }
 
     /**

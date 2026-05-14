@@ -9,17 +9,12 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.sync.ConflictResolution;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.chat.ClearChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ClearChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles clear chat sync actions.
@@ -38,15 +33,6 @@ import java.util.List;
 public final class ClearChatHandler implements WebAppStateActionHandler {
 
     /**
-     * Singleton instance of the clear chat handler.
-     *
-     * <p>Per WhatsApp Web, {@code WAWebClearChatSync} exports a single instance
-     * ({@code var f = new _(); l.default = f}).
-     */
-    @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ClearChatHandler INSTANCE = new ClearChatHandler();
-
-    /**
      * Index slot of the chat JID inside the mutation index parts array.
      *
      * <p>Per WhatsApp Web {@code WAWebClearChatSync}: the constructor sets
@@ -60,7 +46,7 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ClearChatHandler() {
+    public ClearChatHandler() {
     }
 
     /**
@@ -268,84 +254,4 @@ public final class ClearChatHandler implements WebAppStateActionHandler {
         };
     }
 
-    /**
-     * Builds a pending mutation that clears a chat's messages.
-     *
-     * <p>Per WhatsApp Web {@code WAWebClearChatSync.getClearChatMutation}:
-     * <pre>{@code
-     * getClearChatMutation(timestamp, chatWid, deleteStarred, messageRange, skipLidLookup) {
-     *   var indexJid = skipLidLookup ? chatWid.toString()
-     *                                : yield getChatJidMutationIndexForChat(chatWid, Actions.ClearChat);
-     *   var forwardRange = yield constructForwardMovingMessageRange(chatWid, indexJid);
-     *   var indexArgs = [indexJid, deleteStarred ? "1" : "0", deleteMedia ? "1" : "0"];
-     *   // merges with any existing pending ClearChat mutation for the same index
-     *   return buildPendingMutation({
-     *     collection: this.collectionName,
-     *     indexArgs,
-     *     value: {clearChatAction: {messageRange: forwardRange}},
-     *     version: this.getVersion(),
-     *     operation: SyncdMutation$SyncdOperation.SET,
-     *     timestamp,
-     *     action: this.getAction()
-     *   });
-     * }
-     * }</pre>
-     *
-     * <p>The index format is {@code ["clearChat", chatJid, deleteStarred, deleteMedia]}.
-     * Per {@code $ClearChatSync$p_3}, both boolean flags are encoded the same
-     * way on the wire: {@code "1"} for {@code true}, {@code "0"} for {@code false}.
-     * This matches how WA Web constructs outgoing mutations via $p_3; receivers
-     * may apply their own inversion when interpreting the {@code deleteMedia}
-     * index slot.
-     *
-     * <p>In Cobalt, the caller supplies the message range because Cobalt does
-     * not maintain the active-message-range infrastructure (browser-specific
-     * IndexedDB concern). A {@code null} range is permitted and will result in
-     * a mutation without a range; the sync server tolerates this for chats
-     * without any messages. The WAM telemetry commit
-     * ({@code MdSyncdDogfoodingFeatureUsageWamEvent}) is performed at the caller
-     * ({@code WhatsAppClient.clearChat}) since this method has no
-     * {@link com.github.auties00.cobalt.wam.WamService} handle.
-     * @param timestamp     the mutation timestamp
-     * @param chatJid       the JID of the chat to clear
-     * @param deleteStarred whether starred messages should also be deleted
-     * @param deleteMedia   whether media files should be deleted (outgoing
-     *                      flag written verbatim per {@code $ClearChatSync$p_3})
-     * @param messageRange  the message range covering the messages to clear;
-     *                      may be {@code null}
-     * @return the pending mutation for the clear-chat action
-     */
-    @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = {"getClearChatMutation", "$ClearChatSync$p_3"}, adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getClearChatMutation(
-            Instant timestamp,
-            Jid chatJid,
-            boolean deleteStarred,
-            boolean deleteMedia,
-            SyncActionMessageRange messageRange
-    ) {
-        var actionBuilder = new ClearChatActionBuilder();
-        if (messageRange != null) {
-            actionBuilder.messageRange(messageRange);
-        }
-        var action = actionBuilder.build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .clearChatAction(action)
-                .build();
-        // deleteStarred: "1" = delete, "0" = keep; deleteMedia: "1" = keep, "0" = delete (per $p_2 -> s==="1", d==="0")
-        var index = JSON.toJSONString(List.of(
-                actionName(),
-                chatJid.toString(),
-                deleteStarred ? "1" : "0",
-                deleteMedia ? "1" : "0"
-        ));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw mutation object; Cobalt wraps it in SyncPendingMutation for the outgoing queue
-    }
 }

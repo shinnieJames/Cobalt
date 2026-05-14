@@ -34,12 +34,6 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     private static final Logger LOGGER = Logger.getLogger(ChatLockSettingsHandler.class.getName());
 
     /**
-     * The singleton instance of {@code ChatLockSettingsHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ChatLockSettingsHandler INSTANCE = new ChatLockSettingsHandler();
-
-    /**
      * Constructs a new {@code ChatLockSettingsHandler}.
      *
      * <p>Per WhatsApp Web, the constructor of class {@code f} extends
@@ -49,7 +43,7 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
      * {@link #collectionName()} rather than as an instance field.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ChatLockSettingsHandler() {
+    public ChatLockSettingsHandler() {
     }
 
     /**

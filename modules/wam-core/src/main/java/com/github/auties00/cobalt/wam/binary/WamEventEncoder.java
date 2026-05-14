@@ -165,13 +165,25 @@ public abstract sealed class WamEventEncoder
     public abstract void writeRaw(byte[] source, int offset, int length);
 
     /**
-     * Writes a null value entry (tag-only) into the sink.
+     * Writes a null value entry (tag-only) into the sink when the
+     * role is {@link WamTags#GLOBAL}, otherwise emits nothing.
+     *
+     * <p>Matches {@code WAWebWamLibProtocol}'s shared write helper,
+     * which uses the predicate {@code if (value == null) role ===
+     * GLOBAL && writeTag(...);} — only the GLOBAL role's
+     * dirty-tracking null-transition path emits bytes for a null
+     * value. FIELD and EVENT roles with a null value are a no-op
+     * so callers can defensively invoke {@code writeNull} regardless
+     * of role without padding the wire output.
      *
      * @param fieldId the numeric field identifier
      * @param flags   the role and continuation flags
      *                (e.g. {@link WamTags#GLOBAL GLOBAL})
      */
     public final void writeNull(int fieldId, int flags) {
+        if ((flags & 0x03) != GLOBAL) {
+            return;
+        }
         writeTag(fieldId, flags | VALUE_NULL);
     }
 

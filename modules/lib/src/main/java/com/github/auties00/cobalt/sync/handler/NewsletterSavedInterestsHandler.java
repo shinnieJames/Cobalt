@@ -47,15 +47,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@code WAWebNewsletterSavedInterestsSync} module.
  */
 public final class NewsletterSavedInterestsHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code NewsletterSavedInterestsHandler}.
-     */
-    public static final NewsletterSavedInterestsHandler INSTANCE = new NewsletterSavedInterestsHandler();
 
     /**
      * Private constructor that enforces the singleton pattern.
      */
-    private NewsletterSavedInterestsHandler() {
+    public NewsletterSavedInterestsHandler() {
 
     }
 

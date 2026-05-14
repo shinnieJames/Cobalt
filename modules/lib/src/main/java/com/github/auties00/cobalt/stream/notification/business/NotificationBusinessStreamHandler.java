@@ -257,8 +257,8 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
                         .setBusinessAddress(null)
                         .setBusinessDescription(null)
                         .setBusinessEmail(null)
-                        .setBusinessWebsite(null)
-                        .setBusinessCategory(null)
+                        .setBusinessWebsites(null)
+                        .setBusinessCategories(null)
                         .setSyncedBusinessCertificate(false);
             }
             return false;
@@ -401,8 +401,8 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
                 .setBusinessDescription(profile.description().orElse(null))
                 .setBusinessAddress(profile.address().orElse(null))
                 .setBusinessEmail(profile.email().orElse(null))
-                .setBusinessWebsite(profile.websites().stream().findFirst().map(Object::toString).orElse(null))
-                .setBusinessCategory(profile.categories().stream().findFirst().orElse(null));
+                .setBusinessWebsites(profile.websites())
+                .setBusinessCategories(profile.categories());
     }
 
     /**

@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.ExternalWebBetaAction;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
@@ -29,20 +30,20 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 @WhatsAppWebModule(moduleName = "WAWebExternalWebBetaSync")
 public final class ExternalWebBetaHandler implements WebAppStateActionHandler {
     /**
-     * Singleton instance of the external web beta handler.
-     *
-     * <p>Per WhatsApp Web, {@code WAWebExternalWebBetaSync} exports a single instance
-     * ({@code var p = new m(); l.default = p}).
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebExternalWebBetaSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ExternalWebBetaHandler INSTANCE = new ExternalWebBetaHandler();
+    private final ABPropsService abPropsService;
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs the handler instance bound to the given AB-props
+     * service.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalWebBetaSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ExternalWebBetaHandler() {
-
+    public ExternalWebBetaHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -95,7 +96,7 @@ public final class ExternalWebBetaHandler implements WebAppStateActionHandler {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebExternalWebBetaSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!client.abPropsService().getBool(ABProp.EXTERNAL_BETA_CAN_JOIN)) {
+        if (!abPropsService.getBool(ABProp.EXTERNAL_BETA_CAN_JOIN)) {
             return MutationApplicationResult.unsupported();
         }
 

@@ -49,15 +49,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@code WAWebMusicUserIdSync} module.
  */
 public final class MusicUserIdHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code MusicUserIdHandler}.
-     */
-    public static final MusicUserIdHandler INSTANCE = new MusicUserIdHandler();
 
     /**
      * Private constructor that enforces the singleton pattern.
      */
-    private MusicUserIdHandler() {
+    public MusicUserIdHandler() {
 
     }
 

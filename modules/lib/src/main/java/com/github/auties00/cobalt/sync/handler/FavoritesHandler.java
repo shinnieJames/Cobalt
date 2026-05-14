@@ -1,21 +1,15 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.media.FavoritesAction;
-import com.github.auties00.cobalt.model.sync.action.media.FavoritesActionBuilder;
-import com.github.auties00.cobalt.model.sync.action.media.FavoritesActionFavoriteBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -34,14 +28,6 @@ import java.util.logging.Logger;
  */
 @WhatsAppWebModule(moduleName = "WAWebFavoritesSync")
 public final class FavoritesHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of the favorites handler.
-     *
-     * <p>Per WhatsApp Web, a single instance {@code m = new d()} is exported
-     * as the module's default export.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final FavoritesHandler INSTANCE = new FavoritesHandler();
 
     /**
      * Logger for diagnostic messages.
@@ -51,7 +37,7 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
     /**
      * Private constructor to enforce singleton pattern.
      */
-    private FavoritesHandler() {
+    public FavoritesHandler() {
 
     }
 
@@ -205,44 +191,4 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
         client.store().setFavoriteChats(favorites);
     }
 
-    /**
-     * Builds a pending mutation for syncing local favorites changes to the server.
-     *
-     * <p>Per WhatsApp Web {@code WAWebFavoritesSync.getFavoritesMutation}: takes
-     * the current list of favorites with order indices, resolves each to its
-     * mutation index JID, sorts by order index, and builds a SET mutation
-     * containing the full favorites list.
-     *
-     * <p>In WA Web, each favorite is resolved via {@code getWidMutationIndexForWid}
-     * which converts user JIDs to their LID mutation index when LID migration is
-     * active. In Cobalt, the JID is used directly as the mutation index since the
-     * LID mapping is handled by the store layer.
-     * @param favoriteJids the ordered list of favorite chat JIDs
-     * @param timestamp    the mutation timestamp
-     * @return the pending mutation for the favorites action
-     */
-    @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getFavoritesMutation(List<Jid> favoriteJids, Instant timestamp) {
-        var favoriteEntries = favoriteJids.stream()
-                .map(jid -> new FavoritesActionFavoriteBuilder()
-                        .id(jid.toString())
-                        .build())
-                .toList();
-        var action = new FavoritesActionBuilder()
-                .favorites(favoriteEntries)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .favoritesAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName()));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

@@ -1,7 +1,7 @@
-package com.github.auties00.cobalt.call.parity;
+package com.github.auties00.cobalt.call.signaling;
 
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.binary.NodeDecoder;
+import com.github.auties00.cobalt.node.binary.NodeReader;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Parity test: Cobalt's {@link NodeDecoder} produces the same logical
+ * Parity test: Cobalt's {@link NodeReader} produces the same logical
  * tree that {@code WAWap.decodeStanza} produces in WhatsApp Web for a
  * captured outbound {@code <offer>} payload.
  *
@@ -61,7 +61,7 @@ public class OfferDecodeParityTest {
     public void decodesOfferStructure() throws IOException {
         var bytes = Base64.getDecoder().decode(OFFER_B64.replace("\n", ""));
         Node offer;
-        try (var decoder = NodeDecoder.of(ByteBuffer.wrap(bytes))) {
+        try (var decoder = NodeReader.of(ByteBuffer.wrap(bytes))) {
             offer = decoder.decode();
         }
         assertNotNull(offer);
@@ -133,7 +133,7 @@ public class OfferDecodeParityTest {
     public void perDeviceCallKeysDiffer() throws IOException {
         var bytes = Base64.getDecoder().decode(OFFER_B64.replace("\n", ""));
         Node offer;
-        try (var decoder = NodeDecoder.of(ByteBuffer.wrap(bytes))) {
+        try (var decoder = NodeReader.of(ByteBuffer.wrap(bytes))) {
             offer = decoder.decode();
         }
         var children = List.copyOf(offer.children());

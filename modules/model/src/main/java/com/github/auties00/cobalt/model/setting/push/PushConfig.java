@@ -16,7 +16,7 @@ import java.util.Optional;
  * shape into a caller-friendly model: each arm carries only the
  * fields the caller actually needs to populate, with the wire-format
  * boilerplate (the {@code <config platform>} envelope, attribute
- * naming) hidden behind {@code WhatsAppClient#changePushConfig} which
+ * naming) hidden behind {@code WhatsAppClient#editPushConfig} which
  * translates this model into the corresponding wire stanza.
  *
  * <p>Pattern match on the variant to construct the right config; the

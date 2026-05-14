@@ -1,6 +1,8 @@
 package com.github.auties00.cobalt.stream.control;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
+import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -169,6 +171,24 @@ public final class InfoBulletinStreamHandler implements SocketStream.Handler {
     private final WamService wamService;
 
     /**
+     * Reference to the device service, used to drive the
+     * {@code doPendingDeviceSync} retry that closes out the offline resume
+     * state machine when the {@code offline} info bulletin arrives.
+     */
+    private final DeviceService deviceService;
+
+    /**
+     * Epoch-millis timestamp of the {@code offline_preview} IB that drove
+     * the current {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}
+     * transition, or {@code 0L} when no preview has been observed since the
+     * last completion. Used to gate repeated previews against the
+     * {@link WhatsAppClientOfflineResumeState#OFFLINE_PREVIEW_PERIOD_MS}
+     * debounce window before they are accepted as updates rather than
+     * rejected as noise.
+     */
+    private volatile long firstOfflinePreviewMillis;
+
+    /**
      * Constructs a new info bulletin stream handler bound to the supplied
      * client and web app-state service.
      *
@@ -181,14 +201,18 @@ public final class InfoBulletinStreamHandler implements SocketStream.Handler {
      *                                     offline bulletin arrives, must not be {@code null}
      * @param wamService                   the WAM telemetry service used to commit the
      *                                     dirty-bits event, must not be {@code null}
+     * @param deviceService                the device service, used to run the post-resume
+     *                                     pending device sync, must not be {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public InfoBulletinStreamHandler(WhatsAppClient whatsapp, WebAppStateService webAppStateService, OfflineNotificationsReporter offlineNotificationsReporter, WamService wamService) {
+    public InfoBulletinStreamHandler(WhatsAppClient whatsapp, WebAppStateService webAppStateService, OfflineNotificationsReporter offlineNotificationsReporter, WamService wamService, DeviceService deviceService) {
         this.whatsapp = whatsapp;
         this.webAppStateService = webAppStateService;
         this.offlineNotificationsReporter = offlineNotificationsReporter;
         this.wamService = wamService;
+        this.deviceService = deviceService;
+        this.firstOfflinePreviewMillis = 0L;
     }
 
     /**
@@ -365,7 +389,6 @@ public final class InfoBulletinStreamHandler implements SocketStream.Handler {
                 String.join(",", unsupportedTypes));
 
         if (!collectionsToSync.isEmpty()) {
-            whatsapp.store().setSyncedWebAppState(false);
             // pullWebAppState returns the Cobalt equivalent of WA Web's `e.some(r => r.patches?.length > 0 || r.snapshot != null)` directly because it runs synchronously on a virtual thread.
             var hasAppStateChanges = whatsapp.pullWebAppState(collectionsToSync.toArray(SyncPatchType[]::new));
             wamService.commit(new MdAppStateDirtyBitsEventBuilder()
@@ -464,20 +487,46 @@ public final class InfoBulletinStreamHandler implements SocketStream.Handler {
 
     /**
      * Handles the {@code offline} info bulletin that announces the total
-     * number of queued offline messages the server will deliver.
+     * number of queued offline messages the server has delivered, closing
+     * out the offline resume state machine.
      *
-     * <p>In WA Web this feeds the offline resume state machine
-     * ({@code OfflineMessageHandler.processOfflineIb}), triggers
-     * {@code reportOfflineNotifications} and clears the pending-message
-     * dedup cache when the count hits zero. Cobalt does not model the
-     * offline resume state machine; this method logs the count and, when
-     * the backlog is already empty, drives a best-effort retry of orphan
-     * app-state mutations to pick up changes that arrived just before
-     * connect.
+     * <p>Mirrors WA Web's {@code OfflineMessageHandler.processOfflineIb},
+     * which calls into {@code processOfflineSessionComplete} on the active
+     * resume manager. The Cobalt store records the resume state on a
+     * single {@link WhatsAppClientOfflineResumeState} field. The transition
+     * follows the WA Web branching exactly:
+     * <ul>
+     *   <li>If the state is already {@link WhatsAppClientOfflineResumeState#COMPLETE},
+     *       the bulletin is acknowledged for telemetry but no further
+     *       work is performed. WA Web's UI bookkeeping, QPL flow markers
+     *       and reporter commits have no Cobalt analogue.</li>
+     *   <li>If the state is {@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB},
+     *       the live-tab disconnect path runs the pending device sync
+     *       inline (mirroring WA Web's {@code yield doPendingDeviceSync()})
+     *       and then transitions to {@link WhatsAppClientOfflineResumeState#COMPLETE}.</li>
+     *   <li>Otherwise the post-restart path transitions to
+     *       {@link WhatsAppClientOfflineResumeState#COMPLETE} immediately
+     *       and schedules the pending device sync after
+     *       {@link WhatsAppClientOfflineResumeState#OFFLINE_DEVICE_SYNC_DELAY}
+     *       on a virtual thread, mirroring WA Web's
+     *       {@code self.setTimeout(doPendingDeviceSync, OFFLINE_DEVICE_SYNC_DELAY)}.</li>
+     * </ul>
+     *
+     * <p>Independent of the resume transition, Cobalt always flushes the
+     * accumulated offline {@code server_sync} notification counts as a WAM
+     * event (mirroring WA Web's {@code reportOfflineNotifications}) and,
+     * when the count is zero, drives a best-effort orphan-mutation retry
+     * to pick up app-state changes that arrived just before connect.
      *
      * @param offlineNode the {@code offline} child node, never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebOfflineHandler",
+            exports = "processOfflineIb",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebOfflineHandler",
+            exports = "OfflineMessageHandlerImpl",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleOffline(Node offlineNode) {
         var count = offlineNode.getAttributeAsInt("count", 0);
@@ -488,30 +537,129 @@ public final class InfoBulletinStreamHandler implements SocketStream.Handler {
             // Cobalt retries orphan mutations when the backlog is empty; WA Web only clears the dedup cache here.
             webAppStateService.retryAllOrphanMutations();
         }
+
+        var store = whatsapp.store();
+        var current = store.offlineResumeState();
+        if (current == WhatsAppClientOfflineResumeState.COMPLETE) {
+            // WAWebBlockingOfflineResumeManager.processOfflineSessionComplete: early return when state === COMPLETE; Cobalt skips the WAM commit since reporting is centralised in WamService.
+            return;
+        }
+
+        if (current == WhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB) {
+            // WAWebBlockingOfflineResumeManager.processOfflineSessionComplete: yield doPendingDeviceSync() then transition to COMPLETE on the live-tab reconnect path.
+            try {
+                deviceService.retryPendingSyncs();
+            } catch (Throwable throwable) {
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "doPendingDeviceSync failed during open-tab resume completion: {0}",
+                        throwable.getMessage());
+            }
+            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            firstOfflinePreviewMillis = 0L;
+            return;
+        }
+
+        // WAWebBlockingOfflineResumeManager.processOfflineSessionComplete: post-restart path transitions to COMPLETE then schedules doPendingDeviceSync after OFFLINE_DEVICE_SYNC_DELAY.
+        store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+        firstOfflinePreviewMillis = 0L;
+        Thread.startVirtualThread(() -> {
+            try {
+                Thread.sleep(WhatsAppClientOfflineResumeState.OFFLINE_DEVICE_SYNC_DELAY);
+                deviceService.retryPendingSyncs();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Throwable throwable) {
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "doPendingDeviceSync failed after offline resume completion: {0}",
+                        throwable.getMessage());
+            }
+        });
     }
 
     /**
      * Handles the {@code offline_preview} info bulletin that carries a
-     * breakdown of the pending offline backlog by stanza type.
+     * breakdown of the pending offline backlog by stanza type, opening or
+     * advancing the offline resume state machine.
      *
-     * <p>The preview counts are read for observability. In WA Web this
-     * would drive {@code OfflineMessageHandler.processOfflinePreviewIb}
-     * which transitions the blocking resume stage; Cobalt logs the values
-     * and leaves any future stage-machine integration to higher layers.
+     * <p>Mirrors WA Web's {@code OfflineMessageHandler.processOfflinePreviewIb},
+     * which delegates to {@code processOfflinePreview} on the active
+     * resume manager. The transition mirrors WA Web's three-way branch on
+     * the current state:
+     * <ul>
+     *   <li>If {@code isResumeFromRestartComplete()} (the state is past
+     *       {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}),
+     *       a live socket disconnect is in progress; the state moves to
+     *       {@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB}.
+     *       WA Web additionally throttles the chat-sort listener and may
+     *       refresh the window when {@code exceedResumeWithOpenTabLimit}
+     *       trips; both are UI/JS-runtime concerns with no Cobalt
+     *       analogue and are intentionally skipped.</li>
+     *   <li>If the current state is {@link WhatsAppClientOfflineResumeState#INIT},
+     *       this is the first preview after a cold start; the state
+     *       moves to {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}
+     *       and the preview timestamp is recorded for the debounce
+     *       window.</li>
+     *   <li>Otherwise the state is already {@code RESUME_ON_RESTART} and
+     *       repeated previews are gated by the
+     *       {@link WhatsAppClientOfflineResumeState#OFFLINE_PREVIEW_PERIOD_MS}
+     *       debounce window: previews arriving inside the window are
+     *       accepted as cumulative updates and previews arriving outside
+     *       are rejected and logged, matching WA Web's
+     *       {@code "Accept multiple offline preview ibs"} /
+     *       {@code "Reject multiple offline preview ibs"} branches.</li>
+     * </ul>
      *
      * @param previewNode the {@code offline_preview} child node, never
      *                    {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleInfoBulletin", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebOfflineHandler",
+            exports = "processOfflinePreviewIb",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebOfflineHandler",
+            exports = "OfflineMessageHandlerImpl",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     private void handleOfflinePreview(Node previewNode) {
+        var messageCount = previewNode.getAttributeAsInt("message", 0);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Received offline preview bulletin count={0} message={1} receipt={2} notification={3} call={4}",
                 previewNode.getAttributeAsInt("count", 0),
-                previewNode.getAttributeAsInt("message", 0),
+                messageCount,
                 previewNode.getAttributeAsInt("receipt", 0),
                 previewNode.getAttributeAsInt("notification", 0),
                 previewNode.getAttributeAsInt("call", 0));
+
+        var store = whatsapp.store();
+        if (store.isResumeFromRestartComplete()) {
+            // WAWebBlockingOfflineResumeManager.processOfflinePreview: live socket disconnect path; UI-only side effects (chat-sort listener throttle, exceedResumeWithOpenTabLimit refresh) are skipped on the headless Cobalt client.
+            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.RESUME_WITH_OPEN_TAB);
+            return;
+        }
+
+        var current = store.offlineResumeState();
+        if (current == WhatsAppClientOfflineResumeState.INIT) {
+            // WAWebBlockingOfflineResumeManager.processOfflinePreview: first preview after cold start drives INIT -> RESUME_ON_RESTART; the preview timestamp gates the debounce window.
+            firstOfflinePreviewMillis = System.currentTimeMillis();
+            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.RESUME_ON_RESTART);
+            return;
+        }
+
+        // WAWebBlockingOfflineResumeManager.processOfflinePreview: state is RESUME_ON_RESTART and another offline_preview arrived; accept cumulative updates inside OFFLINE_PREVIEW_PERIOD_MS, reject otherwise.
+        var firstMillis = firstOfflinePreviewMillis;
+        if (firstMillis == 0L) {
+            return;
+        }
+        var delay = System.currentTimeMillis() - firstMillis;
+        if (delay < WhatsAppClientOfflineResumeState.OFFLINE_PREVIEW_PERIOD_MS) {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Accept multiple offline preview ibs during offline resume, delay={0} message={1}",
+                    delay, messageCount);
+        } else {
+            LOGGER.log(System.Logger.Level.DEBUG,
+                    "Reject multiple offline preview ibs during offline resume, delay={0}",
+                    delay);
+        }
     }
 
     /**

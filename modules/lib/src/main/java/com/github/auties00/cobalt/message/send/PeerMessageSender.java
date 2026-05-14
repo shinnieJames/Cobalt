@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 
 import java.util.List;
@@ -48,10 +49,11 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Constructs a peer-message sender bound to the given dependencies.
      *
-     * @param client        the WhatsApp client used to dispatch stanzas
-     * @param encryption    the message encryption service
-     * @param deviceService the device service used to manage Signal sessions
-     * @param wamService    the WAM telemetry service shared with the base sender
+     * @param client         the WhatsApp client used to dispatch stanzas
+     * @param encryption     the message encryption service
+     * @param deviceService  the device service used to manage Signal sessions
+     * @param abPropsService the AB-props service consulted by the base sender
+     * @param wamService     the WAM telemetry service shared with the base sender
      */
     @WhatsAppWebExport(moduleName = "WAWebSendAppStateSyncMsgJob", exports = "encryptAndSendKeyMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -59,9 +61,10 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
             WhatsAppClient client,
             MessageEncryption encryption,
             DeviceService deviceService,
+            ABPropsService abPropsService,
             WamService wamService
     ) {
-        super(client, wamService);
+        super(client, abPropsService, wamService);
         this.encryption = Objects.requireNonNull(encryption, "encryption");
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService");
     }

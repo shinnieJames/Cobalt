@@ -262,6 +262,15 @@ public final class LidMigrationService {
     }
 
     /**
+     * Returns the current position of the state machine.
+     *
+     * @return the current state, never {@code null}
+     */
+    LidMigrationState state() {
+        return state.get();
+    }
+
+    /**
      * Moves the state machine from {@link LidMigrationState#NOT_STARTED}
      * to {@link LidMigrationState#WAITING_PROP} so the service can react
      * to the AB prop flip.
@@ -538,7 +547,7 @@ public final class LidMigrationService {
      *                     {@code null}
      * @return {@code true} if a valid mapping was extracted
      */
-    private boolean processConversationLidData(Chat conversation) {
+    boolean processConversationLidData(Chat conversation) {
         if (conversation == null) {
             return false;
         }
@@ -749,7 +758,7 @@ public final class LidMigrationService {
      */
     @WhatsAppWebExport(moduleName = "WAWebLid1X1ThreadAccountMigrations", exports = "getResolvedThreadAccountLid",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private LidMigrationResolution resolveThread(Chat chat, Set<Jid> existingLidThreads) {
+    LidMigrationResolution resolveThread(Chat chat, Set<Jid> existingLidThreads) {
         var jid = chat.jid();
 
         // PNH_CTWA chats are promoted to GENERAL when their LID matches the primary's latest cache
@@ -834,6 +843,24 @@ public final class LidMigrationService {
     }
 
     /**
+     * Convenience overload that derives {@code existingLidThreads} from
+     * the current chat store before delegating to
+     * {@link #resolveThread(Chat, Set)}.
+     *
+     * @param chat the chat to classify
+     * @return the resolution chosen for the chat
+     */
+    LidMigrationResolution resolveThread(Chat chat) {
+        var existingLidThreads = new HashSet<Jid>();
+        for (var stored : store.chats()) {
+            if (stored.jid().hasLidServer()) {
+                existingLidThreads.add(stored.jid().toUserJid());
+            }
+        }
+        return resolveThread(chat, existingLidThreads);
+    }
+
+    /**
      * Returns the timestamp used for freshness comparisons against
      * local chats during migration.
      *
@@ -872,7 +899,7 @@ public final class LidMigrationService {
      */
     @WhatsAppWebExport(moduleName = "WAWebLid1X1ThreadAccountMigrations", exports = "K",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private boolean canDeleteChat(Chat chat) {
+    boolean canDeleteChat(Chat chat) {
         List<ChatMessageInfo> messages;
         try (var stream = chat.messages()) {
             messages = stream.toList();

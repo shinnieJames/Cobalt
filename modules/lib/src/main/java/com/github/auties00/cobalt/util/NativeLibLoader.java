@@ -253,16 +253,7 @@ public final class NativeLibLoader {
             return null;
         }
         var entry = lookup.entry();
-        // Preserve the binary's on-disk basename rather than
-        // remapping via System.mapLibraryName(libraryName). For
-        // single-library bindings (libopus → libopus.so) those
-        // happen to match. For multi-library bindings whose members
-        // reference each other through ELF SONAME tags
-        // (libavformat.so.61 → libavcodec.so.61), the original
-        // basename is what the dynamic linker needs to see when it
-        // resolves NEEDED entries against already-loaded shared
-        // objects. Renaming to libffmpeg-avformat.so would defeat
-        // that.
+
         var fileName = basenameOf(entry.path());
 
         var classpathPath = extractFromClasspath(entry, fileName);
@@ -305,19 +296,57 @@ public final class NativeLibLoader {
      * source-repo layout. Returns the extracted path on success, or
      * {@code null} when no resource exists.
      *
+     * <p>Parallel-JVM safety: the cache slot is shared across every
+     * Cobalt JVM on the host, so two of them starting concurrently
+     * race over the same file. On Windows, {@link System#load} hands
+     * the DLL to {@code LoadLibrary}, which holds the file open
+     * without {@code FILE_SHARE_DELETE} — any concurrent attempt to
+     * delete-then-rewrite that file (the old {@code Files.copy(...,
+     * REPLACE_EXISTING)} behaviour) throws
+     * {@link java.nio.file.AccessDeniedException}. The body below
+     * therefore (1) fast-paths when the target already has the right
+     * size, since a loaded binary necessarily passed the loader's
+     * earlier checks and a JVM holding the lock would have matched
+     * the manifest size; and (2) when an overwrite is genuinely
+     * required (cold cache, stale partial from an older Cobalt
+     * version), writes to a unique temp sibling and renames into
+     * place, accepting a concurrent winner whose size matches the
+     * manifest rather than trying to clobber a locked file.
+     *
      * @param entry    the manifest entry whose path to probe
      * @param fileName the platform-mapped filename
      * @return the extracted path, or {@code null}
      */
     private static Path extractFromClasspath(Entry entry, String fileName) {
-        try (var in = NativeLibLoader.class.getClassLoader().getResourceAsStream(entry.path())) {
-            if (in == null) {
+        try {
+            if (NativeLibLoader.class.getClassLoader().getResource(entry.path()) == null) {
                 return null;
             }
             var dir = ensureCacheDir();
             var out = dir.resolve(fileName);
-            Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
-            return out;
+            if (acceptIfMatchesEntry(out, entry)) {
+                return out;
+            }
+            var tmp = Files.createTempFile(dir, fileName + ".part-", "");
+            try {
+                try (var in = NativeLibLoader.class.getClassLoader().getResourceAsStream(entry.path())) {
+                    if (in == null) {
+                        return null;
+                    }
+                    Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+                }
+                try {
+                    Files.move(tmp, out, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                    return out;
+                } catch (IOException moveFail) {
+                    if (acceptIfMatchesEntry(out, entry)) {
+                        return out;
+                    }
+                    throw moveFail;
+                }
+            } finally {
+                deleteQuietly(tmp);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(
                     "failed to extract bundled native library: " + entry.path(), e);
@@ -418,69 +447,103 @@ public final class NativeLibLoader {
             throw new UnsatisfiedLinkError(
                     "checksum manifest " + lookup.manifest().source()
                             + " is missing the commitSha field — "
-                            + "the release process must run "
-                            + "tooling/native-checksums/generate.sh after committing the binaries");
+                            + "the release process must set it after committing the binaries");
+        }
+        if (acceptIfMatchesEntry(cachePath, entry)) {
+            return cachePath;
         }
         var url = REPO_BASE + commitSha + "/" + entry.path();
-        var tmp = cachePath.resolveSibling(fileName + ".part");
-
-        String actualSha;
-        long actualSize;
+        Path tmp;
         try {
-            var response = httpClient().send(
-                    HttpRequest.newBuilder(URI.create(url))
-                            .timeout(HTTP_REQUEST_TIMEOUT)
-                            .GET()
-                            .build(),
-                    HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() / 100 != 2) {
-                throw new IOException("HTTP " + response.statusCode() + " from " + url);
-            }
-            var digest = MessageDigest.getInstance("SHA-256");
-            try (var body = response.body();
-                 var digesting = new DigestInputStream(body, digest)) {
-                Files.copy(digesting, tmp, StandardCopyOption.REPLACE_EXISTING);
-            }
-            actualSha = HexFormat.of().formatHex(digest.digest());
-            actualSize = Files.size(tmp);
+            tmp = Files.createTempFile(cachePath.getParent(), fileName + ".part-", "");
         } catch (IOException e) {
-            deleteQuietly(tmp);
-            throw new UnsatisfiedLinkError(
-                    "failed to download '" + url + "' for native library '" + libraryName
-                            + "': " + e.getMessage()
-                            + " — add the cobalt:natives-" + CLASSIFIER
-                            + " classifier JAR to the classpath to skip the download.");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            deleteQuietly(tmp);
-            throw new UnsatisfiedLinkError(
-                    "interrupted while downloading '" + libraryName + "' from " + url);
-        } catch (NoSuchAlgorithmException e) {
-            deleteQuietly(tmp);
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
-
-        if (actualSize != entry.size()) {
-            deleteQuietly(tmp);
-            throw new UnsatisfiedLinkError(
-                    "downloaded size mismatch for '" + libraryName + "': expected "
-                            + entry.size() + " bytes, got " + actualSize);
-        }
-        if (!actualSha.equalsIgnoreCase(entry.sha256())) {
-            deleteQuietly(tmp);
-            throw new UnsatisfiedLinkError(
-                    "SHA-256 mismatch for '" + libraryName + "': expected "
-                            + entry.sha256() + ", got " + actualSha);
-        }
-        try {
-            Files.move(tmp, cachePath, StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            deleteQuietly(tmp);
             throw new UncheckedIOException(
-                    "failed to commit cached native library to " + cachePath, e);
+                    "failed to allocate download scratch for " + cachePath, e);
         }
-        return cachePath;
+
+        try {
+            String actualSha;
+            long actualSize;
+            try {
+                var response = httpClient().send(
+                        HttpRequest.newBuilder(URI.create(url))
+                                .timeout(HTTP_REQUEST_TIMEOUT)
+                                .GET()
+                                .build(),
+                        HttpResponse.BodyHandlers.ofInputStream());
+                if (response.statusCode() / 100 != 2) {
+                    throw new IOException("HTTP " + response.statusCode() + " from " + url);
+                }
+                var digest = MessageDigest.getInstance("SHA-256");
+                try (var body = response.body();
+                     var digesting = new DigestInputStream(body, digest)) {
+                    Files.copy(digesting, tmp, StandardCopyOption.REPLACE_EXISTING);
+                }
+                actualSha = HexFormat.of().formatHex(digest.digest());
+                actualSize = Files.size(tmp);
+            } catch (IOException e) {
+                throw new UnsatisfiedLinkError(
+                        "failed to download '" + url + "' for native library '" + libraryName
+                                + "': " + e.getMessage()
+                                + " — add the cobalt:natives-" + CLASSIFIER
+                                + " classifier JAR to the classpath to skip the download.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new UnsatisfiedLinkError(
+                        "interrupted while downloading '" + libraryName + "' from " + url);
+            } catch (NoSuchAlgorithmException e) {
+                throw new IllegalStateException("SHA-256 unavailable", e);
+            }
+
+            if (actualSize != entry.size()) {
+                throw new UnsatisfiedLinkError(
+                        "downloaded size mismatch for '" + libraryName + "': expected "
+                                + entry.size() + " bytes, got " + actualSize);
+            }
+            if (!actualSha.equalsIgnoreCase(entry.sha256())) {
+                throw new UnsatisfiedLinkError(
+                        "SHA-256 mismatch for '" + libraryName + "': expected "
+                                + entry.sha256() + ", got " + actualSha);
+            }
+            try {
+                Files.move(tmp, cachePath, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                if (acceptIfMatchesEntry(cachePath, entry)) {
+                    return cachePath;
+                }
+                throw new UncheckedIOException(
+                        "failed to commit cached native library to " + cachePath, e);
+            }
+            return cachePath;
+        } finally {
+            deleteQuietly(tmp);
+        }
+    }
+
+    /**
+     * Returns {@code true} if the given path already holds a binary
+     * whose size matches the manifest entry — used by
+     * {@link #downloadToCache} to (1) short-circuit when a parallel
+     * JVM populated the cache between the resolver's existence check
+     * and the download leg, and (2) accept a concurrent winner when
+     * the post-download {@link Files#move} fails because the target
+     * is locked (Windows) or already present (any OS). Matching just
+     * the size — not the SHA — is consistent with the resolver's
+     * existing fast path, which also trusts a same-size cached
+     * binary.
+     *
+     * @param cachePath the cache slot to probe
+     * @param entry     the manifest entry to compare against
+     * @return whether {@code cachePath} already holds a matching
+     *         binary
+     */
+    private static boolean acceptIfMatchesEntry(Path cachePath, Entry entry) {
+        try {
+            return Files.exists(cachePath) && Files.size(cachePath) == entry.size();
+        } catch (IOException _) {
+            return false;
+        }
     }
 
     /**

@@ -13,9 +13,9 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
  * Until that backlog has been fully delivered, the client is in the middle
  * of an offline resume: certain operations such as immediate device syncs,
  * chat list re-sorting and collection flushes must be deferred so that the
- * in-flight replay can complete deterministically. Once the
- * {@code offline_stanza_complete} marker arrives, the state moves to
- * {@link #COMPLETE} and normal real-time operation resumes.
+ * in-flight replay can complete deterministically. Once the {@code offline}
+ * info bulletin arrives carrying the final delivered count, the state moves
+ * to {@link #COMPLETE} and normal real-time operation resumes.
  *
  * <p>This type is the Cobalt adaptation of the {@code ResumeStatus}
  * mirrored enum exported by {@code WAWebOfflineResumeConst}. The six
@@ -34,8 +34,8 @@ public enum WhatsAppClientOfflineResumeState {
      * Initial state before any offline resume activity has started.
      *
      * <p>This is the state of a freshly constructed {@link WhatsAppClient}
-     * and of a reconnecting client that has not yet received the
-     * {@code offline_preview} IB from the server.
+     * that has not yet received the {@code offline_preview} IB from the
+     * server.
      */
     INIT,
 

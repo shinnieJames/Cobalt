@@ -24,6 +24,7 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder;
 import com.github.auties00.cobalt.wam.type.MessageType;
@@ -81,6 +82,7 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
      * @param client                the WhatsApp client used to dispatch stanzas
      * @param encryption            the message encryption service
      * @param deviceService         the device service used for audience fanout
+     * @param abPropsService        the AB-props service consulted by the base sender
      * @param senderKeyDistribution the sender-key distribution service
      * @param metaStanza            the meta stanza builder
      * @param reportingStanza       the reporting stanza builder
@@ -92,12 +94,13 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
             WhatsAppClient client,
             MessageEncryption encryption,
             DeviceService deviceService,
+            ABPropsService abPropsService,
             SenderKeyDistribution senderKeyDistribution,
             MetaStanza metaStanza,
             ReportingStanza reportingStanza,
             WamService wamService
     ) {
-        super(client, wamService);
+        super(client, abPropsService, wamService);
         this.encryption = Objects.requireNonNull(encryption, "encryption");
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService");
         this.senderKeyDistribution = Objects.requireNonNull(senderKeyDistribution, "senderKeyDistribution");

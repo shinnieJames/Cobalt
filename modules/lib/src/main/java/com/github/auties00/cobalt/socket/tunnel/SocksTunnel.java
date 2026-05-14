@@ -1,0 +1,576 @@
+package com.github.auties00.cobalt.socket.tunnel;
+
+import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.client.proxy.WhatsAppProxyAuthenticator;
+import com.github.auties00.cobalt.util.DataUtils;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+
+/**
+ * Establishes a TCP tunnel through a SOCKS proxy on an
+ * already-connected {@link Socket}.
+ *
+ * <p>Supports SOCKS4 (local DNS, IPv4 only), SOCKS4a (remote DNS via
+ * the {@code 0.0.0.x} sentinel IP), SOCKS5 with local DNS resolution
+ * (RFC 1928) and SOCKS5h with remote DNS resolution. SOCKS5
+ * authentication is handled via the RFC 1929 username and password
+ * sub-negotiation.
+ *
+ * <p>The tunnel runs entirely on the supplied socket's
+ * {@link InputStream}/{@link OutputStream}; no intermediate
+ * {@link java.nio.ByteBuffer} wrappers, no layer plumbing. On return
+ * the socket is positioned past the SOCKS reply, ready for the next
+ * protocol layer.
+ *
+ * @apiNote The tunnel directly depends on {@link WhatsAppProxy.Socks}
+ *     for proxy configuration; the SOCKS variant decides whether the
+ *     destination address is resolved locally and sent as raw bytes,
+ *     or passed to the proxy as a domain name for remote resolution.
+ */
+public final class SocksTunnel {
+
+    /**
+     * SOCKS protocol version 4 byte.
+     */
+    private static final byte SOCKS_VERSION_4 = 0x04;
+
+    /**
+     * SOCKS protocol version 5 byte.
+     */
+    private static final byte SOCKS_VERSION_5 = 0x05;
+
+    /**
+     * SOCKS {@code CONNECT} command byte.
+     */
+    private static final byte CMD_CONNECT = 0x01;
+
+    /**
+     * Method byte indicating "no authentication required".
+     */
+    private static final byte METHOD_NO_AUTH = 0x00;
+
+    /**
+     * Marker indicating that the proxy refused every offered method.
+     */
+    private static final int METHOD_NO_ACCEPTABLE = 0xFF;
+
+    /**
+     * SOCKS5 address type byte for IPv4.
+     */
+    private static final byte ADDR_TYPE_IPV4 = 0x01;
+
+    /**
+     * SOCKS5 address type byte for a domain name.
+     */
+    private static final byte ADDR_TYPE_DOMAIN = 0x03;
+
+    /**
+     * SOCKS5 address type byte for IPv6.
+     */
+    private static final byte ADDR_TYPE_IPV6 = 0x04;
+
+    /**
+     * RFC 1929 sub-negotiation version 1.
+     */
+    private static final byte AUTH_VERSION_1 = 0x01;
+
+    /**
+     * RFC 1929 success byte.
+     */
+    private static final byte AUTH_SUCCESS = 0x00;
+
+    /**
+     * SOCKS5 reply: success.
+     */
+    private static final byte SOCKS5_REPLY_SUCCESS = 0x00;
+
+    /**
+     * SOCKS5 reply: general server failure.
+     */
+    private static final int SOCKS5_REPLY_GENERAL_FAILURE = 0x01;
+
+    /**
+     * SOCKS5 reply: connection not allowed by ruleset.
+     */
+    private static final int SOCKS5_REPLY_CONNECTION_NOT_ALLOWED = 0x02;
+
+    /**
+     * SOCKS5 reply: network unreachable.
+     */
+    private static final int SOCKS5_REPLY_NETWORK_UNREACHABLE = 0x03;
+
+    /**
+     * SOCKS5 reply: host unreachable.
+     */
+    private static final int SOCKS5_REPLY_HOST_UNREACHABLE = 0x04;
+
+    /**
+     * SOCKS5 reply: connection refused.
+     */
+    private static final int SOCKS5_REPLY_CONNECTION_REFUSED = 0x05;
+
+    /**
+     * SOCKS5 reply: TTL expired.
+     */
+    private static final int SOCKS5_REPLY_TTL_EXPIRED = 0x06;
+
+    /**
+     * SOCKS5 reply: command not supported.
+     */
+    private static final int SOCKS5_REPLY_COMMAND_NOT_SUPPORTED = 0x07;
+
+    /**
+     * SOCKS5 reply: address type not supported.
+     */
+    private static final int SOCKS5_REPLY_ADDRESS_TYPE_UNSUPPORTED = 0x08;
+
+    /**
+     * SOCKS5 reserved byte that always carries a zero value on the
+     * wire.
+     */
+    private static final byte SOCKS5_RESERVED = 0x00;
+
+    /**
+     * SOCKS4 reply version byte.
+     */
+    private static final int SOCKS4_REPLY_VERSION = 0x00;
+
+    /**
+     * SOCKS4 status code: request granted.
+     */
+    private static final int SOCKS4_REQUEST_GRANTED = 0x5A;
+
+    /**
+     * SOCKS4 status code: request rejected or failed.
+     */
+    private static final int SOCKS4_REQUEST_REJECTED = 0x5B;
+
+    /**
+     * SOCKS4 status code: identd unreachable.
+     */
+    private static final int SOCKS4_REQUEST_NO_IDENTD = 0x5C;
+
+    /**
+     * SOCKS4 status code: identd reported a different user id.
+     */
+    private static final int SOCKS4_REQUEST_IDENTD_MISMATCH = 0x5D;
+
+    /**
+     * Null byte used to terminate SOCKS4 user-id and domain fields.
+     */
+    private static final byte SOCKS4_NULL_TERMINATOR = 0x00;
+
+    /**
+     * Sentinel IP {@code 0.0.0.1} that signals to a SOCKS4a proxy
+     * that the destination is supplied as a domain name instead of an
+     * IPv4 address.
+     */
+    private static final byte[] SOCKS4A_SENTINEL_IP = {0x00, 0x00, 0x00, 0x01};
+
+    /**
+     * Length of an IPv4 address in bytes.
+     */
+    private static final int IPV4_ADDR_LENGTH = 4;
+
+    /**
+     * Length of an IPv6 address in bytes.
+     */
+    private static final int IPV6_ADDR_LENGTH = 16;
+
+    /**
+     * Length of the SOCKS port field in bytes.
+     */
+    private static final int PORT_LENGTH = 2;
+
+    /**
+     * Maximum domain length permitted by SOCKS5.
+     */
+    private static final int MAX_DOMAIN_LENGTH = 255;
+
+    /**
+     * Prevents instantiation of the utility class.
+     */
+    private SocksTunnel() {
+
+    }
+
+    /**
+     * Establishes a SOCKS tunnel through the supplied proxy on the
+     * already-connected socket.
+     *
+     * <p>Runs the SOCKS variant matching {@code proxy} (V4, V4a, V5 or
+     * V5h) and returns once the proxy has signalled that the tunnel
+     * to {@code targetHost:targetPort} is open. On return the socket
+     * streams are ready for the next protocol layer.
+     *
+     * @param raw        the already-connected proxy socket
+     * @param targetHost the host the tunnel is meant to reach
+     * @param targetPort the port the tunnel is meant to reach
+     * @param proxy      the SOCKS proxy configuration
+     * @return the connected socket (the same {@code raw}) — returned
+     *         to mirror the {@link HttpTunnel#tunnel} signature
+     * @throws IOException if any phase of the handshake fails or the
+     *         proxy rejects the request
+     */
+    public static Socket tunnel(Socket raw, String targetHost, int targetPort,
+                                WhatsAppProxy.Socks proxy) throws IOException {
+        var in = raw.getInputStream();
+        var out = raw.getOutputStream();
+        switch (proxy) {
+            case WhatsAppProxy.Socks.V4.Local v4 ->
+                    performSocks4Handshake(in, out, v4, targetHost, targetPort);
+            case WhatsAppProxy.Socks.V4.Remote v4a ->
+                    performSocks4aHandshake(in, out, v4a, targetHost, targetPort);
+            case WhatsAppProxy.Socks.V5.Local v5 ->
+                    performSocks5Handshake(in, out, v5, targetHost, targetPort);
+            case WhatsAppProxy.Socks.V5.Remote v5h ->
+                    performSocks5Handshake(in, out, v5h, targetHost, targetPort);
+        }
+        return raw;
+    }
+
+    /**
+     * Performs a SOCKS4 handshake: resolves the host locally to an
+     * IPv4 address, sends the CONNECT request with an optional user
+     * ID, and validates the reply.
+     *
+     * @param in   the proxy input stream
+     * @param out  the proxy output stream
+     * @param v4   the SOCKS4 proxy configuration
+     * @param host the target host
+     * @param port the target port
+     * @throws IOException if DNS resolution fails, the host is not
+     *                     IPv4, or the proxy rejects the request
+     */
+    private static void performSocks4Handshake(InputStream in, OutputStream out,
+                                               WhatsAppProxy.Socks.V4.Local v4,
+                                               String host, int port) throws IOException {
+        var address = InetAddress.getByName(host);
+        if (!(address instanceof Inet4Address)) {
+            throw new IOException("SOCKS4 only supports IPv4 addresses, but resolved " + host + " to " + address.getHostAddress());
+        }
+
+        var ipBytes = address.getAddress();
+        var userIdBytes = v4.authenticator()
+                .map(auth -> auth.userId().getBytes(StandardCharsets.ISO_8859_1))
+                .orElse(DataUtils.EMPTY_BYTE_ARRAY);
+        var request = new byte[9 + userIdBytes.length];
+        var pos = 0;
+        request[pos++] = SOCKS_VERSION_4;
+        request[pos++] = CMD_CONNECT;
+        request[pos++] = (byte) (port >>> 8);
+        request[pos++] = (byte) port;
+        System.arraycopy(ipBytes, 0, request, pos, 4);
+        pos += 4;
+        System.arraycopy(userIdBytes, 0, request, pos, userIdBytes.length);
+        pos += userIdBytes.length;
+        request[pos] = SOCKS4_NULL_TERMINATOR;
+        out.write(request);
+        out.flush();
+
+        handleSocks4Reply(in);
+    }
+
+    /**
+     * Performs a SOCKS4a handshake: sends a CONNECT request with the
+     * sentinel IP and the domain name for remote DNS resolution.
+     *
+     * @param in   the proxy input stream
+     * @param out  the proxy output stream
+     * @param v4a  the SOCKS4a proxy configuration
+     * @param host the target host (a domain name)
+     * @param port the target port
+     * @throws IOException if the proxy rejects the request
+     */
+    private static void performSocks4aHandshake(InputStream in, OutputStream out,
+                                                WhatsAppProxy.Socks.V4.Remote v4a,
+                                                String host, int port) throws IOException {
+        var userIdBytes = v4a.authenticator()
+                .map(auth -> auth.userId().getBytes(StandardCharsets.ISO_8859_1))
+                .orElse(DataUtils.EMPTY_BYTE_ARRAY);
+        var domainBytes = host.getBytes(StandardCharsets.ISO_8859_1);
+        var request = new byte[10 + userIdBytes.length + domainBytes.length];
+        var pos = 0;
+        request[pos++] = SOCKS_VERSION_4;
+        request[pos++] = CMD_CONNECT;
+        request[pos++] = (byte) (port >>> 8);
+        request[pos++] = (byte) port;
+        System.arraycopy(SOCKS4A_SENTINEL_IP, 0, request, pos, SOCKS4A_SENTINEL_IP.length);
+        pos += SOCKS4A_SENTINEL_IP.length;
+        System.arraycopy(userIdBytes, 0, request, pos, userIdBytes.length);
+        pos += userIdBytes.length;
+        request[pos++] = SOCKS4_NULL_TERMINATOR;
+        System.arraycopy(domainBytes, 0, request, pos, domainBytes.length);
+        pos += domainBytes.length;
+        request[pos] = SOCKS4_NULL_TERMINATOR;
+        out.write(request);
+        out.flush();
+
+        handleSocks4Reply(in);
+    }
+
+    /**
+     * Reads and validates the 8-byte SOCKS4/4a reply.
+     *
+     * @param in the proxy input stream
+     * @throws IOException if the reply version is invalid or the
+     *                     request was rejected
+     */
+    private static void handleSocks4Reply(InputStream in) throws IOException {
+        var reply = readNBytes(in, 8);
+
+        var replyVersion = reply[0] & 0xFF;
+        if (replyVersion != SOCKS4_REPLY_VERSION) {
+            throw new IOException("Invalid SOCKS4 reply version: " + replyVersion);
+        }
+
+        var status = reply[1] & 0xFF;
+        if (status != SOCKS4_REQUEST_GRANTED) {
+            var reason = getSocks4ReplyReason(status);
+            throw new IOException("SOCKS4 proxy request failed: " + reason + " (Code: 0x" + Integer.toHexString(status) + ")");
+        }
+    }
+
+    /**
+     * Maps a SOCKS4 reply status code to a human-readable reason
+     * string.
+     *
+     * @param status the SOCKS4 reply status byte (unsigned)
+     * @return a description of the failure reason
+     */
+    private static String getSocks4ReplyReason(int status) {
+        return switch (status) {
+            case SOCKS4_REQUEST_REJECTED -> "Request rejected or failed";
+            case SOCKS4_REQUEST_NO_IDENTD -> "Request rejected because SOCKS server cannot connect to identd on the client";
+            case SOCKS4_REQUEST_IDENTD_MISMATCH -> "Request rejected because the client program and identd report different user-ids";
+            default -> "Unknown failure";
+        };
+    }
+
+    /**
+     * Performs the full SOCKS5 handshake: method negotiation, optional
+     * authentication sub-negotiation (RFC 1929), and the CONNECT
+     * request.
+     *
+     * <p>For {@link WhatsAppProxy.Socks.V5.Local}, the host is
+     * resolved locally and sent as an IPv4 or IPv6 address. For
+     * {@link WhatsAppProxy.Socks.V5.Remote}, the domain name is sent
+     * for remote resolution.
+     *
+     * @param in    the proxy input stream
+     * @param out   the proxy output stream
+     * @param socks the SOCKS5 proxy configuration
+     * @param host  the target host
+     * @param port  the target port
+     * @throws IOException if negotiation, authentication, or the
+     *                     CONNECT request fails
+     */
+    private static void performSocks5Handshake(InputStream in, OutputStream out,
+                                               WhatsAppProxy.Socks.V5 socks,
+                                               String host, int port) throws IOException {
+        var authenticatorOpt = socks.authenticator();
+        var greeting = authenticatorOpt.isPresent()
+                ? new byte[]{SOCKS_VERSION_5, 2, METHOD_NO_AUTH, (byte) authenticatorOpt.get().methodId()}
+                : new byte[]{SOCKS_VERSION_5, 1, METHOD_NO_AUTH};
+        out.write(greeting);
+        out.flush();
+
+        var serverChoice = readNBytes(in, 2);
+        var version = serverChoice[0];
+        if (version != SOCKS_VERSION_5) {
+            throw new IOException("Unsupported socks version: " + (version & 0xFF));
+        }
+
+        var chosenMethod = serverChoice[1] & 0xFF;
+        if (chosenMethod == METHOD_NO_ACCEPTABLE) {
+            throw new IOException("SOCKS5 proxy rejected all offered authentication methods");
+        }
+        if (chosenMethod != METHOD_NO_AUTH) {
+            if (authenticatorOpt.isEmpty()) {
+                throw new IOException("Missing credentials for authentication: please provide them in the proxy configuration");
+            }
+            var authenticator = authenticatorOpt.get();
+            if (authenticator.methodId() != chosenMethod) {
+                throw new IOException("Proxy selected unsupported authentication method: " + chosenMethod);
+            }
+            switch (authenticator) {
+                case WhatsAppProxyAuthenticator.Socks.V5.UserPassword credentials -> {
+                    var userBytes = credentials.username().getBytes(StandardCharsets.ISO_8859_1);
+                    var passBytes = credentials.password().getBytes(StandardCharsets.ISO_8859_1);
+
+                    var authRequest = new byte[3 + userBytes.length + passBytes.length];
+                    var pos = 0;
+                    authRequest[pos++] = AUTH_VERSION_1;
+                    authRequest[pos++] = (byte) userBytes.length;
+                    System.arraycopy(userBytes, 0, authRequest, pos, userBytes.length);
+                    pos += userBytes.length;
+                    authRequest[pos++] = (byte) passBytes.length;
+                    System.arraycopy(passBytes, 0, authRequest, pos, passBytes.length);
+                    out.write(authRequest);
+                    out.flush();
+
+                    var authResponse = readNBytes(in, 2);
+                    var authVersion = authResponse[0] & 0xFF;
+                    if (authVersion != AUTH_VERSION_1) {
+                        throw new IOException("Unsupported SOCKS5 auth sub-negotiation version: " + authVersion);
+                    }
+                    if (authResponse[1] != AUTH_SUCCESS) {
+                        throw new IOException("SOCKS proxy authentication failed.");
+                    }
+                }
+            }
+        }
+
+        var connRequest = switch (socks) {
+            case WhatsAppProxy.Socks.V5.Local _ -> buildResolvedConnectRequest(host, port);
+            case WhatsAppProxy.Socks.V5.Remote _ -> buildDomainConnectRequest(host, port);
+        };
+        out.write(connRequest);
+        out.flush();
+
+        handleSocks5Reply(in);
+    }
+
+    /**
+     * Builds a SOCKS5 CONNECT request with the destination as a
+     * domain name for remote DNS resolution.
+     *
+     * @param host the target host (a domain name)
+     * @param port the target port
+     * @return the serialized CONNECT request, ready to send
+     * @throws IOException if the domain name exceeds
+     *                     {@value #MAX_DOMAIN_LENGTH} bytes
+     */
+    private static byte[] buildDomainConnectRequest(String host, int port) throws IOException {
+        var destHostBytes = host.getBytes(StandardCharsets.ISO_8859_1);
+        if (destHostBytes.length > MAX_DOMAIN_LENGTH) {
+            throw new IOException("SOCKS5 domain name too long: " + destHostBytes.length + " bytes (max " + MAX_DOMAIN_LENGTH + ")");
+        }
+        var request = new byte[4 + 1 + destHostBytes.length + 2];
+        var pos = 0;
+        request[pos++] = SOCKS_VERSION_5;
+        request[pos++] = CMD_CONNECT;
+        request[pos++] = SOCKS5_RESERVED;
+        request[pos++] = ADDR_TYPE_DOMAIN;
+        request[pos++] = (byte) destHostBytes.length;
+        System.arraycopy(destHostBytes, 0, request, pos, destHostBytes.length);
+        pos += destHostBytes.length;
+        request[pos++] = (byte) (port >>> 8);
+        request[pos] = (byte) port;
+        return request;
+    }
+
+    /**
+     * Builds a SOCKS5 CONNECT request with the destination as a
+     * resolved IP address.
+     *
+     * @param host the target host (resolved locally)
+     * @param port the target port
+     * @return the serialized CONNECT request, ready to send
+     * @throws IOException if DNS resolution fails or yields an
+     *                     unsupported address type
+     */
+    private static byte[] buildResolvedConnectRequest(String host, int port) throws IOException {
+        var address = InetAddress.getByName(host);
+        var ipBytes = address.getAddress();
+        var addrType = switch (address) {
+            case Inet4Address _ -> ADDR_TYPE_IPV4;
+            case Inet6Address _ -> ADDR_TYPE_IPV6;
+            default -> throw new IOException("Unsupported address type: " + address.getClass().getName());
+        };
+        var request = new byte[4 + ipBytes.length + 2];
+        var pos = 0;
+        request[pos++] = SOCKS_VERSION_5;
+        request[pos++] = CMD_CONNECT;
+        request[pos++] = SOCKS5_RESERVED;
+        request[pos++] = addrType;
+        System.arraycopy(ipBytes, 0, request, pos, ipBytes.length);
+        pos += ipBytes.length;
+        request[pos++] = (byte) (port >>> 8);
+        request[pos] = (byte) port;
+        return request;
+    }
+
+    /**
+     * Reads and validates the SOCKS5 reply. Checks the version and
+     * reply code, then drains the variable-length bound address and
+     * port fields.
+     *
+     * @param in the proxy input stream
+     * @throws IOException if the reply version is invalid or the
+     *                     request was rejected
+     */
+    private static void handleSocks5Reply(InputStream in) throws IOException {
+        var replyInfo = readNBytes(in, 2);
+
+        if (replyInfo[0] != SOCKS_VERSION_5) {
+            throw new IOException("Invalid SOCKS version in server reply.");
+        }
+        var replyCode = replyInfo[1];
+        if (replyCode != SOCKS5_REPLY_SUCCESS) {
+            var reason = getSocks5ReplyReason(replyCode);
+            throw new IOException("SOCKS proxy request failed: " + reason + " (Code: " + replyCode + ")");
+        }
+
+        var addrInfo = readNBytes(in, 2);
+        // addrInfo[0] is the reserved byte; discard
+
+        var addrType = addrInfo[1];
+        int remainingBytes;
+        switch (addrType) {
+            case ADDR_TYPE_IPV4 -> remainingBytes = IPV4_ADDR_LENGTH + PORT_LENGTH;
+            case ADDR_TYPE_DOMAIN -> {
+                var lenBuf = readNBytes(in, 1);
+                remainingBytes = (lenBuf[0] & 0xFF) + PORT_LENGTH;
+            }
+            case ADDR_TYPE_IPV6 -> remainingBytes = IPV6_ADDR_LENGTH + PORT_LENGTH;
+            default -> throw new IOException("Proxy returned an unsupported address type in reply: " + addrType);
+        }
+        readNBytes(in, remainingBytes);
+    }
+
+    /**
+     * Maps a SOCKS5 reply code to a human-readable reason string.
+     *
+     * @param replyCode the SOCKS5 reply code byte (unsigned)
+     * @return a description of the failure reason
+     */
+    private static String getSocks5ReplyReason(int replyCode) {
+        return switch (replyCode) {
+            case SOCKS5_REPLY_GENERAL_FAILURE -> "General SOCKS server failure";
+            case SOCKS5_REPLY_CONNECTION_NOT_ALLOWED -> "Connection not allowed by ruleset";
+            case SOCKS5_REPLY_NETWORK_UNREACHABLE -> "Network unreachable";
+            case SOCKS5_REPLY_HOST_UNREACHABLE -> "Host unreachable";
+            case SOCKS5_REPLY_CONNECTION_REFUSED -> "Connection refused";
+            case SOCKS5_REPLY_TTL_EXPIRED -> "TTL expired";
+            case SOCKS5_REPLY_COMMAND_NOT_SUPPORTED -> "Command not supported";
+            case SOCKS5_REPLY_ADDRESS_TYPE_UNSUPPORTED -> "Address type not supported";
+            default -> "Unknown failure";
+        };
+    }
+
+    /**
+     * Reads exactly {@code n} bytes from {@code in} and returns them
+     * as a fresh array.
+     *
+     * @param in the input stream
+     * @param n  the exact number of bytes to read
+     * @return a fresh {@code byte[n]} holding the read bytes
+     * @throws IOException if the stream ends before {@code n} bytes
+     *                     have been read
+     */
+    private static byte[] readNBytes(InputStream in, int n) throws IOException {
+        var buffer = in.readNBytes(n);
+        if (buffer.length < n) {
+            throw new IOException("Unexpected end of stream during SOCKS handshake");
+        }
+        return buffer;
+    }
+}

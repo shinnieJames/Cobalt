@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.stream.iq;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler;
 import com.github.auties00.cobalt.device.DeviceService;
+import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.device.identity.ADVDeviceIdentitySpec;
@@ -89,6 +90,12 @@ public final class IqStreamHandler implements SocketStream.Handler {
     private final SnapshotRecoveryService snapshotRecoveryService;
 
     /**
+     * The LID migration service consulted when committing the
+     * {@code Lid11MigrationLifecycle} event after a successful pairing.
+     */
+    private final LidMigrationService lidMigrationService;
+
+    /**
      * Executor for scheduling QR ref rotation tasks.
      */
     private final ScheduledExecutorService rotationExecutor;
@@ -125,6 +132,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
      * @param webVerificationHandler  the web verification handler for delivering QR/pairing codes, must not be {@code null}
      * @param deviceService           the device service for ADV validation, must not be {@code null}
      * @param snapshotRecoveryService the snapshot recovery service, must not be {@code null}
+     * @param lidMigrationService     the LID migration service consulted on pair-success, must not be {@code null}
      * @param deviceLinkingService    the alt-device-linking service used to gate {@code pair-device} notifications, must not be {@code null}
      * @param wamService              the WAM telemetry service used to commit IQ-level events
      */
@@ -133,6 +141,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
             WhatsAppClientVerificationHandler.Web webVerificationHandler,
             DeviceService deviceService,
             SnapshotRecoveryService snapshotRecoveryService,
+            LidMigrationService lidMigrationService,
             CompanionPairingService deviceLinkingService,
             WamService wamService
     ) {
@@ -140,6 +149,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
         this.webVerificationHandler = Objects.requireNonNull(webVerificationHandler, "webVerificationHandler cannot be null");
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService cannot be null");
         this.snapshotRecoveryService = Objects.requireNonNull(snapshotRecoveryService, "snapshotRecoveryService cannot be null");
+        this.lidMigrationService = Objects.requireNonNull(lidMigrationService, "lidMigrationService cannot be null");
         this.deviceLinkingService = Objects.requireNonNull(deviceLinkingService, "altDeviceLinkingService cannot be null");
         this.wamService = Objects.requireNonNull(wamService, "wamService cannot be null");
         this.rotationLock = new Object();
@@ -521,7 +531,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
                             wamService.commit(new Lid11MigrationLifecycleEventBuilder()
                                     .migrationStage(MigrationStageEnum.COMPANION_MIGRATED_ON_NEW_PAIRING)
                                     .webClientDidPairingStanzaIndicated1x1MigrationThisSession(true)
-                                    .isLocally1x1MigratedFromDb(whatsapp.lidMigrationService().isLidMigrated())
+                                    .isLocally1x1MigratedFromDb(lidMigrationService.isLidMigrated())
                                     .build());
                         }
                     });

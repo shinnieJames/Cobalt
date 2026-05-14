@@ -7,16 +7,10 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.preference.OnboardingHintStateBuilder;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.device.NuxAction;
-import com.github.auties00.cobalt.model.sync.action.device.NuxActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
-import java.util.Objects;
 
 /**
  * Handles NUX (New User Experience) sync mutations.
@@ -39,17 +33,12 @@ import java.util.Objects;
  */
 @WhatsAppWebModule(moduleName = "WAWebNuxSync")
 public final class NuxActionHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code NuxActionHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final NuxActionHandler INSTANCE = new NuxActionHandler();
 
     /**
      * Creates the singleton NUX sync handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private NuxActionHandler() {
+    public NuxActionHandler() {
 
     }
 
@@ -128,6 +117,11 @@ public final class NuxActionHandler implements WebAppStateActionHandler {
         }
 
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebNuxSync.applyMutations: var s=e.indexParts[1]; return isString(s) ? success : malformedActionIndex().
+        // indexParts[1] is undefined when missing, which is not a string and yields malformed.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var nuxKey = indexArray.getString(1);
         if (nuxKey == null) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -147,111 +141,4 @@ public final class NuxActionHandler implements WebAppStateActionHandler {
         return MutationApplicationResult.success();
     }
 
-    /**
-     * Builds a pending mutation for acknowledging or unacknowledging a NUX
-     * item.
-     *
-     * <p>Per WhatsApp Web {@code WAWebNuxSync.$NuxSync$p_1}:
-     * <ol>
-     *   <li>Wraps the {@code acknowledged} flag in a
-     *       {@code {nuxAction: {acknowledged}}} value</li>
-     *   <li>Calls {@code WAWebSyncdActionUtils.buildPendingMutation} with
-     *       {@code collection}, {@code indexArgs = [nuxKey]}, value,
-     *       version, operation {@code SET}, and the supplied timestamp</li>
-     * </ol>
-     * @param nuxKey       the NUX identifier (the {@code indexArgs[0]} entry)
-     * @param timestamp    the mutation timestamp
-     * @param acknowledged whether the NUX item is acknowledged
-     * @return the pending mutation for the NUX action
-     */
-    @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "$NuxSync$p_1", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getNuxMutation(String nuxKey, Instant timestamp, boolean acknowledged) {
-        Objects.requireNonNull(nuxKey, "nuxKey cannot be null"); // ADAPTED: defensive null check not present in WA Web
-        Objects.requireNonNull(timestamp, "timestamp cannot be null"); // ADAPTED: defensive null check not present in WA Web
-        var action = new NuxActionBuilder()
-                .acknowledged(acknowledged)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .nuxAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), nuxKey));
-        var pendingMutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(pendingMutation, 0);
-    }
-
-    /**
-     * Acknowledges a NUX item in the local store and builds the pending
-     * mutation to push the change to the server.
-     *
-     * <p>Per WhatsApp Web {@code WAWebNuxSync.acknowledgeNux}, the method
-     * is a thin wrapper over {@code $NuxSync$p_2(nuxKey, true)}. The
-     * underlying {@code $NuxSync$p_2} implementation:
-     * <ol>
-     *   <li>Reads the current millisecond timestamp via
-     *       {@code WATimeUtils.unixTimeMs()}</li>
-     *   <li>Calls {@code WAWebUserPrefsNuxPreferences.updateNuxSyncList}
-     *       with the new entry to update the local NUX store optimistically</li>
-     *   <li>Builds a pending mutation via {@code $NuxSync$p_1}</li>
-     *   <li>Submits it through {@code WAWebSyncdCoreApi.lockForSync([], [mutation],
-     *       () =&gt; Promise.resolve())}</li>
-     *   <li>Returns the timestamp</li>
-     * </ol>
-     *
-     * <p>In Cobalt, the sync submission is left to the caller: this method
-     * applies the local store update and returns the pending mutation so the
-     * caller can enqueue it via the app-state sync pipeline.
-     * @param client the WhatsApp client owning the local NUX store
-     * @param nuxKey the NUX identifier to acknowledge
-     * @return the pending mutation carrying the {@code acknowledged=true} update
-     */
-    @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "acknowledgeNux", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation acknowledgeNux(WhatsAppClient client, String nuxKey) {
-        return updateNuxState(client, nuxKey, true);
-    }
-
-    /**
-     * Unacknowledges a NUX item in the local store and builds the pending
-     * mutation to push the change to the server.
-     *
-     * <p>Per WhatsApp Web {@code WAWebNuxSync.unAcknowledgeNux}, the method
-     * is a thin wrapper over {@code $NuxSync$p_2(nuxKey, false)}. See
-     * {@link #acknowledgeNux(WhatsAppClient, String)} for the full
-     * description of {@code $NuxSync$p_2}.
-     * @param client the WhatsApp client owning the local NUX store
-     * @param nuxKey the NUX identifier to unacknowledge
-     * @return the pending mutation carrying the {@code acknowledged=false} update
-     */
-    @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "unAcknowledgeNux", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation unAcknowledgeNux(WhatsAppClient client, String nuxKey) {
-        return updateNuxState(client, nuxKey, false);
-    }
-
-    /**
-     * Shared implementation of {@link #acknowledgeNux(WhatsAppClient, String)}
-     * and {@link #unAcknowledgeNux(WhatsAppClient, String)}.
-     *
-     * <p>Mirrors WA Web's {@code $NuxSync$p_2} private helper: stamps the
-     * current time, updates the local NUX store optimistically, and
-     * returns a freshly built pending mutation.
-     * @param client       the WhatsApp client owning the local NUX store
-     * @param nuxKey       the NUX identifier
-     * @param acknowledged whether the NUX item should be marked as acknowledged
-     * @return the pending mutation carrying the requested update
-     */
-    @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "$NuxSync$p_2", adaptation = WhatsAppAdaptation.ADAPTED)
-    private SyncPendingMutation updateNuxState(WhatsAppClient client, String nuxKey, boolean acknowledged) {
-        Objects.requireNonNull(client, "client cannot be null"); // ADAPTED: defensive null check not present in WA Web
-        Objects.requireNonNull(nuxKey, "nuxKey cannot be null"); // ADAPTED: defensive null check not present in WA Web
-        var timestamp = Instant.now();
-        client.store().putOnboardingHintState(new OnboardingHintStateBuilder().hintId(nuxKey).dismissed(acknowledged).build()); // ADAPTED: WAWebUserPrefsNuxPreferences.updateNuxSyncList — Cobalt uses typed store quintet
-        return getNuxMutation(nuxKey, timestamp, acknowledged);
-        // ADAPTED: sync submission is delegated to the caller in Cobalt
-    }
 }

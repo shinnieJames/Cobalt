@@ -87,9 +87,7 @@ public final class EncMessageFactory {
         var parentKeyJid = parentKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("Parent key has no parentJid"));
 
-        var originalSender = parentKey.senderJid()
-                .orElse(parentKey.fromMe() ? selfJid : parentKeyJid)
-                .toUserJid();
+        var originalSender = resolveOriginalSender(parentKey, parentKeyJid, selfJid);
 
         var commentContent = comment.message()
                 .orElseThrow(() -> new IllegalArgumentException("Comment has no message content"));
@@ -143,9 +141,7 @@ public final class EncMessageFactory {
         var parentKeyJid = parentKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("Parent key has no parentJid"));
 
-        var originalSender = parentKey.senderJid()
-                .orElse(parentKey.fromMe() ? selfJid : parentKeyJid)
-                .toUserJid();
+        var originalSender = resolveOriginalSender(parentKey, parentKeyJid, selfJid);
 
         var plaintext = ReactionMessageSpec.encode(reaction);
 
@@ -202,9 +198,7 @@ public final class EncMessageFactory {
         var pollKeyJid = pollKey.parentJid()
                 .orElseThrow(() -> new IllegalArgumentException("Poll creation key has no parentJid"));
 
-        var originalSender = pollKey.senderJid()
-                .orElse(pollKey.fromMe() ? voterJid : pollKeyJid)
-                .toUserJid();
+        var originalSender = resolveOriginalSender(pollKey, pollKeyJid, voterJid);
 
         var optionHashes = new ArrayList<byte[]>(selectedOptions.size());
         try {
@@ -237,5 +231,30 @@ public final class EncMessageFactory {
                 .encPayload(encrypted.ciphertext())
                 .encIv(encrypted.iv())
                 .build();
+    }
+
+    /**
+     * Resolves the original-sender JID for the addon HKDF info, mirroring
+     * {@code WAWebMsgGetters.getOriginalSender(parent)}: prefer the
+     * self-author marker (the {@code fromMe} flag), fall back to the
+     * explicit {@code senderJid}, then to the {@code parentJid}.
+     *
+     * @param parentKey    the parent message's key
+     * @param parentKeyJid the parent key's chat JID
+     * @param selfJid      the JID of the local user
+     * @return the resolved original sender in user form
+     */
+    private static Jid resolveOriginalSender(
+            com.github.auties00.cobalt.model.message.MessageKey parentKey,
+            Jid parentKeyJid,
+            Jid selfJid
+    ) {
+        Jid originalSender;
+        if (parentKey.fromMe()) {
+            originalSender = selfJid;
+        } else {
+            originalSender = parentKey.senderJid().orElse(parentKeyJid);
+        }
+        return originalSender.toUserJid();
     }
 }

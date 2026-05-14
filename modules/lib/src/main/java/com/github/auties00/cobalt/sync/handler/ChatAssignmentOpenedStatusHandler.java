@@ -8,15 +8,10 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatAssignmentBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentOpenedStatusAction;
-import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentOpenedStatusActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles chat assignment opened status sync actions.
@@ -33,17 +28,12 @@ import java.util.List;
  */
 @WhatsAppWebModule(moduleName = "WAWebChatAssignmentOpenedStatusSync")
 public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code ChatAssignmentOpenedStatusHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebChatAssignmentOpenedStatusSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final ChatAssignmentOpenedStatusHandler INSTANCE = new ChatAssignmentOpenedStatusHandler();
 
     /**
      * Creates a new {@code ChatAssignmentOpenedStatusHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatAssignmentOpenedStatusSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private ChatAssignmentOpenedStatusHandler() {
+    public ChatAssignmentOpenedStatusHandler() {
 
     }
 
@@ -101,6 +91,11 @@ public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActio
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
             var indexArray = JSON.parseArray(mutation.index());
+            // WAWebChatAssignmentOpenedStatusSync.applyMutations: var t=e.indexParts, n=t[1], i=t[2]; if(n==null||i==null) return r.malformedActionIndex().
+            // Slots 1 and 2 are read unconditionally; mirror the undefined-checks with an explicit size guard.
+            if (indexArray.size() <= 2) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var chatJidString = indexArray.getString(1);
             var agentId = indexArray.getString(2);
             if (chatJidString == null || agentId == null) {
@@ -139,43 +134,4 @@ public final class ChatAssignmentOpenedStatusHandler implements WebAppStateActio
         }
     }
 
-    /**
-     * Builds a pending SET mutation that records whether the given agent has
-     * opened the given chat.
-     *
-     * <p>Per WhatsApp Web
-     * {@code WAWebChatAssignmentOpenedStatusSync.default.createChatOpenedMutations},
-     * the mutation carries a {@link ChatAssignmentOpenedStatusAction} whose
-     * {@code chatOpened} flag records the agent's open state. The index is
-     * {@code ["agentChatAssignmentOpenedStatus", chatJid, agentId]}.
-     * @param chatJid     the JID of the chat
-     * @param agentId     the agent identifier
-     * @param chatOpened  {@code true} when the agent has opened the chat
-     * @param timestamp   the mutation timestamp
-     * @return the pending mutation for the opened-state change
-     */
-    @WhatsAppWebExport(moduleName = "WAWebChatAssignmentOpenedStatusSync", exports = "createChatOpenedMutations", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation createChatOpenedMutation(
-            Jid chatJid,
-            String agentId,
-            boolean chatOpened,
-            Instant timestamp
-    ) {
-        var action = new ChatAssignmentOpenedStatusActionBuilder()
-                .chatOpened(chatOpened)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .chatAssignmentOpenedStatus(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), chatJid.toString(), agentId));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

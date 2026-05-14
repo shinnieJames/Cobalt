@@ -109,13 +109,14 @@ public final class SocketStream {
         // WA Web's module-scoped offlineNotificationsCount map.
         var offlineNotificationsReporter = new OfflineNotificationsReporter(whatsapp, wamService);
         var result = new HashMap<String, Handler>();
-        addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService, companionPairingService, wamService));
+        addHandler(result, "iq", new IqStreamHandler(whatsapp, webVerificationHandler, deviceService, snapshotRecoveryService, lidMigrationService, companionPairingService, wamService));
         addHandler(result, "message", new MessageStreamHandler(
                 whatsapp,
                 messageService,
                 snapshotRecoveryService,
                 webAppStateService,
                 lidMigrationService,
+                abPropsService,
                 wamService
         ));
         addHandler(result, "receipt", new ReceiptStreamHandler(whatsapp, messageService, wamService));
@@ -131,7 +132,7 @@ public final class SocketStream {
                 offlineNotificationsReporter,
                 wamService
         ));
-        addHandler(result, "ib", new InfoBulletinStreamHandler(whatsapp, webAppStateService, offlineNotificationsReporter, wamService));
+        addHandler(result, "ib", new InfoBulletinStreamHandler(whatsapp, webAppStateService, offlineNotificationsReporter, wamService, deviceService));
         addHandler(result, "success", new SuccessStreamHandler(
                 whatsapp,
                 abPropsService,

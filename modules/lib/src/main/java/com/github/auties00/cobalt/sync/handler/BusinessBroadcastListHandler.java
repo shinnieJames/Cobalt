@@ -10,16 +10,11 @@ import com.github.auties00.cobalt.model.business.BroadcastListParticipantBuilder
 import com.github.auties00.cobalt.model.business.BusinessBroadcastListBuilder;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
-import com.github.auties00.cobalt.model.sync.action.business.BroadcastListParticipantAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListAction;
-import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastListActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
@@ -46,16 +41,10 @@ public final class BusinessBroadcastListHandler implements WebAppStateActionHand
     private static final Logger LOGGER = Logger.getLogger(BusinessBroadcastListHandler.class.getName());
 
     /**
-     * The singleton instance of {@code BusinessBroadcastListHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final BusinessBroadcastListHandler INSTANCE = new BusinessBroadcastListHandler();
-
-    /**
      * Creates a new {@code BusinessBroadcastListHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private BusinessBroadcastListHandler() {
+    public BusinessBroadcastListHandler() {
 
     }
 
@@ -119,6 +108,11 @@ public final class BusinessBroadcastListHandler implements WebAppStateActionHand
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
             var indexArray = JSON.parseArray(mutation.index()); // ADAPTED: WAWebBroadcastListSync.applyMutations: var t = e.indexParts (pre-parsed in WA Web)
+            // WAWebBroadcastListSync.applyMutations: var t=e.indexParts, n=t[1]; if(!n) return r.malformedActionIndex().
+            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            if (indexArray.size() <= 1) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var listId = indexArray.getString(1);
             if (listId == null || listId.isEmpty()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -203,103 +197,4 @@ public final class BusinessBroadcastListHandler implements WebAppStateActionHand
         return results;
     }
 
-    /**
-     * Builds a pending SET mutation for creating or updating a business broadcast list with
-     * a {@code null} audience expression.
-     *
-     * <p>Convenience overload that delegates to
-     * {@link #getBroadcastListMutation(String, List, String, Instant, String)} with a
-     * {@code null} audience expression, matching the common WA Web caller path where the
-     * broadcast list is defined purely by its explicit participant snapshot.
-     * @param listId       the broadcast list identifier (index arg)
-     * @param participants the list of broadcast list participants
-     * @param listName     the name of the broadcast list
-     * @param timestamp    the mutation timestamp
-     * @return a pending mutation ready for outbound sync
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "getBroadcastListMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getBroadcastListMutation(
-            String listId,
-            List<BroadcastListParticipantAction> participants,
-            String listName,
-            Instant timestamp
-    ) {
-        return getBroadcastListMutation(listId, participants, listName, timestamp, null); // ADAPTED: WAWebBroadcastListSync.getBroadcastListMutation defaults audience expression to null
-    }
-
-    /**
-     * Builds a pending SET mutation for creating or updating a business broadcast list.
-     *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastListSync.getBroadcastListMutation}), this method
-     * creates a sync action value containing the business broadcast list action with the
-     * supplied participants, list name, an always-empty label id list, and a serialized
-     * audience expression. The mutation is built as a SET operation via
-     * {@code WAWebSyncdActionUtils.buildPendingMutation}.
-     *
-     * <p>WA Web compiles the audience expression object through
-     * {@code WAWebAudienceExpressionTypes.serializeAudienceExpression(i)} before persisting it
-     * on the wire. Cobalt accepts the already-serialized JSON string directly because the
-     * AudienceExpression DSL is not ported; callers must supply the serialized form or
-     * {@code null} to clear it.
-     * @param listId             the broadcast list identifier (index arg)
-     * @param participants       the list of broadcast list participants
-     * @param listName           the name of the broadcast list
-     * @param timestamp          the mutation timestamp
-     * @param audienceExpression the pre-serialized audience expression, or {@code null}
-     * @return a pending mutation ready for outbound sync
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "getBroadcastListMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getBroadcastListMutation(
-            String listId,
-            List<BroadcastListParticipantAction> participants,
-            String listName,
-            Instant timestamp,
-            String audienceExpression
-    ) {
-        var action = new BusinessBroadcastListActionBuilder()
-                .participants(participants)
-                .listName(listName)
-                .labelIds(List.of())
-                .audienceExpression(audienceExpression)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .businessBroadcastListAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), listId));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
-
-    /**
-     * Builds a pending REMOVE mutation for deleting a business broadcast list.
-     *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastListSync.getDeleteBroadcastListMutation}),
-     * this method creates a sync action value with an empty payload and builds
-     * a REMOVE operation via {@code WAWebSyncdActionUtils.buildPendingMutation}.
-     * @param listId    the broadcast list identifier to remove
-     * @param timestamp the mutation timestamp
-     * @return a pending mutation ready for outbound sync
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "getDeleteBroadcastListMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getDeleteBroadcastListMutation(String listId, Instant timestamp) {
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), listId));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.REMOVE,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

@@ -19,6 +19,7 @@ import com.github.auties00.cobalt.message.preview.source.GroupInvitePreviewResol
 import com.github.auties00.cobalt.message.preview.source.NewsletterPreviewResolver;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import it.auties.linkpreview.LinkPreview;
 import it.auties.linkpreview.LinkPreviewMedia;
 
@@ -28,10 +29,8 @@ import java.net.http.HttpClient;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.WeakHashMap;
 
 /**
  * Orchestrates the rich link-preview pipeline for outgoing
@@ -50,36 +49,23 @@ import java.util.WeakHashMap;
  * {@code GENERATE_LINK_PREVIEW} peer-data-operation does not apply;
  * the direct fetch path is the canonical implementation here.
  *
- * <p>The service is constructed lazily per {@link WhatsAppClient} via
- * {@link #forClient(WhatsAppClient)} so the per-session cache and the
- * HTTP client survive across messages but do not leak across clients.
+ * <p>Instances are owned by the caller (typically the
+ * {@code MessageSendingService}) and re-used across sends so the
+ * preview cache and HTTP client amortise their setup cost.
  */
 @WhatsAppWebModule(moduleName = "WAWebLinkPreviewChatAction")
 public final class LinkPreviewService {
     /**
-     * Per-client registry so each {@link WhatsAppClient} owns one
-     * instance, with its own cache and HTTP client.
-     */
-    private static final Map<WhatsAppClient, LinkPreviewService> SERVICES = new WeakHashMap<>();
-
-    /**
-     * Returns the {@link LinkPreviewService} bound to {@code client},
-     * creating it on first access.
-     *
-     * @param client the client whose preview pipeline is requested
-     * @return the bound service
-     */
-    public static LinkPreviewService forClient(WhatsAppClient client) {
-        Objects.requireNonNull(client, "client cannot be null");
-        synchronized (SERVICES) {
-            return SERVICES.computeIfAbsent(client, LinkPreviewService::new);
-        }
-    }
-
-    /**
-     * The owning client.
+     * The owning client, used for store access and newsletter MEX
+     * round-trips.
      */
     private final WhatsAppClient client;
+
+    /**
+     * The AB-props service consulted to gate the rich fetch and to
+     * derive the per-request HTTP timeout.
+     */
+    private final ABPropsService abPropsService;
 
     /**
      * Per-session preview cache.
@@ -96,10 +82,13 @@ public final class LinkPreviewService {
     /**
      * Creates a fresh service bound to {@code client}.
      *
-     * @param client the owning client
+     * @param client         the owning client
+     * @param abPropsService the AB-props service used for feature
+     *                       gating and timeout configuration
      */
-    private LinkPreviewService(WhatsAppClient client) {
-        this.client = client;
+    public LinkPreviewService(WhatsAppClient client, ABPropsService abPropsService) {
+        this.client = Objects.requireNonNull(client, "client cannot be null");
+        this.abPropsService = Objects.requireNonNull(abPropsService, "abPropsService cannot be null");
         this.cache = new LinkPreviewCache();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -120,7 +109,7 @@ public final class LinkPreviewService {
     @WhatsAppWebExport(moduleName = "WAWebABProps", exports = "getABPropConfigValue",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private Duration linkPreviewTimeout() {
-        var seconds = client.abPropsService().getInt(ABProp.LINK_PREVIEW_WAIT_TIME);
+        var seconds = abPropsService.getInt(ABProp.LINK_PREVIEW_WAIT_TIME);
         return Duration.ofSeconds(Math.max(1, seconds));
     }
 
@@ -156,7 +145,7 @@ public final class LinkPreviewService {
         if (SuspiciousLinks.isSuspicious(client, chatJid, match)) {
             return;
         }
-        if (!DomainPreviewableGate.isPreviewable(client, chatJid, match.domain())) {
+        if (!DomainPreviewableGate.isPreviewable(client, abPropsService, chatJid, match.domain())) {
             return;
         }
         var newsletterChat = chatJid != null && chatJid.hasNewsletterServer();
@@ -172,7 +161,7 @@ public final class LinkPreviewService {
         // PaymentLink threads through previewType and paymentDetails and continues into
         // the rich fetch so the page title and description populate the card. Anything
         // else goes straight to rich fetch, or to the newsletter MEX for newsletter chats.
-        var command = DeepLinkParser.parse(client, match.href());
+        var command = DeepLinkParser.parse(client, abPropsService, match.href());
         var previewType = ExtendedTextMessage.PreviewType.NONE;
         PaymentLinkDetails paymentDetails = null;
         var attached = false;
@@ -252,7 +241,7 @@ public final class LinkPreviewService {
                                       PaymentLinkDetails paymentDetails) {
         // When web_link_preview_sync_enabled is off the rich fetch is skipped and the
         // minimal fallback is attached, mirroring the JS genMinimalLinkPreview branch.
-        if (!client.abPropsService().getBool(ABProp.WEB_LINK_PREVIEW_SYNC_ENABLED)) {
+        if (!abPropsService.getBool(ABProp.WEB_LINK_PREVIEW_SYNC_ENABLED)) {
             attachMinimal(match, message, baselinePreviewType, paymentDetails);
             return true;
         }

@@ -3,10 +3,10 @@ package com.github.auties00.cobalt.call.transport.relay;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.util.DataUtils;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
 
@@ -110,13 +110,11 @@ public final class WaRelayXorAddress {
         if (attrValue.length < 4) {
             throw new IllegalArgumentException("XOR-ADDRESS attr too short: " + attrValue.length);
         }
-        var buf = ByteBuffer.wrap(attrValue).order(ByteOrder.BIG_ENDIAN);
-        var reserved = buf.get();
-        if (reserved != 0) {
+        if (attrValue[0] != 0) {
             throw new IllegalArgumentException("XOR-ADDRESS reserved byte != 0");
         }
-        var family = buf.get() & 0xFF;
-        var xPort = buf.getShort() & 0xFFFF;
+        var family = attrValue[1] & 0xFF;
+        var xPort = DataUtils.getShort(attrValue, 2, ByteOrder.BIG_ENDIAN) & 0xFFFF;
         var port = xPort ^ (WaRelayPacket.MAGIC_COOKIE >>> 16);
 
         return switch (family) {
@@ -125,12 +123,10 @@ public final class WaRelayXorAddress {
                     throw new IllegalArgumentException("IPv4 XOR-ADDRESS must be 8 bytes, got " + attrValue.length);
                 }
                 var addrBytes = new byte[4];
-                buf.get(addrBytes);
-                var cookie = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
-                        .putInt(WaRelayPacket.MAGIC_COOKIE).array();
-                for (var i = 0; i < 4; i++) {
-                    addrBytes[i] ^= cookie[i];
-                }
+                System.arraycopy(attrValue, 4, addrBytes, 0, 4);
+                DataUtils.putInt(addrBytes, 0,
+                        DataUtils.getInt(addrBytes, 0, ByteOrder.BIG_ENDIAN) ^ WaRelayPacket.MAGIC_COOKIE,
+                        ByteOrder.BIG_ENDIAN);
                 try {
                     yield new WaRelayXorAddress(InetAddress.getByAddress(addrBytes), port);
                 } catch (UnknownHostException e) {
@@ -142,13 +138,12 @@ public final class WaRelayXorAddress {
                     throw new IllegalArgumentException("IPv6 XOR-ADDRESS must be 20 bytes, got " + attrValue.length);
                 }
                 var addrBytes = new byte[16];
-                buf.get(addrBytes);
-                var mask = ByteBuffer.allocate(16).order(ByteOrder.BIG_ENDIAN);
-                mask.putInt(WaRelayPacket.MAGIC_COOKIE);
-                mask.put(transactionId);
-                var maskBytes = mask.array();
-                for (var i = 0; i < 16; i++) {
-                    addrBytes[i] ^= maskBytes[i];
+                System.arraycopy(attrValue, 4, addrBytes, 0, 16);
+                DataUtils.putInt(addrBytes, 0,
+                        DataUtils.getInt(addrBytes, 0, ByteOrder.BIG_ENDIAN) ^ WaRelayPacket.MAGIC_COOKIE,
+                        ByteOrder.BIG_ENDIAN);
+                for (var i = 0; i < 12; i++) {
+                    addrBytes[i + 4] ^= transactionId[i];
                 }
                 try {
                     yield new WaRelayXorAddress(InetAddress.getByAddress(addrBytes), port);
@@ -173,27 +168,19 @@ public final class WaRelayXorAddress {
         Objects.requireNonNull(transactionId, "transactionId cannot be null");
         var addrBytes = address.getAddress().clone();
         var family = addrBytes.length == 4 ? FAMILY_IPV4 : FAMILY_IPV6;
-        var buf = ByteBuffer.allocate(4 + addrBytes.length).order(ByteOrder.BIG_ENDIAN);
-        buf.put((byte) 0); // reserved
-        buf.put((byte) family);
-        buf.putShort((short) (port ^ (WaRelayPacket.MAGIC_COOKIE >>> 16)));
-        if (family == FAMILY_IPV4) {
-            var cookie = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
-                    .putInt(WaRelayPacket.MAGIC_COOKIE).array();
-            for (var i = 0; i < 4; i++) {
-                addrBytes[i] ^= cookie[i];
-            }
-        } else {
-            var mask = ByteBuffer.allocate(16).order(ByteOrder.BIG_ENDIAN);
-            mask.putInt(WaRelayPacket.MAGIC_COOKIE);
-            mask.put(transactionId);
-            var maskBytes = mask.array();
-            for (var i = 0; i < 16; i++) {
-                addrBytes[i] ^= maskBytes[i];
+        DataUtils.putInt(addrBytes, 0,
+                DataUtils.getInt(addrBytes, 0, ByteOrder.BIG_ENDIAN) ^ WaRelayPacket.MAGIC_COOKIE,
+                ByteOrder.BIG_ENDIAN);
+        if (family == FAMILY_IPV6) {
+            for (var i = 0; i < 12; i++) {
+                addrBytes[i + 4] ^= transactionId[i];
             }
         }
-        buf.put(addrBytes);
-        return buf.array();
+        var result = new byte[4 + addrBytes.length];
+        result[1] = (byte) family;
+        DataUtils.putShort(result, 2, (short) (port ^ (WaRelayPacket.MAGIC_COOKIE >>> 16)), ByteOrder.BIG_ENDIAN);
+        System.arraycopy(addrBytes, 0, result, 4, addrBytes.length);
+        return result;
     }
 
     /**

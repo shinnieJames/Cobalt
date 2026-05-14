@@ -1,14 +1,11 @@
-package com.github.auties00.cobalt.call.parity;
+package com.github.auties00.cobalt.call.signaling;
 
-import com.github.auties00.cobalt.call.signaling.CallIdGenerator;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Parity test for {@link CallIdGenerator}.

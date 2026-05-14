@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.AvatarUpdatedAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles {@code avatar_updated_action} app-state sync mutations.
@@ -34,17 +35,19 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 @WhatsAppWebModule(moduleName = "WAWebStickersAvatarUpdatedSyncAction")
 public final class AvatarUpdatedHandler implements WebAppStateActionHandler {
     /**
-     * Singleton instance shared by the {@code WebAppStateHandlerRegistry}.
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebStickersAvatarUpdatedSyncAction", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final AvatarUpdatedHandler INSTANCE = new AvatarUpdatedHandler();
+    private final ABPropsService abPropsService;
 
     /**
      * Constructs a new handler.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebStickersAvatarUpdatedSyncAction", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private AvatarUpdatedHandler() {
-
+    public AvatarUpdatedHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -94,7 +97,7 @@ public final class AvatarUpdatedHandler implements WebAppStateActionHandler {
         //   if (!WAWebAvatarGatingUtils.avatarsOnWebEnabled())
         //     return mutations.map(() => ({actionState: Unsupported}))
         //   return WAWebABProps.getABPropConfigValue("enable_avatars_on_web_companion")
-        if (!client.abPropsService().getBool(ABProp.ENABLE_AVATARS_ON_WEB_COMPANION)) {
+        if (!abPropsService.getBool(ABProp.ENABLE_AVATARS_ON_WEB_COMPANION)) {
             return MutationApplicationResult.unsupported();
         }
 

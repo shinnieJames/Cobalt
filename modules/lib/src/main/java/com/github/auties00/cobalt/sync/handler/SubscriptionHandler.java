@@ -54,16 +54,10 @@ public final class SubscriptionHandler implements WebAppStateActionHandler {
     private static final Logger LOGGER = Logger.getLogger(SubscriptionHandler.class.getName());
 
     /**
-     * The singleton instance of {@code SubscriptionHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebSubscriptionsSyncV2Sync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final SubscriptionHandler INSTANCE = new SubscriptionHandler();
-
-    /**
      * Private constructor to enforce the singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebSubscriptionsSyncV2Sync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private SubscriptionHandler() {
+    public SubscriptionHandler() {
 
     }
 

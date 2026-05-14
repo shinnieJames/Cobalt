@@ -106,7 +106,7 @@ final class TemporaryStoreFactory implements WhatsAppStoreFactory {
                 false, null, null, null, null, null, jid, null, null, null, null, null, null, null, null,
                 new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),
                 false, false, null, null, false, false, false,
-                false, false, false, false, false, false,
+                false, false, false, false, false,
                 null, noiseKeyPair, identityKeyPair, null, null, new LinkedHashMap<>(),
                 null, null, null, identityId, null,
                 new ConcurrentHashMap<>(), new LinkedHashMap<>(), new ConcurrentHashMap<>(), new ConcurrentHashMap<>(),

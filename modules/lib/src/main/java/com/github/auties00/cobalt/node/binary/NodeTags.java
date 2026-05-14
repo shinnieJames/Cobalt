@@ -10,13 +10,13 @@ import com.github.auties00.cobalt.node.Node;
  * <p>The wire format places a single tag byte before every value to identify
  * its shape: an empty list, a dictionary token, a sized list, a JID variant,
  * a hex or nibble packed string, or a binary blob with an 8, 20, or 32 bit
- * length prefix. {@link NodeEncoder} and {@link NodeDecoder} consult these
+ * length prefix. {@link NodeWriter} and {@link NodeReader} consult these
  * constants while translating between {@link Node} trees and their serialised
  * form.
  *
  * @see Node
- * @see NodeEncoder
- * @see NodeDecoder
+ * @see NodeWriter
+ * @see NodeReader
  */
 @WhatsAppWebModule(moduleName = "WAWap")
 public final class NodeTags {

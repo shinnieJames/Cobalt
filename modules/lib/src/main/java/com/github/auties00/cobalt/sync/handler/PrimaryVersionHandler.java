@@ -43,16 +43,10 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
     private static final String INDEX_SESSION_START = "session_start";
 
     /**
-     * The singleton instance of {@code PrimaryVersionHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final PrimaryVersionHandler INSTANCE = new PrimaryVersionHandler();
-
-    /**
      * Constructs the singleton instance.
      */
     @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private PrimaryVersionHandler() {
+    public PrimaryVersionHandler() {
 
     }
 
@@ -140,6 +134,11 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
         }
 
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebPrimaryVersionSync.applyMutations: var i=e.indexParts, s=i[1]; if(!s||...) return n.malformedActionIndex().
+        // indexParts[1] is undefined when missing; mirror with explicit size check.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var subIndex = indexArray.getString(1);
         if (subIndex == null || subIndex.isEmpty() || (!subIndex.equals(INDEX_CURRENT) && !subIndex.equals(INDEX_SESSION_START))) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());

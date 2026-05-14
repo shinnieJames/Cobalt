@@ -2,6 +2,8 @@ package com.github.auties00.cobalt.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -9,9 +11,11 @@ import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -104,6 +108,52 @@ public class NativeLibLoaderTest {
     }
 
     /**
+     * Reproduces the parallel-JVM extraction failure: when two Cobalt
+     * processes start at once, the first one's {@link System#load}
+     * call hands {@code opus.dll} to Windows {@code LoadLibrary},
+     * which opens it without {@code FILE_SHARE_DELETE}. The second
+     * process's {@code extractFromClasspath} then tried
+     * {@code Files.copy(REPLACE_EXISTING)} into the same cache slot
+     * and crashed with {@link java.nio.file.AccessDeniedException}
+     * because the delete-then-rewrite step couldn't unlink a loaded
+     * DLL.
+     *
+     * <p>The bug is reproduced inside one JVM by:
+     *
+     * <ol>
+     *   <li>loading {@code opus} once — extracts the binary and
+     *       calls {@link System#load}, which locks the file on
+     *       Windows;</li>
+     *   <li>calling {@link NativeLibLoader#clearCache()} — drops the
+     *       in-process {@code SymbolLookup} cache without unloading
+     *       the native library (the OS lock persists);</li>
+     *   <li>calling {@link NativeLibLoader#load} again — re-enters
+     *       {@code extractFromClasspath} against the locked file,
+     *       which is exactly what a parallel JVM would do.</li>
+     * </ol>
+     *
+     * <p>Before the fix this threw
+     * {@code UncheckedIOException(AccessDeniedException)} on Windows.
+     * After the fix the loader fast-paths on a size-matching cached
+     * file and never attempts to delete the locked target. On Linux
+     * and macOS the {@code LoadLibrary}-style file lock doesn't
+     * exist, but the same test still exercises the fast path
+     * regression-wise.
+     */
+    @Test
+    public void parallelExtractionDoesNotFailWhenTargetIsLocked() {
+        try {
+            NativeLibLoader.load("opus", Arena.global());
+            NativeLibLoader.clearCache();
+            assertDoesNotThrow(() -> NativeLibLoader.load("opus", Arena.global()),
+                    "second load on a target locked by an earlier System.load "
+                            + "must reuse the cached binary, not re-extract over it");
+        } finally {
+            NativeLibLoader.clearCache();
+        }
+    }
+
+    /**
      * Two synthetic manifests with disjoint keys are merged into one
      * lookup map without a conflict — the toolkit's manifest will
      * declare {@code ffmpeg-*} entries, the lib's will declare
@@ -116,32 +166,10 @@ public class NativeLibLoaderTest {
     public void disjointManifestsMergeWithoutConflict() throws Exception {
         var libManifest = parseManifestReflectively(
                 "lib.jar!/META-INF/native-checksums.json",
-                """
-                {
-                  "version": "0.1.0",
-                  "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "binaries": {
-                    "opus/linux-x86_64": {
-                      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-                      "size": 100,
-                      "path": "modules/lib/dependencies/libopus/bin/linux-x86_64/libopus.so"
-                    }
-                  }
-                }""");
+                readFixture("fixtures/native-lib/manifest-lib-opus.json"));
         var toolkitManifest = parseManifestReflectively(
                 "toolkit.jar!/META-INF/native-checksums.json",
-                """
-                {
-                  "version": "0.1.0",
-                  "commitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                  "binaries": {
-                    "ffmpeg-avformat/linux-x86_64": {
-                      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
-                      "size": 200,
-                      "path": "modules/call-toolkit/dependencies/ffmpeg/bin/linux-x86_64/libavformat.so"
-                    }
-                  }
-                }""");
+                readFixture("fixtures/native-lib/manifest-toolkit-ffmpeg-avformat.json"));
         verifyNoConflictsReflectively(List.of(libManifest, toolkitManifest));
     }
 
@@ -157,32 +185,10 @@ public class NativeLibLoaderTest {
     public void conflictingManifestsThrow() throws Exception {
         var first = parseManifestReflectively(
                 "first.jar!/META-INF/native-checksums.json",
-                """
-                {
-                  "version": "0.1.0",
-                  "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "binaries": {
-                    "opus/linux-x86_64": {
-                      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-                      "size": 100,
-                      "path": "modules/lib/dependencies/libopus/bin/linux-x86_64/libopus.so"
-                    }
-                  }
-                }""");
+                readFixture("fixtures/native-lib/manifest-lib-opus.json"));
         var second = parseManifestReflectively(
                 "second.jar!/META-INF/native-checksums.json",
-                """
-                {
-                  "version": "0.1.0",
-                  "commitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                  "binaries": {
-                    "opus/linux-x86_64": {
-                      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                      "size": 100,
-                      "path": "modules/lib/dependencies/libopus/bin/linux-x86_64/libopus.so"
-                    }
-                  }
-                }""");
+                readFixture("fixtures/native-lib/manifest-lib-opus-conflicting-sha.json"));
         var thrown = assertThrows(InvocationTargetException.class,
                 () -> verifyNoConflictsReflectively(List.of(first, second)));
         var cause = thrown.getCause();
@@ -201,36 +207,34 @@ public class NativeLibLoaderTest {
      */
     @Test
     public void identicalEntriesAcrossManifestsAreAllowed() throws Exception {
-        var sha = "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+        var manifestJson = readFixture("fixtures/native-lib/manifest-lib-opus-identical.json");
         var first = parseManifestReflectively(
-                "first.jar!/META-INF/native-checksums.json",
-                """
-                {
-                  "version": "0.1.0",
-                  "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "binaries": {
-                    "opus/linux-x86_64": {
-                      "sha256": "%s",
-                      "size": 100,
-                      "path": "modules/lib/dependencies/libopus/bin/linux-x86_64/libopus.so"
-                    }
-                  }
-                }""".formatted(sha));
+                "first.jar!/META-INF/native-checksums.json", manifestJson);
         var second = parseManifestReflectively(
-                "second.jar!/META-INF/native-checksums.json",
-                """
-                {
-                  "version": "0.1.0",
-                  "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "binaries": {
-                    "opus/linux-x86_64": {
-                      "sha256": "%s",
-                      "size": 100,
-                      "path": "modules/lib/dependencies/libopus/bin/linux-x86_64/libopus.so"
-                    }
-                  }
-                }""".formatted(sha));
+                "second.jar!/META-INF/native-checksums.json", manifestJson);
         verifyNoConflictsReflectively(List.of(first, second));
+    }
+
+    /**
+     * Loads a manifest fixture from the test classpath as a UTF-8
+     * string.
+     *
+     * @param resourcePath the path under {@code src/test/resources/}
+     *                     (e.g.
+     *                     {@code "fixtures/native-lib/manifest-lib-opus.json"})
+     * @return the file contents
+     * @throws UncheckedIOException if the resource is missing or
+     *                              cannot be read
+     */
+    private static String readFixture(String resourcePath) {
+        try (var in = NativeLibLoaderTest.class.getResourceAsStream("/" + resourcePath)) {
+            if (in == null) {
+                throw new IOException("fixture not found on classpath: " + resourcePath);
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("failed to read fixture: " + resourcePath, e);
+        }
     }
 
     /**

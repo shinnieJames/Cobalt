@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.PnForLidChatAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 /**
  * Handles the {@code pn_for_lid_chat} app state sync action, which carries a
@@ -33,23 +34,20 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 @WhatsAppWebModule(moduleName = "WAWebPnForLidChatSync")
 public final class PnForLidChatHandler implements WebAppStateActionHandler {
     /**
-     * Canonical stateless instance of this handler.
-     *
-     * <p>Per WhatsApp Web {@code WAWebPnForLidChatSync}, the default export is a
-     * single {@code new d(...)} instance registered with the sync action
-     * registry; Cobalt exposes the same singleton via this constant.
+     * The AB-props service consulted before applying any mutation.
      */
-    @WhatsAppWebExport(moduleName = "WAWebPnForLidChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final PnForLidChatHandler INSTANCE = new PnForLidChatHandler();
+    private final ABPropsService abPropsService;
 
     /**
-     * Constructs the singleton handler instance.
+     * Constructs the handler instance bound to the given AB-props
+     * service.
      *
-     * <p>Kept {@code private} so that all callers go through {@link #INSTANCE}.
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebPnForLidChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private PnForLidChatHandler() {
-
+    public PnForLidChatHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -120,7 +118,7 @@ public final class PnForLidChatHandler implements WebAppStateActionHandler {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPnForLidChatSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!client.abPropsService().getBool(ABProp.PNH_PN_FOR_LID_CHAT_SYNC)) {
+        if (!abPropsService.getBool(ABProp.PNH_PN_FOR_LID_CHAT_SYNC)) {
             return MutationApplicationResult.unsupported();
         }
 

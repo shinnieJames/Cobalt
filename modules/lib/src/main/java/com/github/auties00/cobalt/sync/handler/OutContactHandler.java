@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.OutContactAction;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
@@ -37,15 +38,14 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebOutContactSync")
 public final class OutContactHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of this handler.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebOutContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final OutContactHandler INSTANCE = new OutContactHandler();
-
-    /**
      * Logger for diagnostic messages emitted during out-contact sync processing.
      */
     private static final Logger LOGGER = Logger.getLogger(OutContactHandler.class.getName());
+
+    /**
+     * The AB-props service consulted before applying any mutation.
+     */
+    private final ABPropsService abPropsService;
 
     /**
      * Value of the {@code out_contact_invites_enabled} AB prop that enables the
@@ -54,11 +54,15 @@ public final class OutContactHandler implements WebAppStateActionHandler {
     private static final int OUT_CONTACT_INVITES_ENABLED_VALUE = 1;
 
     /**
-     * Private constructor preventing external instantiation.
+     * Constructs the handler instance bound to the given AB-props
+     * service.
+     *
+     * @param abPropsService the AB-props service consulted on every
+     *                       mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebOutContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private OutContactHandler() {
-
+    public OutContactHandler(ABPropsService abPropsService) {
+        this.abPropsService = abPropsService;
     }
 
     /**
@@ -131,12 +135,17 @@ public final class OutContactHandler implements WebAppStateActionHandler {
     @WhatsAppWebExport(moduleName = "WAWebOutContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         //     return t.map(function() { return {actionState: Unsupported} })
-        var gateValue = client.abPropsService().getInt(ABProp.OUT_CONTACT_INVITES_ENABLED);
+        var gateValue = abPropsService.getInt(ABProp.OUT_CONTACT_INVITES_ENABLED);
         if (gateValue != OUT_CONTACT_INVITES_ENABLED_VALUE) {
             return MutationApplicationResult.unsupported();
         }
 
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebOutContactSync.applyMutations: var d=l.indexParts[1]; if(d==null) return malformedActionValue(...).
+        // indexParts[1] is undefined when missing; mirror with explicit size check before getString.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionValue(collectionName().name());
+        }
         var userJidString = indexArray.getString(1);
         if (userJidString == null) {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());

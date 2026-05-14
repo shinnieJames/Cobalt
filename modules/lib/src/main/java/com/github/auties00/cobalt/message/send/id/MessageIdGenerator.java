@@ -6,8 +6,6 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.util.DataUtils;
 
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,14 +54,6 @@ public final class MessageIdGenerator {
      * Holds the uppercase hex formatter that matches WA Web's {@code WAHex.toHex}.
      */
     private static final HexFormat HEX = HexFormat.of().withUpperCase();
-
-    /**
-     * Holds the {@link VarHandle} used to write a {@code long} in big-endian
-     * order into a {@code byte[]}, mirroring WA Web's {@code WABinary.writeInt64}.
-     */
-    private static final VarHandle LONG_BE = MethodHandles.byteArrayViewVarHandle(
-            long[].class, ByteOrder.BIG_ENDIAN
-    );
 
     /**
      * Prevents instantiation of this utility class.
@@ -148,7 +138,7 @@ public final class MessageIdGenerator {
         var payload = new byte[Long.BYTES + jidBytes.length + randomBytes.length];
         var offset = 0;
 
-        LONG_BE.set(payload, offset, timestamp);
+        DataUtils.putLong(payload, offset, timestamp, ByteOrder.BIG_ENDIAN);
         offset += Long.BYTES;
 
         System.arraycopy(jidBytes, 0, payload, offset, jidBytes.length);

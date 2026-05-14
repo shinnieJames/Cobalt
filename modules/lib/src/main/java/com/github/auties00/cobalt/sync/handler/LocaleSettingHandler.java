@@ -1,22 +1,14 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.LocaleSetting;
-import com.github.auties00.cobalt.model.sync.action.setting.LocaleSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
-import java.util.Objects;
 
 /**
  * Applies {@code setting_locale} mutations decoded from app state sync.
@@ -37,21 +29,14 @@ import java.util.Objects;
  *       virtual thread.</li>
  * </ol>
  *
- * <p>As on WA Web, the mutation is skipped entirely on the Windows hybrid
- * client because locale management is delegated to the host operating
- * system there.
+ * <p>WA Web skips the mutation entirely on the Windows-hybrid Electron
+ * build because the host OS owns locale on that platform. Cobalt is not
+ * an Electron host and has no IPC bridge to delegate to, so the gate is
+ * intentionally absent — every mutation is applied to the Cobalt store
+ * regardless of which platform descriptor the companion identifies as.
  */
 @WhatsAppWebModule(moduleName = "WAWebLocaleSettingSync")
 public final class LocaleSettingHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of this handler.
-     *
-     * <p>WA Web instantiates the handler exactly once at module evaluation
-     * time via {@code var _ = new p; l.default = _;}. Cobalt mirrors that by
-     * exposing a module-level constant.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLocaleSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final LocaleSettingHandler INSTANCE = new LocaleSettingHandler();
 
     /**
      * Creates a new {@code LocaleSettingHandler}.
@@ -60,7 +45,7 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
      * {@link #INSTANCE}, matching the WA Web module-level singleton.
      */
     @WhatsAppWebExport(moduleName = "WAWebLocaleSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private LocaleSettingHandler() {
+    public LocaleSettingHandler() {
 
     }
 
@@ -103,14 +88,9 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
      *
      * <p>This method implements the body of the WA Web per-mutation callback
      * passed to {@code Promise.all(a.map(async e => { ... }))} inside
-     * {@code applyMutations(a)}. The order of checks mirrors WA Web exactly:
+     * {@code applyMutations(a)}. The order of checks mirrors WA Web exactly,
+     * minus the Windows-hybrid runtime gate which does not apply to Cobalt:
      * <ol>
-     *   <li><b>Windows hybrid short-circuit</b> — WA Web uses
-     *       {@code WAWebEnvironment.isWindows} (the {@code win_hybrid} runtime
-     *       gate) to skip the mutation entirely. Cobalt uses the paired device
-     *       platform, matching {@code SettingsSyncHandler}'s convention of
-     *       treating {@link ClientPlatformType#WINDOWS} as the Windows hybrid
-     *       client.</li>
      *   <li><b>Operation filter</b> — WA Web falls through to the final
      *       {@code p++; return {actionState: Unsupported};} branch for any
      *       operation other than {@code "set"}. Cobalt returns
@@ -133,6 +113,14 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
      *   <li><b>Success</b> — returns {@link MutationApplicationResult#success()}.</li>
      * </ol>
      *
+     * <p>WA Web also wraps the body in a {@code WAWebEnvironment.isWindows}
+     * short-circuit that returns {@code Skipped} on the Windows-hybrid
+     * Electron build, because the host OS owns locale on that platform and
+     * the renderer delegates via the hybrid IPC bridge. Cobalt has no
+     * Electron host and no IPC bridge — the locale must be applied to the
+     * store unconditionally so listeners can observe the change. The gate
+     * is therefore intentionally absent in Cobalt's adaptation.
+     *
      * <p>WA Web also increments local telemetry counters ({@code i}, {@code l},
      * {@code p}), appends each applied locale to a bounded {@code _} array
      * ({@code if (_.length < 3) _.push(s)}), and emits {@code WALogger.LOG}/
@@ -147,8 +135,8 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
      * pluggable error model.
      * @param client   the WhatsApp client the mutation is being applied to
      * @param mutation the trusted, decoded mutation to apply
-     * @return {@link MutationApplicationResult#skipped()} on Windows hybrid or
-     *         null locale; {@link MutationApplicationResult#unsupported()} for
+     * @return {@link MutationApplicationResult#skipped()} on null locale;
+     *         {@link MutationApplicationResult#unsupported()} for
      *         non-{@code SET} operations; {@link MutationApplicationResult#malformed()}
      *         if the decoded action is not a {@link LocaleSetting};
      *         {@link MutationApplicationResult#success()} otherwise
@@ -156,10 +144,6 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLocaleSettingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (client.store().device() != null && client.store().device().platform() == ClientPlatformType.WINDOWS) {
-            return MutationApplicationResult.skipped();
-        }
-
         if (mutation.operation() != SyncdOperation.SET) {
             return MutationApplicationResult.unsupported();
         }
@@ -190,42 +174,4 @@ public final class LocaleSettingHandler implements WebAppStateActionHandler {
         return MutationApplicationResult.success();
     }
 
-    /**
-     * Builds a pending {@code setting_locale} mutation that broadcasts the
-     * given locale to every linked device.
-     *
-     * <p>WA Web does not ship a dedicated {@code getLocaleMutation} helper on
-     * {@code WAWebLocaleSettingSync}; outgoing locale changes go through the
-     * generic {@code WAWebSyncdActionUtils.buildPendingMutation} pathway used
-     * by every other {@code AccountSyncdActionBase} subclass. Cobalt exposes
-     * a typed helper here — mirroring {@code WAWebPushNameSync.getPushnameMutation}
-     * and {@code WAWebDisableLinkPreviewsSync.getMutation} — so the public
-     * {@code WhatsAppClient.changeLocale} setter can build a single mutation
-     * without hand-rolling the protobuf wrapping.
-     * @param timestamp the mutation timestamp
-     * @param locale    the new BCP-47 locale tag (e.g. {@code "en_US"})
-     * @return a pending mutation carrying the {@code setting_locale} action
-     * @throws NullPointerException if {@code timestamp} or {@code locale} is {@code null}
-     */
-    @WhatsAppWebExport(moduleName = "WAWebSyncdActionUtils", exports = "buildPendingMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getLocaleMutation(Instant timestamp, String locale) {
-        Objects.requireNonNull(timestamp, "timestamp cannot be null");
-        Objects.requireNonNull(locale, "locale cannot be null");
-        var setting = new LocaleSettingBuilder() // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation value shape: {localeSetting: {locale: s}}
-                .locale(locale)
-                .build();
-        var value = new SyncActionValueBuilder() // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation: encodeProtobuf(SyncActionValueSpec, {...l, timestamp: i})
-                .timestamp(timestamp)
-                .localeSetting(setting)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName())); // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation: index = JSON.stringify([action].concat(indexArgs)) with indexArgs = []
-        var pending = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET, // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation: operation: SyncdOperation.SET
-                timestamp,
-                version() // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation: version: this.getVersion()
-        );
-        return new SyncPendingMutation(pending, 0);
-    }
 }

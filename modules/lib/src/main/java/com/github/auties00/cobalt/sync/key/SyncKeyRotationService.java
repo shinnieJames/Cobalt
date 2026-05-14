@@ -172,7 +172,6 @@ public final class SyncKeyRotationService {
 
         var newKeysStored = new ArrayList<AppStateSyncKey>(); // WAWebSyncdHandleKeyShare.handleKeyShare: keys stored via setSyncKeyInTransaction
         var resolvedAny = false; // WAWebSyncdStoreMissingKeys.updateMissingKeys: tracks if +keys removed from missing
-        var negativeResponseObserved = false; // WAWebSyncdStoreMissingKeys.updateMissingKeys: tracks if -keys updated
 
         for (var key : keys) { // WAWebSyncdHandleKeyShare.handleKeyShare: yield Promise.all(r.map(...))
             var keyIdBytes = key.keyId() // WAWebSyncdHandleKeyShare.handleKeyShare: var a = e.keyId
@@ -225,7 +224,6 @@ public final class SyncKeyRotationService {
                     if (missingKey != null && missingKey.wasAsked(senderDeviceId)) { // WAWebSyncdStoreMissingKeys.updateMissingKeys: bulkGet(i).filter(Boolean)
                         if (!missingKey.hasDeviceRespondedWithoutKey(senderDeviceId)) {
                             missingKey.markDeviceRespondedWithoutKey(senderDeviceId); // WAWebSyncdStoreMissingKeys.updateMissingKeys: e.deviceResponses.set(r, !1)
-                            negativeResponseObserved = true;
                         }
                         // WAWebSyncdStoreMissingKeys._checkMissingKeyOnAllClients (N): check after update
                         if (missingKey.isMissingOnAllDevices()) {
@@ -244,13 +242,6 @@ public final class SyncKeyRotationService {
         // WAWebSyncdStoreMissingKeys.updateMissingKeys: yield I({MissingKeyStore: t}) — reschedule timeout after +keys removed
         if (resolvedAny) {
             webAppStateService.rescheduleMissingSyncKeyTimeout(); // WAWebSyncdStoreMissingKeys._setMissingKeyTimeout
-        }
-
-        // ADAPTED: Cobalt store flag — when missing key state changes (positive or negative
-        // response from a peer), the cached "syncedWebAppState" marker is invalidated so the
-        // next sync round re-evaluates app state freshness.
-        if (resolvedAny || negativeResponseObserved) {
-            whatsapp.store().setSyncedWebAppState(false);
         }
 
         // WAWebSyncdHandleKeyShare.handleKeyShare: o("WAWebSyncd").syncBlockedCollections()

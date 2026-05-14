@@ -6,15 +6,11 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.RemoveRecentStickerAction;
-import com.github.auties00.cobalt.model.sync.action.media.RemoveRecentStickerActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.time.Instant;
-import java.util.List;
 
 /**
  * Handles {@code removeRecentSticker} app-state sync mutations.
@@ -55,16 +51,10 @@ public final class RemoveRecentStickerHandler implements WebAppStateActionHandle
     private static final String RECENT_STICKER_FEATURE = "recent_sticker";
 
     /**
-     * The singleton instance of {@code RemoveRecentStickerHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStickersRemoveRecentSyncAction", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final RemoveRecentStickerHandler INSTANCE = new RemoveRecentStickerHandler();
-
-    /**
      * Constructs the singleton instance.
      */
     @WhatsAppWebExport(moduleName = "WAWebStickersRemoveRecentSyncAction", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private RemoveRecentStickerHandler() {
+    public RemoveRecentStickerHandler() {
 
     }
 
@@ -122,7 +112,11 @@ public final class RemoveRecentStickerHandler implements WebAppStateActionHandle
 
         //   var i = e.indexParts, l = i[1]
         //   if (l == null) return a++, n.malformedActionIndex()
+        // indexParts[1] is undefined when the slot is missing; mirror with explicit size check.
         var indexArray = JSON.parseArray(mutation.index());
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var stickerHash = indexArray.getString(1);
         if (stickerHash == null) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -187,39 +181,4 @@ public final class RemoveRecentStickerHandler implements WebAppStateActionHandle
         return instant.getEpochSecond();
     }
 
-    /**
-     * Builds a pending outgoing mutation that removes a sticker from the
-     * recent-stickers collection across linked devices.
-     *
-     * <p>Per WhatsApp Web {@code WAWebStickersRemoveRecentSyncAction}: emits a
-     * SET mutation at {@code ["removeRecentSticker", stickerFileHash]} in the
-     * REGULAR_LOW collection with {@code version = 7} and a
-     * {@code removeRecentStickerAction} sub-message carrying the current
-     * timestamp as {@code lastStickerSentTs}. Receiving devices compare this
-     * timestamp against their local recent-sticker entry to decide whether to
-     * remove it.
-     * @param stickerHash the sticker file hash used as the mutation index
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStickersRemoveRecentSyncAction", exports = "generateRemoveStickerMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getRemoveRecentStickerMutation(String stickerHash) {
-        var timestamp = Instant.now();
-        var action = new RemoveRecentStickerActionBuilder()
-                .lastStickerSentTs(timestamp)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .removeRecentStickerAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(RemoveRecentStickerAction.ACTION_NAME, stickerHash));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                RemoveRecentStickerAction.ACTION_VERSION
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

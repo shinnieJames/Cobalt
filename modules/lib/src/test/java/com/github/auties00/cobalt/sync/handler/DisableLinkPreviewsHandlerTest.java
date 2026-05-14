@@ -1,0 +1,263 @@
+package com.github.auties00.cobalt.sync.handler;
+
+import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.device.DeviceFixtures;
+import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
+import com.github.auties00.cobalt.model.sync.SyncActionState;
+import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
+import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
+import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsAction;
+import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsActionBuilder;
+import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
+import com.github.auties00.cobalt.sync.SyncFixtures;
+import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+import com.github.auties00.cobalt.sync.factory.DisableLinkPreviewsMutationFactory;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Tests for {@link DisableLinkPreviewsHandler} â€” Cobalt's adapter for
+ * {@code WAWebDisableLinkPreviewsSync}.
+ */
+@DisplayName("DisableLinkPreviewsHandler")
+class DisableLinkPreviewsHandlerTest {
+    private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
+    private static final Jid SELF_LID = Jid.of("83116928594000@lid");
+
+    private WhatsAppClient client;
+
+    @BeforeEach
+    void setUp() {
+        var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
+        client = TestWhatsAppClient.create().withStore(store);
+    }
+
+    private static DecryptedMutation.Trusted mutation(boolean disabled, SyncdOperation op, Instant ts) {
+        var action = new PrivacySettingDisableLinkPreviewsActionBuilder()
+                .isPreviewsDisabled(disabled)
+                .build();
+        var value = new SyncActionValueBuilder()
+                .timestamp(ts)
+                .privacySettingDisableLinkPreviewsAction(action)
+                .build();
+        return new DecryptedMutation.Trusted("[\"setting_disableLinkPreviews\"]", value, op, ts,
+                PrivacySettingDisableLinkPreviewsAction.ACTION_VERSION);
+    }
+
+    @Nested
+    @DisplayName("metadata â€” wire identity")
+    class Metadata {
+        @Test
+        @DisplayName("actionName() returns the PrivacySettingDisableLinkPreviewsAction wire constant")
+        void actionName() {
+            assertEquals(PrivacySettingDisableLinkPreviewsAction.ACTION_NAME, new DisableLinkPreviewsHandler().actionName());
+            assertEquals("setting_disableLinkPreviews", new DisableLinkPreviewsHandler().actionName());
+        }
+
+        @Test
+        @DisplayName("collectionName() returns REGULAR")
+        void collectionName() {
+            assertEquals(PrivacySettingDisableLinkPreviewsAction.COLLECTION_NAME, new DisableLinkPreviewsHandler().collectionName());
+            assertEquals(SyncPatchType.REGULAR, new DisableLinkPreviewsHandler().collectionName());
+        }
+
+        @Test
+        @DisplayName("version() returns the declared action version (8)")
+        void version() {
+            assertEquals(PrivacySettingDisableLinkPreviewsAction.ACTION_VERSION, new DisableLinkPreviewsHandler().version());
+            assertEquals(8, new DisableLinkPreviewsHandler().version());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” happy SET")
+    class ApplySetHappy {
+        @Test
+        @DisplayName("SET true writes the flag to the store and returns SUCCESS")
+        void setsTrue() {
+            assertFalse(client.store().disableLinkPreviews(), "precondition: starts false");
+            var result = new DisableLinkPreviewsHandler().applyMutation(client,
+                    mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_700_000_000L)));
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+            assertTrue(client.store().disableLinkPreviews());
+        }
+
+        @Test
+        @DisplayName("SET false flips the flag back to false")
+        void setsFalse() {
+            client.store().setDisableLinkPreviews(true);
+            var result = new DisableLinkPreviewsHandler().applyMutation(client,
+                    mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_700_000_000L)));
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+            assertFalse(client.store().disableLinkPreviews());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    class OrphanDimension {
+        @Test
+        @DisplayName("link-preview setting is global; no per-entity orphan path")
+        void noOrphan() {
+            var result = new DisableLinkPreviewsHandler().applyMutation(client,
+                    mutation(true, SyncdOperation.SET, Instant.now()));
+            assertEquals(SyncActionState.SUCCESS, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” malformed action value")
+    class MalformedActionValue {
+        @Test
+        @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
+        void wrongActionIsMalformed() {
+            var ts = Instant.ofEpochSecond(1_700_000_000L);
+            var value = new SyncActionValueBuilder()
+                    .timestamp(ts)
+                    .archiveChatAction(new ArchiveChatActionBuilder().archived(true).build())
+                    .build();
+            var mutation = new DecryptedMutation.Trusted("[\"setting_disableLinkPreviews\"]", value, SyncdOperation.SET, ts, 8);
+            var result = new DisableLinkPreviewsHandler().applyMutation(client, mutation);
+            assertEquals(SyncActionState.MALFORMED, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” malformed action index")
+    class MalformedActionIndex {
+        @Test
+        @DisplayName("the handler ignores the index shape (global setting)")
+        void indexShapeIgnored() {
+            var ts = Instant.ofEpochSecond(1_700_000_000L);
+            var value = new SyncActionValueBuilder()
+                    .timestamp(ts)
+                    .privacySettingDisableLinkPreviewsAction(
+                            new PrivacySettingDisableLinkPreviewsActionBuilder().isPreviewsDisabled(true).build())
+                    .build();
+            var mutation = new DecryptedMutation.Trusted("", value, SyncdOperation.SET, ts, 8);
+            var result = new DisableLinkPreviewsHandler().applyMutation(client, mutation);
+            assertEquals(SyncActionState.SUCCESS, result.actionState(),
+                    "the handler does not parse the index; the setting is keyed off the action only");
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    class RemoveOperation {
+        @Test
+        @DisplayName("REMOVE is unsupported per the WA Web fall-through")
+        void removeIsUnsupported() {
+            var result = new DisableLinkPreviewsHandler().applyMutation(client,
+                    mutation(true, SyncdOperation.REMOVE, Instant.now()));
+            assertEquals(SyncActionState.UNSUPPORTED, result.actionState());
+        }
+    }
+
+    @Nested
+    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    class ResolveConflicts {
+        @Test
+        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        void newerRemoteApplies() {
+            var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
+            var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+                    new DisableLinkPreviewsHandler().resolveConflicts(local, remote).state());
+        }
+
+        @Test
+        @DisplayName("older remote â†’ SKIP_REMOTE")
+        void olderRemoteSkipped() {
+            var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
+            var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
+            assertEquals(ConflictResolutionState.SKIP_REMOTE,
+                    new DisableLinkPreviewsHandler().resolveConflicts(local, remote).state());
+        }
+    }
+
+    @Nested
+    @DisplayName("applyMutationBatch â€” only the last valid SET writes to the store")
+    class ApplyBatchOverride {
+        @Test
+        @DisplayName("an empty batch yields an empty result list")
+        void emptyBatchEmptyResult() {
+            assertTrue(new DisableLinkPreviewsHandler().applyMutationBatch(client, List.of()).isEmpty());
+        }
+
+        @Test
+        @DisplayName("only the last SET's value lands in the store; earlier SETs return SUCCESS individually")
+        void lastSetWins() {
+            var results = new DisableLinkPreviewsHandler().applyMutationBatch(client, List.of(
+                    mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000)),
+                    mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000))
+            ));
+            assertEquals(2, results.size());
+            assertEquals(SyncActionState.SUCCESS, results.get(0).actionState());
+            assertEquals(SyncActionState.SUCCESS, results.get(1).actionState());
+            assertFalse(client.store().disableLinkPreviews(),
+                    "WAWebDisableLinkPreviewsSync.applyMutations accumulates the last valid value and writes once");
+        }
+
+        @Test
+        @DisplayName("REMOVE within a batch reports UNSUPPORTED but does not block other SETs")
+        void removeInBatchYieldsUnsupported() {
+            var results = new DisableLinkPreviewsHandler().applyMutationBatch(client, List.of(
+                    mutation(true, SyncdOperation.REMOVE, Instant.ofEpochSecond(1_000)),
+                    mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000))
+            ));
+            assertEquals(SyncActionState.UNSUPPORTED, results.get(0).actionState());
+            assertEquals(SyncActionState.SUCCESS, results.get(1).actionState());
+            assertTrue(client.store().disableLinkPreviews());
+        }
+    }
+
+    @Nested
+    @DisplayName("static builder â€” getMutation")
+    class StaticBuilder {
+        @Test
+        @DisplayName("produces a SET mutation with the singleton index")
+        void buildsPendingMutation() {
+            var ts = Instant.ofEpochSecond(1_700_000_000L);
+            var pending = new DisableLinkPreviewsMutationFactory().getDisableLinkPreviewsMutation(ts, true);
+            var inner = pending.mutation();
+
+            assertEquals(SyncdOperation.SET, inner.operation());
+            assertEquals(PrivacySettingDisableLinkPreviewsAction.ACTION_VERSION, inner.actionVersion());
+            assertEquals("[\"setting_disableLinkPreviews\"]", inner.index());
+            assertTrue(inner.value().action().filter(a -> a instanceof PrivacySettingDisableLinkPreviewsAction).map(a -> (PrivacySettingDisableLinkPreviewsAction) a).orElseThrow().isPreviewsDisabled());
+        }
+    }
+
+    @Nested
+    @DisplayName("WA Web byte-parity oracle (gated)")
+    class OracleParity {
+        @Test
+        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
+        void byteEqualityWithOracle() {
+            if (!SyncFixtures.isOracleAvailable("handler/disable-link-previews/encode")) return;
+            var oracle = SyncFixtures.loadOracle("handler/disable-link-previews/encode");
+            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
+
+            var pending = new DisableLinkPreviewsMutationFactory().getDisableLinkPreviewsMutation(Instant.ofEpochSecond(1_700_000_000L), true);
+            var actual = SyncActionValueSpec.encode(pending.mutation().value());
+
+            assertNotNull(actual);
+            assertArrayEquals(expected, actual);
+        }
+    }
+}

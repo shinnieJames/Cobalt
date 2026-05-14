@@ -28,11 +28,6 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 @WhatsAppWebModule(moduleName = "WAWebAgentSync")
 public final class AgentActionHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code AgentActionHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final AgentActionHandler INSTANCE = new AgentActionHandler();
 
     /**
      * Creates the singleton agent action handler.
@@ -44,7 +39,7 @@ public final class AgentActionHandler implements WebAppStateActionHandler {
      * {@link #collectionName()} rather than as an instance field.
      */
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private AgentActionHandler() {
+    public AgentActionHandler() {
 
     }
 
@@ -108,6 +103,11 @@ public final class AgentActionHandler implements WebAppStateActionHandler {
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = {"applyMutations", "getValidatedContentSet", "getValidatedContentRemove"}, adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
+        // WAWebAgentSync.getValidatedContentSet/Remove: var t=e.indexParts, n=t[1]; if(!n) return {result:"malformed_index"}
+        // Out-of-bounds in JS yields undefined which is falsy; mirror via explicit size check.
+        if (indexArray.size() <= 1) {
+            return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+        }
         var agentId = indexArray.getString(1);
         if (agentId == null || agentId.isEmpty()) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());

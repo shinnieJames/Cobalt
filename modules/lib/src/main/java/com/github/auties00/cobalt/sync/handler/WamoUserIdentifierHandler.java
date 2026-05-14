@@ -65,15 +65,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * {@code WAWebWamoUserIdentifierSync} module.
  */
 public final class WamoUserIdentifierHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code WamoUserIdentifierHandler}.
-     */
-    public static final WamoUserIdentifierHandler INSTANCE = new WamoUserIdentifierHandler();
 
     /**
      * Private constructor that enforces the singleton pattern.
      */
-    private WamoUserIdentifierHandler() {
+    public WamoUserIdentifierHandler() {
 
     }
 

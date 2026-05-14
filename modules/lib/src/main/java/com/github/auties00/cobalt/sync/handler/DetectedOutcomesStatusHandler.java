@@ -22,17 +22,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 @WhatsAppWebModule(moduleName = "WAWebDetectedOutcomesStatusSync")
 public final class DetectedOutcomesStatusHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code DetectedOutcomesStatusHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebDetectedOutcomesStatusSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final DetectedOutcomesStatusHandler INSTANCE = new DetectedOutcomesStatusHandler();
 
     /**
      * Constructs a new {@code DetectedOutcomesStatusHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebDetectedOutcomesStatusSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private DetectedOutcomesStatusHandler() {
+    public DetectedOutcomesStatusHandler() {
 
     }
 

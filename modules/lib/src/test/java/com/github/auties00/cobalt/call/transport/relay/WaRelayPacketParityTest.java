@@ -15,8 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Byte-exact parity test for {@link WaRelayPacket} against every packet
- * captured at {@code tooling/voip-shadow/captures/stun-bytes-raw.json}.
+ * Byte-exact parity test for {@link WaRelayPacket} against every
+ * captured packet.
  *
  * <p>Every packet is decoded then re-encoded; the result must be
  * identical to the captured bytes. This pins both the decoder and the

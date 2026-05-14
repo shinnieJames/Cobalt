@@ -63,15 +63,11 @@ import java.util.List;
  * {@code WAWebRecentEmojiWeightsSync} module.
  */
 public final class RecentEmojiWeightsHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code RecentEmojiWeightsHandler}.
-     */
-    public static final RecentEmojiWeightsHandler INSTANCE = new RecentEmojiWeightsHandler();
 
     /**
      * Private constructor that enforces the singleton pattern.
      */
-    private RecentEmojiWeightsHandler() {
+    public RecentEmojiWeightsHandler() {
 
     }
 

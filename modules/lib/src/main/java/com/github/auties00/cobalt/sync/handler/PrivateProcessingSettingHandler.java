@@ -38,15 +38,11 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  * ships the matching {@code WAWebPrivateProcessingSettingSync} module.
  */
 public final class PrivateProcessingSettingHandler implements WebAppStateActionHandler {
-    /**
-     * The singleton instance of {@code PrivateProcessingSettingHandler}.
-     */
-    public static final PrivateProcessingSettingHandler INSTANCE = new PrivateProcessingSettingHandler();
 
     /**
      * Private constructor that enforces the singleton pattern.
      */
-    private PrivateProcessingSettingHandler() {
+    public PrivateProcessingSettingHandler() {
 
     }
 

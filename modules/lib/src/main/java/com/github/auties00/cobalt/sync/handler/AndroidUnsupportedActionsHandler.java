@@ -30,16 +30,10 @@ public final class AndroidUnsupportedActionsHandler implements WebAppStateAction
     private static final Logger LOGGER = Logger.getLogger(AndroidUnsupportedActionsHandler.class.getName());
 
     /**
-     * The singleton instance of {@code AndroidUnsupportedActionsHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final AndroidUnsupportedActionsHandler INSTANCE = new AndroidUnsupportedActionsHandler();
-
-    /**
      * Constructs the singleton handler.
      */
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private AndroidUnsupportedActionsHandler() {
+    public AndroidUnsupportedActionsHandler() {
 
     }
 

@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 
 /**
  * Decides whether a domain is allowed to render a rich link preview
@@ -35,20 +36,25 @@ public final class DomainPreviewableGate {
      * Returns whether {@code domain} is allowed to render a rich link
      * preview for {@code chatJid}.
      *
-     * @param client  the WhatsApp client whose AB-props are consulted
-     * @param chatJid the target chat JID, used to detect newsletter
-     *                chats
-     * @param domain  the link's domain (informational; the gate is
-     *                currently AB-prop driven, not domain driven)
+     * @param client         the WhatsApp client whose newsletter
+     *                       allow-list is consulted on the server
+     *                       branch
+     * @param abPropsService the AB-props service used to read the
+     *                       newsletter URL-preview gate
+     * @param chatJid        the target chat JID, used to detect
+     *                       newsletter chats
+     * @param domain         the link's domain (informational; the gate
+     *                       is currently AB-prop driven, not domain
+     *                       driven)
      * @return {@code true} when previews are allowed
      */
     @WhatsAppWebExport(moduleName = "WAWebCheckIfDomainIsPreviewable", exports = "checkIfDomainIsPreviewable",
             adaptation = WhatsAppAdaptation.DIRECT)
-    public static boolean isPreviewable(WhatsAppClient client, Jid chatJid, String domain) {
+    public static boolean isPreviewable(WhatsAppClient client, ABPropsService abPropsService, Jid chatJid, String domain) {
         if (chatJid == null || !chatJid.hasNewsletterServer()) {
             return true;
         }
-        if (!client.abPropsService().getBool(ABProp.CHANNELS_HIDE_NEWS_URL_PREVIEW)) {
+        if (!abPropsService.getBool(ABProp.CHANNELS_HIDE_NEWS_URL_PREVIEW)) {
             return true;
         }
         // When channels_hide_news_url_preview is on, defer to the server side allow list

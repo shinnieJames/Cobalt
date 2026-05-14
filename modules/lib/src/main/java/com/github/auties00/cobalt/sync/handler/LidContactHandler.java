@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LidContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.UserStatusMuteAction;
 import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.util.ArrayList;
@@ -36,22 +37,34 @@ import java.util.logging.Logger;
 @WhatsAppWebModule(moduleName = "WAWebLidContactSync")
 public final class LidContactHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of this handler.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLidContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final LidContactHandler INSTANCE = new LidContactHandler();
-
-    /**
      * Logger for diagnostic messages emitted during LID contact sync processing.
      */
     private static final Logger LOGGER = Logger.getLogger(LidContactHandler.class.getName());
 
     /**
-     * Private constructor preventing external instantiation.
+     * The AB-props service consulted before applying any mutation.
+     */
+    private final ABPropsService abPropsService;
+
+    /**
+     * The user-status-mute handler delegated to when an orphan LID
+     * contact mutation must be retried as a user-status-mute mutation.
+     */
+    private final UserStatusMuteHandler userStatusMuteHandler;
+
+    /**
+     * Constructs the handler instance bound to the given AB-props
+     * service and its companion user-status-mute handler.
+     *
+     * @param abPropsService        the AB-props service consulted on
+     *                              every mutation
+     * @param userStatusMuteHandler the user-status-mute handler used to
+     *                              re-process orphan mutations
      */
     @WhatsAppWebExport(moduleName = "WAWebLidContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private LidContactHandler() {
-
+    public LidContactHandler(ABPropsService abPropsService, UserStatusMuteHandler userStatusMuteHandler) {
+        this.abPropsService = abPropsService;
+        this.userStatusMuteHandler = userStatusMuteHandler;
     }
 
     /**
@@ -124,7 +137,7 @@ public final class LidContactHandler implements WebAppStateActionHandler {
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLidContactSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        if (!client.abPropsService().getBool(ABProp.USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE)) {
+        if (!abPropsService.getBool(ABProp.USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE)) {
             return MutationApplicationResult.unsupported();
         }
 
@@ -227,7 +240,7 @@ public final class LidContactHandler implements WebAppStateActionHandler {
                         entry.timestamp(),
                         entry.actionVersion()
                 );
-                var result = UserStatusMuteHandler.INSTANCE.applyMutation(client, orphanMutation);
+                var result = userStatusMuteHandler.applyMutation(client, orphanMutation);
                 if (result.actionState() == SyncActionState.SUCCESS) {
                     applied.add(entry);
                 }

@@ -1,18 +1,11 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
-import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import java.time.Instant;
-import java.util.List;
-import java.util.Objects;
 
 /**
  * Applies {@code notificationActivitySetting} mutations decoded from app state sync.
@@ -54,17 +47,6 @@ import java.util.Objects;
  * should already be wire-compatible.
  */
 public final class NotificationActivitySettingHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of this handler.
-     *
-     * <p>Mirrors the WA Web pattern of exposing each sync handler as a
-     * module-level singleton ({@code var _ = new p; l.default = _}). Even
-     * though WA Web has no concrete module for this action, sibling handlers
-     * such as {@code WAWebLocaleSettingSync} and
-     * {@code WAWebPushNameSync} all follow this convention, and Cobalt's
-     * dispatcher expects a single shared instance per handler class.
-     */
-    public static final NotificationActivitySettingHandler INSTANCE = new NotificationActivitySettingHandler();
 
     /**
      * Creates a new {@code NotificationActivitySettingHandler}.
@@ -73,7 +55,7 @@ public final class NotificationActivitySettingHandler implements WebAppStateActi
      * {@link #INSTANCE}, matching the WA Web module-level singleton pattern
      * used by other sync handlers.
      */
-    private NotificationActivitySettingHandler() {
+    public NotificationActivitySettingHandler() {
 
     }
 
@@ -181,40 +163,4 @@ public final class NotificationActivitySettingHandler implements WebAppStateActi
         return MutationApplicationResult.success();
     }
 
-    /**
-     * Builds a pending {@code notificationActivitySetting} mutation carrying
-     * the given notification activity preference.
-     *
-     * <p>NO_WA_BASIS: WA Web has no outgoing helper for this action; the shape
-     * follows {@code WAWebSyncdActionUtils.buildPendingMutation} as used by
-     * every other sibling {@code AccountSyncdActionBase} subclass. Cobalt
-     * surfaces the helper so the public
-     * {@code WhatsAppClient.changeNotificationActivity} setter can build a single
-     * mutation without hand-rolling the protobuf wrapping.
-     * @param timestamp the mutation timestamp
-     * @param setting   the new {@link NotificationActivitySettingAction.NotificationActivitySetting}
-     * @return a pending mutation carrying the {@code notificationActivitySetting}
-     *         action
-     * @throws NullPointerException if {@code timestamp} or {@code setting} is {@code null}
-     */
-    public SyncPendingMutation getNotificationActivityMutation(Instant timestamp, NotificationActivitySettingAction.NotificationActivitySetting setting) {
-        Objects.requireNonNull(timestamp, "timestamp cannot be null");
-        Objects.requireNonNull(setting, "setting cannot be null");
-        var action = new NotificationActivitySettingActionBuilder()
-                .notificationActivitySetting(setting)
-                .build();
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .notificationActivitySettingAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName()));
-        var pending = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(pending, 0);
-    }
 }

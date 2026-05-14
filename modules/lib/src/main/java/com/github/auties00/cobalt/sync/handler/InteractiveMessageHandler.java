@@ -32,20 +32,12 @@ import java.util.Collection;
  */
 @WhatsAppWebModule(moduleName = "WAWebInteractiveMessageSync")
 public final class InteractiveMessageHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of the interactive message handler.
-     *
-     * <p>Per WhatsApp Web, {@code WAWebInteractiveMessageSync} exports a single
-     * instance ({@code var _ = new p(); l.default = _}).
-     */
-    @WhatsAppWebExport(moduleName = "WAWebInteractiveMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final InteractiveMessageHandler INSTANCE = new InteractiveMessageHandler();
 
     /**
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebInteractiveMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private InteractiveMessageHandler() {
+    public InteractiveMessageHandler() {
 
     }
 

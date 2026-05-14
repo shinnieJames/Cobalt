@@ -9,11 +9,9 @@ import com.github.auties00.cobalt.model.business.BusinessBroadcastCampaignBuilde
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
-import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 import java.time.Instant;
@@ -39,16 +37,10 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     private static final Logger LOGGER = Logger.getLogger(BusinessBroadcastCampaignHandler.class.getName());
 
     /**
-     * The singleton instance of {@code BusinessBroadcastCampaignHandler}.
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final BusinessBroadcastCampaignHandler INSTANCE = new BusinessBroadcastCampaignHandler();
-
-    /**
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private BusinessBroadcastCampaignHandler() {
+    public BusinessBroadcastCampaignHandler() {
 
     }
 
@@ -118,6 +110,11 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
             var indexArray = JSON.parseArray(mutation.index()); // ADAPTED: WAWebBroadcastCampaignSync uses e.indexParts (pre-parsed); Cobalt parses from JSON string
+            // WAWebBroadcastCampaignSync.applyMutations: var t=e.indexParts, n=t[1]; if(!n) return r.malformedActionIndex().
+            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            if (indexArray.size() <= 1) {
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
+            }
             var campaignId = indexArray.getString(1);
             if (campaignId == null || campaignId.isEmpty()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
@@ -197,66 +194,4 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
         return results;
     }
 
-    /**
-     * Builds a pending SET mutation for creating or updating a business broadcast campaign.
-     *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.getCampaignMutation}),
-     * this method wraps the supplied {@link BusinessBroadcastCampaignAction} into a
-     * {@code SyncActionValue} whose payload field is
-     * {@code businessBroadcastCampaignAction}, then delegates to
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} with {@code action =
-     * getAction()}, {@code indexArgs = [campaignId]}, {@code collection =
-     * Regular}, {@code version = 1}, and {@code operation = SET}.
-     * @param campaignId the business broadcast campaign identifier (index arg)
-     * @param action     the campaign action payload
-     * @param timestamp  the mutation timestamp
-     * @return a pending mutation ready for outbound sync
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "getCampaignMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getCampaignMutation(
-            String campaignId,
-            BusinessBroadcastCampaignAction action,
-            Instant timestamp
-    ) {
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .businessBroadcastCampaignAction(action)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), campaignId));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.SET,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
-
-    /**
-     * Builds a pending REMOVE mutation for deleting a business broadcast campaign.
-     *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.getDeleteCampaignMutation}),
-     * this method delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}
-     * with an empty value, {@code indexArgs = [campaignId]}, and
-     * {@code operation = REMOVE}.
-     * @param campaignId the business broadcast campaign identifier to remove
-     * @param timestamp  the mutation timestamp
-     * @return a pending mutation ready for outbound sync
-     */
-    @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "getDeleteCampaignMutation", adaptation = WhatsAppAdaptation.ADAPTED)
-    public SyncPendingMutation getDeleteCampaignMutation(String campaignId, Instant timestamp) {
-        var value = new SyncActionValueBuilder()
-                .timestamp(timestamp)
-                .build();
-        var index = JSON.toJSONString(List.of(actionName(), campaignId));
-        var mutation = new DecryptedMutation.Trusted(
-                index,
-                value,
-                SyncdOperation.REMOVE,
-                timestamp,
-                version()
-        );
-        return new SyncPendingMutation(mutation, 0);
-    }
 }

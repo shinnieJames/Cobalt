@@ -32,20 +32,12 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
  */
 @WhatsAppWebModule(moduleName = "WAWebStarMessageSync")
 public final class StarMessageHandler implements WebAppStateActionHandler {
-    /**
-     * Singleton instance of the star message handler.
-     *
-     * <p>Per WhatsApp Web, {@code WAWebStarMessageSync} exports a single instance
-     * ({@code var h = new g(); l.default = h}).
-     */
-    @WhatsAppWebExport(moduleName = "WAWebStarMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    public static final StarMessageHandler INSTANCE = new StarMessageHandler();
 
     /**
      * Private constructor to enforce singleton pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebStarMessageSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
-    private StarMessageHandler() {
+    public StarMessageHandler() {
 
     }
 
